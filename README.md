@@ -3,6 +3,7 @@
 [![CI](https://github.com/MagiCrazy/neumann-cockpit/actions/workflows/ci.yml/badge.svg)](https://github.com/MagiCrazy/neumann-cockpit/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/MagiCrazy/neumann-cockpit)](https://github.com/MagiCrazy/neumann-cockpit/releases/latest)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org/)
 
 A terminal UI cockpit for [Von Neumann Game](https://github.com/gnieark/Von-Neumann-Game) — control your probe and its mannies from the command line.
 
