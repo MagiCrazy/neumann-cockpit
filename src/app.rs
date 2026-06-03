@@ -12,6 +12,18 @@ pub enum ScanMode {
 }
 
 #[derive(Default)]
+pub enum RepairInput {
+    #[default]
+    Inactive,
+    Typing {
+        manny_id: String,
+        manny_name: String,
+        buf: String,
+        error: Option<String>,
+    },
+}
+
+#[derive(Default)]
 pub enum TravelInput {
     #[default]
     Inactive,
@@ -35,6 +47,44 @@ pub enum Panel {
     Scanner,
 }
 
+pub const RESOURCE_TYPES: [&str; 4] = ["deuterium", "metals", "ice", "carbon_compounds"];
+pub const RESOURCE_LABELS: [&str; 4] = ["deuterium", "metals", "ice", "carbon"];
+
+pub struct MapView {
+    pub open: bool,
+    pub center_x: i32,
+    pub center_z: i32,
+    pub y_layer: i32,
+}
+
+impl Default for MapView {
+    fn default() -> Self {
+        Self { open: false, center_x: 0, center_z: 0, y_layer: 0 }
+    }
+}
+
+#[derive(Default)]
+pub enum MineInput {
+    #[default]
+    Inactive,
+    PickAsteroid {
+        manny_id: String,
+        manny_name: String,
+        candidates: Vec<(String, String)>, // (object_id, display_name)
+        selection: usize,
+    },
+    Configure {
+        manny_id: String,
+        manny_name: String,
+        object_id: String,
+        object_name: String,
+        resources: [bool; 4], // deuterium, metals, ice, carbon_compounds
+        amount_buf: String,
+        amount_mode: bool, // false = toggling resources, true = editing amount
+        error: Option<String>,
+    },
+}
+
 pub enum ApiMessage {
     ProbeUpdated(Probe),
     ManniesUpdated(Vec<Manny>),
@@ -42,6 +92,10 @@ pub enum ApiMessage {
     ScanError(String),
     MoveStarted(ProbeMovement),
     MoveError(String),
+    RepairStarted,
+    RepairError(String),
+    MineStarted,
+    MineError(String),
     Error(String),
 }
 
@@ -63,6 +117,9 @@ pub struct AppState {
     pub scan_error: Option<String>,
     pub scan_batch: Option<usize>,
     pub travel: TravelInput,
+    pub repair: RepairInput,
+    pub mine: MineInput,
+    pub map: MapView,
 }
 
 impl AppState {
@@ -315,5 +372,81 @@ impl AppState {
     pub fn seconds_until_refresh(&self) -> Option<i64> {
         self.movement_arrival
             .map(|a| (a - Utc::now()).num_seconds().max(0))
+    }
+
+    pub fn repair_max_percent(&self) -> f64 {
+        self.probe.as_ref()
+            .and_then(|p| p.systems.as_ref())
+            .and_then(|s| s.integrity_percent)
+            .map(|i| (100.0_f64 - i).max(0.0))
+            .unwrap_or(0.0)
+    }
+
+    pub fn repair_metals_stock(&self) -> f64 {
+        self.probe.as_ref()
+            .map(|p| {
+                p.inventory.resource_stocks.iter()
+                    .find(|s| s.stock_type == "metals")
+                    .map(|s| s.amount)
+                    .unwrap_or(0.0)
+            })
+            .unwrap_or(0.0)
+    }
+
+    pub fn repair_type_char(&mut self, c: char) {
+        if let RepairInput::Typing { ref mut buf, ref mut error, .. } = self.repair {
+            if c.is_ascii_digit() || (c == '.' && !buf.contains('.')) {
+                buf.push(c);
+                *error = None;
+            }
+        }
+    }
+
+    pub fn repair_backspace(&mut self) {
+        if let RepairInput::Typing { ref mut buf, .. } = self.repair {
+            buf.pop();
+        }
+    }
+
+    pub fn repair_fill_max(&mut self) {
+        let max = self.repair_max_percent();
+        if let RepairInput::Typing { ref mut buf, ref mut error, .. } = self.repair {
+            *buf = format!("{:.2}", max);
+            *error = None;
+        }
+    }
+
+    pub fn set_repair_error(&mut self, msg: String) {
+        if let RepairInput::Typing { ref mut error, .. } = self.repair {
+            *error = Some(msg);
+        }
+    }
+
+    pub fn mine_max_amount(&self) -> f64 {
+        self.probe.as_ref()
+            .map(|p| (p.inventory.free_capacity * 10000.0).round() / 10000.0)
+            .unwrap_or(0.30)
+            .max(0.0)
+    }
+
+    pub fn set_mine_error(&mut self, msg: String) {
+        if let MineInput::Configure { ref mut error, .. } = self.mine {
+            *error = Some(msg);
+        }
+    }
+
+    pub fn open_map(&mut self) {
+        if let Some((x, y, z)) = self.probe_sector_coords() {
+            self.map.center_x = x;
+            self.map.center_z = z;
+            self.map.y_layer = y;
+        }
+        self.map.open = true;
+    }
+
+    // Move to y±1 while preserving cx+y+cz (no drift on round-trips).
+    pub fn map_move_y(&mut self, dy: i32) {
+        self.map.y_layer += dy;
+        self.map.center_z -= dy;
     }
 }

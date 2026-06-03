@@ -1,8 +1,8 @@
 use crate::api::types::{
     DangerLevel, DataFreshness, KnowledgeLevel, Manny, MannyLocationType, MannyTask,
-    MovementPhase, ProbeStatus, SectorObject, SectorObjectType, SensorMode,
+    MovementPhase, ProbeStatus, SectorObject, SectorObjectType, SectorObservation, SensorMode,
 };
-use crate::app::{AppState, Panel, ScanMode, TravelInput};
+use crate::app::{AppState, MineInput, Panel, RepairInput, ScanMode, TravelInput, RESOURCE_LABELS, RESOURCE_TYPES};
 use chrono::Utc;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -58,6 +58,15 @@ pub fn render(frame: &mut Frame, state: &AppState) {
     if !matches!(state.travel, TravelInput::Inactive) {
         render_travel_overlay(frame, area, state);
     }
+    if !matches!(state.repair, RepairInput::Inactive) {
+        render_repair_overlay(frame, area, state);
+    }
+    if !matches!(state.mine, MineInput::Inactive) {
+        render_mine_overlay(frame, area, state);
+    }
+    if state.map.open {
+        render_map_overlay(frame, area, state);
+    }
 }
 
 // ── Probe panel ───────────────────────────────────────────────────────────────
@@ -91,11 +100,17 @@ fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState, focused: 
         )
     });
 
+    let show_sector = active_movement.is_none()
+        && probe.sector.as_ref().and_then(|s| s.relative.as_ref()).is_some();
+
     let mut sections: Vec<Constraint> = vec![
         Constraint::Length(1), // name + status
     ];
+    if show_sector {
+        sections.push(Constraint::Length(1)); // current sector coords
+    }
     if active_movement.is_some() {
-        sections.push(Constraint::Length(1)); // coords
+        sections.push(Constraint::Length(1)); // coords + distance
         sections.push(Constraint::Length(1)); // phase + ETA
         sections.push(Constraint::Length(1)); // progress gauge
         sections.push(Constraint::Length(1)); // speed gauge
@@ -126,6 +141,23 @@ fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState, focused: 
     );
     row += 1;
 
+    // ── Current sector ──
+    if show_sector {
+        if let Some(rel) = probe.sector.as_ref().and_then(|s| s.relative.as_ref()) {
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled("@ ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        format!("({},{},{})", rel.x as i64, rel.y as i64, rel.z as i64),
+                        Style::default().fg(Color::White),
+                    ),
+                ])),
+                rows[row],
+            );
+            row += 1;
+        }
+    }
+
     // ── Movement ──
     if let Some(mv) = active_movement {
         let remaining = (mv.arrival_at - Utc::now()).num_seconds().max(0);
@@ -138,9 +170,10 @@ fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState, focused: 
             Paragraph::new(Line::from(vec![
                 Span::styled("▶ ", Style::default().fg(Color::Yellow)),
                 Span::raw(format!(
-                    "({},{},{}) → ({},{},{})",
+                    "({},{},{}) → ({},{},{})  d:{}",
                     mv.origin.x as i64, mv.origin.y as i64, mv.origin.z as i64,
                     mv.target.x as i64, mv.target.y as i64, mv.target.z as i64,
+                    mv.distance,
                 )),
             ])),
             rows[row],
@@ -176,12 +209,8 @@ fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState, focused: 
     }
 
     // ── Fuel ──
-    let fuel_ratio = probe
-        .inventory
-        .external_tanks
-        .iter()
-        .find(|t| t.tank_type == "deuterium")
-        .map(|t| (t.fill_percent / 100.0).clamp(0.0, 1.0))
+    let fuel_ratio = probe.fuel.deuterium
+        .map(|d| (d / 100.0).clamp(0.0, 1.0))
         .unwrap_or(0.0);
     frame.render_widget(
         make_line_gauge(
@@ -233,7 +262,15 @@ fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focus
         0.0
     };
 
-    let n_rows = 1 + inv.resource_stocks.len();
+    let items_expanded = focused && !inv.items.is_empty();
+    let items_rows: usize = if items_expanded {
+        1 + inv.items.len()
+    } else if !inv.items.is_empty() {
+        1
+    } else {
+        0
+    };
+    let n_rows = 1 + inv.resource_stocks.len() + items_rows;
 
     let mut sections: Vec<Constraint> = (0..n_rows).map(|_| Constraint::Length(1)).collect();
     sections.push(Constraint::Min(0));
@@ -258,7 +295,8 @@ fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focus
     for stock in &inv.resource_stocks {
         let (icon, color, label) = match stock.stock_type.as_str() {
             "metals" => ("◆", Color::White, "Metals"),
-            "other" => ("◇", Color::Cyan, "Non-metals"),
+            "ice" => ("❄", Color::Cyan, "Ice"),
+            "carbon_compounds" => ("◇", Color::Green, "Carbon"),
             _ => ("·", Color::DarkGray, stock.stock_type.as_str()),
         };
         frame.render_widget(
@@ -267,6 +305,53 @@ fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focus
                 Span::raw(format!("{:<11}", label)),
                 Span::styled(format!("{:.3}", stock.amount), Style::default().fg(Color::White)),
                 Span::styled(" ECE", Style::default().fg(Color::DarkGray)),
+            ])),
+            rows[row],
+        );
+        row += 1;
+    }
+
+    // ── Items ──
+    if items_expanded {
+        frame.render_widget(
+            Paragraph::new(Line::from(Span::styled(
+                "── items ──",
+                Style::default().fg(Color::DarkGray),
+            ))),
+            rows[row],
+        );
+        row += 1;
+        for item in &inv.items {
+            let (icon, icon_color) = match item.item_type.as_str() {
+                "manny" => ("♟", Color::Green),
+                _ => ("◈", Color::White),
+            };
+            let task_span = match item.current_task.as_deref() {
+                None => Span::styled("idle", Style::default().fg(Color::DarkGray)),
+                Some(t) => Span::styled(t.to_string(), Style::default().fg(Color::Yellow)),
+            };
+            let progress = if item.current_task.is_some() {
+                format!(" {:3.0}%", item.task_progress_percent)
+            } else {
+                String::new()
+            };
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled(format!("  {icon} "), Style::default().fg(icon_color)),
+                    Span::raw(format!("{:<14}", item.name)),
+                    task_span,
+                    Span::styled(progress, Style::default().fg(Color::DarkGray)),
+                ])),
+                rows[row],
+            );
+            row += 1;
+        }
+    } else if !inv.items.is_empty() {
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled("  items  ", Style::default().fg(Color::DarkGray)),
+                Span::styled(format!("{}", inv.items.len()), Style::default().fg(Color::White)),
+                Span::styled("  (focus to expand)", Style::default().fg(Color::DarkGray)),
             ])),
             rows[row],
         );
@@ -283,10 +368,43 @@ fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+    let list_area = rows[0];
+    let hint_area = rows[1];
+
+    // Hint bar
+    if focused {
+        let selected_can_repair = state.mannies.as_ref()
+            .and_then(|m| m.get(state.mannies_selection))
+            .map(|m| m.can_receive_orders)
+            .unwrap_or(false);
+        if selected_can_repair {
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled("[Enter]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" repair  "),
+                    Span::styled("[e]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" mine"),
+                ])),
+                hint_area,
+            );
+        } else {
+            frame.render_widget(
+                Paragraph::new(
+                    Span::styled("busy — cannot receive orders", Style::default().fg(Color::DarkGray)),
+                ),
+                hint_area,
+            );
+        }
+    }
+
     let Some(mannies) = &state.mannies else {
         frame.render_widget(
             Paragraph::new("No data").style(Style::default().fg(Color::DarkGray)),
-            inner,
+            list_area,
         );
         return;
     };
@@ -294,7 +412,7 @@ fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
     if mannies.is_empty() {
         frame.render_widget(
             Paragraph::new("No mannies aboard").style(Style::default().fg(Color::DarkGray)),
-            inner,
+            list_area,
         );
         return;
     }
@@ -316,7 +434,7 @@ fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
         list_state.select(Some(state.mannies_selection));
     }
 
-    frame.render_stateful_widget(list, inner, &mut list_state);
+    frame.render_stateful_widget(list, list_area, &mut list_state);
 }
 
 fn manny_list_item(m: &Manny) -> ListItem<'_> {
@@ -796,6 +914,324 @@ fn render_travel_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     }
 }
 
+fn estimate_mine_duration(target_amount: f64) -> (i64, i64) {
+    const CARGO_CAP: f64 = 0.30;
+    const TRAVEL_SECS: i64 = 1800; // 900s each way
+    const TICK_AMOUNT: f64 = 0.01;
+    const TICK_SECS: i64 = 300;
+    let trips = (target_amount / CARGO_CAP).ceil() as i64;
+    let mut remaining = target_amount;
+    let mut total_secs: i64 = 0;
+    for _ in 0..trips {
+        let trip = remaining.min(CARGO_CAP);
+        let ticks = (trip / TICK_AMOUNT).ceil() as i64;
+        total_secs += TRAVEL_SECS + ticks * TICK_SECS;
+        remaining -= trip;
+    }
+    (trips, total_secs)
+}
+
+fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    match &state.mine {
+        MineInput::PickAsteroid { manny_name, candidates, selection, .. } => {
+            let height = (candidates.len() as u16 + 6).min(16);
+            let popup = centered_rect(50, height, area);
+            frame.render_widget(Clear, popup);
+            let block = Block::default()
+                .title(format!(" MINE — {manny_name} "))
+                .title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan));
+            let inner = block.inner(popup);
+            frame.render_widget(block, popup);
+
+            let rows = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(1), Constraint::Length(1)])
+                .split(inner);
+
+            let mut lines: Vec<Line> = vec![
+                Line::from(Span::styled("Select mining target:", Style::default().fg(Color::Cyan))),
+                Line::default(),
+            ];
+            for (i, (_, name)) in candidates.iter().enumerate() {
+                let selected = i == *selection;
+                if selected {
+                    lines.push(Line::from(vec![
+                        Span::styled("▶ ", Style::default().fg(Color::Yellow)),
+                        Span::styled(name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                    ]));
+                } else {
+                    lines.push(Line::from(vec![
+                        Span::raw("  "),
+                        Span::styled(name.as_str(), Style::default().fg(Color::DarkGray)),
+                    ]));
+                }
+            }
+            frame.render_widget(Paragraph::new(lines), rows[0]);
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" select  "),
+                    Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                    Span::raw(" confirm  "),
+                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" cancel"),
+                ])),
+                rows[1],
+            );
+        }
+
+        MineInput::Configure { manny_name, object_name, resources, amount_buf, amount_mode, error, .. } => {
+            let popup = centered_rect(52, 14, area);
+            frame.render_widget(Clear, popup);
+
+            let manny_short = if manny_name.len() > 10 { &manny_name[..10] } else { manny_name };
+            let obj_short = if object_name.len() > 12 { &object_name[..12] } else { object_name };
+            let title = format!(" MINE — {manny_short} → {obj_short} ");
+            let block = Block::default()
+                .title(title)
+                .title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan));
+            let inner = block.inner(popup);
+            frame.render_widget(block, popup);
+
+            let rows = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(1), Constraint::Length(1)])
+                .split(inner);
+
+            let mut lines: Vec<Line> = Vec::new();
+
+            // Resources section
+            let res_header_color = if *amount_mode { Color::DarkGray } else { Color::Cyan };
+            lines.push(Line::from(vec![
+                Span::styled("Resources", Style::default().fg(res_header_color)),
+                Span::styled(
+                    if *amount_mode { "  (Tab to edit)" } else { "  [1-4 to toggle]" },
+                    Style::default().fg(Color::DarkGray),
+                ),
+            ]));
+            for (i, (&label, &_type_str)) in RESOURCE_LABELS.iter().zip(RESOURCE_TYPES.iter()).enumerate() {
+                let checked = if resources[i] { "[✓]" } else { "[ ]" };
+                let (checked_color, label_color) = if resources[i] {
+                    (Color::Green, Color::White)
+                } else {
+                    (Color::DarkGray, Color::DarkGray)
+                };
+                lines.push(Line::from(vec![
+                    Span::styled(format!("  {checked} "), Style::default().fg(checked_color)),
+                    Span::styled(format!("{} ", i + 1), Style::default().fg(Color::DarkGray)),
+                    Span::styled(label, Style::default().fg(label_color)),
+                ]));
+            }
+
+            lines.push(Line::default());
+
+            // Amount section
+            let amt_header_color = if *amount_mode { Color::Cyan } else { Color::DarkGray };
+            if *amount_mode {
+                lines.push(Line::from(vec![
+                    Span::styled("Amount: ", Style::default().fg(amt_header_color)),
+                    Span::raw(amount_buf.as_str()),
+                    Span::styled("█", Style::default().fg(Color::Cyan)),
+                    Span::styled(" ECE", Style::default().fg(Color::DarkGray)),
+                    Span::raw("  "),
+                    Span::styled("[M]", Style::default().fg(Color::Yellow)),
+                    Span::styled(" max", Style::default().fg(Color::DarkGray)),
+                ]));
+            } else {
+                lines.push(Line::from(vec![
+                    Span::styled("Amount: ", Style::default().fg(amt_header_color)),
+                    Span::styled(amount_buf.as_str(), Style::default().fg(Color::DarkGray)),
+                    Span::styled(" ECE", Style::default().fg(Color::DarkGray)),
+                    Span::styled("  [Tab to edit]", Style::default().fg(Color::DarkGray)),
+                ]));
+            }
+
+            // Time estimate
+            if let Ok(amount) = amount_buf.parse::<f64>() {
+                if amount > 0.0 {
+                    let (trips, secs) = estimate_mine_duration(amount);
+                    lines.push(Line::from(vec![
+                        Span::styled(
+                            format!("{trips} trip{}  •  ~{}", if trips == 1 { "" } else { "s" }, format_duration(secs)),
+                            Style::default().fg(Color::DarkGray),
+                        ),
+                    ]));
+                } else {
+                    lines.push(Line::default());
+                }
+            } else {
+                lines.push(Line::default());
+            }
+
+            // Error
+            if let Some(err) = error {
+                lines.push(Line::default());
+                lines.push(Line::from(Span::styled(
+                    format!("✗ {err}"),
+                    Style::default().fg(Color::Red),
+                )));
+            }
+
+            frame.render_widget(Paragraph::new(lines), rows[0]);
+
+            // Hint bar
+            let any_resource = resources.iter().any(|&r| r);
+            let valid_amount = amount_buf.parse::<f64>().ok().filter(|&v| v > 0.0).is_some();
+            let can_send = any_resource && valid_amount;
+            let hint = if *amount_mode {
+                Line::from(vec![
+                    Span::styled("[Tab]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" resources  "),
+                    Span::styled("[Enter]", if can_send { Style::default().fg(Color::Green).add_modifier(Modifier::BOLD) } else { Style::default().fg(Color::DarkGray) }),
+                    Span::raw(" send  "),
+                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" cancel"),
+                ])
+            } else {
+                Line::from(vec![
+                    Span::styled("[1-4]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" toggle  "),
+                    Span::styled("[Tab]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" amount  "),
+                    Span::styled("[Enter]", if can_send { Style::default().fg(Color::Green).add_modifier(Modifier::BOLD) } else { Style::default().fg(Color::DarkGray) }),
+                    Span::raw(" send  "),
+                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" cancel"),
+                ])
+            };
+            frame.render_widget(Paragraph::new(hint), rows[1]);
+        }
+
+        MineInput::Inactive => {}
+    }
+}
+
+fn render_repair_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let RepairInput::Typing { ref manny_name, ref buf, ref error, .. } = state.repair else { return };
+
+    let max_pct = state.repair_max_percent();
+    let metals_stock = state.repair_metals_stock();
+
+    let parsed = buf.parse::<f64>().ok().filter(|&v| v > 0.0);
+    let effective = parsed.map(|v| v.min(max_pct));
+    let metals_cost = effective.map(|v| v * 0.01);
+    let duration_secs = effective.map(|v| (v * 600.0) as i64);
+    let insufficient = metals_cost.map_or(false, |c| c > metals_stock + 1e-6);
+
+    let popup = centered_rect(46, 12, area);
+    frame.render_widget(Clear, popup);
+
+    let title = format!(" REPAIR — {manny_name} ");
+    let block = Block::default()
+        .title(title)
+        .title_alignment(Alignment::Center)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan));
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+    let body = rows[0];
+    let hint_area = rows[1];
+
+    let mut lines: Vec<Line> = Vec::new();
+
+    // Input line
+    lines.push(Line::from(vec![
+        Span::styled("Restore: ", Style::default().fg(Color::Cyan)),
+        Span::raw(buf.as_str()),
+        Span::styled("█", Style::default().fg(Color::Cyan)),
+        Span::styled("%", Style::default().fg(Color::DarkGray)),
+    ]));
+
+    lines.push(Line::default());
+
+    // MAX hint
+    lines.push(Line::from(vec![
+        Span::styled("MAX  ", Style::default().fg(Color::DarkGray)),
+        Span::styled(format!("{max_pct:.2}%"), Style::default().fg(Color::White)),
+        Span::raw("   "),
+        Span::styled("[M]", Style::default().fg(Color::Yellow)),
+        Span::styled(" fill", Style::default().fg(Color::DarkGray)),
+    ]));
+
+    lines.push(Line::default());
+
+    // Cost preview (only when input is parseable)
+    if let (Some(metals), Some(secs)) = (metals_cost, duration_secs) {
+        let metals_color = if insufficient { Color::Red } else { Color::White };
+        lines.push(Line::from(vec![
+            Span::styled("Metals  ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{metals:.4}"), Style::default().fg(metals_color)),
+            Span::styled(" ECE", Style::default().fg(Color::DarkGray)),
+            if insufficient {
+                Span::styled(
+                    format!("  (have {metals_stock:.4})"),
+                    Style::default().fg(Color::Red),
+                )
+            } else {
+                Span::raw("")
+            },
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("Time    ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format_duration(secs), Style::default().fg(Color::Yellow)),
+        ]));
+        if let Some(eff) = effective {
+            if parsed.map_or(false, |v| v > max_pct + 0.001) {
+                lines.push(Line::from(vec![
+                    Span::styled(
+                        format!("  → capped at {eff:.2}% (probe already at max above)"),
+                        Style::default().fg(Color::DarkGray),
+                    ),
+                ]));
+            }
+        }
+    } else {
+        lines.push(Line::from(Span::styled(
+            "type a value to see cost",
+            Style::default().fg(Color::DarkGray),
+        )));
+    }
+
+    // API error
+    if let Some(err) = error {
+        lines.push(Line::default());
+        lines.push(Line::from(Span::styled(
+            format!("✗ {err}"),
+            Style::default().fg(Color::Red),
+        )));
+    }
+
+    frame.render_widget(Paragraph::new(lines), body);
+
+    // Hint bar
+    let can_send = parsed.is_some() && !insufficient;
+    let hint = if can_send {
+        Line::from(vec![
+            Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::raw(" send  "),
+            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::raw(" cancel"),
+        ])
+    } else {
+        Line::from(vec![
+            Span::styled("[Enter]", Style::default().fg(Color::DarkGray)),
+            Span::raw(" send  "),
+            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::raw(" cancel"),
+        ])
+    };
+    frame.render_widget(Paragraph::new(hint), hint_area);
+}
+
 fn sector_interest_color(s: &crate::api::types::SectorObservation) -> Color {
     use crate::api::types::{DangerLevel, KnowledgeLevel, SectorObjectType};
 
@@ -876,10 +1312,12 @@ fn sector_object_lines(obj: &SectorObject) -> Vec<Line<'_>> {
             Style::default().fg(Color::DarkGray),
         ));
     }
-    main_spans.push(Span::styled(
-        format!("  {}", obj.summary),
-        Style::default().fg(Color::DarkGray),
-    ));
+    if let Some(summary) = &obj.summary {
+        main_spans.push(Span::styled(
+            format!("  {summary}"),
+            Style::default().fg(Color::DarkGray),
+        ));
+    }
 
     let mut lines = vec![Line::from(main_spans)];
 
@@ -914,6 +1352,154 @@ fn sector_object_lines(obj: &SectorObject) -> Vec<Line<'_>> {
     lines
 }
 
+// ── Map overlay ───────────────────────────────────────────────────────────────
+
+fn map_cell_symbol(s: &SectorObservation) -> (&'static str, Style) {
+    if let Some(objects) = &s.objects {
+        for obj in objects {
+            if matches!(obj.object_type, SectorObjectType::BlackHole) {
+                return ("◉", Style::default().fg(Color::Magenta));
+            }
+            if matches!(obj.danger_level, Some(DangerLevel::Extreme)) {
+                return ("!", Style::default().fg(Color::Red));
+            }
+            if matches!(obj.object_type, SectorObjectType::Star | SectorObjectType::SolarSystem) {
+                let has_minable = obj.minable_targets.as_ref()
+                    .map_or(false, |t| !t.is_empty());
+                return if has_minable {
+                    ("★", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+                } else {
+                    ("★", Style::default().fg(Color::Yellow))
+                };
+            }
+        }
+        return ("●", Style::default().fg(Color::Green));
+    }
+    ("·", Style::default().fg(Color::White))
+}
+
+fn render_map_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    use std::collections::HashMap;
+
+    let popup = centered_rect(66, 24, area);
+    frame.render_widget(Clear, popup);
+
+    let block = Block::default()
+        .title(Span::styled(
+            format!(
+                " MAP  ({},{},{})  y:{} ",
+                state.map.center_x, state.map.y_layer, state.map.center_z,
+                state.map.y_layer,
+            ),
+            Style::default().fg(Color::Cyan),
+        ))
+        .title_alignment(Alignment::Center)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan));
+    let map_inner = block.inner(popup);
+    frame.render_widget(block, popup);
+
+    let rows_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(map_inner);
+    let map_area = rows_layout[0];
+    let hint_area = rows_layout[1];
+
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("[hjkl]", Style::default().fg(Color::Cyan)),
+            Span::raw(" pan  "),
+            Span::styled("[u/d]", Style::default().fg(Color::Cyan)),
+            Span::raw(" y±1  "),
+            Span::styled("[g]", Style::default().fg(Color::Yellow)),
+            Span::raw(" travel  "),
+            Span::styled("[b/Esc]", Style::default().fg(Color::Cyan)),
+            Span::raw(" close"),
+        ])),
+        hint_area,
+    );
+
+    // Fast lookup: (x,y,z) → sector
+    let sector_lookup: HashMap<(i32, i32, i32), &SectorObservation> = state
+        .scan_history
+        .iter()
+        .map(|s| {
+            (
+                (
+                    s.relative_coordinates.x as i32,
+                    s.relative_coordinates.y as i32,
+                    s.relative_coordinates.z as i32,
+                ),
+                s,
+            )
+        })
+        .collect();
+
+    let probe_coords = state
+        .probe
+        .as_ref()
+        .and_then(|p| p.sector.as_ref())
+        .and_then(|s| s.relative.as_ref())
+        .map(|r| (r.x as i32, r.y as i32, r.z as i32));
+
+    let cx = state.map.center_x;
+    let cz = state.map.center_z;
+    let y = state.map.y_layer;
+    let w = map_area.width as i32;
+    let h = map_area.height as i32;
+    let center_col = map_area.x as i32 + w / 2;
+    let center_row = map_area.y as i32 + h / 2;
+
+    // Projection:
+    //   term_col = center_col + (dx - dz) * 2
+    //   term_row = center_row - (dx + dz) / 2
+    // Valid cells: (dx+dz) even, col_off multiple of 4.
+
+    let buf = frame.buffer_mut();
+
+    for tr in map_area.y..(map_area.y + map_area.height) {
+        let row_off = tr as i32 - center_row;
+        let dsum = -2 * row_off; // dx + dz
+
+        let col_off_min = map_area.x as i32 - center_col;
+        let rem = col_off_min.rem_euclid(4);
+        let col_off_start = if rem == 0 { col_off_min } else { col_off_min + (4 - rem) };
+        let col_off_max = (map_area.x as i32 + w - 1) - center_col;
+
+        let mut col_off = col_off_start;
+        while col_off <= col_off_max {
+            let tc = (center_col + col_off) as u16;
+            let ddiff = col_off / 2; // dx - dz
+            let dx = (dsum + ddiff) / 2;
+            let dz = (dsum - ddiff) / 2;
+            let x = cx + dx;
+            let z = cz + dz;
+
+            let is_probe = probe_coords == Some((x, y, z));
+            let is_center = dx == 0 && dz == 0;
+
+            let (sym, style) = if is_probe {
+                ("⊕", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+            } else if let Some(sector) = sector_lookup.get(&(x, y, z)) {
+                let (s, st) = map_cell_symbol(sector);
+                if is_center {
+                    (s, st.add_modifier(Modifier::REVERSED))
+                } else {
+                    (s, st)
+                }
+            } else if is_center {
+                ("+", Style::default().fg(Color::DarkGray).add_modifier(Modifier::REVERSED))
+            } else {
+                ("·", Style::default().fg(Color::DarkGray))
+            };
+
+            buf.set_string(tc, tr, sym, style);
+            col_off += 4;
+        }
+    }
+}
+
 // ── Status bar ────────────────────────────────────────────────────────────────
 
 fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -946,6 +1532,8 @@ fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
         Span::raw(" scanner  "),
         Span::styled("[t]", Style::default().fg(Color::Cyan)),
         Span::raw(" travel  "),
+        Span::styled("[b]", Style::default().fg(Color::Cyan)),
+        Span::raw(" map  "),
         Span::styled("[q]", Style::default().fg(Color::Cyan)),
         Span::raw(" quit"),
         Span::styled(error_part, Style::default().fg(Color::Red)),
@@ -978,7 +1566,10 @@ fn probe_panel_height(state: &AppState) -> u16 {
             MovementPhase::Arrived | MovementPhase::Failed | MovementPhase::Destroyed | MovementPhase::Idle
         )
     }).is_some();
+    let show_sector = !has_movement
+        && probe.sector.as_ref().and_then(|s| s.relative.as_ref()).is_some();
     let content: u16 = 1  // name + status
+        + if show_sector { 1 } else { 0 }   // current sector coords
         + if has_movement { 4 } else { 0 }  // coords + phase + travel + speed
         + 1  // fuel
         + if probe.systems.is_some() { 1 } else { 0 };  // integrity
@@ -986,10 +1577,21 @@ fn probe_panel_height(state: &AppState) -> u16 {
 }
 
 fn inventory_panel_height(state: &AppState) -> u16 {
-    let n_stocks = state.probe.as_ref()
-        .map(|p| p.inventory.resource_stocks.len() as u16)
-        .unwrap_or(0);
-    1 + n_stocks + 2  // cargo gauge + stocks + borders
+    let probe = match &state.probe {
+        Some(p) => p,
+        None => return 3,
+    };
+    let inv = &probe.inventory;
+    let focused = state.focused == Some(Panel::Inventory);
+    let n_stocks = inv.resource_stocks.len() as u16;
+    let items_rows: u16 = if focused && !inv.items.is_empty() {
+        1 + inv.items.len() as u16
+    } else if !inv.items.is_empty() {
+        1
+    } else {
+        0
+    };
+    1 + n_stocks + items_rows + 2
 }
 
 fn top_row_height(state: &AppState) -> u16 {

@@ -15,7 +15,8 @@ mod config;
 mod ui;
 
 use api::client::ApiClient;
-use app::{ApiMessage, AppState, Panel, ScanMode, TravelInput};
+use api::types::SectorObjectType;
+use app::{ApiMessage, AppState, MineInput, Panel, RepairInput, ScanMode, TravelInput, RESOURCE_TYPES};
 
 fn neighbors_d1() -> Vec<(i32, i32, i32)> {
     let mut out = Vec::new();
@@ -123,6 +124,16 @@ async fn run(
                     }
                     ApiMessage::MoveStarted(mv) => state.apply_movement(mv),
                     ApiMessage::MoveError(e) => state.set_travel_error(e),
+                    ApiMessage::RepairStarted => {
+                        state.repair = RepairInput::Inactive;
+                        fetch_mannies(client.clone(), tx.clone());
+                    }
+                    ApiMessage::RepairError(e) => state.set_repair_error(e),
+                    ApiMessage::MineStarted => {
+                        state.mine = MineInput::Inactive;
+                        fetch_mannies(client.clone(), tx.clone());
+                    }
+                    ApiMessage::MineError(e) => state.set_mine_error(e),
                     ApiMessage::Error(e) => state.set_error(e),
                 }
             }
@@ -154,14 +165,31 @@ fn handle_event(
     let in_scan_input = matches!(state.scan_mode, ScanMode::Input(_));
     let in_direction_pick = matches!(state.scan_mode, ScanMode::DirectionPick);
     let in_travel = !matches!(state.travel, TravelInput::Inactive);
+    let in_repair = !matches!(state.repair, RepairInput::Inactive);
 
     if ctrl && k.code == KeyCode::Char('c') {
         state.set_quit();
         return;
     }
 
+    if state.map.open {
+        handle_map_event(k.code, state);
+        return;
+    }
+
     if in_travel {
         handle_travel_event(k.code, state, client, tx);
+        return;
+    }
+
+    if in_repair {
+        handle_repair_event(k.code, state, client, tx);
+        return;
+    }
+
+    let in_mine = !matches!(state.mine, MineInput::Inactive);
+    if in_mine {
+        handle_mine_event(k.code, state, client, tx);
         return;
     }
 
@@ -203,6 +231,7 @@ fn handle_event(
 
     match k.code {
         KeyCode::Char('q') => state.set_quit(),
+        KeyCode::Char('b') => state.open_map(),
         KeyCode::Esc => state.focused = None,
         KeyCode::Char('t') => {
             state.travel = TravelInput::Typing(String::new());
@@ -236,6 +265,49 @@ fn handle_event(
         }
         KeyCode::Up | KeyCode::Char('k') if state.focused == Some(Panel::Scanner) => {
             state.scan_hist_prev();
+        }
+        KeyCode::Enter if state.focused == Some(Panel::Mannies) => {
+            if let Some(mannies) = &state.mannies {
+                if let Some(manny) = mannies.get(state.mannies_selection) {
+                    if manny.can_receive_orders {
+                        state.repair = RepairInput::Typing {
+                            manny_id: manny.id.clone(),
+                            manny_name: manny.name.clone(),
+                            buf: String::new(),
+                            error: None,
+                        };
+                    }
+                }
+            }
+        }
+        KeyCode::Char('e') if state.focused == Some(Panel::Mannies) => {
+            if let Some(mannies) = &state.mannies {
+                if let Some(manny) = mannies.get(state.mannies_selection) {
+                    if manny.can_receive_orders {
+                        let manny_id = manny.id.clone();
+                        let manny_name = manny.name.clone();
+                        let candidates = collect_mineable_candidates(state);
+                        match candidates.len() {
+                            0 => state.error = Some("no mineable objects in current sector — scan first".into()),
+                            1 => {
+                                let (object_id, object_name) = candidates.into_iter().next().unwrap();
+                                state.mine = MineInput::Configure {
+                                    manny_id, manny_name, object_id, object_name,
+                                    resources: [false, true, false, false],
+                                    amount_buf: "0.30".into(),
+                                    amount_mode: false,
+                                    error: None,
+                                };
+                            }
+                            _ => {
+                                state.mine = MineInput::PickAsteroid {
+                                    manny_id, manny_name, candidates, selection: 0,
+                                };
+                            }
+                        }
+                    }
+                }
+            }
         }
         KeyCode::Enter if state.focused == Some(Panel::Scanner) && !state.scan_loading => {
             state.scan_loading = true;
@@ -326,6 +398,194 @@ fn handle_travel_event(
     }
 }
 
+fn handle_repair_event(
+    code: KeyCode,
+    state: &mut AppState,
+    client: &ApiClient,
+    tx: &mpsc::Sender<ApiMessage>,
+) {
+    match code {
+        KeyCode::Esc => state.repair = RepairInput::Inactive,
+        KeyCode::Backspace => state.repair_backspace(),
+        KeyCode::Char('m') | KeyCode::Char('M') => state.repair_fill_max(),
+        KeyCode::Char(c) => state.repair_type_char(c),
+        KeyCode::Enter => {
+            let (manny_id, pct) = {
+                let RepairInput::Typing { ref manny_id, ref buf, .. } = state.repair else { return };
+                let Ok(pct) = buf.parse::<f64>() else { return };
+                if pct <= 0.0 { return }
+                (manny_id.clone(), pct)
+            };
+            fetch_repair(manny_id, pct, client.clone(), tx.clone());
+        }
+        _ => {}
+    }
+}
+
+fn handle_mine_event(
+    code: KeyCode,
+    state: &mut AppState,
+    client: &ApiClient,
+    tx: &mpsc::Sender<ApiMessage>,
+) {
+    match &state.mine {
+        MineInput::PickAsteroid { selection, candidates, .. } => {
+            let sel = *selection;
+            let count = candidates.len();
+            match code {
+                KeyCode::Esc => state.mine = MineInput::Inactive,
+                KeyCode::Up | KeyCode::Char('k') => {
+                    if let MineInput::PickAsteroid { ref mut selection, .. } = state.mine {
+                        *selection = sel.checked_sub(1).unwrap_or(count - 1);
+                    }
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    if let MineInput::PickAsteroid { ref mut selection, .. } = state.mine {
+                        *selection = (sel + 1) % count;
+                    }
+                }
+                KeyCode::Enter => {
+                    let (manny_id, manny_name, object_id, object_name) = {
+                        let MineInput::PickAsteroid { ref manny_id, ref manny_name, ref candidates, selection } = state.mine else { return };
+                        let (id, name) = candidates[selection].clone();
+                        (manny_id.clone(), manny_name.clone(), id, name)
+                    };
+                    state.mine = MineInput::Configure {
+                        manny_id, manny_name, object_id, object_name,
+                        resources: [false, true, false, false],
+                        amount_buf: "0.30".into(),
+                        amount_mode: false,
+                        error: None,
+                    };
+                }
+                _ => {}
+            }
+        }
+        MineInput::Configure { amount_mode, .. } => {
+            let am = *amount_mode;
+            match code {
+                KeyCode::Esc => state.mine = MineInput::Inactive,
+                KeyCode::Tab => {
+                    if let MineInput::Configure { ref mut amount_mode, ref mut error, .. } = state.mine {
+                        *amount_mode = !am;
+                        *error = None;
+                    }
+                }
+                // Toggle resources (only in resource mode)
+                KeyCode::Char(c @ '1'..='4') if !am => {
+                    let idx = (c as u8 - b'1') as usize;
+                    if let MineInput::Configure { ref mut resources, ref mut error, .. } = state.mine {
+                        resources[idx] = !resources[idx];
+                        *error = None;
+                    }
+                }
+                // Amount editing (only in amount mode)
+                KeyCode::Char('m') | KeyCode::Char('M') if am => {
+                    let max = state.mine_max_amount();
+                    if let MineInput::Configure { ref mut amount_buf, ref mut error, .. } = state.mine {
+                        *amount_buf = format!("{:.4}", max);
+                        *error = None;
+                    }
+                }
+                KeyCode::Char(c) if am && (c.is_ascii_digit() || c == '.') => {
+                    if let MineInput::Configure { ref mut amount_buf, ref mut error, .. } = state.mine {
+                        if !(c == '.' && amount_buf.contains('.')) {
+                            amount_buf.push(c);
+                            *error = None;
+                        }
+                    }
+                }
+                KeyCode::Backspace if am => {
+                    if let MineInput::Configure { ref mut amount_buf, .. } = state.mine {
+                        amount_buf.pop();
+                    }
+                }
+                KeyCode::Enter => {
+                    let (manny_id, object_id, selected_resources, amount) = {
+                        let MineInput::Configure { ref manny_id, ref object_id, resources, ref amount_buf, .. } = state.mine else { return };
+                        let selected: Vec<String> = RESOURCE_TYPES.iter().enumerate()
+                            .filter(|(i, _)| resources[*i])
+                            .map(|(_, &t)| t.to_string())
+                            .collect();
+                        if selected.is_empty() { return }
+                        let Ok(amount) = amount_buf.parse::<f64>() else { return };
+                        if amount <= 0.0 { return }
+                        (manny_id.clone(), object_id.clone(), selected, amount)
+                    };
+                    fetch_mine(manny_id, object_id, selected_resources, amount, client.clone(), tx.clone());
+                }
+                _ => {}
+            }
+        }
+        MineInput::Inactive => {}
+    }
+}
+
+fn fetch_mine(
+    manny_id: String,
+    object_id: String,
+    resources: Vec<String>,
+    target_amount: f64,
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+) {
+    tokio::spawn(async move {
+        let msg = match client.mine_manny(&manny_id, &object_id, resources, target_amount).await {
+            Ok(_) => ApiMessage::MineStarted,
+            Err(e) => ApiMessage::MineError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
+fn collect_mineable_candidates(state: &AppState) -> Vec<(String, String)> {
+    // Find the scan for the probe's current sector
+    let current_pos = state.probe.as_ref()
+        .and_then(|p| p.sector.as_ref())
+        .and_then(|s| s.relative.as_ref())
+        .map(|r| (r.x as i64, r.y as i64, r.z as i64));
+
+    let sector = if let Some(pos) = current_pos {
+        state.scan_history.iter().find(|s| {
+            (s.relative_coordinates.x as i64, s.relative_coordinates.y as i64, s.relative_coordinates.z as i64) == pos
+        })
+    } else {
+        state.scan_history.first()
+    };
+
+    sector
+        .and_then(|s| s.objects.as_ref())
+        .map(|objects| {
+            objects.iter()
+                .flat_map(|o| o.minable_targets.iter().flatten())
+                .filter(|t| matches!(t.object_type, SectorObjectType::Asteroid))
+                .map(|t| {
+                    let name = t.name.clone().unwrap_or_else(|| "unnamed".into());
+                    (t.id.clone(), name)
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn fetch_repair(manny_id: String, integrity_percent: f64, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        let msg = match client.repair_manny(&manny_id, integrity_percent).await {
+            Ok(_) => ApiMessage::RepairStarted,
+            Err(e) => ApiMessage::RepairError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
+fn fetch_mannies(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        if let Ok(m) = client.get_mannies().await {
+            let _ = tx.send(ApiMessage::ManniesUpdated(m)).await;
+        }
+    });
+}
+
 fn fetch_move(x: i32, y: i32, z: i32, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     tokio::spawn(async move {
         let msg = match client.move_probe(x, y, z).await {
@@ -334,6 +594,24 @@ fn fetch_move(x: i32, y: i32, z: i32, client: ApiClient, tx: mpsc::Sender<ApiMes
         };
         let _ = tx.send(msg).await;
     });
+}
+
+fn handle_map_event(code: KeyCode, state: &mut AppState) {
+    match code {
+        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('b') => state.map.open = false,
+        KeyCode::Char('h') | KeyCode::Left  => state.map.center_x -= 2,
+        KeyCode::Char('l') | KeyCode::Right => state.map.center_x += 2,
+        KeyCode::Char('k') | KeyCode::Up    => state.map.center_z -= 2,
+        KeyCode::Char('j') | KeyCode::Down  => state.map.center_z += 2,
+        KeyCode::Char('u') => state.map_move_y(1),
+        KeyCode::Char('d') => state.map_move_y(-1),
+        KeyCode::Char('g') => {
+            let (cx, y, cz) = (state.map.center_x, state.map.y_layer, state.map.center_z);
+            state.map.open = false;
+            state.travel_go_sector(cx, y, cz, None);
+        }
+        _ => {}
+    }
 }
 
 fn fetch_sector(coords: Option<(i32, i32, i32)>, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {

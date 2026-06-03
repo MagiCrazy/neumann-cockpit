@@ -108,6 +108,43 @@ impl ApiClient {
             .movement)
     }
 
+    pub async fn repair_manny(&self, manny_id: &str, integrity_percent: f64) -> Result<Manny> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Body { integrity_percent: f64 }
+        #[derive(Deserialize)]
+        struct Resp { manny: Manny }
+        let path = format!("/api/probe/mannies/{manny_id}/repair");
+        Ok(self.post::<Resp, _>(&path, &Body { integrity_percent }).await?.manny)
+    }
+
+    pub async fn mine_manny(
+        &self,
+        manny_id: &str,
+        object_id: &str,
+        resources: Vec<String>,
+        target_amount: f64,
+    ) -> Result<Manny> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Body {
+            object_id: String,
+            resources: Vec<String>,
+            target_amount: f64,
+        }
+        #[derive(Deserialize)]
+        struct Resp { manny: Manny }
+        let path = format!("/api/probe/mannies/{manny_id}/mine");
+        Ok(self
+            .post::<Resp, _>(&path, &Body {
+                object_id: object_id.to_string(),
+                resources,
+                target_amount,
+            })
+            .await?
+            .manny)
+    }
+
     pub async fn get_sector(&self, x: i32, y: i32, z: i32) -> Result<SectorObservation> {
         #[derive(Deserialize)]
         struct Resp {

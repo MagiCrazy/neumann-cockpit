@@ -100,7 +100,8 @@ pub struct MannyCargo {
     pub capacity: f64,
     pub deuterium: f64,
     pub metals: f64,
-    pub other: f64,
+    pub ice: f64,
+    pub organic_compounds: f64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -291,12 +292,24 @@ pub struct SectorObject {
     pub object_type: SectorObjectType,
     pub name: Option<String>,
     pub estimated: Option<bool>,
-    pub summary: String,
+    pub summary: Option<String>,
     pub mass: Option<f64>,
     pub radius: Option<f64>,
     pub danger_level: Option<DangerLevel>,
     pub manny_state: Option<String>,
     pub manny_uid: Option<String>,
+    pub minable_targets: Option<Vec<MinableTarget>>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MinableTarget {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub object_type: SectorObjectType,
+    pub name: Option<String>,
+    pub mass: Option<f64>,
+    pub resource_types: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
