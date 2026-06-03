@@ -16,7 +16,7 @@ mod ui;
 
 use api::client::ApiClient;
 use api::types::SectorObjectType;
-use app::{ApiMessage, AppState, CraftInput, JettisonInput, MineInput, Panel, RecallInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_TYPES};
+use app::{ApiMessage, AppState, CraftInput, DeployInput, JettisonInput, MineInput, Panel, RecallInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_TYPES};
 
 fn neighbors_d1() -> Vec<(i32, i32, i32)> {
     let mut out = Vec::new();
@@ -155,6 +155,11 @@ async fn run(
                         fetch_mannies(client.clone(), tx.clone());
                     }
                     ApiMessage::RecallError(e) => state.set_recall_error(e),
+                    ApiMessage::DeployDone(inv) => {
+                        state.update_inventory(inv);
+                        state.deploy = DeployInput::Inactive;
+                    }
+                    ApiMessage::DeployError(e) => state.set_deploy_error(e),
                     ApiMessage::Error(e) => state.set_error(e),
                 }
             }
@@ -191,6 +196,7 @@ fn handle_event(
     let in_craft = !matches!(state.craft, CraftInput::Inactive);
     let in_salvage = !matches!(state.salvage, SalvageInput::Inactive);
     let in_recall = !matches!(state.recall, RecallInput::Inactive);
+    let in_deploy = !matches!(state.deploy, DeployInput::Inactive);
 
     if ctrl && k.code == KeyCode::Char('c') {
         state.set_quit();
@@ -219,6 +225,11 @@ fn handle_event(
 
     if in_recall {
         handle_recall_event(k.code, state, client, tx);
+        return;
+    }
+
+    if in_deploy {
+        handle_deploy_event(k.code, state, client, tx);
         return;
     }
 
@@ -302,6 +313,34 @@ fn handle_event(
             let items = state.build_jettison_items();
             if !items.is_empty() {
                 state.jettison = JettisonInput::PickItem { items, selection: 0 };
+            }
+        }
+        KeyCode::Char('d') if state.focused == Some(Panel::Inventory) => {
+            match state.inventory_waypoint_bookmark_id() {
+                None => state.error = Some("no waypoint bookmark in inventory — craft one first".into()),
+                Some(item_id) => {
+                    let candidates = state.collect_deploy_candidates();
+                    match candidates.len() {
+                        0 => state.error = Some("no targets in current sector — scan first".into()),
+                        1 => {
+                            let (object_id, object_name) = candidates.into_iter().next().unwrap();
+                            state.deploy = DeployInput::EnterName {
+                                item_id,
+                                object_id,
+                                object_name,
+                                name_buf: String::new(),
+                                error: None,
+                            };
+                        }
+                        _ => {
+                            state.deploy = DeployInput::PickObject {
+                                item_id,
+                                candidates,
+                                selection: 0,
+                            };
+                        }
+                    }
+                }
             }
         }
         KeyCode::Down | KeyCode::Char('j') if state.focused == Some(Panel::Mannies) => {
@@ -945,6 +984,75 @@ fn fetch_sector(coords: Option<(i32, i32, i32)>, client: ApiClient, tx: mpsc::Se
         let msg = match result {
             Ok(s) => ApiMessage::SectorUpdated(s),
             Err(e) => ApiMessage::ScanError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
+fn handle_deploy_event(
+    code: KeyCode,
+    state: &mut AppState,
+    client: &ApiClient,
+    tx: &mpsc::Sender<ApiMessage>,
+) {
+    match &state.deploy {
+        DeployInput::PickObject { selection, candidates, .. } => {
+            let sel = *selection;
+            let count = candidates.len();
+            match code {
+                KeyCode::Esc => state.deploy = DeployInput::Inactive,
+                KeyCode::Up | KeyCode::Char('k') => {
+                    if let DeployInput::PickObject { ref mut selection, .. } = state.deploy {
+                        *selection = sel.checked_sub(1).unwrap_or(count - 1);
+                    }
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    if let DeployInput::PickObject { ref mut selection, .. } = state.deploy {
+                        *selection = (sel + 1) % count;
+                    }
+                }
+                KeyCode::Enter => {
+                    let (item_id, object_id, object_name) = {
+                        let DeployInput::PickObject { ref item_id, ref candidates, selection } = state.deploy else { return };
+                        let (id, name) = candidates[selection].clone();
+                        (item_id.clone(), id, name)
+                    };
+                    state.deploy = DeployInput::EnterName {
+                        item_id,
+                        object_id,
+                        object_name,
+                        name_buf: String::new(),
+                        error: None,
+                    };
+                }
+                _ => {}
+            }
+        }
+        DeployInput::EnterName { .. } => {
+            match code {
+                KeyCode::Esc => state.deploy = DeployInput::Inactive,
+                KeyCode::Backspace => state.deploy_backspace(),
+                KeyCode::Char(c) => state.deploy_type_char(c),
+                KeyCode::Enter => {
+                    let (item_id, object_id, name) = {
+                        let DeployInput::EnterName { ref item_id, ref object_id, ref name_buf, .. } = state.deploy else { return };
+                        if name_buf.is_empty() { return }
+                        (item_id.clone(), object_id.clone(), name_buf.clone())
+                    };
+                    fetch_deploy(item_id, object_id, name, client.clone(), tx.clone());
+                }
+                _ => {}
+            }
+        }
+        DeployInput::Inactive => {}
+    }
+}
+
+fn fetch_deploy(item_id: String, object_id: String, name: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        let msg = match client.deploy_waypoint(&item_id, &object_id, &name).await {
+            Ok(inv) => ApiMessage::DeployDone(inv),
+            Err(e) => ApiMessage::DeployError(e.to_string()),
         };
         let _ = tx.send(msg).await;
     });

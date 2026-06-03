@@ -191,4 +191,14 @@ impl ApiClient {
         let path = format!("/api/probe/mannies/{manny_id}/recall");
         Ok(self.post::<Resp, _>(&path, &serde_json::json!({})).await?.manny)
     }
+
+    pub async fn deploy_waypoint(&self, item_id: &str, object_id: &str, name: &str) -> Result<ProbeInventory> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Body<'a> { object_id: &'a str, name: &'a str }
+        #[derive(Deserialize)]
+        struct Resp { inventory: ProbeInventory }
+        let path = format!("/api/probe/waypoint-bookmarks/{item_id}/deploy");
+        Ok(self.post::<Resp, _>(&path, &Body { object_id, name }).await?.inventory)
+    }
 }

@@ -1,4 +1,4 @@
-use crate::api::types::{Manny, Probe, ProbeInventory, ProbeMovement, SectorObjectType, SectorObservation};
+use crate::api::types::{Manny, Probe, ProbeInventory, ProbeMovement, SectorObject, SectorObjectType, SectorObservation};
 use chrono::{DateTime, Local, Utc};
 use std::path::Path;
 use tokio::time::Instant;
@@ -127,6 +127,24 @@ pub enum RecallInput {
 }
 
 #[derive(Default)]
+pub enum DeployInput {
+    #[default]
+    Inactive,
+    PickObject {
+        item_id: String,
+        candidates: Vec<(String, String)>,
+        selection: usize,
+    },
+    EnterName {
+        item_id: String,
+        object_id: String,
+        object_name: String,
+        name_buf: String,
+        error: Option<String>,
+    },
+}
+
+#[derive(Default)]
 pub enum JettisonInput {
     #[default]
     Inactive,
@@ -167,6 +185,8 @@ pub enum ApiMessage {
     SalvageError(String),
     RecallStarted,
     RecallError(String),
+    DeployDone(ProbeInventory),
+    DeployError(String),
     Error(String),
 }
 
@@ -194,6 +214,7 @@ pub struct AppState {
     pub craft: CraftInput,
     pub salvage: SalvageInput,
     pub recall: RecallInput,
+    pub deploy: DeployInput,
     pub map: MapView,
 }
 
@@ -622,5 +643,60 @@ impl AppState {
             JettisonInput::EnterAmount { ref mut error, .. } => *error = Some(msg),
             _ => {}
         }
+    }
+
+    pub fn set_deploy_error(&mut self, msg: String) {
+        if let DeployInput::EnterName { ref mut error, .. } = self.deploy {
+            *error = Some(msg);
+        }
+    }
+
+    pub fn deploy_type_char(&mut self, c: char) {
+        if let DeployInput::EnterName { ref mut name_buf, .. } = self.deploy {
+            if name_buf.len() < 80 {
+                name_buf.push(c);
+            }
+        }
+    }
+
+    pub fn deploy_backspace(&mut self) {
+        if let DeployInput::EnterName { ref mut name_buf, .. } = self.deploy {
+            name_buf.pop();
+        }
+    }
+
+    pub fn collect_deploy_candidates(&self) -> Vec<(String, String)> {
+        let current_pos = self.probe.as_ref()
+            .and_then(|p| p.sector.as_ref())
+            .and_then(|s| s.relative.as_ref())
+            .map(|r| (r.x as i64, r.y as i64, r.z as i64));
+
+        let sector = if let Some(pos) = current_pos {
+            self.scan_history.iter().find(|s| {
+                (s.relative_coordinates.x as i64, s.relative_coordinates.y as i64, s.relative_coordinates.z as i64) == pos
+            })
+        } else {
+            self.scan_history.first()
+        };
+
+        sector
+            .and_then(|s| s.objects.as_ref())
+            .map(|objects| {
+                objects.iter()
+                    .filter(|o| o.id.is_some())
+                    .map(|o: &SectorObject| {
+                        let id = o.id.clone().unwrap();
+                        let name = o.name.clone().unwrap_or_else(|| format!("{:?}", o.object_type).to_lowercase());
+                        (id, name)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn inventory_waypoint_bookmark_id(&self) -> Option<String> {
+        self.probe.as_ref()?.inventory.items.iter()
+            .find(|i| i.item_type == "waypoint_bookmark")
+            .map(|i| i.id.clone())
     }
 }

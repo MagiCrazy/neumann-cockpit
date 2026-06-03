@@ -2,7 +2,7 @@ use crate::api::types::{
     DangerLevel, DataFreshness, KnowledgeLevel, Manny, MannyLocationType, MannyTask,
     MovementPhase, ProbeStatus, SectorObject, SectorObjectType, SectorObservation, SensorMode,
 };
-use crate::app::{AppState, CraftInput, JettisonInput, MineInput, Panel, RecallInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_LABELS, RESOURCE_TYPES};
+use crate::app::{AppState, CraftInput, DeployInput, JettisonInput, MineInput, Panel, RecallInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_LABELS, RESOURCE_TYPES};
 use chrono::Utc;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -78,6 +78,9 @@ pub fn render(frame: &mut Frame, state: &AppState) {
     }
     if !matches!(state.recall, RecallInput::Inactive) {
         render_recall_overlay(frame, area, state);
+    }
+    if !matches!(state.deploy, DeployInput::Inactive) {
+        render_deploy_overlay(frame, area, state);
     }
 }
 
@@ -269,11 +272,17 @@ fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focus
     };
 
     if let Some(hint_area) = hint_area_opt {
+        let mut hint_spans = vec![
+            Span::styled("[j]", Style::default().fg(Color::Cyan)),
+            Span::raw(" jettison"),
+        ];
+        if state.inventory_waypoint_bookmark_id().is_some() {
+            hint_spans.push(Span::raw("  "));
+            hint_spans.push(Span::styled("[d]", Style::default().fg(Color::Cyan)));
+            hint_spans.push(Span::raw(" deploy"));
+        }
         frame.render_widget(
-            Paragraph::new(Line::from(vec![
-                Span::styled("[j]", Style::default().fg(Color::Cyan)),
-                Span::raw(" jettison"),
-            ])),
+            Paragraph::new(Line::from(hint_spans)),
             hint_area,
         );
     }
@@ -1618,6 +1627,100 @@ fn render_recall_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
         ])),
         rows[1],
     );
+}
+
+fn render_deploy_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    match &state.deploy {
+        DeployInput::PickObject { candidates, selection, .. } => {
+            let height = (candidates.len() as u16 + 6).min(18);
+            let popup = centered_rect(52, height, area);
+            frame.render_widget(Clear, popup);
+            let block = Block::default()
+                .title(" DEPLOY WAYPOINT ")
+                .title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan));
+            let inner = block.inner(popup);
+            frame.render_widget(block, popup);
+
+            let rows = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(1), Constraint::Length(1)])
+                .split(inner);
+
+            let mut lines: Vec<Line> = Vec::new();
+            for (i, (_, name)) in candidates.iter().enumerate() {
+                let selected = i == *selection;
+                if selected {
+                    lines.push(Line::from(vec![
+                        Span::styled("▶ ", Style::default().fg(Color::Yellow)),
+                        Span::styled(name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                    ]));
+                } else {
+                    lines.push(Line::from(vec![
+                        Span::raw("  "),
+                        Span::styled(name.as_str(), Style::default().fg(Color::DarkGray)),
+                    ]));
+                }
+            }
+            frame.render_widget(Paragraph::new(lines), rows[0]);
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" select  "),
+                    Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                    Span::raw(" confirm  "),
+                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" cancel"),
+                ])),
+                rows[1],
+            );
+        }
+
+        DeployInput::EnterName { object_name, name_buf, error, .. } => {
+            let popup = centered_rect(52, 8, area);
+            frame.render_widget(Clear, popup);
+            let title = format!(" DEPLOY WAYPOINT — {object_name} ");
+            let block = Block::default()
+                .title(title)
+                .title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan));
+            let inner = block.inner(popup);
+            frame.render_widget(block, popup);
+
+            let rows = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(1), Constraint::Length(1)])
+                .split(inner);
+
+            let mut lines: Vec<Line> = Vec::new();
+            lines.push(Line::from(vec![
+                Span::styled("Name: ", Style::default().fg(Color::Cyan)),
+                Span::raw(name_buf.as_str()),
+                Span::styled("█", Style::default().fg(Color::Cyan)),
+            ]));
+            if let Some(err) = error {
+                lines.push(Line::default());
+                lines.push(Line::from(Span::styled(
+                    format!("✗ {err}"),
+                    Style::default().fg(Color::Red),
+                )));
+            }
+            frame.render_widget(Paragraph::new(lines), rows[0]);
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                    Span::raw(" DEPLOY  "),
+                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" cancel"),
+                ])),
+                rows[1],
+            );
+        }
+
+        DeployInput::Inactive => {}
+    }
 }
 
 fn sector_interest_color(s: &crate::api::types::SectorObservation) -> Color {
