@@ -1,0 +1,89 @@
+version: "2.0"
+github:
+  controls:
+    actionsMustBePinnedByCommitSha:
+      enabled: true
+      trustedOwners:
+        - actions
+        - github
+
+    actionsMustNotBeArchived:
+      enabled: true
+
+    actionsMustNotCarryKnownCVEs:
+      enabled: true
+
+    containerImageMustNotUseForbiddenTags:
+      enabled: true
+      tags:
+        - latest
+        - dev
+        - development
+        - staging
+        - main
+        - master
+      containerImagesMustBePinnedByDigest: true
+
+    pipelineMustNotEnableDebugTrace:
+      enabled: true
+      forbiddenVariables:
+        - ACTIONS_STEP_DEBUG
+        - ACTIONS_RUNNER_DEBUG
+
+    pipelineMustNotUseDockerInDocker:
+      enabled: true
+      detectInsecureDaemon: true
+
+    reusableWorkflowsMustNotInheritSecrets:
+      enabled: true
+
+    securityJobsMustNotBeWeakened:
+      enabled: true
+      securityJobPatterns:
+        - "*codeql*"
+        - "*dependency-review*"
+        - "*trufflehog*"
+        - "*gitleaks*"
+        - "*osv-scanner*"
+        - "*-sast"
+        - "*-sast-*"
+        - "*-scan"
+        - "*scan*"
+        - "*-security"
+        - "*-security-*"
+        - "*-audit"
+        - "*-audit-*"
+      allowFailureMustBeFalse:
+        enabled: true
+      rulesMustNotBeRedefined:
+        enabled: true
+      whenMustNotBeManual:
+        enabled: true
+
+    pipelineMustNotExecuteUnverifiedScripts:
+      enabled: true
+      trustedUrls: []
+
+    workflowMustNotInjectUserInputInScripts:
+      enabled: true
+
+    workflowMustNotUseDangerousTriggers:
+      enabled: true
+
+    workflowsMustDeclarePermissions:
+      enabled: true
+
+    workflowMustNotGrantPermissionsWriteAll:
+      enabled: true
+
+    workflowMustIncludeRequiredActions:
+      enabled: false
+
+    branchMustBeProtected:
+      enabled: true
+      defaultMustBeProtected: true
+      namePatterns:
+        - main
+        - release/*
+      allowForcePush: false
+      codeOwnerApprovalRequired: false
