@@ -9,6 +9,16 @@ A terminal UI cockpit for [Von Neumann Game](https://github.com/gnieark/Von-Neum
 
 The official game instance runs at **[https://neumann-probe.net](https://neumann-probe.net)** (default endpoint).
 
+## Install
+
+**Prebuilt binaries** for Linux, macOS, and Windows are available on the [releases page](https://github.com/MagiCrazy/neumann-cockpit/releases/latest).
+
+```bash
+# Linux x86_64 example
+curl -sL https://github.com/MagiCrazy/neumann-cockpit/releases/latest/download/neumann-cockpit-linux-x86_64.tar.gz | tar xz
+./neumann-cockpit
+```
+
 ## Quickstart
 
 **1. Get an API key** — create an account on [neumann-probe.net](https://neumann-probe.net), go to Settings and generate an API key. It is shown only once.
@@ -29,7 +39,7 @@ api_key  = "vng_your_api_key_here"
 **3. Run**
 
 ```bash
-cargo run --release
+neumann-cockpit
 ```
 
 ## Features
@@ -50,6 +60,8 @@ The UI refreshes automatically when a movement completes — the timer is set to
 Requires a stable Rust toolchain (`rustup` recommended).
 
 ```bash
+git clone https://github.com/MagiCrazy/neumann-cockpit
+cd neumann-cockpit
 cargo build --release
 ./target/release/neumann-cockpit
 ```
