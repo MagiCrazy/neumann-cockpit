@@ -1,47 +1,50 @@
 # neumann-cockpit
 
-Terminal UI for monitoring the Neumann probe and its mannies in real time.
+A terminal UI cockpit for [Von Neumann Game](https://github.com/gnieark/Von-Neumann-Game) — control your probe and its mannies from the command line.
 
-## Prerequisites
+The official game instance runs at **[https://neumann-probe.net](https://neumann-probe.net)** (default endpoint).
 
-- Rust toolchain (`rustup` recommended — stable is sufficient)
-- An API key generated from the Neumann web UI (shown only at creation time)
+## Quickstart
 
-## Setup
+**1. Get an API key** — create an account on [neumann-probe.net](https://neumann-probe.net), go to Settings and generate an API key. It is shown only once.
+
+**2. Configure**
 
 ```bash
 mkdir -p ~/.config/neumann-cockpit
 cp config.example.toml ~/.config/neumann-cockpit/config.toml
+# then edit the file and paste your API key
 ```
-
-Edit `~/.config/neumann-cockpit/config.toml` and fill in your API key:
 
 ```toml
 base_url = "https://neumann-probe.net"
 api_key  = "vng_your_api_key_here"
 ```
 
-## Run
+**3. Run**
 
 ```bash
-cargo run           # development (debug build)
-cargo run --release # optimised build
+cargo run --release
 ```
 
-Or build once and run the binary directly:
+## Features
+
+- **Probe** — status, fuel, integrity, movement ETA and speed gauges
+- **Inventory** — cargo stocks, onboard items; jettison resources or eject mannies; deploy waypoint bookmarks
+- **Mannies** — per-manny status and progress; repair, mine, craft, salvage, recall, rename
+- **Scanner** — scan current sector or arbitrary coordinates, neighbor sweep, deep scan; browsable history
+- **Sector map** — isometric overview of scanned sectors, pan and travel from the map
+- **Auto-travel** — fuel and ETA preview before committing a jump
+
+## Auto-refresh
+
+The UI refreshes automatically when a movement completes — the timer is set to the probe's `arrival_at` timestamp. When idle the next deadline is 24 h away; no background polling.
+
+## Build from source
+
+Requires a stable Rust toolchain (`rustup` recommended).
 
 ```bash
 cargo build --release
 ./target/release/neumann-cockpit
 ```
-
-## Keybindings
-
-| Key | Action          |
-|-----|-----------------|
-| `r` | Manual refresh  |
-| `q` | Quit            |
-
-## Auto-refresh
-
-The UI refreshes automatically when a movement completes: the timer is set to the probe's `arrival_at` timestamp. When no movement is in progress the next deadline is 24 h away — no background polling.
