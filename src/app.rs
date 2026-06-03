@@ -1,4 +1,4 @@
-use crate::api::types::{Manny, Probe, ProbeInventory, ProbeMovement, SectorObservation};
+use crate::api::types::{Manny, Probe, ProbeInventory, ProbeMovement, SectorObjectType, SectorObservation};
 use chrono::{DateTime, Local, Utc};
 use std::path::Path;
 use tokio::time::Instant;
@@ -97,6 +97,36 @@ pub enum CraftInput {
 }
 
 #[derive(Default)]
+pub enum SalvageInput {
+    #[default]
+    Inactive,
+    PickTarget {
+        manny_id: String,
+        manny_name: String,
+        candidates: Vec<(String, String)>,
+        selection: usize,
+    },
+    Confirm {
+        manny_id: String,
+        manny_name: String,
+        object_id: String,
+        object_name: String,
+        error: Option<String>,
+    },
+}
+
+#[derive(Default)]
+pub enum RecallInput {
+    #[default]
+    Inactive,
+    Confirm {
+        manny_id: String,
+        manny_name: String,
+        error: Option<String>,
+    },
+}
+
+#[derive(Default)]
 pub enum JettisonInput {
     #[default]
     Inactive,
@@ -133,6 +163,10 @@ pub enum ApiMessage {
     JettisonError(String),
     CraftStarted,
     CraftError(String),
+    SalvageStarted,
+    SalvageError(String),
+    RecallStarted,
+    RecallError(String),
     Error(String),
 }
 
@@ -158,6 +192,8 @@ pub struct AppState {
     pub mine: MineInput,
     pub jettison: JettisonInput,
     pub craft: CraftInput,
+    pub salvage: SalvageInput,
+    pub recall: RecallInput,
     pub map: MapView,
 }
 
@@ -537,6 +573,47 @@ impl AppState {
         if let CraftInput::Confirm { ref mut error, .. } = self.craft {
             *error = Some(msg);
         }
+    }
+
+    pub fn set_salvage_error(&mut self, msg: String) {
+        if let SalvageInput::Confirm { ref mut error, .. } = self.salvage {
+            *error = Some(msg);
+        }
+    }
+
+    pub fn set_recall_error(&mut self, msg: String) {
+        if let RecallInput::Confirm { ref mut error, .. } = self.recall {
+            *error = Some(msg);
+        }
+    }
+
+    pub fn collect_salvage_candidates(&self) -> Vec<(String, String)> {
+        let current_pos = self.probe.as_ref()
+            .and_then(|p| p.sector.as_ref())
+            .and_then(|s| s.relative.as_ref())
+            .map(|r| (r.x as i64, r.y as i64, r.z as i64));
+
+        let sector = if let Some(pos) = current_pos {
+            self.scan_history.iter().find(|s| {
+                (s.relative_coordinates.x as i64, s.relative_coordinates.y as i64, s.relative_coordinates.z as i64) == pos
+            })
+        } else {
+            self.scan_history.first()
+        };
+
+        sector
+            .and_then(|s| s.objects.as_ref())
+            .map(|objects| {
+                objects.iter()
+                    .filter(|o| matches!(o.object_type, SectorObjectType::Manny))
+                    .map(|o| {
+                        let id = o.id.clone().unwrap_or_default();
+                        let name = o.name.clone().unwrap_or_else(|| "unknown manny".into());
+                        (id, name)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     pub fn set_jettison_error(&mut self, msg: String) {

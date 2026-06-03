@@ -174,4 +174,21 @@ impl ApiClient {
         let path = format!("/api/sector?x={x}&y={y}&z={z}");
         Ok(self.get::<Resp>(&path).await?.sector)
     }
+
+    pub async fn salvage_manny(&self, manny_id: &str, object_id: &str) -> Result<Manny> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Body<'a> { object_id: &'a str }
+        #[derive(Deserialize)]
+        struct Resp { manny: Manny }
+        let path = format!("/api/probe/mannies/{manny_id}/salvage");
+        Ok(self.post::<Resp, _>(&path, &Body { object_id }).await?.manny)
+    }
+
+    pub async fn recall_manny(&self, manny_id: &str) -> Result<Manny> {
+        #[derive(Deserialize)]
+        struct Resp { manny: Manny }
+        let path = format!("/api/probe/mannies/{manny_id}/recall");
+        Ok(self.post::<Resp, _>(&path, &serde_json::json!({})).await?.manny)
+    }
 }

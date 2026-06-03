@@ -2,7 +2,7 @@ use crate::api::types::{
     DangerLevel, DataFreshness, KnowledgeLevel, Manny, MannyLocationType, MannyTask,
     MovementPhase, ProbeStatus, SectorObject, SectorObjectType, SectorObservation, SensorMode,
 };
-use crate::app::{AppState, CraftInput, JettisonInput, MineInput, Panel, RepairInput, ScanMode, TravelInput, RESOURCE_LABELS, RESOURCE_TYPES};
+use crate::app::{AppState, CraftInput, JettisonInput, MineInput, Panel, RecallInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_LABELS, RESOURCE_TYPES};
 use chrono::Utc;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -72,6 +72,12 @@ pub fn render(frame: &mut Frame, state: &AppState) {
     }
     if !matches!(state.craft, CraftInput::Inactive) {
         render_craft_overlay(frame, area, state);
+    }
+    if !matches!(state.salvage, SalvageInput::Inactive) {
+        render_salvage_overlay(frame, area, state);
+    }
+    if !matches!(state.recall, RecallInput::Inactive) {
+        render_recall_overlay(frame, area, state);
     }
 }
 
@@ -403,19 +409,33 @@ fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
 
     // Hint bar
     if focused {
-        let selected_can_repair = state.mannies.as_ref()
-            .and_then(|m| m.get(state.mannies_selection))
-            .map(|m| m.can_receive_orders)
-            .unwrap_or(false);
-        if selected_can_repair {
+        let selected_manny = state.mannies.as_ref()
+            .and_then(|m| m.get(state.mannies_selection));
+        let can_order = selected_manny.map(|m| m.can_receive_orders).unwrap_or(false);
+        let is_busy = selected_manny.map(|m| !m.can_receive_orders && m.current_task.is_some()).unwrap_or(false);
+        if can_order {
+            let mut spans = vec![
+                Span::styled("[Enter]", Style::default().fg(Color::Cyan)),
+                Span::raw(" repair  "),
+                Span::styled("[e]", Style::default().fg(Color::Cyan)),
+                Span::raw(" mine  "),
+                Span::styled("[c]", Style::default().fg(Color::Cyan)),
+                Span::raw(" craft  "),
+                Span::styled("[s]", Style::default().fg(Color::Cyan)),
+                Span::raw(" salvage"),
+            ];
+            if is_busy {
+                spans.push(Span::raw("  "));
+                spans.push(Span::styled("[R]", Style::default().fg(Color::Yellow)));
+                spans.push(Span::raw(" recall"));
+            }
+            frame.render_widget(Paragraph::new(Line::from(spans)), hint_area);
+        } else if is_busy {
             frame.render_widget(
                 Paragraph::new(Line::from(vec![
-                    Span::styled("[Enter]", Style::default().fg(Color::Cyan)),
-                    Span::raw(" repair  "),
-                    Span::styled("[e]", Style::default().fg(Color::Cyan)),
-                    Span::raw(" mine  "),
-                    Span::styled("[c]", Style::default().fg(Color::Cyan)),
-                    Span::raw(" craft"),
+                    Span::styled("busy  ", Style::default().fg(Color::DarkGray)),
+                    Span::styled("[R]", Style::default().fg(Color::Yellow)),
+                    Span::raw(" recall"),
                 ])),
                 hint_area,
             );
@@ -1454,6 +1474,145 @@ fn render_craft_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
         Paragraph::new(Line::from(vec![
             Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
             Span::raw(" CRAFT  "),
+            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::raw(" cancel"),
+        ])),
+        rows[1],
+    );
+}
+
+fn render_salvage_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    match &state.salvage {
+        SalvageInput::PickTarget { manny_name, candidates, selection, .. } => {
+            let height = (candidates.len() as u16 + 6).min(16);
+            let popup = centered_rect(50, height, area);
+            frame.render_widget(Clear, popup);
+            let block = Block::default()
+                .title(format!(" SALVAGE — {manny_name} "))
+                .title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan));
+            let inner = block.inner(popup);
+            frame.render_widget(block, popup);
+
+            let rows = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(1), Constraint::Length(1)])
+                .split(inner);
+
+            let mut lines: Vec<Line> = vec![
+                Line::from(Span::styled("Select salvage target:", Style::default().fg(Color::Cyan))),
+                Line::default(),
+            ];
+            for (i, (_, name)) in candidates.iter().enumerate() {
+                let selected = i == *selection;
+                if selected {
+                    lines.push(Line::from(vec![
+                        Span::styled("▶ ", Style::default().fg(Color::Yellow)),
+                        Span::styled(name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                    ]));
+                } else {
+                    lines.push(Line::from(vec![
+                        Span::raw("  "),
+                        Span::styled(name.as_str(), Style::default().fg(Color::DarkGray)),
+                    ]));
+                }
+            }
+            frame.render_widget(Paragraph::new(lines), rows[0]);
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" select  "),
+                    Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                    Span::raw(" confirm  "),
+                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" cancel"),
+                ])),
+                rows[1],
+            );
+        }
+
+        SalvageInput::Confirm { manny_name, object_name, error, .. } => {
+            let popup = centered_rect(50, 8, area);
+            frame.render_widget(Clear, popup);
+            let block = Block::default()
+                .title(format!(" SALVAGE — {manny_name} "))
+                .title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan));
+            let inner = block.inner(popup);
+            frame.render_widget(block, popup);
+
+            let rows = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(1), Constraint::Length(1)])
+                .split(inner);
+
+            let mut lines: Vec<Line> = Vec::new();
+            lines.push(Line::from(vec![
+                Span::styled("Target: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(object_name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            ]));
+            if let Some(err) = error {
+                lines.push(Line::default());
+                lines.push(Line::from(Span::styled(
+                    format!("✗ {err}"),
+                    Style::default().fg(Color::Red),
+                )));
+            }
+            frame.render_widget(Paragraph::new(lines), rows[0]);
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                    Span::raw(" SALVAGE  "),
+                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" cancel"),
+                ])),
+                rows[1],
+            );
+        }
+
+        SalvageInput::Inactive => {}
+    }
+}
+
+fn render_recall_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let RecallInput::Confirm { ref manny_name, ref error, .. } = state.recall else { return };
+
+    let popup = centered_rect(46, 7, area);
+    frame.render_widget(Clear, popup);
+
+    let title = format!(" RECALL — {manny_name} ");
+    let block = Block::default()
+        .title(title)
+        .title_alignment(Alignment::Center)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Yellow));
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let mut lines: Vec<Line> = Vec::new();
+    lines.push(Line::from(Span::styled(
+        "Send recall order?",
+        Style::default().fg(Color::White),
+    )));
+    if let Some(err) = error {
+        lines.push(Line::default());
+        lines.push(Line::from(Span::styled(
+            format!("✗ {err}"),
+            Style::default().fg(Color::Red),
+        )));
+    }
+    frame.render_widget(Paragraph::new(lines), rows[0]);
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("[Enter]", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+            Span::raw(" RECALL  "),
             Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
             Span::raw(" cancel"),
         ])),

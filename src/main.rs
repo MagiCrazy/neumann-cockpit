@@ -16,7 +16,7 @@ mod ui;
 
 use api::client::ApiClient;
 use api::types::SectorObjectType;
-use app::{ApiMessage, AppState, CraftInput, JettisonInput, MineInput, Panel, RepairInput, ScanMode, TravelInput, RESOURCE_TYPES};
+use app::{ApiMessage, AppState, CraftInput, JettisonInput, MineInput, Panel, RecallInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_TYPES};
 
 fn neighbors_d1() -> Vec<(i32, i32, i32)> {
     let mut out = Vec::new();
@@ -145,6 +145,16 @@ async fn run(
                         fetch_mannies(client.clone(), tx.clone());
                     }
                     ApiMessage::CraftError(e) => state.set_craft_error(e),
+                    ApiMessage::SalvageStarted => {
+                        state.salvage = SalvageInput::Inactive;
+                        fetch_mannies(client.clone(), tx.clone());
+                    }
+                    ApiMessage::SalvageError(e) => state.set_salvage_error(e),
+                    ApiMessage::RecallStarted => {
+                        state.recall = RecallInput::Inactive;
+                        fetch_mannies(client.clone(), tx.clone());
+                    }
+                    ApiMessage::RecallError(e) => state.set_recall_error(e),
                     ApiMessage::Error(e) => state.set_error(e),
                 }
             }
@@ -179,6 +189,8 @@ fn handle_event(
     let in_repair = !matches!(state.repair, RepairInput::Inactive);
     let in_jettison = !matches!(state.jettison, JettisonInput::Inactive);
     let in_craft = !matches!(state.craft, CraftInput::Inactive);
+    let in_salvage = !matches!(state.salvage, SalvageInput::Inactive);
+    let in_recall = !matches!(state.recall, RecallInput::Inactive);
 
     if ctrl && k.code == KeyCode::Char('c') {
         state.set_quit();
@@ -197,6 +209,16 @@ fn handle_event(
 
     if in_craft {
         handle_craft_event(k.code, state, client, tx);
+        return;
+    }
+
+    if in_salvage {
+        handle_salvage_event(k.code, state, client, tx);
+        return;
+    }
+
+    if in_recall {
+        handle_recall_event(k.code, state, client, tx);
         return;
     }
 
@@ -276,7 +298,6 @@ fn handle_event(
         KeyCode::Char('p') => state.toggle_focus(Panel::Probe),
         KeyCode::Char('i') => state.toggle_focus(Panel::Inventory),
         KeyCode::Char('m') => state.toggle_focus(Panel::Mannies),
-        KeyCode::Char('s') => state.toggle_focus(Panel::Scanner),
         KeyCode::Char('j') if state.focused == Some(Panel::Inventory) => {
             let items = state.build_jettison_items();
             if !items.is_empty() {
@@ -351,6 +372,44 @@ fn handle_event(
                 }
             }
         }
+        KeyCode::Char('s') if state.focused == Some(Panel::Mannies) => {
+            if let Some(mannies) = &state.mannies {
+                if let Some(manny) = mannies.get(state.mannies_selection) {
+                    if manny.can_receive_orders {
+                        let manny_id = manny.id.clone();
+                        let manny_name = manny.name.clone();
+                        let candidates = state.collect_salvage_candidates();
+                        match candidates.len() {
+                            0 => state.error = Some("no salvageable objects in current sector — scan first".into()),
+                            1 => {
+                                let (object_id, object_name) = candidates.into_iter().next().unwrap();
+                                state.salvage = SalvageInput::Confirm {
+                                    manny_id, manny_name, object_id, object_name, error: None,
+                                };
+                            }
+                            _ => {
+                                state.salvage = SalvageInput::PickTarget {
+                                    manny_id, manny_name, candidates, selection: 0,
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        KeyCode::Char('R') if state.focused == Some(Panel::Mannies) => {
+            if let Some(mannies) = &state.mannies {
+                if let Some(manny) = mannies.get(state.mannies_selection) {
+                    if !manny.can_receive_orders && manny.current_task.is_some() {
+                        state.recall = RecallInput::Confirm {
+                            manny_id: manny.id.clone(),
+                            manny_name: manny.name.clone(),
+                            error: None,
+                        };
+                    }
+                }
+            }
+        }
         KeyCode::Enter if state.focused == Some(Panel::Scanner) && !state.scan_loading => {
             state.scan_loading = true;
             state.scan_error = None;
@@ -372,6 +431,7 @@ fn handle_event(
         KeyCode::Char('d') if state.focused == Some(Panel::Scanner) && state.scan_batch.is_none() => {
             state.scan_mode = ScanMode::DirectionPick;
         }
+        KeyCode::Char('s') => state.toggle_focus(Panel::Scanner),
         _ => {}
     }
 }
@@ -780,6 +840,97 @@ fn fetch_craft(manny_id: String, recipe: &'static str, client: ApiClient, tx: mp
         let msg = match client.craft_manny(&manny_id, recipe).await {
             Ok(_) => ApiMessage::CraftStarted,
             Err(e) => ApiMessage::CraftError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
+fn handle_salvage_event(
+    code: KeyCode,
+    state: &mut AppState,
+    client: &ApiClient,
+    tx: &mpsc::Sender<ApiMessage>,
+) {
+    match &state.salvage {
+        SalvageInput::PickTarget { selection, candidates, .. } => {
+            let sel = *selection;
+            let count = candidates.len();
+            match code {
+                KeyCode::Esc => state.salvage = SalvageInput::Inactive,
+                KeyCode::Up | KeyCode::Char('k') => {
+                    if let SalvageInput::PickTarget { ref mut selection, .. } = state.salvage {
+                        *selection = sel.checked_sub(1).unwrap_or(count - 1);
+                    }
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    if let SalvageInput::PickTarget { ref mut selection, .. } = state.salvage {
+                        *selection = (sel + 1) % count;
+                    }
+                }
+                KeyCode::Enter => {
+                    let (manny_id, manny_name, object_id, object_name) = {
+                        let SalvageInput::PickTarget { ref manny_id, ref manny_name, ref candidates, selection } = state.salvage else { return };
+                        let (id, name) = candidates[selection].clone();
+                        (manny_id.clone(), manny_name.clone(), id, name)
+                    };
+                    state.salvage = SalvageInput::Confirm {
+                        manny_id, manny_name, object_id, object_name, error: None,
+                    };
+                }
+                _ => {}
+            }
+        }
+        SalvageInput::Confirm { .. } => {
+            match code {
+                KeyCode::Esc => state.salvage = SalvageInput::Inactive,
+                KeyCode::Enter => {
+                    let (manny_id, object_id) = {
+                        let SalvageInput::Confirm { ref manny_id, ref object_id, .. } = state.salvage else { return };
+                        (manny_id.clone(), object_id.clone())
+                    };
+                    fetch_salvage(manny_id, object_id, client.clone(), tx.clone());
+                }
+                _ => {}
+            }
+        }
+        SalvageInput::Inactive => {}
+    }
+}
+
+fn handle_recall_event(
+    code: KeyCode,
+    state: &mut AppState,
+    client: &ApiClient,
+    tx: &mpsc::Sender<ApiMessage>,
+) {
+    match code {
+        KeyCode::Esc => state.recall = RecallInput::Inactive,
+        KeyCode::Enter => {
+            let manny_id = {
+                let RecallInput::Confirm { ref manny_id, .. } = state.recall else { return };
+                manny_id.clone()
+            };
+            fetch_recall(manny_id, client.clone(), tx.clone());
+        }
+        _ => {}
+    }
+}
+
+fn fetch_salvage(manny_id: String, object_id: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        let msg = match client.salvage_manny(&manny_id, &object_id).await {
+            Ok(_) => ApiMessage::SalvageStarted,
+            Err(e) => ApiMessage::SalvageError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
+fn fetch_recall(manny_id: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        let msg = match client.recall_manny(&manny_id).await {
+            Ok(_) => ApiMessage::RecallStarted,
+            Err(e) => ApiMessage::RecallError(e.to_string()),
         };
         let _ = tx.send(msg).await;
     });
