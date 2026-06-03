@@ -61,6 +61,8 @@ pub enum MannyTask {
     Mining,
     Returning,
     WaitingForSpace,
+    Crafting,
+    Salvage,
     #[serde(other)]
     Unknown,
 }
@@ -122,6 +124,7 @@ pub struct Manny {
     pub task_progress_percent: f64,
     pub cargo: MannyCargo,
     pub can_receive_orders: bool,
+    pub task_estimated_end_time: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

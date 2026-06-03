@@ -86,6 +86,17 @@ pub enum MineInput {
 }
 
 #[derive(Default)]
+pub enum CraftInput {
+    #[default]
+    Inactive,
+    Confirm {
+        manny_id: String,
+        manny_name: String,
+        error: Option<String>,
+    },
+}
+
+#[derive(Default)]
 pub enum JettisonInput {
     #[default]
     Inactive,
@@ -120,6 +131,8 @@ pub enum ApiMessage {
     MineError(String),
     JettisonDone(ProbeInventory),
     JettisonError(String),
+    CraftStarted,
+    CraftError(String),
     Error(String),
 }
 
@@ -144,6 +157,7 @@ pub struct AppState {
     pub repair: RepairInput,
     pub mine: MineInput,
     pub jettison: JettisonInput,
+    pub craft: CraftInput,
     pub map: MapView,
 }
 
@@ -516,6 +530,12 @@ impl AppState {
     pub fn jettison_backspace(&mut self) {
         if let JettisonInput::EnterAmount { ref mut buf, .. } = self.jettison {
             buf.pop();
+        }
+    }
+
+    pub fn set_craft_error(&mut self, msg: String) {
+        if let CraftInput::Confirm { ref mut error, .. } = self.craft {
+            *error = Some(msg);
         }
     }
 

@@ -157,6 +157,15 @@ impl ApiClient {
         Ok(self.post::<Resp, _>(&path, &Body { amount }).await?.inventory)
     }
 
+    pub async fn craft_manny(&self, manny_id: &str, recipe: &str) -> Result<Manny> {
+        #[derive(Serialize)]
+        struct Body<'a> { recipe: &'a str }
+        #[derive(Deserialize)]
+        struct Resp { manny: Manny }
+        let path = format!("/api/probe/mannies/{manny_id}/craft");
+        Ok(self.post::<Resp, _>(&path, &Body { recipe }).await?.manny)
+    }
+
     pub async fn get_sector(&self, x: i32, y: i32, z: i32) -> Result<SectorObservation> {
         #[derive(Deserialize)]
         struct Resp {

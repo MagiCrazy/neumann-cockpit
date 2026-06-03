@@ -16,7 +16,7 @@ mod ui;
 
 use api::client::ApiClient;
 use api::types::SectorObjectType;
-use app::{ApiMessage, AppState, JettisonInput, MineInput, Panel, RepairInput, ScanMode, TravelInput, RESOURCE_TYPES};
+use app::{ApiMessage, AppState, CraftInput, JettisonInput, MineInput, Panel, RepairInput, ScanMode, TravelInput, RESOURCE_TYPES};
 
 fn neighbors_d1() -> Vec<(i32, i32, i32)> {
     let mut out = Vec::new();
@@ -140,6 +140,11 @@ async fn run(
                         fetch_mannies(client.clone(), tx.clone());
                     }
                     ApiMessage::JettisonError(e) => state.set_jettison_error(e),
+                    ApiMessage::CraftStarted => {
+                        state.craft = CraftInput::Inactive;
+                        fetch_mannies(client.clone(), tx.clone());
+                    }
+                    ApiMessage::CraftError(e) => state.set_craft_error(e),
                     ApiMessage::Error(e) => state.set_error(e),
                 }
             }
@@ -173,6 +178,7 @@ fn handle_event(
     let in_travel = !matches!(state.travel, TravelInput::Inactive);
     let in_repair = !matches!(state.repair, RepairInput::Inactive);
     let in_jettison = !matches!(state.jettison, JettisonInput::Inactive);
+    let in_craft = !matches!(state.craft, CraftInput::Inactive);
 
     if ctrl && k.code == KeyCode::Char('c') {
         state.set_quit();
@@ -186,6 +192,11 @@ fn handle_event(
 
     if in_jettison {
         handle_jettison_event(k.code, state, client, tx);
+        return;
+    }
+
+    if in_craft {
+        handle_craft_event(k.code, state, client, tx);
         return;
     }
 
@@ -323,6 +334,19 @@ fn handle_event(
                                 };
                             }
                         }
+                    }
+                }
+            }
+        }
+        KeyCode::Char('c') if state.focused == Some(Panel::Mannies) => {
+            if let Some(mannies) = &state.mannies {
+                if let Some(manny) = mannies.get(state.mannies_selection) {
+                    if manny.can_receive_orders {
+                        state.craft = CraftInput::Confirm {
+                            manny_id: manny.id.clone(),
+                            manny_name: manny.name.clone(),
+                            error: None,
+                        };
                     }
                 }
             }
@@ -730,6 +754,35 @@ fn handle_map_event(code: KeyCode, state: &mut AppState) {
         }
         _ => {}
     }
+}
+
+fn handle_craft_event(
+    code: KeyCode,
+    state: &mut AppState,
+    client: &ApiClient,
+    tx: &mpsc::Sender<ApiMessage>,
+) {
+    match code {
+        KeyCode::Esc => state.craft = CraftInput::Inactive,
+        KeyCode::Enter => {
+            let manny_id = {
+                let CraftInput::Confirm { ref manny_id, .. } = state.craft else { return };
+                manny_id.clone()
+            };
+            fetch_craft(manny_id, "waypoint_bookmark", client.clone(), tx.clone());
+        }
+        _ => {}
+    }
+}
+
+fn fetch_craft(manny_id: String, recipe: &'static str, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        let msg = match client.craft_manny(&manny_id, recipe).await {
+            Ok(_) => ApiMessage::CraftStarted,
+            Err(e) => ApiMessage::CraftError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
 }
 
 fn fetch_sector(coords: Option<(i32, i32, i32)>, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
