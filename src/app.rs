@@ -189,6 +189,7 @@ pub enum ApiMessage {
     RepairError(String),
     MineStarted,
     MineError(String),
+    VersionFetched(u32),
     JettisonDone(ProbeInventory),
     JettisonError(String),
     CraftStarted,
@@ -231,6 +232,7 @@ pub struct AppState {
     pub deploy: DeployInput,
     pub rename_manny: RenameMannyInput,
     pub map: MapView,
+    pub api_version: Option<u32>,
 }
 
 impl AppState {

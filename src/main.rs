@@ -87,6 +87,7 @@ async fn run(
 
     // Initial data fetch
     fetch_all(client.clone(), tx.clone());
+    fetch_api_version(client.clone(), tx.clone());
     state.loading = true;
 
     loop {
@@ -169,6 +170,7 @@ async fn run(
                         state.rename_manny = RenameMannyInput::Inactive;
                     }
                     ApiMessage::RenameMannyError(e) => state.set_rename_manny_error(e),
+                    ApiMessage::VersionFetched(v) => state.api_version = Some(v),
                     ApiMessage::Error(e) => state.set_error(e),
                 }
             }
@@ -504,6 +506,14 @@ fn handle_event(
 
 fn state_requests_quit(state: &AppState) -> bool {
     state.quit
+}
+
+fn fetch_api_version(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        if let Ok(v) = client.get_api_version().await {
+            let _ = tx.send(ApiMessage::VersionFetched(v)).await;
+        }
+    });
 }
 
 fn fetch_all(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {

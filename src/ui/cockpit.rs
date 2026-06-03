@@ -2085,14 +2085,18 @@ fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
         Span::styled(error_part, Style::default().fg(Color::Red)),
     ]);
 
-    let right_text = format!("⟳ {last}   next: {next}");
+    let api_version = state.api_version
+        .map(|v| format!("API v{v}  "))
+        .unwrap_or_default();
+    let right_text = format!("{api_version}⟳ {last}   next: {next}");
+    let right_len = right_text.chars().count() as u16;
     let right = Paragraph::new(right_text)
         .alignment(Alignment::Right)
         .style(Style::default().fg(Color::DarkGray));
 
     let cols = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(1), Constraint::Length(35)])
+        .constraints([Constraint::Min(1), Constraint::Length(right_len)])
         .split(area);
 
     frame.render_widget(Paragraph::new(left), cols[0]);

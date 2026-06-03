@@ -97,6 +97,13 @@ impl ApiClient {
         resp.json::<T>().await.with_context(|| format!("Parsing GET {path}"))
     }
 
+    pub async fn get_api_version(&self) -> Result<u32> {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Resp { api_version: u32 }
+        Ok(self.get::<Resp>("/api/version").await?.api_version)
+    }
+
     pub async fn get_probe(&self) -> Result<Probe> {
         #[derive(Deserialize)]
         struct Resp {
