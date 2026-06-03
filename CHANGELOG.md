@@ -1,5 +1,12 @@
 # Changelog
 
+## [11.1.2](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v11.1.1...neumann-cockpit-v11.1.2) (2026-06-03)
+
+
+### Documentation
+
+* add GPL-3.0 license ([#13](https://github.com/MagiCrazy/neumann-cockpit/issues/13)) ([487d81b](https://github.com/MagiCrazy/neumann-cockpit/commit/487d81b6f1355c809e71461f88eb4d6d427b2726))
+
 ## [11.1.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v11.1.0...neumann-cockpit-v11.1.1) (2026-06-03)
 
 
