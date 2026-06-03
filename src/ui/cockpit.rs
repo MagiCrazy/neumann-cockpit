@@ -797,7 +797,7 @@ fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
         }
     }
 
-    let has_objects = sector.objects.as_ref().map_or(false, |o| !o.is_empty());
+    let has_objects = sector.objects.as_ref().is_some_and(|o| !o.is_empty());
     if !has_objects {
         if let Some(possible) = &sector.possible_objects {
             if !possible.is_empty() {
@@ -1188,7 +1188,7 @@ fn render_repair_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let effective = parsed.map(|v| v.min(max_pct));
     let metals_cost = effective.map(|v| v * 0.01);
     let duration_secs = effective.map(|v| (v * 600.0) as i64);
-    let insufficient = metals_cost.map_or(false, |c| c > metals_stock + 1e-6);
+    let insufficient = metals_cost.is_some_and(|c| c > metals_stock + 1e-6);
 
     let popup = centered_rect(46, 12, area);
     frame.render_widget(Clear, popup);
@@ -1253,7 +1253,7 @@ fn render_repair_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
             Span::styled(format_duration(secs), Style::default().fg(Color::Yellow)),
         ]));
         if let Some(eff) = effective {
-            if parsed.map_or(false, |v| v > max_pct + 0.001) {
+            if parsed.is_some_and(|v| v > max_pct + 0.001) {
                 lines.push(Line::from(vec![
                     Span::styled(
                         format!("  → capped at {eff:.2}% (probe already at max above)"),
@@ -1819,7 +1819,7 @@ fn sector_interest_color(s: &crate::api::types::SectorObservation) -> Color {
         }
     }
 
-    if s.possible_objects.as_ref().map_or(false, |p| !p.is_empty()) {
+    if s.possible_objects.as_ref().is_some_and(|p| !p.is_empty()) {
         return Color::Cyan;
     }
 
@@ -1911,7 +1911,7 @@ fn map_cell_symbol(s: &SectorObservation) -> (&'static str, Style) {
             }
             if matches!(obj.object_type, SectorObjectType::Star | SectorObjectType::SolarSystem) {
                 let has_minable = obj.minable_targets.as_ref()
-                    .map_or(false, |t| !t.is_empty());
+                    .is_some_and(|t| !t.is_empty());
                 return if has_minable {
                     ("★", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
                 } else {

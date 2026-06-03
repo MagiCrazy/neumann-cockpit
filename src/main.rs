@@ -530,20 +530,16 @@ fn fetch_all(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     let c2 = client.clone();
     let tx2 = tx.clone();
     tokio::spawn(async move {
-        match c2.get_mannies().await {
-            Ok(m) => {
-                let _ = tx2.send(ApiMessage::ManniesUpdated(m)).await;
-            }
-            Err(_) => {} // mannies failure is non-fatal
+        if let Ok(m) = c2.get_mannies().await {
+            let _ = tx2.send(ApiMessage::ManniesUpdated(m)).await;
         }
     });
 
     let c3 = client;
     let tx3 = tx;
     tokio::spawn(async move {
-        match c3.get_probe_sector().await {
-            Ok(s) => { let _ = tx3.send(ApiMessage::SectorUpdated(s)).await; }
-            Err(_) => {}
+        if let Ok(s) = c3.get_probe_sector().await {
+            let _ = tx3.send(ApiMessage::SectorUpdated(s)).await;
         }
     });
 }

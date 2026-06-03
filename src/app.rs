@@ -50,17 +50,12 @@ pub enum Panel {
 pub const RESOURCE_TYPES: [&str; 4] = ["deuterium", "metals", "ice", "carbon_compounds"];
 pub const RESOURCE_LABELS: [&str; 4] = ["deuterium", "metals", "ice", "carbon"];
 
+#[derive(Default)]
 pub struct MapView {
     pub open: bool,
     pub center_x: i32,
     pub center_z: i32,
     pub y_layer: i32,
-}
-
-impl Default for MapView {
-    fn default() -> Self {
-        Self { open: false, center_x: 0, center_z: 0, y_layer: 0 }
-    }
 }
 
 #[derive(Default)]
