@@ -1,5 +1,12 @@
 # Changelog
 
+## [11.1.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v11.1.0...neumann-cockpit-v11.1.1) (2026-06-03)
+
+
+### Bug Fixes
+
+* **ci:** use client-id and install Bob app on repo ([#9](https://github.com/MagiCrazy/neumann-cockpit/issues/9)) ([6b7f42b](https://github.com/MagiCrazy/neumann-cockpit/commit/6b7f42be23d14f6409f1d13589a5a9aedd379172))
+
 ## [11.1.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v11.0.0...neumann-cockpit-v11.1.0) (2026-06-03)
 
 
