@@ -16,7 +16,7 @@ mod ui;
 
 use api::client::ApiClient;
 use api::types::SectorObjectType;
-use app::{ApiMessage, AppState, CraftInput, DeployInput, JettisonInput, MineInput, Panel, RecallInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_TYPES};
+use app::{ApiMessage, AppState, CraftInput, DeployInput, JettisonInput, MineInput, Panel, RecallInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_TYPES};
 
 fn neighbors_d1() -> Vec<(i32, i32, i32)> {
     let mut out = Vec::new();
@@ -160,6 +160,15 @@ async fn run(
                         state.deploy = DeployInput::Inactive;
                     }
                     ApiMessage::DeployError(e) => state.set_deploy_error(e),
+                    ApiMessage::RenameMannyDone(manny) => {
+                        if let Some(ref mut mannies) = state.mannies {
+                            if let Some(m) = mannies.iter_mut().find(|m| m.id == manny.id) {
+                                *m = manny;
+                            }
+                        }
+                        state.rename_manny = RenameMannyInput::Inactive;
+                    }
+                    ApiMessage::RenameMannyError(e) => state.set_rename_manny_error(e),
                     ApiMessage::Error(e) => state.set_error(e),
                 }
             }
@@ -196,6 +205,7 @@ fn handle_event(
     let in_craft = !matches!(state.craft, CraftInput::Inactive);
     let in_salvage = !matches!(state.salvage, SalvageInput::Inactive);
     let in_recall = !matches!(state.recall, RecallInput::Inactive);
+    let in_rename_manny = !matches!(state.rename_manny, RenameMannyInput::Inactive);
     let in_deploy = !matches!(state.deploy, DeployInput::Inactive);
 
     if ctrl && k.code == KeyCode::Char('c') {
@@ -225,6 +235,11 @@ fn handle_event(
 
     if in_recall {
         handle_recall_event(k.code, state, client, tx);
+        return;
+    }
+
+    if in_rename_manny {
+        handle_rename_manny_event(k.code, state, client, tx);
         return;
     }
 
@@ -446,6 +461,18 @@ fn handle_event(
                             error: None,
                         };
                     }
+                }
+            }
+        }
+        KeyCode::Char('n') if state.focused == Some(Panel::Mannies) => {
+            if let Some(mannies) = &state.mannies {
+                if let Some(manny) = mannies.get(state.mannies_selection) {
+                    state.rename_manny = RenameMannyInput::Typing {
+                        manny_id: manny.id.clone(),
+                        manny_name: manny.name.clone(),
+                        buf: manny.name.clone(),
+                        error: None,
+                    };
                 }
             }
         }
@@ -1053,6 +1080,38 @@ fn fetch_deploy(item_id: String, object_id: String, name: String, client: ApiCli
         let msg = match client.deploy_waypoint(&item_id, &object_id, &name).await {
             Ok(inv) => ApiMessage::DeployDone(inv),
             Err(e) => ApiMessage::DeployError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
+fn handle_rename_manny_event(
+    code: KeyCode,
+    state: &mut AppState,
+    client: &ApiClient,
+    tx: &mpsc::Sender<ApiMessage>,
+) {
+    match code {
+        KeyCode::Esc => state.rename_manny = RenameMannyInput::Inactive,
+        KeyCode::Backspace => state.rename_manny_backspace(),
+        KeyCode::Char(c) => state.rename_manny_type_char(c),
+        KeyCode::Enter => {
+            let (manny_id, name) = {
+                let RenameMannyInput::Typing { ref manny_id, ref buf, .. } = state.rename_manny else { return };
+                if buf.is_empty() { return }
+                (manny_id.clone(), buf.clone())
+            };
+            fetch_rename_manny(manny_id, name, client.clone(), tx.clone());
+        }
+        _ => {}
+    }
+}
+
+fn fetch_rename_manny(manny_id: String, name: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        let msg = match client.rename_manny(&manny_id, &name).await {
+            Ok(manny) => ApiMessage::RenameMannyDone(manny),
+            Err(e) => ApiMessage::RenameMannyError(e.to_string()),
         };
         let _ = tx.send(msg).await;
     });

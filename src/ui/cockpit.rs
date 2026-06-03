@@ -2,7 +2,7 @@ use crate::api::types::{
     DangerLevel, DataFreshness, KnowledgeLevel, Manny, MannyLocationType, MannyTask,
     MovementPhase, ProbeStatus, SectorObject, SectorObjectType, SectorObservation, SensorMode,
 };
-use crate::app::{AppState, CraftInput, DeployInput, JettisonInput, MineInput, Panel, RecallInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_LABELS, RESOURCE_TYPES};
+use crate::app::{AppState, CraftInput, DeployInput, JettisonInput, MineInput, Panel, RecallInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_LABELS, RESOURCE_TYPES};
 use chrono::Utc;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -81,6 +81,9 @@ pub fn render(frame: &mut Frame, state: &AppState) {
     }
     if !matches!(state.deploy, DeployInput::Inactive) {
         render_deploy_overlay(frame, area, state);
+    }
+    if !matches!(state.rename_manny, RenameMannyInput::Inactive) {
+        render_rename_manny_overlay(frame, area, state);
     }
 }
 
@@ -431,7 +434,9 @@ fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
                 Span::styled("[c]", Style::default().fg(Color::Cyan)),
                 Span::raw(" craft  "),
                 Span::styled("[s]", Style::default().fg(Color::Cyan)),
-                Span::raw(" salvage"),
+                Span::raw(" salvage  "),
+                Span::styled("[n]", Style::default().fg(Color::Cyan)),
+                Span::raw(" rename"),
             ];
             if is_busy {
                 spans.push(Span::raw("  "));
@@ -444,15 +449,19 @@ fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
                 Paragraph::new(Line::from(vec![
                     Span::styled("busy  ", Style::default().fg(Color::DarkGray)),
                     Span::styled("[R]", Style::default().fg(Color::Yellow)),
-                    Span::raw(" recall"),
+                    Span::raw(" recall  "),
+                    Span::styled("[n]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" rename"),
                 ])),
                 hint_area,
             );
         } else {
             frame.render_widget(
-                Paragraph::new(
-                    Span::styled("busy — cannot receive orders", Style::default().fg(Color::DarkGray)),
-                ),
+                Paragraph::new(Line::from(vec![
+                    Span::styled("busy — cannot receive orders  ", Style::default().fg(Color::DarkGray)),
+                    Span::styled("[n]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" rename"),
+                ])),
                 hint_area,
             );
         }
@@ -1622,6 +1631,52 @@ fn render_recall_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
         Paragraph::new(Line::from(vec![
             Span::styled("[Enter]", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
             Span::raw(" RECALL  "),
+            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::raw(" cancel"),
+        ])),
+        rows[1],
+    );
+}
+
+fn render_rename_manny_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let RenameMannyInput::Typing { ref manny_name, ref buf, ref error, .. } = state.rename_manny else { return };
+
+    let popup = centered_rect(46, 7, area);
+    frame.render_widget(Clear, popup);
+
+    let title = format!(" RENAME — {manny_name} ");
+    let block = Block::default()
+        .title(title)
+        .title_alignment(Alignment::Center)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan));
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let mut lines: Vec<Line> = Vec::new();
+    lines.push(Line::from(vec![
+        Span::styled("Name: ", Style::default().fg(Color::Cyan)),
+        Span::raw(buf.as_str()),
+        Span::styled("█", Style::default().fg(Color::Cyan)),
+    ]));
+    if let Some(err) = error {
+        lines.push(Line::default());
+        lines.push(Line::from(Span::styled(
+            format!("✗ {err}"),
+            Style::default().fg(Color::Red),
+        )));
+    }
+
+    frame.render_widget(Paragraph::new(lines), rows[0]);
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::raw(" rename  "),
             Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
             Span::raw(" cancel"),
         ])),

@@ -127,6 +127,18 @@ pub enum RecallInput {
 }
 
 #[derive(Default)]
+pub enum RenameMannyInput {
+    #[default]
+    Inactive,
+    Typing {
+        manny_id: String,
+        manny_name: String,
+        buf: String,
+        error: Option<String>,
+    },
+}
+
+#[derive(Default)]
 pub enum DeployInput {
     #[default]
     Inactive,
@@ -187,6 +199,8 @@ pub enum ApiMessage {
     RecallError(String),
     DeployDone(ProbeInventory),
     DeployError(String),
+    RenameMannyDone(Manny),
+    RenameMannyError(String),
     Error(String),
 }
 
@@ -215,6 +229,7 @@ pub struct AppState {
     pub salvage: SalvageInput,
     pub recall: RecallInput,
     pub deploy: DeployInput,
+    pub rename_manny: RenameMannyInput,
     pub map: MapView,
 }
 
@@ -648,6 +663,26 @@ impl AppState {
     pub fn set_deploy_error(&mut self, msg: String) {
         if let DeployInput::EnterName { ref mut error, .. } = self.deploy {
             *error = Some(msg);
+        }
+    }
+
+    pub fn set_rename_manny_error(&mut self, msg: String) {
+        if let RenameMannyInput::Typing { ref mut error, .. } = self.rename_manny {
+            *error = Some(msg);
+        }
+    }
+
+    pub fn rename_manny_type_char(&mut self, c: char) {
+        if let RenameMannyInput::Typing { ref mut buf, .. } = self.rename_manny {
+            if buf.len() < 40 {
+                buf.push(c);
+            }
+        }
+    }
+
+    pub fn rename_manny_backspace(&mut self) {
+        if let RenameMannyInput::Typing { ref mut buf, .. } = self.rename_manny {
+            buf.pop();
         }
     }
 

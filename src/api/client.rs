@@ -24,6 +24,32 @@ impl ApiClient {
         self.base_url.join(path).expect("static paths are valid")
     }
 
+    async fn patch<T: for<'de> Deserialize<'de>, B: Serialize>(&self, path: &str, body: &B) -> Result<T> {
+        let resp = self
+            .client
+            .patch(self.url(path))
+            .bearer_auth(&self.api_key)
+            .json(body)
+            .send()
+            .await
+            .with_context(|| format!("PATCH {path}"))?;
+
+        let status = resp.status();
+        if status == StatusCode::UNAUTHORIZED {
+            anyhow::bail!("Unauthorized — check your api_key in config.toml");
+        }
+        if !status.is_success() {
+            let text = resp.text().await.unwrap_or_default();
+            let msg = serde_json::from_str::<serde_json::Value>(&text)
+                .ok()
+                .and_then(|v| v["error"]["message"].as_str().map(String::from))
+                .unwrap_or(text);
+            anyhow::bail!("{msg}");
+        }
+
+        resp.json::<T>().await.with_context(|| format!("Parsing PATCH {path}"))
+    }
+
     async fn post<T: for<'de> Deserialize<'de>, B: Serialize>(&self, path: &str, body: &B) -> Result<T> {
         let resp = self
             .client
@@ -190,6 +216,15 @@ impl ApiClient {
         struct Resp { manny: Manny }
         let path = format!("/api/probe/mannies/{manny_id}/recall");
         Ok(self.post::<Resp, _>(&path, &serde_json::json!({})).await?.manny)
+    }
+
+    pub async fn rename_manny(&self, manny_id: &str, name: &str) -> Result<Manny> {
+        #[derive(Serialize)]
+        struct Body<'a> { name: &'a str }
+        #[derive(Deserialize)]
+        struct Resp { manny: Manny }
+        let path = format!("/api/probe/mannies/{manny_id}");
+        Ok(self.patch::<Resp, _>(&path, &Body { name }).await?.manny)
     }
 
     pub async fn deploy_waypoint(&self, item_id: &str, object_id: &str, name: &str) -> Result<ProbeInventory> {
