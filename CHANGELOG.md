@@ -1,5 +1,12 @@
 # Changelog
 
+## [11.1.3](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v11.1.2...neumann-cockpit-v11.1.3) (2026-06-03)
+
+
+### Documentation
+
+* **readme:** add badges and prebuilt binaries install ([#17](https://github.com/MagiCrazy/neumann-cockpit/issues/17)) ([106eae9](https://github.com/MagiCrazy/neumann-cockpit/commit/106eae9528ba22cf6e89c73655ec9fd7b3b4ddf4))
+
 ## [11.1.2](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v11.1.1...neumann-cockpit-v11.1.2) (2026-06-03)
 
 
