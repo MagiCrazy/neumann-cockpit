@@ -1,0 +1,1569 @@
+openapi: 3.0.3
+info:
+  title: Von Neumann Game API
+  version: '11'
+servers:
+  - url: /
+    description: Current host
+security:
+  - bearerAuth: []
+paths:
+  /api/version:
+    get:
+      security: []
+      summary: Get API version
+      responses:
+        '200':
+          description: Current API version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiVersionResponse'
+              example:
+                apiVersion: 11
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+  /api/session:
+    post:
+      security: []
+      summary: Create a password session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionRequest'
+            example:
+              username: remi
+              password: secret
+      responses:
+        '200':
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+              example:
+                token: eyJlocalExampleToken
+                expiresAt: '2026-05-28T12:00:00+00:00'
+                player:
+                  id: 1
+                  username: remi
+                  displayName: Remi
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+  /api/me:
+    get:
+      summary: Get authenticated player
+      responses:
+        '200':
+          description: Current player
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [player]
+                properties:
+                  player:
+                    $ref: '#/components/schemas/Player'
+              example:
+                player:
+                  id: 1
+                  username: remi
+                  displayName: Remi
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/me/api-key:
+    post:
+      summary: Create an API key for the authenticated player
+      description: >
+        Returns a new API key that can be used as a Bearer token on protected
+        API endpoints. The clear token is shown only in this response; only its
+        hash is stored server-side.
+      responses:
+        '201':
+          description: API key created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyResponse'
+              example:
+                apiKey:
+                  id: 1
+                  token: vng_exampleGeneratedSecret
+                  label: default
+                  lastFour: cret
+                  createdAt: '2026-06-01T12:00:00+00:00'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/crafting-recipes:
+    get:
+      summary: List available crafting recipes
+      responses:
+        '200':
+          description: Available crafting recipes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [recipes]
+                properties:
+                  recipes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CraftingRecipe'
+              example:
+                recipes:
+                  - id: waypoint_bookmark
+                    name: Waypoint bookmark
+                    craftableBy: [manny]
+                    ingredients:
+                      - type: metals
+                        quantity: 0.01
+                        unit: earth_container_equivalent
+                    durationSeconds: 600
+                    output:
+                      type: waypoint_bookmark
+                      name: Waypoint bookmark
+                      containerSpace: 0.01
+                      containerSpaceUnit: earth_container_equivalent
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/probe:
+    get:
+      summary: Get current Neumann probe
+      responses:
+        '200':
+          description: Current probe
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [probe]
+                properties:
+                  probe:
+                    $ref: '#/components/schemas/Probe'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/probe/sector:
+    get:
+      summary: Get observable probe sector and onboard inventory
+      responses:
+        '200':
+          description: Current sector summary and probe inventory
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sector, inventory]
+                properties:
+                  sector:
+                    $ref: '#/components/schemas/SectorObservation'
+                  inventory:
+                    $ref: '#/components/schemas/ProbeInventory'
+              example:
+                sector:
+                  relativeCoordinates: { x: 0, y: 0, z: 0 }
+                  distance: 0
+                  knowledgeLevel: detailed
+                  confidence: 1
+                  objects:
+                    - type: solar_system
+                      name: System abc123
+                      summary: Stellar system with 1 star(s) and 4 orbital body(ies).
+                  probes:
+                    - id: 2
+                      name: Probe of nova
+                      moving: false
+                  scan:
+                    currentSectorResidenceSeconds: 42
+                    requiredResidenceSeconds: 0
+                    scanQuality: 1
+                inventory:
+                  capacity: 1
+                  capacityUnit: earth_container_equivalent
+                  usedCapacity: 0.5
+                  freeCapacity: 0.5
+                  items:
+                    - id: probe-1-atomic-3d-printer
+                      type: atomic_3d_printer
+                      name: Imprimante 3D atomique
+                      containerSpace: 0.3
+                      currentTask: null
+                      taskProgressPercent: 0
+                    - id: mny_8d4a2c1f5a91b334
+                      type: manny
+                      name: manny-1
+                      containerSpace: 0.05
+                      currentTask: null
+                      taskProgressPercent: 0
+                      location:
+                        type: probe
+                      cargo:
+                        capacity: 0.3
+                        deuterium: 0
+                        metals: 0
+                        ice: 0
+                        organicCompounds: 0
+                        capacityUnit: earth_container_equivalent
+                  resourceStocks:
+                    - id: probe-1-stock-metals
+                      type: metals
+                      name: Métaux
+                      amount: 0
+                      containerSpace: 0
+                      capacityUnit: earth_container_equivalent
+                    - id: probe-1-stock-ice
+                      type: ice
+                      name: Glace
+                      amount: 0
+                      containerSpace: 0
+                      capacityUnit: earth_container_equivalent
+                    - id: probe-1-stock-organic-compounds
+                      type: carbon_compounds
+                      name: Composés organiques
+                      amount: 0
+                      containerSpace: 0
+                      capacityUnit: earth_container_equivalent
+                  externalTanks:
+                    - id: probe-1-deuterium-tank
+                      type: deuterium
+                      name: Cuve externe de deutérium
+                      fillPercent: 100
+                      external: true
+                      usesCargoCapacity: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Probe is dead
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '400':
+          description: Sensors unavailable while cruising
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: sensors_unavailable
+                  message: External sensors are unavailable at current relativistic velocity.
+  /api/probe/move:
+    post:
+      summary: Start an asynchronous intersector movement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProbeMoveRequest'
+            example:
+              target: { x: 1, y: 1, z: 0 }
+      responses:
+        '202':
+          description: Movement accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [movement]
+                properties:
+                  movement:
+                    $ref: '#/components/schemas/ProbeMovement'
+              example:
+                movement:
+                  status: preparing
+                  origin: { x: 0, y: 0, z: 0 }
+                  target: { x: 1, y: 1, z: 0 }
+                  distance: 1
+                  fuelCostDeuterium: 2
+                  startedAt: '2026-05-28T12:00:00+00:00'
+                  arrivalAt: '2026-05-28T12:40:00+00:00'
+                  phase: preparing
+                  secondsRemaining: 2400
+                  sensorMode: normal
+                  estimatedVelocityC: 0
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Probe is already moving or dead
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                moving:
+                  value:
+                    error:
+                      code: probe_already_moving
+                      message: The probe is already moving between sectors.
+                dead:
+                  value:
+                    error:
+                      code: probe_dead
+                      message: The probe is no longer operational.
+        '422':
+          description: Insufficient deuterium
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: insufficient_fuel
+                  message: Insufficient deuterium for movement.
+  /api/probe/inventory/{itemId}:
+    get:
+      summary: Get task state for an onboard inventory item
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: mny_8d4a2c1f5a91b334
+      responses:
+        '200':
+          description: Inventory item task state
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [item]
+                properties:
+                  item:
+                    $ref: '#/components/schemas/ProbeInventoryItemTask'
+              example:
+                item:
+                  id: mny_8d4a2c1f5a91b334
+                  type: manny
+                  name: manny-1
+                  currentTask: null
+                  taskProgressPercent: 0
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/probe/inventory/{itemId}/jettison:
+    post:
+      summary: Jettison an inventory entry into space
+      description: >
+        Discards stored metals/non-metal materials by amount, vents deuterium from
+        the external tank by percentage points, or ejects an idle onboard Manny
+        into the current sector. Non-persisted core equipment cannot be
+        jettisoned.
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+          examples:
+            metals:
+              value: probe-1-stock-metals
+            manny:
+              value: mny_8d4a2c1f5a91b334
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProbeInventoryJettisonRequest'
+            examples:
+              partialStock:
+                value:
+                  amount: 0.05
+              wholeItem:
+                value: {}
+      responses:
+        '200':
+          description: Inventory entry jettisoned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbeInventoryJettisonResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The requested Manny cannot be ejected now
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Entry cannot be jettisoned or requested amount is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/probe/waypoint-bookmarks/{itemId}/deploy:
+    post:
+      summary: Place a waypoint bookmark on a celestial object in the current sector
+      description: >
+        Consumes one waypoint bookmark inventory item, renames the target
+        celestial object, and appends a timestamped history entry containing the
+        player name that placed it.
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: itm_8d4a2c1f5a91b334
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WaypointBookmarkDeployRequest'
+            example:
+              objectId: asteroid-abc123
+              name: North ice marker
+      responses:
+        '200':
+          description: Waypoint bookmark placed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WaypointBookmarkDeployResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Bookmark item or target object not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Probe is already moving or no longer operational
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Target is not a celestial object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/probe/mannies:
+    get:
+      summary: List persisted Manny robots for the current probe
+      responses:
+        '200':
+          description: Manny robots
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [mannies]
+                properties:
+                  mannies:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Manny'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/probe/mannies/{mannyId}:
+    patch:
+      summary: Rename a Manny robot
+      parameters:
+        - $ref: '#/components/parameters/MannyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MannyRenameRequest'
+            example:
+              name: atelier
+      responses:
+        '200':
+          description: Manny renamed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manny]
+                properties:
+                  manny:
+                    $ref: '#/components/schemas/Manny'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Duplicate Manny name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/probe/mannies/{mannyId}/repair:
+    post:
+      summary: Start restoring probe integrity with a Manny
+      parameters:
+        - $ref: '#/components/parameters/MannyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MannyRepairRequest'
+            example:
+              integrityPercent: 2
+      responses:
+        '202':
+          description: Repair task accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manny]
+                properties:
+                  manny:
+                    $ref: '#/components/schemas/Manny'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Manny unavailable or probe cannot be repaired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Insufficient metals
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/probe/mannies/{mannyId}/mine:
+    post:
+      summary: Start mining a small body with a Manny
+      parameters:
+        - $ref: '#/components/parameters/MannyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MannyMineRequest'
+            example:
+              objectId: mine-rock
+              resources: [metals, ice, carbon_compounds]
+              targetAmount: 0.3
+      responses:
+        '202':
+          description: Mining task accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manny]
+                properties:
+                  manny:
+                    $ref: '#/components/schemas/Manny'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Manny unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid target, unavailable resource, or insufficient cargo capacity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/probe/mannies/{mannyId}/craft:
+    post:
+      summary: Start crafting an inventory item with a Manny
+      parameters:
+        - $ref: '#/components/parameters/MannyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MannyCraftRequest'
+            example:
+              recipe: waypoint_bookmark
+      responses:
+        '202':
+          description: Crafting task accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manny]
+                properties:
+                  manny:
+                    $ref: '#/components/schemas/Manny'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Manny unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Insufficient metals or cargo capacity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/probe/mannies/{mannyId}/salvage:
+    post:
+      summary: Recover a drifting sector object with a Manny
+      description: >
+        Starts a five-minute recovery task. The target is checked again when
+        the delay ends; if another player has already recovered it, the task
+        completes with a failed result and no object is transferred.
+      parameters:
+        - $ref: '#/components/parameters/MannyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MannySalvageRequest'
+            example:
+              objectId: manny-mny_abandoned
+      responses:
+        '202':
+          description: Recovery task accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manny]
+                properties:
+                  manny:
+                    $ref: '#/components/schemas/Manny'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Manny unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Object is not recoverable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/probe/mannies/{mannyId}/recall:
+    post:
+      summary: Recall an exterior Manny to the probe
+      parameters:
+        - $ref: '#/components/parameters/MannyId'
+      responses:
+        '202':
+          description: Recall accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manny]
+                properties:
+                  manny:
+                    $ref: '#/components/schemas/Manny'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Manny is outside the probe current sector
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/sector:
+    get:
+      summary: Observe a sector by player-relative coordinates
+      description: >
+        Coordinates are relative to the authenticated player's reference frame.
+        Absolute sector coordinates are never exposed. Detail depends on whether
+        the sector is current, visited, or only passively scanned from the probe
+        current sector. During blind cruise, only already visited sectors can be
+        consulted as historical cartography.
+      parameters:
+        - name: x
+          in: query
+          required: true
+          schema:
+            type: integer
+          example: 1
+        - name: y
+          in: query
+          required: true
+          schema:
+            type: integer
+          example: 1
+        - name: z
+          in: query
+          required: true
+          schema:
+            type: integer
+          example: 0
+      responses:
+        '200':
+          description: Sector observation
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sector]
+                properties:
+                  sector:
+                    $ref: '#/components/schemas/SectorObservation'
+              examples:
+                detailed:
+                  value:
+                    sector:
+                      relativeCoordinates: { x: 0, y: 0, z: 0 }
+                      distance: 0
+                      knowledgeLevel: detailed
+                      confidence: 1
+                      objects:
+                        - type: solar_system
+                          name: System abc123
+                          estimated: false
+                          summary: Stellar system with 1 star(s) and 4 orbital body(ies).
+                          dangerLevel: low
+                      scan:
+                        currentSectorResidenceSeconds: 42
+                        requiredResidenceSeconds: 0
+                        scanQuality: 1
+                neighborScan:
+                  value:
+                    sector:
+                      relativeCoordinates: { x: 1, y: 1, z: 0 }
+                      distance: 1
+                      knowledgeLevel: neighbor_scan
+                      confidence: 0.82
+                      estimatedObjects:
+                        star: true
+                        planetCountMin: 3
+                        planetCountMax: 7
+                        blackHoleProbability: 0.01
+                        dangerEstimate: low
+                        signalAge: recent
+                      scan:
+                        currentSectorResidenceSeconds: 1832
+                        requiredResidenceSeconds: 300
+                        scanQuality: 1
+                distantScan:
+                  value:
+                    sector:
+                      relativeCoordinates: { x: 2, y: 0, z: 0 }
+                      distance: 2
+                      knowledgeLevel: distant_scan
+                      confidence: 0.41
+                      possibleObjects: [stellar_mass_detected, dust_cloud_possible]
+                      dangerEstimate: moderate
+                      scan:
+                        currentSectorResidenceSeconds: 3600
+                        requiredResidenceSeconds: 1800
+                        scanQuality: 0.5
+                longRange:
+                  value:
+                    sector:
+                      relativeCoordinates: { x: 3, y: 3, z: 0 }
+                      distance: 3
+                      knowledgeLevel: long_range_estimation
+                      confidence: 0.12
+                      navigationalRisk: high
+                      message: Insufficient sensor accuracy.
+                      scan:
+                        currentSectorResidenceSeconds: 28800
+                        requiredResidenceSeconds: 7200
+                        scanQuality: 1
+        '400':
+          description: Bad request or insufficient scan data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidCoordinates:
+                  value:
+                    error:
+                      code: bad_request
+                      message: 'Invalid coordinates (1, 0, 0): sum must be even (got 1)'
+                insufficientScanData:
+                  value:
+                    error:
+                      code: insufficient_scan_data
+                      message: Too little passive scan data available to estimate nearby objects.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Probe is dead
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Use a session token from /api/session or an API key generated from /api/me/api-key.
+  parameters:
+    MannyId:
+      name: mannyId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: mny_8d4a2c1f5a91b334
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: unauthorized
+              message: Missing or invalid bearer token
+    MethodNotAllowed:
+      description: Method not allowed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [bad_request, unauthorized, not_found, method_not_allowed, insufficient_scan_data, sensors_unavailable, probe_already_moving, probe_dead, probe_trapped_by_black_hole, insufficient_fuel, same_destination, manny_not_found, duplicate_manny_name, manny_busy, manny_out_of_range, manny_not_on_probe, probe_integrity_full, insufficient_metals, invalid_recipe, invalid_mining_target, invalid_salvage_target, resource_unavailable, insufficient_target_resources, insufficient_cargo_capacity, item_not_jettisonable, nothing_to_jettison, insufficient_inventory_amount, waypoint_bookmark_not_found, bookmark_target_not_found, invalid_bookmark_target, internal_error]
+            message:
+              type: string
+    ApiVersionResponse:
+      type: object
+      required: [apiVersion]
+      properties:
+        apiVersion:
+          type: integer
+          minimum: 1
+          description: Monotonic public API version. Increment it when the API contract changes.
+    SessionRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+    SessionResponse:
+      type: object
+      required: [token, expiresAt, player]
+      properties:
+        token:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        player:
+          $ref: '#/components/schemas/Player'
+    Player:
+      type: object
+      required: [id, username]
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        displayName:
+          type: string
+          nullable: true
+    ApiKeyResponse:
+      type: object
+      required: [apiKey]
+      properties:
+        apiKey:
+          $ref: '#/components/schemas/ApiKey'
+    ApiKey:
+      type: object
+      required: [id, token, label, lastFour, createdAt]
+      properties:
+        id:
+          type: integer
+        token:
+          type: string
+          description: Clear API key shown only once. Use it as the Bearer token.
+        label:
+          type: string
+        lastFour:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    CraftingRecipe:
+      type: object
+      required: [id, name, craftableBy, ingredients, durationSeconds, output]
+      properties:
+        id:
+          type: string
+          enum: [waypoint_bookmark]
+        name:
+          type: string
+        craftableBy:
+          type: array
+          description: Inventory item types that can start this recipe.
+          items:
+            type: string
+            enum: [manny, atomic_3d_printer]
+        ingredients:
+          type: array
+          items:
+            $ref: '#/components/schemas/CraftingRecipeIngredient'
+        durationSeconds:
+          type: integer
+          minimum: 0
+          description: Real seconds needed to complete the crafting task.
+        output:
+          $ref: '#/components/schemas/CraftingRecipeOutput'
+    CraftingRecipeIngredient:
+      type: object
+      required: [type, quantity, unit]
+      properties:
+        type:
+          type: string
+          enum: [deuterium, metals, ice, carbon_compounds]
+        quantity:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+        unit:
+          type: string
+          enum: [earth_container_equivalent]
+    CraftingRecipeOutput:
+      type: object
+      required: [type, name, containerSpace, containerSpaceUnit]
+      properties:
+        type:
+          type: string
+          enum: [waypoint_bookmark]
+        name:
+          type: string
+        containerSpace:
+          type: number
+          minimum: 0
+        containerSpaceUnit:
+          type: string
+          enum: [earth_container_equivalent]
+    Vector:
+      type: object
+      required: [x, y, z]
+      properties:
+        x: { type: number }
+        y: { type: number }
+        z: { type: number }
+    ProbeMoveRequest:
+      type: object
+      required: [target]
+      properties:
+        target:
+          $ref: '#/components/schemas/Vector'
+    ProbeMovement:
+      type: object
+      required: [status, origin, target, distance, fuelCostDeuterium, startedAt, arrivalAt]
+      properties:
+        status:
+          type: string
+          enum: [preparing, accelerating, cruising, decelerating, arrived, failed, destroyed]
+        origin:
+          $ref: '#/components/schemas/Vector'
+        target:
+          $ref: '#/components/schemas/Vector'
+        distance:
+          type: integer
+        fuelCostDeuterium:
+          type: number
+        startedAt:
+          type: string
+          format: date-time
+        arrivalAt:
+          type: string
+          format: date-time
+        phase:
+          type: string
+          enum: [idle, preparing, accelerating, cruising, decelerating, arrived, failed, destroyed]
+        secondsRemaining:
+          type: integer
+        sensorMode:
+          type: string
+          enum: [normal, degraded, blind]
+        estimatedVelocityC:
+          type: number
+    Probe:
+      type: object
+      required: [id, name, status, fuel, sensorMode, movement, inventory]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        status:
+          type: string
+          enum: [idle, preparing, accelerating, cruising, decelerating, orbiting, disabled, dead]
+        fuel:
+          type: object
+          properties:
+            deuterium:
+              type: number
+        sensorMode:
+          type: string
+          enum: [normal, degraded, blind]
+        sector:
+          type: object
+          nullable: true
+          properties:
+            relative:
+              $ref: '#/components/schemas/Vector'
+        movement:
+          nullable: true
+          $ref: '#/components/schemas/ProbeMovement'
+        navigation:
+          type: object
+          properties:
+            velocityC: { type: number }
+            accelerationCPerDay: { type: number }
+            direction:
+              $ref: '#/components/schemas/Vector'
+        systems:
+          type: object
+          properties:
+            integrityPercent:
+              type: number
+              minimum: 0
+              maximum: 100
+            energyStored:
+              type: number
+            internalClockRate:
+              type: number
+            currentTask:
+              type: string
+              nullable: true
+        inventory:
+          $ref: '#/components/schemas/ProbeInventory'
+    ProbeInventory:
+      type: object
+      required: [capacity, capacityUnit, usedCapacity, freeCapacity, items, resourceStocks, externalTanks]
+      properties:
+        capacity:
+          type: number
+          description: Maximum transport capacity in equivalent earth containers.
+          example: 1
+        capacityUnit:
+          type: string
+          enum: [earth_container_equivalent]
+        usedCapacity:
+          type: number
+          example: 0.5
+        freeCapacity:
+          type: number
+          example: 0.5
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProbeInventoryItem'
+        resourceStocks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProbeResourceStock'
+        externalTanks:
+          type: array
+          description: Special external tanks that do not consume cargo capacity.
+          items:
+            $ref: '#/components/schemas/ProbeExternalTank'
+    ProbeResourceStock:
+      type: object
+      required: [id, type, name, amount, containerSpace, capacityUnit]
+      properties:
+        id:
+          type: string
+          description: Stable inventory id used for jettison orders.
+          example: probe-1-stock-metals
+        type:
+          type: string
+          enum: [metals, ice, carbon_compounds]
+        name:
+          type: string
+        amount:
+          type: number
+          description: Stored amount in equivalent earth containers.
+        containerSpace:
+          type: number
+        capacityUnit:
+          type: string
+          enum: [earth_container_equivalent]
+    ProbeExternalTank:
+      type: object
+      required: [id, type, name, fillPercent, external, usesCargoCapacity]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [deuterium]
+        name:
+          type: string
+        fillPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+        external:
+          type: boolean
+          enum: [true]
+        usesCargoCapacity:
+          type: boolean
+          enum: [false]
+    ProbeInventoryJettisonRequest:
+      type: object
+      properties:
+        amount:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          description: >
+            Amount to discard. For stored metals/non-metal materials this uses
+            equivalent earth containers; for the deuterium tank this uses tank
+            percentage points. Omit it to discard the full selected stock.
+    ProbeInventoryJettisonResponse:
+      type: object
+      required: [inventory]
+      properties:
+        inventory:
+          $ref: '#/components/schemas/ProbeInventory'
+        jettisoned:
+          type: object
+          nullable: true
+          properties:
+            type:
+              type: string
+              enum: [deuterium, metals, ice, carbon_compounds]
+            amount:
+              type: number
+        manny:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Manny'
+    WaypointBookmarkDeployRequest:
+      type: object
+      required: [objectId, name]
+      properties:
+        objectId:
+          type: string
+          description: Celestial object id in the probe current sector. Solar-system orbital bodies can be targeted by their object id.
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+          description: Player-facing name to assign to the target object.
+    WaypointBookmarkDeployResponse:
+      type: object
+      required: [object, sector, inventory]
+      properties:
+        object:
+          type: object
+          additionalProperties: true
+          description: Updated raw celestial object data, including waypointBookmarks.
+        sector:
+          $ref: '#/components/schemas/SectorObservation'
+        inventory:
+          $ref: '#/components/schemas/ProbeInventory'
+    ProbeInventoryItem:
+      type: object
+      required: [id, type, name, containerSpace, currentTask, taskProgressPercent]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [atomic_3d_printer, manny, waypoint_bookmark]
+        name:
+          type: string
+        containerSpace:
+          type: number
+          description: Space occupied in equivalent earth containers.
+        currentTask:
+          type: string
+          nullable: true
+        taskProgressPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+        location:
+          $ref: '#/components/schemas/MannyLocation'
+        cargo:
+          $ref: '#/components/schemas/MannyCargo'
+        metadata:
+          type: object
+          additionalProperties: true
+    ProbeInventoryItemTask:
+      type: object
+      required: [id, type, name, currentTask, taskProgressPercent]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [atomic_3d_printer, manny, waypoint_bookmark]
+        name:
+          type: string
+        currentTask:
+          type: string
+          nullable: true
+        taskProgressPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+        location:
+          $ref: '#/components/schemas/MannyLocation'
+        cargo:
+          $ref: '#/components/schemas/MannyCargo'
+        metadata:
+          type: object
+          additionalProperties: true
+    MannyRenameRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 40
+    MannyRepairRequest:
+      type: object
+      required: [integrityPercent]
+      properties:
+        integrityPercent:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          maximum: 100
+          description: Integrity percentage to restore. Each percent takes 10 real minutes and consumes 0.01 containers of metals.
+        percent:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          maximum: 100
+          deprecated: true
+          description: Legacy alias for integrityPercent.
+    MannyMineRequest:
+      type: object
+      required: [objectId, targetAmount]
+      oneOf:
+        - required: [objectId, resources, targetAmount]
+        - required: [objectId, resource, targetAmount]
+      properties:
+        objectId:
+          type: string
+        resources:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum: [deuterium, metals, ice, carbon_compounds]
+          description: Resource categories to mine. The extracted amount is split according to the target object's composition, normalized over the selected categories.
+        resource:
+          type: string
+          enum: [deuterium, metals, ice, carbon_compounds]
+          deprecated: true
+          description: Legacy single resource selector. Prefer resources.
+        targetAmount:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          description: Amount to mine in equivalent earth containers. Manny cargo capacity is 0.3 per trip.
+    MannyCraftRequest:
+      type: object
+      required: [recipe]
+      properties:
+        recipe:
+          type: string
+          enum: [waypoint_bookmark]
+          description: >
+            Crafting recipe to start. The initial recipe, waypoint_bookmark,
+            consumes 0.01 containers of metals, takes 10 real minutes, and
+            creates an inventory item occupying 0.01 containers.
+    MannySalvageRequest:
+      type: object
+      required: [objectId]
+      properties:
+        objectId:
+          type: string
+          description: Current-sector object id to recover. Abandoned Manny objects are recoverable.
+    Manny:
+      type: object
+      required: [id, name, location, currentTask, taskProgressPercent, taskEstimatedEndTime, task, cargo, canReceiveOrders]
+      properties:
+        id:
+          type: string
+          description: Stable generated Manny uid used by API calls.
+          example: mny_8d4a2c1f5a91b334
+        name:
+          type: string
+          example: manny-1
+        location:
+          $ref: '#/components/schemas/MannyLocation'
+        currentTask:
+          type: string
+          nullable: true
+          enum: [repair, mining, crafting, salvage, returning, waiting_for_space]
+        taskProgressPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+        taskEstimatedEndTime:
+          type: string
+          format: date-time
+          nullable: true
+          description: Estimated ISO-8601 completion time for the current task, or null when idle.
+        task:
+          type: object
+          additionalProperties: true
+        cargo:
+          $ref: '#/components/schemas/MannyCargo'
+        canReceiveOrders:
+          type: boolean
+    MannyLocation:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [probe, sector]
+        sector:
+          type: object
+          nullable: true
+          properties:
+            relative:
+              $ref: '#/components/schemas/Vector'
+    MannyCargo:
+      type: object
+      required: [capacity, deuterium, metals, ice, organicCompounds, capacityUnit]
+      properties:
+        capacity:
+          type: number
+          example: 0.3
+        deuterium:
+          type: number
+        metals:
+          type: number
+        ice:
+          type: number
+        organicCompounds:
+          type: number
+        capacityUnit:
+          type: string
+          enum: [earth_container_equivalent]
+    SectorSummary:
+      type: object
+      required: [coordinates, objects]
+      properties:
+        coordinates:
+          type: object
+          properties:
+            relative:
+              $ref: '#/components/schemas/Vector'
+        objects:
+          type: array
+          description: Detailed current or visited sector objects. Abandoned or forgotten Manny objects are included only when the observed sector is the probe current sector.
+          items:
+            $ref: '#/components/schemas/SectorObject'
+    SectorObservation:
+      type: object
+      required: [relativeCoordinates, distance, knowledgeLevel, confidence, scan]
+      properties:
+        relativeCoordinates:
+          $ref: '#/components/schemas/Vector'
+        distance:
+          type: integer
+        knowledgeLevel:
+          type: string
+          enum: [detailed, neighbor_scan, distant_scan, long_range_estimation]
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        objects:
+          type: array
+          description: Detailed current or visited sector objects. Abandoned or forgotten Manny objects are included only when the observed sector is the probe current sector.
+          items:
+            $ref: '#/components/schemas/SectorObject'
+        probes:
+          type: array
+          description: Other probes detected in the current sector. Present only on current-sector observations when at least one other probe is detected.
+          items:
+            $ref: '#/components/schemas/SectorProbePresence'
+        estimatedObjects:
+          type: object
+          additionalProperties: true
+        possibleObjects:
+          type: array
+          items:
+            type: string
+        navigationalRisk:
+          type: string
+        message:
+          type: string
+        sensorMode:
+          type: string
+          enum: [normal, degraded, blind]
+        dataFreshness:
+          type: string
+          enum: [live, degraded_live, historical, unavailable]
+        scan:
+          type: object
+          required: [currentSectorResidenceSeconds, requiredResidenceSeconds, scanQuality]
+          properties:
+            currentSectorResidenceSeconds:
+              type: integer
+            requiredResidenceSeconds:
+              type: integer
+            scanQuality:
+              type: number
+              minimum: 0
+              maximum: 1
+    SectorProbePresence:
+      type: object
+      required: [id, name, moving]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        moving:
+          type: boolean
+    SectorObject:
+      type: object
+      required: [type, name, summary]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [star, planet, asteroid, dust_cloud, black_hole, solar_system, manny]
+        name:
+          type: string
+          nullable: true
+        estimated:
+          type: boolean
+        summary:
+          type: string
+        mass:
+          type: number
+        radius:
+          type: number
+        dangerLevel:
+          type: string
+          enum: [low, moderate, extreme]
+        salvageable:
+          type: boolean
+          description: True when the object can be recovered with POST /api/probe/mannies/{mannyId}/salvage.
+        waypointBookmarks:
+          type: array
+          items:
+            $ref: '#/components/schemas/WaypointBookmarkHistory'
+        bookmarkTargets:
+          type: array
+          description: Present on solar systems; lists nested stars and orbital bodies that can receive a waypoint bookmark.
+          items:
+            $ref: '#/components/schemas/WaypointBookmarkTarget'
+        mannyState:
+          type: string
+          enum: [abandoned, forgotten]
+          description: Present only for detected Manny objects in the current sector.
+        mannyUid:
+          type: string
+          description: Present only for detected Manny objects.
+        cargo:
+          $ref: '#/components/schemas/MannyCargo'
+    WaypointBookmarkTarget:
+      type: object
+      required: [id, type, name]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [star, planet, asteroid, dust_cloud, black_hole, solar_system]
+        name:
+          type: string
+          nullable: true
+        mass:
+          type: number
+        radius:
+          type: number
+        waypointBookmarks:
+          type: array
+          items:
+            $ref: '#/components/schemas/WaypointBookmarkHistory'
+    WaypointBookmarkHistory:
+      type: object
+      required: [name, playerId, playerName, createdAt]
+      properties:
+        name:
+          type: string
+        playerId:
+          type: integer
+        playerName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
