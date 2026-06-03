@@ -16,7 +16,7 @@ mod ui;
 
 use api::client::ApiClient;
 use api::types::SectorObjectType;
-use app::{ApiMessage, AppState, MineInput, Panel, RepairInput, ScanMode, TravelInput, RESOURCE_TYPES};
+use app::{ApiMessage, AppState, JettisonInput, MineInput, Panel, RepairInput, ScanMode, TravelInput, RESOURCE_TYPES};
 
 fn neighbors_d1() -> Vec<(i32, i32, i32)> {
     let mut out = Vec::new();
@@ -134,6 +134,12 @@ async fn run(
                         fetch_mannies(client.clone(), tx.clone());
                     }
                     ApiMessage::MineError(e) => state.set_mine_error(e),
+                    ApiMessage::JettisonDone(inv) => {
+                        state.update_inventory(inv);
+                        state.jettison = JettisonInput::Inactive;
+                        fetch_mannies(client.clone(), tx.clone());
+                    }
+                    ApiMessage::JettisonError(e) => state.set_jettison_error(e),
                     ApiMessage::Error(e) => state.set_error(e),
                 }
             }
@@ -166,6 +172,7 @@ fn handle_event(
     let in_direction_pick = matches!(state.scan_mode, ScanMode::DirectionPick);
     let in_travel = !matches!(state.travel, TravelInput::Inactive);
     let in_repair = !matches!(state.repair, RepairInput::Inactive);
+    let in_jettison = !matches!(state.jettison, JettisonInput::Inactive);
 
     if ctrl && k.code == KeyCode::Char('c') {
         state.set_quit();
@@ -174,6 +181,11 @@ fn handle_event(
 
     if state.map.open {
         handle_map_event(k.code, state);
+        return;
+    }
+
+    if in_jettison {
+        handle_jettison_event(k.code, state, client, tx);
         return;
     }
 
@@ -254,6 +266,12 @@ fn handle_event(
         KeyCode::Char('i') => state.toggle_focus(Panel::Inventory),
         KeyCode::Char('m') => state.toggle_focus(Panel::Mannies),
         KeyCode::Char('s') => state.toggle_focus(Panel::Scanner),
+        KeyCode::Char('j') if state.focused == Some(Panel::Inventory) => {
+            let items = state.build_jettison_items();
+            if !items.is_empty() {
+                state.jettison = JettisonInput::PickItem { items, selection: 0 };
+            }
+        }
         KeyCode::Down | KeyCode::Char('j') if state.focused == Some(Panel::Mannies) => {
             state.manny_next();
         }
@@ -566,6 +584,106 @@ fn collect_mineable_candidates(state: &AppState) -> Vec<(String, String)> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+fn handle_jettison_event(
+    code: KeyCode,
+    state: &mut AppState,
+    client: &ApiClient,
+    tx: &mpsc::Sender<ApiMessage>,
+) {
+    match &state.jettison {
+        JettisonInput::PickItem { selection, items, .. } => {
+            let sel = *selection;
+            let count = items.len();
+            match code {
+                KeyCode::Esc => state.jettison = JettisonInput::Inactive,
+                KeyCode::Up | KeyCode::Char('k') => {
+                    if let JettisonInput::PickItem { ref mut selection, .. } = state.jettison {
+                        *selection = sel.checked_sub(1).unwrap_or(count - 1);
+                    }
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    if let JettisonInput::PickItem { ref mut selection, .. } = state.jettison {
+                        *selection = (sel + 1) % count;
+                    }
+                }
+                KeyCode::Enter => {
+                    let (item_id, is_manny) = {
+                        let JettisonInput::PickItem { ref items, selection, .. } = state.jettison else { return };
+                        let (id, _, manny) = &items[selection];
+                        (id.clone(), *manny)
+                    };
+                    if is_manny {
+                        let manny_name = state.probe.as_ref()
+                            .and_then(|p| p.inventory.items.iter().find(|i| i.id == item_id))
+                            .map(|i| i.name.clone())
+                            .unwrap_or_else(|| item_id.clone());
+                        state.jettison = JettisonInput::ConfirmManny { item_id, manny_name, error: None };
+                    } else {
+                        let (item_name, max_amount) = state.probe.as_ref()
+                            .and_then(|p| p.inventory.resource_stocks.iter().find(|s| s.id == item_id))
+                            .map(|s| (s.name.clone(), s.amount))
+                            .unwrap_or_else(|| (item_id.clone(), 0.0));
+                        state.jettison = JettisonInput::EnterAmount {
+                            item_id,
+                            item_name,
+                            max_amount,
+                            buf: String::new(),
+                            error: None,
+                        };
+                    }
+                }
+                _ => {}
+            }
+        }
+        JettisonInput::ConfirmManny { .. } => {
+            match code {
+                KeyCode::Esc => state.jettison = JettisonInput::Inactive,
+                KeyCode::Enter => {
+                    let item_id = {
+                        let JettisonInput::ConfirmManny { ref item_id, .. } = state.jettison else { return };
+                        item_id.clone()
+                    };
+                    fetch_jettison(item_id, None, client.clone(), tx.clone());
+                }
+                _ => {}
+            }
+        }
+        JettisonInput::EnterAmount { .. } => {
+            match code {
+                KeyCode::Esc => state.jettison = JettisonInput::Inactive,
+                KeyCode::Backspace => state.jettison_backspace(),
+                KeyCode::Char(c) => state.jettison_type_char(c),
+                KeyCode::Enter => {
+                    let (item_id, amount) = {
+                        let JettisonInput::EnterAmount { ref item_id, ref buf, .. } = state.jettison else { return };
+                        let amount = if buf.is_empty() {
+                            None
+                        } else {
+                            let Ok(v) = buf.parse::<f64>() else { return };
+                            if v <= 0.0 { return }
+                            Some(v)
+                        };
+                        (item_id.clone(), amount)
+                    };
+                    fetch_jettison(item_id, amount, client.clone(), tx.clone());
+                }
+                _ => {}
+            }
+        }
+        JettisonInput::Inactive => {}
+    }
+}
+
+fn fetch_jettison(item_id: String, amount: Option<f64>, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        let msg = match client.jettison_inventory(&item_id, amount).await {
+            Ok(inv) => ApiMessage::JettisonDone(inv),
+            Err(e) => ApiMessage::JettisonError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
 }
 
 fn fetch_repair(manny_id: String, integrity_percent: f64, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {

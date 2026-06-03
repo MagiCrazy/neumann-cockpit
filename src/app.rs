@@ -1,4 +1,4 @@
-use crate::api::types::{Manny, Probe, ProbeMovement, SectorObservation};
+use crate::api::types::{Manny, Probe, ProbeInventory, ProbeMovement, SectorObservation};
 use chrono::{DateTime, Local, Utc};
 use std::path::Path;
 use tokio::time::Instant;
@@ -85,6 +85,28 @@ pub enum MineInput {
     },
 }
 
+#[derive(Default)]
+pub enum JettisonInput {
+    #[default]
+    Inactive,
+    PickItem {
+        items: Vec<(String, String, bool)>,
+        selection: usize,
+    },
+    ConfirmManny {
+        item_id: String,
+        manny_name: String,
+        error: Option<String>,
+    },
+    EnterAmount {
+        item_id: String,
+        item_name: String,
+        max_amount: f64,
+        buf: String,
+        error: Option<String>,
+    },
+}
+
 pub enum ApiMessage {
     ProbeUpdated(Probe),
     ManniesUpdated(Vec<Manny>),
@@ -96,6 +118,8 @@ pub enum ApiMessage {
     RepairError(String),
     MineStarted,
     MineError(String),
+    JettisonDone(ProbeInventory),
+    JettisonError(String),
     Error(String),
 }
 
@@ -119,6 +143,7 @@ pub struct AppState {
     pub travel: TravelInput,
     pub repair: RepairInput,
     pub mine: MineInput,
+    pub jettison: JettisonInput,
     pub map: MapView,
 }
 
@@ -448,5 +473,57 @@ impl AppState {
     pub fn map_move_y(&mut self, dy: i32) {
         self.map.y_layer += dy;
         self.map.center_z -= dy;
+    }
+
+    pub fn build_jettison_items(&self) -> Vec<(String, String, bool)> {
+        let Some(probe) = &self.probe else { return vec![] };
+        let inv = &probe.inventory;
+        let mut out: Vec<(String, String, bool)> = Vec::new();
+        for stock in &inv.resource_stocks {
+            if stock.amount > 0.0 {
+                let label = format!("{} ({:.3} ECE)", stock.name, stock.amount);
+                out.push((stock.id.clone(), label, false));
+            }
+        }
+        for item in &inv.items {
+            if item.item_type == "manny" {
+                let in_probe = item.location.as_ref()
+                    .map(|l| l.location_type == crate::api::types::MannyLocationType::Probe)
+                    .unwrap_or(false);
+                let idle = item.current_task.is_none();
+                if in_probe && idle {
+                    out.push((item.id.clone(), item.name.clone(), true));
+                }
+            }
+        }
+        out
+    }
+
+    pub fn update_inventory(&mut self, inv: ProbeInventory) {
+        if let Some(ref mut probe) = self.probe {
+            probe.inventory = inv;
+        }
+    }
+
+    pub fn jettison_type_char(&mut self, c: char) {
+        if let JettisonInput::EnterAmount { ref mut buf, .. } = self.jettison {
+            if c.is_ascii_digit() || (c == '.' && !buf.contains('.')) {
+                buf.push(c);
+            }
+        }
+    }
+
+    pub fn jettison_backspace(&mut self) {
+        if let JettisonInput::EnterAmount { ref mut buf, .. } = self.jettison {
+            buf.pop();
+        }
+    }
+
+    pub fn set_jettison_error(&mut self, msg: String) {
+        match self.jettison {
+            JettisonInput::ConfirmManny { ref mut error, .. } => *error = Some(msg),
+            JettisonInput::EnterAmount { ref mut error, .. } => *error = Some(msg),
+            _ => {}
+        }
     }
 }

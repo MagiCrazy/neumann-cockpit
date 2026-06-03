@@ -1,4 +1,4 @@
-use super::types::{Manny, Probe, ProbeMovement, SectorObservation};
+use super::types::{Manny, Probe, ProbeInventory, ProbeMovement, SectorObservation};
 use anyhow::{Context, Result};
 use reqwest::{Client, StatusCode, Url};
 use serde::{Deserialize, Serialize};
@@ -143,6 +143,18 @@ impl ApiClient {
             })
             .await?
             .manny)
+    }
+
+    pub async fn jettison_inventory(&self, item_id: &str, amount: Option<f64>) -> Result<ProbeInventory> {
+        #[derive(Serialize)]
+        struct Body {
+            #[serde(skip_serializing_if = "Option::is_none")]
+            amount: Option<f64>,
+        }
+        #[derive(Deserialize)]
+        struct Resp { inventory: ProbeInventory }
+        let path = format!("/api/probe/inventory/{item_id}/jettison");
+        Ok(self.post::<Resp, _>(&path, &Body { amount }).await?.inventory)
     }
 
     pub async fn get_sector(&self, x: i32, y: i32, z: i32) -> Result<SectorObservation> {

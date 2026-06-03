@@ -2,7 +2,7 @@ use crate::api::types::{
     DangerLevel, DataFreshness, KnowledgeLevel, Manny, MannyLocationType, MannyTask,
     MovementPhase, ProbeStatus, SectorObject, SectorObjectType, SectorObservation, SensorMode,
 };
-use crate::app::{AppState, MineInput, Panel, RepairInput, ScanMode, TravelInput, RESOURCE_LABELS, RESOURCE_TYPES};
+use crate::app::{AppState, JettisonInput, MineInput, Panel, RepairInput, ScanMode, TravelInput, RESOURCE_LABELS, RESOURCE_TYPES};
 use chrono::Utc;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -66,6 +66,9 @@ pub fn render(frame: &mut Frame, state: &AppState) {
     }
     if state.map.open {
         render_map_overlay(frame, area, state);
+    }
+    if !matches!(state.jettison, JettisonInput::Inactive) {
+        render_jettison_overlay(frame, area, state);
     }
 }
 
@@ -243,8 +246,28 @@ fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState, focused: 
 
 fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focused: bool) {
     let block = panel_block(" INVENTORY ", focused);
-    let inner = block.inner(area);
+    let full_inner = block.inner(area);
     frame.render_widget(block, area);
+
+    let (inner, hint_area_opt) = if focused {
+        let split = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(1), Constraint::Length(1)])
+            .split(full_inner);
+        (split[0], Some(split[1]))
+    } else {
+        (full_inner, None)
+    };
+
+    if let Some(hint_area) = hint_area_opt {
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled("[j]", Style::default().fg(Color::Cyan)),
+                Span::raw(" jettison"),
+            ])),
+            hint_area,
+        );
+    }
 
     let Some(probe) = &state.probe else {
         frame.render_widget(
@@ -1230,6 +1253,159 @@ fn render_repair_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
         ])
     };
     frame.render_widget(Paragraph::new(hint), hint_area);
+}
+
+fn render_jettison_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    match &state.jettison {
+        JettisonInput::PickItem { items, selection } => {
+            let height = (items.len() as u16 + 6).min(20);
+            let popup = centered_rect(50, height, area);
+            frame.render_widget(Clear, popup);
+            let block = Block::default()
+                .title(" JETTISON ")
+                .title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow));
+            let inner = block.inner(popup);
+            frame.render_widget(block, popup);
+
+            let rows = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(1), Constraint::Length(1)])
+                .split(inner);
+
+            let mut lines: Vec<Line> = Vec::new();
+            for (i, (id, label, is_manny)) in items.iter().enumerate() {
+                let selected = i == *selection;
+                let (icon, icon_color) = if *is_manny {
+                    ("♟", Color::Green)
+                } else if id.contains("metals") {
+                    ("◆", Color::White)
+                } else if id.contains("ice") {
+                    ("❄", Color::Cyan)
+                } else if id.contains("carbon") {
+                    ("◇", Color::Green)
+                } else {
+                    ("◆", Color::White)
+                };
+                if selected {
+                    lines.push(Line::from(vec![
+                        Span::styled("▶ ", Style::default().fg(Color::Yellow)),
+                        Span::styled(icon, Style::default().fg(icon_color)),
+                        Span::raw(" "),
+                        Span::styled(label.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                    ]));
+                } else {
+                    lines.push(Line::from(vec![
+                        Span::raw("  "),
+                        Span::styled(icon, Style::default().fg(icon_color)),
+                        Span::raw(" "),
+                        Span::styled(label.as_str(), Style::default().fg(Color::DarkGray)),
+                    ]));
+                }
+            }
+            frame.render_widget(Paragraph::new(lines), rows[0]);
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" select  "),
+                    Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                    Span::raw(" confirm  "),
+                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" cancel"),
+                ])),
+                rows[1],
+            );
+        }
+
+        JettisonInput::ConfirmManny { manny_name, error, .. } => {
+            let popup = centered_rect(48, 8, area);
+            frame.render_widget(Clear, popup);
+            let block = Block::default()
+                .title(format!(" JETTISON — {manny_name} "))
+                .title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Red));
+            let inner = block.inner(popup);
+            frame.render_widget(block, popup);
+
+            let rows = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(1), Constraint::Length(1)])
+                .split(inner);
+
+            let mut lines: Vec<Line> = Vec::new();
+            lines.push(Line::from(Span::styled(
+                "Eject manny into the sector?",
+                Style::default().fg(Color::Red),
+            )));
+            if let Some(err) = error {
+                lines.push(Line::default());
+                lines.push(Line::from(Span::styled(
+                    format!("✗ {err}"),
+                    Style::default().fg(Color::Red),
+                )));
+            }
+            frame.render_widget(Paragraph::new(lines), rows[0]);
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled("[Enter]", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+                    Span::raw(" EJECT  "),
+                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" cancel"),
+                ])),
+                rows[1],
+            );
+        }
+
+        JettisonInput::EnterAmount { item_name, max_amount, buf, error, .. } => {
+            let popup = centered_rect(46, 8, area);
+            frame.render_widget(Clear, popup);
+            let block = Block::default()
+                .title(format!(" JETTISON — {item_name} "))
+                .title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow));
+            let inner = block.inner(popup);
+            frame.render_widget(block, popup);
+
+            let rows = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(1), Constraint::Length(1)])
+                .split(inner);
+
+            let mut lines: Vec<Line> = Vec::new();
+            lines.push(Line::from(vec![
+                Span::styled("Amount: ", Style::default().fg(Color::Cyan)),
+                Span::raw(buf.as_str()),
+                Span::styled("█", Style::default().fg(Color::Cyan)),
+                Span::styled(" ECE", Style::default().fg(Color::DarkGray)),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("MAX  ", Style::default().fg(Color::DarkGray)),
+                Span::styled(format!("{max_amount:.3}"), Style::default().fg(Color::White)),
+                Span::styled("  [empty = all]", Style::default().fg(Color::DarkGray)),
+            ]));
+            if let Some(err) = error {
+                lines.push(Line::from(Span::styled(
+                    format!("✗ {err}"),
+                    Style::default().fg(Color::Red),
+                )));
+            }
+            frame.render_widget(Paragraph::new(lines), rows[0]);
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                    Span::raw(" confirm  "),
+                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" cancel"),
+                ])),
+                rows[1],
+            );
+        }
+
+        JettisonInput::Inactive => {}
+    }
 }
 
 fn sector_interest_color(s: &crate::api::types::SectorObservation) -> Color {
