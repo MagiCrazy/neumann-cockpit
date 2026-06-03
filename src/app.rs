@@ -137,13 +137,17 @@ pub enum RenameMannyInput {
 pub enum DeployInput {
     #[default]
     Inactive,
+    PickManny {
+        mannies: Vec<(String, String)>,
+        selection: usize,
+    },
     PickObject {
-        item_id: String,
+        manny_id: String,
         candidates: Vec<(String, String)>,
         selection: usize,
     },
     EnterName {
-        item_id: String,
+        manny_id: String,
         object_id: String,
         object_name: String,
         name_buf: String,
@@ -193,7 +197,7 @@ pub enum ApiMessage {
     SalvageError(String),
     RecallStarted,
     RecallError(String),
-    DeployDone(ProbeInventory),
+    DeployStarted,
     DeployError(String),
     RenameMannyDone(Manny),
     RenameMannyError(String),
@@ -695,6 +699,20 @@ impl AppState {
         if let DeployInput::EnterName { ref mut name_buf, .. } = self.deploy {
             name_buf.pop();
         }
+    }
+
+    pub fn collect_idle_onboard_mannies(&self) -> Vec<(String, String)> {
+        self.mannies.as_ref()
+            .map(|ms| {
+                ms.iter()
+                    .filter(|m| {
+                        m.location.location_type == crate::api::types::MannyLocationType::Probe
+                            && m.can_receive_orders
+                    })
+                    .map(|m| (m.id.clone(), m.name.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     pub fn collect_deploy_candidates(&self) -> Vec<(String, String)> {

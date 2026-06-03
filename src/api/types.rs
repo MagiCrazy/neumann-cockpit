@@ -59,10 +59,15 @@ pub enum MovementPhase {
 pub enum MannyTask {
     Repair,
     Mining,
+    Crafting,
+    AssistingAtomicPrinter,
+    Salvage,
+    InstallingWaypointBookmark,
+    DetachingStorageContainer,
+    InspectingAsteroid,
     Returning,
     WaitingForSpace,
-    Crafting,
-    Salvage,
+    MovingStockage,
     #[serde(other)]
     Unknown,
 }
@@ -265,6 +270,8 @@ pub enum SectorObjectType {
     BlackHole,
     SolarSystem,
     Manny,
+    DriftingItem,
+    DetachedContainer,
     #[serde(other)]
     Unknown,
 }

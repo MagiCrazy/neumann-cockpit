@@ -156,9 +156,9 @@ async fn run(
                         fetch_mannies(client.clone(), tx.clone());
                     }
                     ApiMessage::RecallError(e) => state.set_recall_error(e),
-                    ApiMessage::DeployDone(inv) => {
-                        state.update_inventory(inv);
+                    ApiMessage::DeployStarted => {
                         state.deploy = DeployInput::Inactive;
+                        fetch_all(client.clone(), tx.clone());
                     }
                     ApiMessage::DeployError(e) => state.set_deploy_error(e),
                     ApiMessage::RenameMannyDone(manny) => {
@@ -333,29 +333,32 @@ fn handle_event(
             }
         }
         KeyCode::Char('d') if state.focused == Some(Panel::Inventory) => {
-            match state.inventory_waypoint_bookmark_id() {
-                None => state.error = Some("no waypoint bookmark in inventory — craft one first".into()),
-                Some(item_id) => {
+            if state.inventory_waypoint_bookmark_id().is_none() {
+                state.error = Some("no waypoint bookmark in inventory — craft one first".into());
+            } else {
+                let mannies = state.collect_idle_onboard_mannies();
+                if mannies.is_empty() {
+                    state.error = Some("no idle Manny on board".into());
+                } else {
                     let candidates = state.collect_deploy_candidates();
-                    match candidates.len() {
-                        0 => state.error = Some("no targets in current sector — scan first".into()),
-                        1 => {
+                    if candidates.is_empty() {
+                        state.error = Some("no targets in current sector — scan first".into());
+                    } else if mannies.len() == 1 {
+                        let (manny_id, _) = mannies.into_iter().next().unwrap();
+                        if candidates.len() == 1 {
                             let (object_id, object_name) = candidates.into_iter().next().unwrap();
                             state.deploy = DeployInput::EnterName {
-                                item_id,
+                                manny_id,
                                 object_id,
                                 object_name,
                                 name_buf: String::new(),
                                 error: None,
                             };
+                        } else {
+                            state.deploy = DeployInput::PickObject { manny_id, candidates, selection: 0 };
                         }
-                        _ => {
-                            state.deploy = DeployInput::PickObject {
-                                item_id,
-                                candidates,
-                                selection: 0,
-                            };
-                        }
+                    } else {
+                        state.deploy = DeployInput::PickManny { mannies, selection: 0 };
                     }
                 }
             }
@@ -1029,6 +1032,40 @@ fn handle_deploy_event(
     tx: &mpsc::Sender<ApiMessage>,
 ) {
     match &state.deploy {
+        DeployInput::PickManny { selection, mannies } => {
+            let sel = *selection;
+            let count = mannies.len();
+            match code {
+                KeyCode::Esc => state.deploy = DeployInput::Inactive,
+                KeyCode::Up | KeyCode::Char('k') => {
+                    if let DeployInput::PickManny { ref mut selection, .. } = state.deploy {
+                        *selection = sel.checked_sub(1).unwrap_or(count - 1);
+                    }
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    if let DeployInput::PickManny { ref mut selection, .. } = state.deploy {
+                        *selection = (sel + 1) % count;
+                    }
+                }
+                KeyCode::Enter => {
+                    let manny_id = {
+                        let DeployInput::PickManny { ref mannies, selection } = state.deploy else { return };
+                        mannies[selection].0.clone()
+                    };
+                    let candidates = state.collect_deploy_candidates();
+                    if candidates.is_empty() {
+                        state.deploy = DeployInput::Inactive;
+                        state.error = Some("no targets in current sector".into());
+                    } else if candidates.len() == 1 {
+                        let (object_id, object_name) = candidates.into_iter().next().unwrap();
+                        state.deploy = DeployInput::EnterName { manny_id, object_id, object_name, name_buf: String::new(), error: None };
+                    } else {
+                        state.deploy = DeployInput::PickObject { manny_id, candidates, selection: 0 };
+                    }
+                }
+                _ => {}
+            }
+        }
         DeployInput::PickObject { selection, candidates, .. } => {
             let sel = *selection;
             let count = candidates.len();
@@ -1045,13 +1082,13 @@ fn handle_deploy_event(
                     }
                 }
                 KeyCode::Enter => {
-                    let (item_id, object_id, object_name) = {
-                        let DeployInput::PickObject { ref item_id, ref candidates, selection } = state.deploy else { return };
+                    let (manny_id, object_id, object_name) = {
+                        let DeployInput::PickObject { ref manny_id, ref candidates, selection } = state.deploy else { return };
                         let (id, name) = candidates[selection].clone();
-                        (item_id.clone(), id, name)
+                        (manny_id.clone(), id, name)
                     };
                     state.deploy = DeployInput::EnterName {
-                        item_id,
+                        manny_id,
                         object_id,
                         object_name,
                         name_buf: String::new(),
@@ -1067,12 +1104,12 @@ fn handle_deploy_event(
                 KeyCode::Backspace => state.deploy_backspace(),
                 KeyCode::Char(c) => state.deploy_type_char(c),
                 KeyCode::Enter => {
-                    let (item_id, object_id, name) = {
-                        let DeployInput::EnterName { ref item_id, ref object_id, ref name_buf, .. } = state.deploy else { return };
+                    let (manny_id, object_id, name) = {
+                        let DeployInput::EnterName { ref manny_id, ref object_id, ref name_buf, .. } = state.deploy else { return };
                         if name_buf.is_empty() { return }
-                        (item_id.clone(), object_id.clone(), name_buf.clone())
+                        (manny_id.clone(), object_id.clone(), name_buf.clone())
                     };
-                    fetch_deploy(item_id, object_id, name, client.clone(), tx.clone());
+                    fetch_deploy(manny_id, object_id, name, client.clone(), tx.clone());
                 }
                 _ => {}
             }
@@ -1081,10 +1118,10 @@ fn handle_deploy_event(
     }
 }
 
-fn fetch_deploy(item_id: String, object_id: String, name: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+fn fetch_deploy(manny_id: String, object_id: String, name: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     tokio::spawn(async move {
-        let msg = match client.deploy_waypoint(&item_id, &object_id, &name).await {
-            Ok(inv) => ApiMessage::DeployDone(inv),
+        let msg = match client.install_bookmark_manny(&manny_id, &object_id, &name).await {
+            Ok(_) => ApiMessage::DeployStarted,
             Err(e) => ApiMessage::DeployError(e.to_string()),
         };
         let _ = tx.send(msg).await;

@@ -514,12 +514,15 @@ fn manny_list_item(m: &Manny) -> ListItem<'_> {
         None => Span::styled("idle", Style::default().fg(Color::DarkGray)),
         Some(MannyTask::Repair) => Span::styled("repair", Style::default().fg(Color::Cyan)),
         Some(MannyTask::Mining) => Span::styled("mining", Style::default().fg(Color::Yellow)),
-        Some(MannyTask::Returning) => Span::styled("returning", Style::default().fg(Color::Blue)),
-        Some(MannyTask::WaitingForSpace) => {
-            Span::styled("waiting", Style::default().fg(Color::Magenta))
-        }
         Some(MannyTask::Crafting) => Span::styled("crafting", Style::default().fg(Color::Cyan)),
+        Some(MannyTask::AssistingAtomicPrinter) => Span::styled("assisting printer", Style::default().fg(Color::Cyan)),
         Some(MannyTask::Salvage) => Span::styled("salvage", Style::default().fg(Color::Yellow)),
+        Some(MannyTask::InstallingWaypointBookmark) => Span::styled("installing waypoint", Style::default().fg(Color::Green)),
+        Some(MannyTask::DetachingStorageContainer) => Span::styled("detaching container", Style::default().fg(Color::Yellow)),
+        Some(MannyTask::InspectingAsteroid) => Span::styled("inspecting", Style::default().fg(Color::Yellow)),
+        Some(MannyTask::Returning) => Span::styled("returning", Style::default().fg(Color::Blue)),
+        Some(MannyTask::WaitingForSpace) => Span::styled("waiting", Style::default().fg(Color::Magenta)),
+        Some(MannyTask::MovingStockage) => Span::styled("moving cargo", Style::default().fg(Color::Blue)),
         Some(MannyTask::Unknown) => Span::styled("?", Style::default().fg(Color::DarkGray)),
     };
 
@@ -1686,6 +1689,52 @@ fn render_rename_manny_overlay(frame: &mut Frame, area: Rect, state: &AppState) 
 
 fn render_deploy_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     match &state.deploy {
+        DeployInput::PickManny { mannies, selection } => {
+            let height = (mannies.len() as u16 + 6).min(18);
+            let popup = centered_rect(52, height, area);
+            frame.render_widget(Clear, popup);
+            let block = Block::default()
+                .title(" DEPLOY WAYPOINT — SELECT MANNY ")
+                .title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan));
+            let inner = block.inner(popup);
+            frame.render_widget(block, popup);
+
+            let rows = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(1), Constraint::Length(1)])
+                .split(inner);
+
+            let mut lines: Vec<Line> = Vec::new();
+            for (i, (_, name)) in mannies.iter().enumerate() {
+                let selected = i == *selection;
+                if selected {
+                    lines.push(Line::from(vec![
+                        Span::styled("▶ ", Style::default().fg(Color::Yellow)),
+                        Span::styled(name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                    ]));
+                } else {
+                    lines.push(Line::from(vec![
+                        Span::raw("  "),
+                        Span::styled(name.as_str(), Style::default().fg(Color::DarkGray)),
+                    ]));
+                }
+            }
+            frame.render_widget(Paragraph::new(lines), rows[0]);
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" select  "),
+                    Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                    Span::raw(" confirm  "),
+                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" cancel"),
+                ])),
+                rows[1],
+            );
+        }
+
         DeployInput::PickObject { candidates, selection, .. } => {
             let height = (candidates.len() as u16 + 6).min(18);
             let popup = centered_rect(52, height, area);
@@ -2200,6 +2249,8 @@ fn object_icon(t: &SectorObjectType) -> (&'static str, Color) {
         SectorObjectType::BlackHole => ("◉", Color::Magenta),
         SectorObjectType::SolarSystem => ("⊙", Color::Yellow),
         SectorObjectType::Manny => ("♟", Color::Green),
+        SectorObjectType::DriftingItem => ("◌", Color::White),
+        SectorObjectType::DetachedContainer => ("□", Color::Cyan),
         SectorObjectType::Unknown => ("?", Color::DarkGray),
     }
 }
