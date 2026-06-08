@@ -2374,6 +2374,35 @@ fn sector_object_lines(obj: &SectorObject) -> Vec<Line<'_>> {
         lines.push(Line::from(detail_spans));
     }
 
+    // Minable asteroid targets with resource types
+    if let Some(targets) = &obj.minable_targets {
+        for target in targets {
+            let (icon, color) = object_icon(&target.object_type);
+            let name = target.name.as_deref().unwrap_or("unnamed");
+            let mut spans = vec![
+                Span::styled("  ", Style::default().fg(Color::DarkGray)),
+                Span::styled(icon, Style::default().fg(color)),
+                Span::raw(" "),
+                Span::raw(name.to_string()),
+            ];
+            if let Some(resources) = &target.resource_types {
+                let res_str = resources.iter().map(|r| match r.as_str() {
+                    "metals" => "metals",
+                    "ice" => "ice",
+                    "carbon_compounds" => "carbon",
+                    other => other,
+                }).collect::<Vec<_>>().join("  ");
+                if !res_str.is_empty() {
+                    spans.push(Span::styled(
+                        format!("  {res_str}"),
+                        Style::default().fg(Color::Yellow),
+                    ));
+                }
+            }
+            lines.push(Line::from(spans));
+        }
+    }
+
     // Nested bodies of a solar system
     for target in &obj.bookmark_targets {
         let (icon, color) = object_icon(&target.object_type);
