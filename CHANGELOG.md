@@ -1,5 +1,13 @@
 # Changelog
 
+## [11.2.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v11.1.3...neumann-cockpit-v11.2.0) (2026-06-08)
+
+
+### Features
+
+* **scanner:** show minable asteroid resource types in sector detail ([#22](https://github.com/MagiCrazy/neumann-cockpit/issues/22)) ([ab4d7d3](https://github.com/MagiCrazy/neumann-cockpit/commit/ab4d7d31cf9ab8a8bd68544a1edaf8a35aeeef86))
+* v23 API, dynamic recipes, scanner enhancements, mannies actions ([#20](https://github.com/MagiCrazy/neumann-cockpit/issues/20)) ([d0dc94d](https://github.com/MagiCrazy/neumann-cockpit/commit/d0dc94d76de1ce6660055e5cce7fa4d81817f821))
+
 ## [11.1.3](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v11.1.2...neumann-cockpit-v11.1.3) (2026-06-03)
 
 
