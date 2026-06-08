@@ -144,7 +144,7 @@ pub struct ResourceStockContainerLine {
 
 // ── Inventory ─────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MannyCargo {
     pub capacity: f64,
@@ -378,6 +378,15 @@ pub struct SectorScan {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct WaypointBookmarkHistory {
+    pub name: String,
+    pub player_id: i64,
+    pub player_name: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WaypointBookmarkTarget {
     pub id: String,
     #[serde(rename = "type")]
@@ -387,6 +396,16 @@ pub struct WaypointBookmarkTarget {
     pub mass_unit: Option<String>,
     pub radius: Option<f64>,
     pub radius_unit: Option<String>,
+    #[serde(default)]
+    pub waypoint_bookmarks: Vec<WaypointBookmarkHistory>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SectorProbePresence {
+    pub id: i64,
+    pub name: String,
+    pub moving: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -399,11 +418,24 @@ pub struct SectorObject {
     pub estimated: Option<bool>,
     pub summary: Option<String>,
     pub mass: Option<f64>,
+    pub mass_unit: Option<String>,
     pub radius: Option<f64>,
+    pub radius_unit: Option<String>,
     pub danger_level: Option<DangerLevel>,
+    pub salvageable: Option<bool>,
     pub manny_state: Option<String>,
     pub manny_uid: Option<String>,
+    pub cargo: Option<MannyCargo>,
+    pub item_type: Option<String>,
+    pub quantity: Option<i64>,
+    pub container_space: Option<f64>,
+    pub mode: Option<String>,
+    pub target_object_id: Option<String>,
+    pub capacity: Option<f64>,
+    pub capacity_unit: Option<String>,
     pub minable_targets: Option<Vec<MinableTarget>>,
+    #[serde(default)]
+    pub waypoint_bookmarks: Vec<WaypointBookmarkHistory>,
     #[serde(default)]
     pub bookmark_targets: Vec<WaypointBookmarkTarget>,
 }
@@ -427,6 +459,7 @@ pub struct SectorObservation {
     pub knowledge_level: KnowledgeLevel,
     pub confidence: f64,
     pub objects: Option<Vec<SectorObject>>,
+    pub probes: Option<Vec<SectorProbePresence>>,
     pub possible_objects: Option<Vec<String>>,
     pub estimated_objects: Option<EstimatedObjects>,
     pub navigational_risk: Option<String>,

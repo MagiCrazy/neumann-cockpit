@@ -825,6 +825,23 @@ fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
         }
     }
 
+    if let Some(probes) = &sector.probes {
+        if !probes.is_empty() {
+            lines.push(Line::from(Span::styled(
+                "── other probes ──",
+                Style::default().fg(Color::DarkGray),
+            )));
+            for p in probes {
+                let moving = if p.moving { " moving" } else { " idle" };
+                lines.push(Line::from(vec![
+                    Span::styled("⊕ ", Style::default().fg(Color::Cyan)),
+                    Span::raw(p.name.as_str()),
+                    Span::styled(moving, Style::default().fg(Color::DarkGray)),
+                ]));
+            }
+        }
+    }
+
     let has_objects = sector.objects.as_ref().is_some_and(|o| !o.is_empty());
     let confirmed_empty = sector.objects.as_ref().is_some_and(|o| o.is_empty())
         && sector.possible_objects.as_ref().is_none_or(|p| p.is_empty())
@@ -2034,23 +2051,46 @@ fn sector_object_lines(obj: &SectorObject) -> Vec<Line<'_>> {
 
     let manny_state = obj.manny_state.as_deref().unwrap_or("");
 
+    let salvageable = obj.salvageable.unwrap_or(false);
+
     let mut main_spans = vec![
         Span::styled(icon, Style::default().fg(color)),
         Span::raw(" "),
         Span::styled(estimated, Style::default().fg(Color::DarkGray)),
         Span::raw(format!("{name}{danger}")),
     ];
+    if salvageable {
+        main_spans.push(Span::styled("  ⬡ salvageable", Style::default().fg(Color::Yellow)));
+    }
     if !manny_state.is_empty() {
         main_spans.push(Span::styled(
             format!("  [{manny_state}]"),
             Style::default().fg(Color::DarkGray),
         ));
     }
-    if let Some(summary) = &obj.summary {
-        main_spans.push(Span::styled(
-            format!("  {summary}"),
-            Style::default().fg(Color::DarkGray),
-        ));
+    // drifting item: show type + quantity instead of summary
+    if obj.object_type == SectorObjectType::DriftingItem {
+        if let (Some(itype), Some(qty)) = (&obj.item_type, obj.quantity) {
+            main_spans.push(Span::styled(
+                format!("  {itype} × {qty}"),
+                Style::default().fg(Color::DarkGray),
+            ));
+        }
+    } else if obj.object_type == SectorObjectType::DetachedContainer {
+        if let Some(cap) = obj.capacity {
+            let mode = obj.mode.as_deref().unwrap_or("drifting");
+            main_spans.push(Span::styled(
+                format!("  {mode}  {cap:.2} ECE"),
+                Style::default().fg(Color::DarkGray),
+            ));
+        }
+    } else if let Some(summary) = &obj.summary {
+        if !matches!(obj.object_type, SectorObjectType::SolarSystem) || obj.bookmark_targets.is_empty() {
+            main_spans.push(Span::styled(
+                format!("  {summary}"),
+                Style::default().fg(Color::DarkGray),
+            ));
+        }
     }
 
     let mut lines = vec![Line::from(main_spans)];
