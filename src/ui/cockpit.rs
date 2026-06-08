@@ -809,6 +809,15 @@ fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
     }
 
     let has_objects = sector.objects.as_ref().is_some_and(|o| !o.is_empty());
+    let confirmed_empty = sector.objects.as_ref().is_some_and(|o| o.is_empty())
+        && sector.possible_objects.as_ref().is_none_or(|p| p.is_empty())
+        && sector.estimated_objects.is_none();
+    if confirmed_empty {
+        lines.push(Line::from(Span::styled(
+            "empty sector",
+            Style::default().fg(Color::DarkGray),
+        )));
+    }
     if !has_objects {
         if let Some(possible) = &sector.possible_objects {
             if !possible.is_empty() {
