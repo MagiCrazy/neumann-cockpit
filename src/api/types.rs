@@ -273,6 +273,40 @@ pub struct ManniesResponse {
     pub mannies: Vec<Manny>,
 }
 
+// ── Crafting recipes ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CraftingRecipeIngredient {
+    #[serde(rename = "type")]
+    pub ingredient_type: String,
+    pub quantity: f64,
+    pub unit: String,
+    pub kind: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CraftingRecipeOutput {
+    #[serde(rename = "type")]
+    pub output_type: String,
+    pub name: String,
+    pub container_space: f64,
+    pub container_space_unit: String,
+    pub capacity_bonus: Option<f64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CraftingRecipe {
+    pub id: String,
+    pub name: String,
+    pub craftable_by: Vec<String>,
+    pub ingredients: Vec<CraftingRecipeIngredient>,
+    pub duration_seconds: i64,
+    pub output: CraftingRecipeOutput,
+}
+
 // ── Sector ────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

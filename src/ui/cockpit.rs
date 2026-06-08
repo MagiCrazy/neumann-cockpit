@@ -2,7 +2,7 @@ use crate::api::types::{
     DangerLevel, DataFreshness, KnowledgeLevel, Manny, MannyLocationType, MannyTask,
     MovementPhase, ProbeStatus, SectorObject, SectorObjectType, SectorObservation, SensorMode,
 };
-use crate::app::{AppState, AtomicPrinterCraftInput, ATOMIC_RECIPES, CraftInput, DeployInput, JettisonInput, MineInput, Panel, RecallInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_LABELS, RESOURCE_TYPES};
+use crate::app::{AppState, AtomicPrinterCraftInput, CraftInput, DeployInput, JettisonInput, MineInput, Panel, RecallInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_LABELS, RESOURCE_TYPES};
 use chrono::Utc;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -1488,9 +1488,11 @@ fn render_jettison_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
 }
 
 fn render_craft_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let CraftInput::Confirm { ref manny_name, ref error, .. } = state.craft else { return };
+    let CraftInput::PickRecipe { ref manny_name, selection, ref error, .. } = state.craft else { return };
 
-    let popup = centered_rect(48, 10, area);
+    let recipes = state.manny_craft_recipes();
+    let height = (recipes.len() as u16 + 6).min(16);
+    let popup = centered_rect(58, height, area);
     frame.render_widget(Clear, popup);
 
     let title = format!(" CRAFT — {manny_name} ");
@@ -1508,13 +1510,38 @@ fn render_craft_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
         .split(inner);
 
     let mut lines: Vec<Line> = Vec::new();
-    lines.push(Line::from(vec![
-        Span::styled("waypoint_bookmark", Style::default().fg(Color::White)),
-        Span::styled("  —  ", Style::default().fg(Color::DarkGray)),
-        Span::styled("0.01 ECE metals, 10 min", Style::default().fg(Color::DarkGray)),
-    ]));
-    lines.push(Line::default());
+    if recipes.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "loading recipes…",
+            Style::default().fg(Color::DarkGray),
+        )));
+    }
+    for (i, recipe) in recipes.iter().enumerate() {
+        let selected = i == selection;
+        let duration_min = recipe.duration_seconds / 60;
+        let ingredients: String = recipe.ingredients.iter().map(|ing| {
+            if ing.unit == "item" {
+                format!("{} × {}", ing.quantity as u32, ing.ingredient_type)
+            } else {
+                format!("{:.2} ECE {}", ing.quantity, ing.ingredient_type)
+            }
+        }).collect::<Vec<_>>().join(", ");
+        let detail = format!("  {}m  {}", duration_min, ingredients);
+        if selected {
+            lines.push(Line::from(vec![
+                Span::styled("▶ ", Style::default().fg(Color::Yellow)),
+                Span::styled(recipe.name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                Span::styled(detail, Style::default().fg(Color::DarkGray)),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(recipe.name.as_str(), Style::default().fg(Color::DarkGray)),
+            ]));
+        }
+    }
     if let Some(err) = error {
+        lines.push(Line::default());
         lines.push(Line::from(Span::styled(
             format!("✗ {err}"),
             Style::default().fg(Color::Red),
@@ -1524,8 +1551,10 @@ fn render_craft_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     frame.render_widget(Paragraph::new(lines), rows[0]);
     frame.render_widget(
         Paragraph::new(Line::from(vec![
+            Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
+            Span::raw(" select  "),
             Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-            Span::raw(" CRAFT  "),
+            Span::raw(" start  "),
             Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
             Span::raw(" cancel"),
         ])),
@@ -1536,8 +1565,9 @@ fn render_craft_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
 fn render_atomic_printer_craft_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let AtomicPrinterCraftInput::PickRecipe { selection, ref error } = state.atomic_printer_craft else { return };
 
-    let height = (ATOMIC_RECIPES.len() as u16 + 6).min(16);
-    let popup = centered_rect(52, height, area);
+    let recipes = state.atomic_printer_recipes();
+    let height = (recipes.len() as u16 + 6).min(16);
+    let popup = centered_rect(58, height, area);
     frame.render_widget(Clear, popup);
 
     let block = Block::default()
@@ -1554,17 +1584,33 @@ fn render_atomic_printer_craft_overlay(frame: &mut Frame, area: Rect, state: &Ap
         .split(inner);
 
     let mut lines: Vec<Line> = Vec::new();
-    for (i, (_, label)) in ATOMIC_RECIPES.iter().enumerate() {
+    if recipes.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "loading recipes…",
+            Style::default().fg(Color::DarkGray),
+        )));
+    }
+    for (i, recipe) in recipes.iter().enumerate() {
         let selected = i == selection;
+        let duration_min = recipe.duration_seconds / 60;
+        let ingredients: String = recipe.ingredients.iter().map(|ing| {
+            if ing.unit == "item" {
+                format!("{} × {}", ing.quantity as u32, ing.ingredient_type)
+            } else {
+                format!("{:.2} ECE {}", ing.quantity, ing.ingredient_type)
+            }
+        }).collect::<Vec<_>>().join(", ");
+        let detail = format!("  {}m  {}", duration_min, ingredients);
         if selected {
             lines.push(Line::from(vec![
                 Span::styled("▶ ", Style::default().fg(Color::Yellow)),
-                Span::styled(*label, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                Span::styled(recipe.name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                Span::styled(detail, Style::default().fg(Color::DarkGray)),
             ]));
         } else {
             lines.push(Line::from(vec![
                 Span::raw("  "),
-                Span::styled(*label, Style::default().fg(Color::DarkGray)),
+                Span::styled(recipe.name.as_str(), Style::default().fg(Color::DarkGray)),
             ]));
         }
     }

@@ -1,4 +1,4 @@
-use crate::api::types::{Manny, Probe, ProbeInventory, ProbeMovement, SectorObject, SectorObjectType, SectorObservation};
+use crate::api::types::{CraftingRecipe, Manny, Probe, ProbeInventory, ProbeMovement, SectorObject, SectorObjectType, SectorObservation};
 use chrono::{DateTime, Local, Utc};
 use std::path::Path;
 use tokio::time::Instant;
@@ -50,14 +50,6 @@ pub enum Panel {
 pub const RESOURCE_TYPES: [&str; 4] = ["deuterium", "metals", "ice", "carbon_compounds"];
 pub const RESOURCE_LABELS: [&str; 4] = ["deuterium", "metals", "ice", "carbon"];
 
-pub const ATOMIC_RECIPES: &[(&str, &str)] = &[
-    ("micro_conductor",    "Micro-conductor"),
-    ("ceramic_insulator",  "Ceramic insulator"),
-    ("crystal_substrate",  "Crystal substrate"),
-    ("dopant_matrix",      "Dopant matrix"),
-    ("integrated_circuit", "Integrated circuit"),
-];
-
 #[derive(Default)]
 pub enum AtomicPrinterCraftInput {
     #[default]
@@ -102,9 +94,10 @@ pub enum MineInput {
 pub enum CraftInput {
     #[default]
     Inactive,
-    Confirm {
+    PickRecipe {
         manny_id: String,
         manny_name: String,
+        selection: usize,
         error: Option<String>,
     },
 }
@@ -219,6 +212,7 @@ pub enum ApiMessage {
     DeployError(String),
     AtomicPrinterCraftStarted,
     AtomicPrinterCraftError(String),
+    RecipesFetched(Vec<CraftingRecipe>),
     RenameMannyDone(Manny),
     RenameMannyError(String),
     Error(String),
@@ -253,6 +247,7 @@ pub struct AppState {
     pub rename_manny: RenameMannyInput,
     pub map: MapView,
     pub api_version: Option<u32>,
+    pub recipes: Vec<CraftingRecipe>,
 }
 
 impl AppState {
@@ -628,7 +623,7 @@ impl AppState {
     }
 
     pub fn set_craft_error(&mut self, msg: String) {
-        if let CraftInput::Confirm { ref mut error, .. } = self.craft {
+        if let CraftInput::PickRecipe { ref mut error, .. } = self.craft {
             *error = Some(msg);
         }
     }
@@ -775,6 +770,18 @@ impl AppState {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    pub fn atomic_printer_recipes(&self) -> Vec<&CraftingRecipe> {
+        self.recipes.iter()
+            .filter(|r| r.craftable_by.iter().any(|c| c == "atomic_3d_printer"))
+            .collect()
+    }
+
+    pub fn manny_craft_recipes(&self) -> Vec<&CraftingRecipe> {
+        self.recipes.iter()
+            .filter(|r| r.craftable_by.iter().any(|c| c == "manny"))
+            .collect()
     }
 
     pub fn inventory_waypoint_bookmark_id(&self) -> Option<String> {

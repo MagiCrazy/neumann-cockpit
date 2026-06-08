@@ -16,7 +16,7 @@ mod ui;
 
 use api::client::ApiClient;
 use api::types::SectorObjectType;
-use app::{ApiMessage, AppState, AtomicPrinterCraftInput, ATOMIC_RECIPES, CraftInput, DeployInput, JettisonInput, MineInput, Panel, RecallInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_TYPES};
+use app::{ApiMessage, AppState, AtomicPrinterCraftInput, CraftInput, DeployInput, JettisonInput, MineInput, Panel, RecallInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_TYPES};
 
 fn neighbors_d1() -> Vec<(i32, i32, i32)> {
     let mut out = Vec::new();
@@ -88,6 +88,7 @@ async fn run(
     // Initial data fetch
     fetch_all(client.clone(), tx.clone());
     fetch_api_version(client.clone(), tx.clone());
+    fetch_crafting_recipes(client.clone(), tx.clone());
     state.loading = true;
 
     loop {
@@ -166,6 +167,7 @@ async fn run(
                         fetch_all(client.clone(), tx.clone());
                     }
                     ApiMessage::AtomicPrinterCraftError(e) => state.set_atomic_printer_craft_error(e),
+                    ApiMessage::RecipesFetched(recipes) => state.recipes = recipes,
                     ApiMessage::RenameMannyDone(manny) => {
                         if let Some(ref mut mannies) = state.mannies {
                             if let Some(m) = mannies.iter_mut().find(|m| m.id == manny.id) {
@@ -375,13 +377,15 @@ fn handle_event(
             }
         }
         KeyCode::Char('a') if state.focused == Some(Panel::Inventory) => {
-            if state.has_atomic_printer() {
+            if !state.has_atomic_printer() {
+                state.error = Some("no atomic printer in inventory".into());
+            } else if state.atomic_printer_recipes().is_empty() {
+                state.error = Some("recipes not loaded yet — press r to refresh".into());
+            } else {
                 state.atomic_printer_craft = AtomicPrinterCraftInput::PickRecipe {
                     selection: 0,
                     error: None,
                 };
-            } else {
-                state.error = Some("no atomic printer in inventory".into());
             }
         }
         KeyCode::Down | KeyCode::Char('j') if state.focused == Some(Panel::Mannies) => {
@@ -443,11 +447,16 @@ fn handle_event(
             if let Some(mannies) = &state.mannies {
                 if let Some(manny) = mannies.get(state.mannies_selection) {
                     if manny.can_receive_orders {
-                        state.craft = CraftInput::Confirm {
-                            manny_id: manny.id.clone(),
-                            manny_name: manny.name.clone(),
-                            error: None,
-                        };
+                        if state.manny_craft_recipes().is_empty() {
+                            state.error = Some("recipes not loaded yet — press r to refresh".into());
+                        } else {
+                            state.craft = CraftInput::PickRecipe {
+                                manny_id: manny.id.clone(),
+                                manny_name: manny.name.clone(),
+                                selection: 0,
+                                error: None,
+                            };
+                        }
                     }
                 }
             }
@@ -918,22 +927,36 @@ fn handle_craft_event(
     client: &ApiClient,
     tx: &mpsc::Sender<ApiMessage>,
 ) {
+    let CraftInput::PickRecipe { selection: _, .. } = state.craft else { return };
+    let count = state.manny_craft_recipes().len();
+    if count == 0 { return; }
     match code {
         KeyCode::Esc => state.craft = CraftInput::Inactive,
+        KeyCode::Up | KeyCode::Char('k') => {
+            if let CraftInput::PickRecipe { ref mut selection, .. } = state.craft {
+                *selection = selection.checked_sub(1).unwrap_or(count - 1);
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if let CraftInput::PickRecipe { ref mut selection, .. } = state.craft {
+                *selection = (*selection + 1) % count;
+            }
+        }
         KeyCode::Enter => {
-            let manny_id = {
-                let CraftInput::Confirm { ref manny_id, .. } = state.craft else { return };
-                manny_id.clone()
+            let (manny_id, recipe_id) = {
+                let CraftInput::PickRecipe { ref manny_id, selection, .. } = state.craft else { return };
+                let recipe_id = state.manny_craft_recipes()[selection].id.clone();
+                (manny_id.clone(), recipe_id)
             };
-            fetch_craft(manny_id, "waypoint_bookmark", client.clone(), tx.clone());
+            fetch_craft(manny_id, recipe_id, client.clone(), tx.clone());
         }
         _ => {}
     }
 }
 
-fn fetch_craft(manny_id: String, recipe: &'static str, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+fn fetch_craft(manny_id: String, recipe: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     tokio::spawn(async move {
-        let msg = match client.craft_manny(&manny_id, recipe).await {
+        let msg = match client.craft_manny(&manny_id, &recipe).await {
             Ok(_) => ApiMessage::CraftStarted,
             Err(e) => ApiMessage::CraftError(e.to_string()),
         };
@@ -948,7 +971,8 @@ fn handle_atomic_printer_craft_event(
     tx: &mpsc::Sender<ApiMessage>,
 ) {
     let AtomicPrinterCraftInput::PickRecipe { selection, .. } = state.atomic_printer_craft else { return };
-    let count = ATOMIC_RECIPES.len();
+    let count = state.atomic_printer_recipes().len();
+    if count == 0 { return; }
     match code {
         KeyCode::Esc => state.atomic_printer_craft = AtomicPrinterCraftInput::Inactive,
         KeyCode::Up | KeyCode::Char('k') => {
@@ -962,16 +986,24 @@ fn handle_atomic_printer_craft_event(
             }
         }
         KeyCode::Enter => {
-            let recipe = ATOMIC_RECIPES[selection].0;
-            fetch_atomic_printer_craft(recipe, client.clone(), tx.clone());
+            let recipe_id = state.atomic_printer_recipes()[selection].id.clone();
+            fetch_atomic_printer_craft(recipe_id, client.clone(), tx.clone());
         }
         _ => {}
     }
 }
 
-fn fetch_atomic_printer_craft(recipe: &'static str, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+fn fetch_crafting_recipes(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     tokio::spawn(async move {
-        let msg = match client.craft_atomic_printer(recipe).await {
+        if let Ok(recipes) = client.get_crafting_recipes().await {
+            let _ = tx.send(ApiMessage::RecipesFetched(recipes)).await;
+        }
+    });
+}
+
+fn fetch_atomic_printer_craft(recipe: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        let msg = match client.craft_atomic_printer(&recipe).await {
             Ok(()) => ApiMessage::AtomicPrinterCraftStarted,
             Err(e) => ApiMessage::AtomicPrinterCraftError(e.to_string()),
         };

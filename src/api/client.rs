@@ -1,4 +1,4 @@
-use super::types::{Manny, Probe, ProbeInventory, ProbeMovement, SectorObservation};
+use super::types::{CraftingRecipe, Manny, Probe, ProbeInventory, ProbeMovement, SectorObservation};
 use anyhow::{Context, Result};
 use reqwest::{Client, StatusCode, Url};
 use serde::{Deserialize, Serialize};
@@ -239,6 +239,12 @@ impl ApiClient {
         struct Body<'a> { recipe: &'a str }
         self.post::<serde_json::Value, _>("/api/probe/atomic-printer/craft", &Body { recipe }).await?;
         Ok(())
+    }
+
+    pub async fn get_crafting_recipes(&self) -> Result<Vec<CraftingRecipe>> {
+        #[derive(Deserialize)]
+        struct Resp { recipes: Vec<CraftingRecipe> }
+        Ok(self.get::<Resp>("/api/crafting-recipes").await?.recipes)
     }
 
     pub async fn install_bookmark_manny(&self, manny_id: &str, object_id: &str, name: &str) -> Result<Manny> {
