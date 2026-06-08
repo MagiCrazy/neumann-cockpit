@@ -378,6 +378,19 @@ pub struct SectorScan {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct WaypointBookmarkTarget {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub object_type: SectorObjectType,
+    pub name: Option<String>,
+    pub mass: Option<f64>,
+    pub mass_unit: Option<String>,
+    pub radius: Option<f64>,
+    pub radius_unit: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SectorObject {
     pub id: Option<String>,
     #[serde(rename = "type")]
@@ -391,6 +404,8 @@ pub struct SectorObject {
     pub manny_state: Option<String>,
     pub manny_uid: Option<String>,
     pub minable_targets: Option<Vec<MinableTarget>>,
+    #[serde(default)]
+    pub bookmark_targets: Vec<WaypointBookmarkTarget>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

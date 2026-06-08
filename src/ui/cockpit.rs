@@ -656,6 +656,9 @@ fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
                         s.push(Span::styled("[g]", Style::default().fg(Color::Yellow)));
                         s.push(Span::raw(" go"));
                     }
+                    s.push(Span::raw("  "));
+                    s.push(Span::styled("[J/K]", Style::default().fg(Color::Cyan)));
+                    s.push(Span::raw(" scroll"));
                     s
                 };
                 frame.render_widget(Paragraph::new(Line::from(spans)), hint_area);
@@ -899,7 +902,10 @@ fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
         }
     }
 
-    frame.render_widget(Paragraph::new(lines), detail_area);
+    frame.render_widget(
+        Paragraph::new(lines).scroll((state.scan_detail_scroll as u16, 0)),
+        detail_area,
+    );
 }
 
 // ── Travel overlay ────────────────────────────────────────────────────────────
@@ -2049,8 +2055,9 @@ fn sector_object_lines(obj: &SectorObject) -> Vec<Line<'_>> {
 
     let mut lines = vec![Line::from(main_spans)];
 
-    let has_mass = obj.mass.is_some();
-    let has_radius = obj.radius.is_some();
+    let skip_dimensions = matches!(obj.object_type, SectorObjectType::SolarSystem);
+    let has_mass = obj.mass.is_some() && !skip_dimensions;
+    let has_radius = obj.radius.is_some() && !skip_dimensions;
     let has_uid = obj.manny_uid.is_some();
     if has_mass || has_radius || has_uid {
         let mut detail_spans = vec![Span::raw("  ")];
@@ -2075,6 +2082,32 @@ fn sector_object_lines(obj: &SectorObject) -> Vec<Line<'_>> {
             detail_spans.push(Span::styled(uid.as_str(), Style::default().fg(Color::White)));
         }
         lines.push(Line::from(detail_spans));
+    }
+
+    // Nested bodies of a solar system
+    for target in &obj.bookmark_targets {
+        let (icon, color) = object_icon(&target.object_type);
+        let name = target.name.as_deref().unwrap_or("unnamed");
+        let mut spans = vec![
+            Span::styled("  ", Style::default().fg(Color::DarkGray)),
+            Span::styled(icon, Style::default().fg(color)),
+            Span::raw(" "),
+            Span::raw(name.to_string()),
+        ];
+        let mut extras: Vec<String> = Vec::new();
+        if let Some(m) = target.mass {
+            extras.push(format!("{m:.3e} {}", target.mass_unit.as_deref().unwrap_or("")));
+        }
+        if let Some(r) = target.radius {
+            extras.push(format!("r {r:.3e} {}", target.radius_unit.as_deref().unwrap_or("")));
+        }
+        if !extras.is_empty() {
+            spans.push(Span::styled(
+                format!("  {}", extras.join("  ")),
+                Style::default().fg(Color::DarkGray),
+            ));
+        }
+        lines.push(Line::from(spans));
     }
 
     lines

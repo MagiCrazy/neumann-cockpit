@@ -400,6 +400,12 @@ fn handle_event(
         KeyCode::Up | KeyCode::Char('k') if state.focused == Some(Panel::Scanner) => {
             state.scan_hist_prev();
         }
+        KeyCode::Char('J') if state.focused == Some(Panel::Scanner) => {
+            state.scan_detail_scroll = state.scan_detail_scroll.saturating_add(3);
+        }
+        KeyCode::Char('K') if state.focused == Some(Panel::Scanner) => {
+            state.scan_detail_scroll = state.scan_detail_scroll.saturating_sub(3);
+        }
         KeyCode::Enter if state.focused == Some(Panel::Mannies) => {
             if let Some(mannies) = &state.mannies {
                 if let Some(manny) = mannies.get(state.mannies_selection) {

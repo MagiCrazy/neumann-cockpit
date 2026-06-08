@@ -235,6 +235,7 @@ pub struct AppState {
     pub scan_mode: ScanMode,
     pub scan_error: Option<String>,
     pub scan_batch: Option<usize>,
+    pub scan_detail_scroll: usize,
     pub travel: TravelInput,
     pub repair: RepairInput,
     pub mine: MineInput,
@@ -328,6 +329,7 @@ impl AppState {
         });
         self.scan_history.insert(0, sector);
         self.scan_history_idx = 0;
+        self.scan_detail_scroll = 0;
         self.scan_loading = false;
         self.scan_error = None;
         self.scan_mode = ScanMode::Current;
@@ -339,14 +341,18 @@ impl AppState {
 
     pub fn scan_hist_next(&mut self) {
         if !self.scan_history.is_empty() {
-            self.scan_history_idx =
-                (self.scan_history_idx + 1).min(self.scan_history.len() - 1);
+            let new = (self.scan_history_idx + 1).min(self.scan_history.len() - 1);
+            if new != self.scan_history_idx {
+                self.scan_history_idx = new;
+                self.scan_detail_scroll = 0;
+            }
         }
     }
 
     pub fn scan_hist_prev(&mut self) {
         if self.scan_history_idx > 0 {
             self.scan_history_idx -= 1;
+            self.scan_detail_scroll = 0;
         }
     }
 
