@@ -16,7 +16,7 @@ mod ui;
 
 use api::client::ApiClient;
 use api::types::SectorObjectType;
-use app::{ApiMessage, AppState, CraftInput, DeployInput, JettisonInput, MineInput, Panel, RecallInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_TYPES};
+use app::{ApiMessage, AppState, AtomicPrinterCraftInput, CraftInput, DeployInput, DetachInput, InspectInput, JettisonInput, MineInput, Panel, RecallInput, RecoverInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_TYPES};
 
 fn neighbors_d1() -> Vec<(i32, i32, i32)> {
     let mut out = Vec::new();
@@ -88,6 +88,7 @@ async fn run(
     // Initial data fetch
     fetch_all(client.clone(), tx.clone());
     fetch_api_version(client.clone(), tx.clone());
+    fetch_crafting_recipes(client.clone(), tx.clone());
     state.loading = true;
 
     loop {
@@ -156,11 +157,32 @@ async fn run(
                         fetch_mannies(client.clone(), tx.clone());
                     }
                     ApiMessage::RecallError(e) => state.set_recall_error(e),
-                    ApiMessage::DeployDone(inv) => {
-                        state.update_inventory(inv);
+                    ApiMessage::DeployStarted => {
                         state.deploy = DeployInput::Inactive;
+                        fetch_all(client.clone(), tx.clone());
                     }
                     ApiMessage::DeployError(e) => state.set_deploy_error(e),
+                    ApiMessage::AtomicPrinterCraftStarted => {
+                        state.atomic_printer_craft = AtomicPrinterCraftInput::Inactive;
+                        fetch_all(client.clone(), tx.clone());
+                    }
+                    ApiMessage::AtomicPrinterCraftError(e) => state.set_atomic_printer_craft_error(e),
+                    ApiMessage::RecipesFetched(recipes) => state.recipes = recipes,
+                    ApiMessage::InspectStarted => {
+                        state.inspect = InspectInput::Inactive;
+                        fetch_mannies(client.clone(), tx.clone());
+                    }
+                    ApiMessage::InspectError(e) => state.set_inspect_error(e),
+                    ApiMessage::RecoverStarted => {
+                        state.recover = RecoverInput::Inactive;
+                        fetch_all(client.clone(), tx.clone());
+                    }
+                    ApiMessage::RecoverError(e) => state.set_recover_error(e),
+                    ApiMessage::DetachStarted => {
+                        state.detach = DetachInput::Inactive;
+                        fetch_all(client.clone(), tx.clone());
+                    }
+                    ApiMessage::DetachError(e) => state.set_detach_error(e),
                     ApiMessage::RenameMannyDone(manny) => {
                         if let Some(ref mut mannies) = state.mannies {
                             if let Some(m) = mannies.iter_mut().find(|m| m.id == manny.id) {
@@ -205,10 +227,14 @@ fn handle_event(
     let in_repair = !matches!(state.repair, RepairInput::Inactive);
     let in_jettison = !matches!(state.jettison, JettisonInput::Inactive);
     let in_craft = !matches!(state.craft, CraftInput::Inactive);
+    let in_atomic_craft = !matches!(state.atomic_printer_craft, AtomicPrinterCraftInput::Inactive);
     let in_salvage = !matches!(state.salvage, SalvageInput::Inactive);
     let in_recall = !matches!(state.recall, RecallInput::Inactive);
     let in_rename_manny = !matches!(state.rename_manny, RenameMannyInput::Inactive);
     let in_deploy = !matches!(state.deploy, DeployInput::Inactive);
+    let in_inspect = !matches!(state.inspect, InspectInput::Inactive);
+    let in_recover = !matches!(state.recover, RecoverInput::Inactive);
+    let in_detach = !matches!(state.detach, DetachInput::Inactive);
 
     if ctrl && k.code == KeyCode::Char('c') {
         state.set_quit();
@@ -230,6 +256,11 @@ fn handle_event(
         return;
     }
 
+    if in_atomic_craft {
+        handle_atomic_printer_craft_event(k.code, state, client, tx);
+        return;
+    }
+
     if in_salvage {
         handle_salvage_event(k.code, state, client, tx);
         return;
@@ -247,6 +278,21 @@ fn handle_event(
 
     if in_deploy {
         handle_deploy_event(k.code, state, client, tx);
+        return;
+    }
+
+    if in_inspect {
+        handle_inspect_event(k.code, state, client, tx);
+        return;
+    }
+
+    if in_recover {
+        handle_recover_event(k.code, state, client, tx);
+        return;
+    }
+
+    if in_detach {
+        handle_detach_event(k.code, state, client, tx);
         return;
     }
 
@@ -333,31 +379,46 @@ fn handle_event(
             }
         }
         KeyCode::Char('d') if state.focused == Some(Panel::Inventory) => {
-            match state.inventory_waypoint_bookmark_id() {
-                None => state.error = Some("no waypoint bookmark in inventory — craft one first".into()),
-                Some(item_id) => {
+            if state.inventory_waypoint_bookmark_id().is_none() {
+                state.error = Some("no waypoint bookmark in inventory — craft one first".into());
+            } else {
+                let mannies = state.collect_idle_onboard_mannies();
+                if mannies.is_empty() {
+                    state.error = Some("no idle Manny on board".into());
+                } else {
                     let candidates = state.collect_deploy_candidates();
-                    match candidates.len() {
-                        0 => state.error = Some("no targets in current sector — scan first".into()),
-                        1 => {
+                    if candidates.is_empty() {
+                        state.error = Some("no targets in current sector — scan first".into());
+                    } else if mannies.len() == 1 {
+                        let (manny_id, _) = mannies.into_iter().next().unwrap();
+                        if candidates.len() == 1 {
                             let (object_id, object_name) = candidates.into_iter().next().unwrap();
                             state.deploy = DeployInput::EnterName {
-                                item_id,
+                                manny_id,
                                 object_id,
                                 object_name,
                                 name_buf: String::new(),
                                 error: None,
                             };
+                        } else {
+                            state.deploy = DeployInput::PickObject { manny_id, candidates, selection: 0 };
                         }
-                        _ => {
-                            state.deploy = DeployInput::PickObject {
-                                item_id,
-                                candidates,
-                                selection: 0,
-                            };
-                        }
+                    } else {
+                        state.deploy = DeployInput::PickManny { mannies, selection: 0 };
                     }
                 }
+            }
+        }
+        KeyCode::Char('a') if state.focused == Some(Panel::Inventory) => {
+            if !state.has_atomic_printer() {
+                state.error = Some("no atomic printer in inventory".into());
+            } else if state.atomic_printer_recipes().is_empty() {
+                state.error = Some("recipes not loaded yet — press r to refresh".into());
+            } else {
+                state.atomic_printer_craft = AtomicPrinterCraftInput::PickRecipe {
+                    selection: 0,
+                    error: None,
+                };
             }
         }
         KeyCode::Down | KeyCode::Char('j') if state.focused == Some(Panel::Mannies) => {
@@ -371,6 +432,12 @@ fn handle_event(
         }
         KeyCode::Up | KeyCode::Char('k') if state.focused == Some(Panel::Scanner) => {
             state.scan_hist_prev();
+        }
+        KeyCode::Char('J') if state.focused == Some(Panel::Scanner) => {
+            state.scan_detail_scroll = state.scan_detail_scroll.saturating_add(3);
+        }
+        KeyCode::Char('K') if state.focused == Some(Panel::Scanner) => {
+            state.scan_detail_scroll = state.scan_detail_scroll.saturating_sub(3);
         }
         KeyCode::Enter if state.focused == Some(Panel::Mannies) => {
             if let Some(mannies) = &state.mannies {
@@ -419,11 +486,16 @@ fn handle_event(
             if let Some(mannies) = &state.mannies {
                 if let Some(manny) = mannies.get(state.mannies_selection) {
                     if manny.can_receive_orders {
-                        state.craft = CraftInput::Confirm {
-                            manny_id: manny.id.clone(),
-                            manny_name: manny.name.clone(),
-                            error: None,
-                        };
+                        if state.manny_craft_recipes().is_empty() {
+                            state.error = Some("recipes not loaded yet — press r to refresh".into());
+                        } else {
+                            state.craft = CraftInput::PickRecipe {
+                                manny_id: manny.id.clone(),
+                                manny_name: manny.name.clone(),
+                                selection: 0,
+                                error: None,
+                            };
+                        }
                     }
                 }
             }
@@ -475,6 +547,83 @@ fn handle_event(
                         buf: manny.name.clone(),
                         error: None,
                     };
+                }
+            }
+        }
+        KeyCode::Char('x') if state.focused == Some(Panel::Mannies) => {
+            if let Some(mannies) = &state.mannies {
+                if let Some(manny) = mannies.get(state.mannies_selection) {
+                    if manny.can_receive_orders {
+                        let candidates = collect_asteroid_candidates(state);
+                        match candidates.len() {
+                            0 => state.error = Some("no asteroids in current sector — scan first".into()),
+                            1 => {
+                                let (object_id, _) = candidates.into_iter().next().unwrap();
+                                fetch_inspect(manny.id.clone(), object_id, client.clone(), tx.clone());
+                            }
+                            _ => {
+                                state.inspect = InspectInput::PickAsteroid {
+                                    manny_id: manny.id.clone(),
+                                    manny_name: manny.name.clone(),
+                                    candidates,
+                                    selection: 0,
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        KeyCode::Char('v') if state.focused == Some(Panel::Mannies) => {
+            if let Some(mannies) = &state.mannies {
+                if let Some(manny) = mannies.get(state.mannies_selection) {
+                    if manny.can_receive_orders {
+                        let candidates = state.collect_detached_containers();
+                        match candidates.len() {
+                            0 => state.error = Some("no detached containers in current sector — scan first".into()),
+                            1 => {
+                                let (object_id, _) = candidates.into_iter().next().unwrap();
+                                fetch_recover(manny.id.clone(), object_id, client.clone(), tx.clone());
+                            }
+                            _ => {
+                                state.recover = RecoverInput::PickContainer {
+                                    manny_id: manny.id.clone(),
+                                    manny_name: manny.name.clone(),
+                                    candidates,
+                                    selection: 0,
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        KeyCode::Char('D') if state.focused == Some(Panel::Mannies) => {
+            if let Some(mannies) = &state.mannies {
+                if let Some(manny) = mannies.get(state.mannies_selection) {
+                    if manny.can_receive_orders {
+                        let containers = state.collect_detachable_containers();
+                        if containers.is_empty() {
+                            state.error = Some("no detachable containers in inventory".into());
+                        } else if containers.len() == 1 {
+                            let (container_id, container_name) = containers.into_iter().next().unwrap();
+                            state.detach = DetachInput::PickMode {
+                                manny_id: manny.id.clone(),
+                                manny_name: manny.name.clone(),
+                                container_id,
+                                container_name,
+                                selection: 0,
+                                error: None,
+                            };
+                        } else {
+                            state.detach = DetachInput::PickContainer {
+                                manny_id: manny.id.clone(),
+                                manny_name: manny.name.clone(),
+                                containers,
+                                selection: 0,
+                            };
+                        }
+                    }
                 }
             }
         }
@@ -894,24 +1043,85 @@ fn handle_craft_event(
     client: &ApiClient,
     tx: &mpsc::Sender<ApiMessage>,
 ) {
+    let CraftInput::PickRecipe { selection: _, .. } = state.craft else { return };
+    let count = state.manny_craft_recipes().len();
+    if count == 0 { return; }
     match code {
         KeyCode::Esc => state.craft = CraftInput::Inactive,
+        KeyCode::Up | KeyCode::Char('k') => {
+            if let CraftInput::PickRecipe { ref mut selection, .. } = state.craft {
+                *selection = selection.checked_sub(1).unwrap_or(count - 1);
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if let CraftInput::PickRecipe { ref mut selection, .. } = state.craft {
+                *selection = (*selection + 1) % count;
+            }
+        }
         KeyCode::Enter => {
-            let manny_id = {
-                let CraftInput::Confirm { ref manny_id, .. } = state.craft else { return };
-                manny_id.clone()
+            let (manny_id, recipe_id) = {
+                let CraftInput::PickRecipe { ref manny_id, selection, .. } = state.craft else { return };
+                let recipe_id = state.manny_craft_recipes()[selection].id.clone();
+                (manny_id.clone(), recipe_id)
             };
-            fetch_craft(manny_id, "waypoint_bookmark", client.clone(), tx.clone());
+            fetch_craft(manny_id, recipe_id, client.clone(), tx.clone());
         }
         _ => {}
     }
 }
 
-fn fetch_craft(manny_id: String, recipe: &'static str, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+fn fetch_craft(manny_id: String, recipe: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     tokio::spawn(async move {
-        let msg = match client.craft_manny(&manny_id, recipe).await {
+        let msg = match client.craft_manny(&manny_id, &recipe).await {
             Ok(_) => ApiMessage::CraftStarted,
             Err(e) => ApiMessage::CraftError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
+fn handle_atomic_printer_craft_event(
+    code: KeyCode,
+    state: &mut AppState,
+    client: &ApiClient,
+    tx: &mpsc::Sender<ApiMessage>,
+) {
+    let AtomicPrinterCraftInput::PickRecipe { selection, .. } = state.atomic_printer_craft else { return };
+    let count = state.atomic_printer_recipes().len();
+    if count == 0 { return; }
+    match code {
+        KeyCode::Esc => state.atomic_printer_craft = AtomicPrinterCraftInput::Inactive,
+        KeyCode::Up | KeyCode::Char('k') => {
+            if let AtomicPrinterCraftInput::PickRecipe { ref mut selection, .. } = state.atomic_printer_craft {
+                *selection = selection.checked_sub(1).unwrap_or(count - 1);
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if let AtomicPrinterCraftInput::PickRecipe { ref mut selection, .. } = state.atomic_printer_craft {
+                *selection = (*selection + 1) % count;
+            }
+        }
+        KeyCode::Enter => {
+            let recipe_id = state.atomic_printer_recipes()[selection].id.clone();
+            fetch_atomic_printer_craft(recipe_id, client.clone(), tx.clone());
+        }
+        _ => {}
+    }
+}
+
+fn fetch_crafting_recipes(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        if let Ok(recipes) = client.get_crafting_recipes().await {
+            let _ = tx.send(ApiMessage::RecipesFetched(recipes)).await;
+        }
+    });
+}
+
+fn fetch_atomic_printer_craft(recipe: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        let msg = match client.craft_atomic_printer(&recipe).await {
+            Ok(()) => ApiMessage::AtomicPrinterCraftStarted,
+            Err(e) => ApiMessage::AtomicPrinterCraftError(e.to_string()),
         };
         let _ = tx.send(msg).await;
     });
@@ -1029,6 +1239,40 @@ fn handle_deploy_event(
     tx: &mpsc::Sender<ApiMessage>,
 ) {
     match &state.deploy {
+        DeployInput::PickManny { selection, mannies } => {
+            let sel = *selection;
+            let count = mannies.len();
+            match code {
+                KeyCode::Esc => state.deploy = DeployInput::Inactive,
+                KeyCode::Up | KeyCode::Char('k') => {
+                    if let DeployInput::PickManny { ref mut selection, .. } = state.deploy {
+                        *selection = sel.checked_sub(1).unwrap_or(count - 1);
+                    }
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    if let DeployInput::PickManny { ref mut selection, .. } = state.deploy {
+                        *selection = (sel + 1) % count;
+                    }
+                }
+                KeyCode::Enter => {
+                    let manny_id = {
+                        let DeployInput::PickManny { ref mannies, selection } = state.deploy else { return };
+                        mannies[selection].0.clone()
+                    };
+                    let candidates = state.collect_deploy_candidates();
+                    if candidates.is_empty() {
+                        state.deploy = DeployInput::Inactive;
+                        state.error = Some("no targets in current sector".into());
+                    } else if candidates.len() == 1 {
+                        let (object_id, object_name) = candidates.into_iter().next().unwrap();
+                        state.deploy = DeployInput::EnterName { manny_id, object_id, object_name, name_buf: String::new(), error: None };
+                    } else {
+                        state.deploy = DeployInput::PickObject { manny_id, candidates, selection: 0 };
+                    }
+                }
+                _ => {}
+            }
+        }
         DeployInput::PickObject { selection, candidates, .. } => {
             let sel = *selection;
             let count = candidates.len();
@@ -1045,13 +1289,13 @@ fn handle_deploy_event(
                     }
                 }
                 KeyCode::Enter => {
-                    let (item_id, object_id, object_name) = {
-                        let DeployInput::PickObject { ref item_id, ref candidates, selection } = state.deploy else { return };
+                    let (manny_id, object_id, object_name) = {
+                        let DeployInput::PickObject { ref manny_id, ref candidates, selection } = state.deploy else { return };
                         let (id, name) = candidates[selection].clone();
-                        (item_id.clone(), id, name)
+                        (manny_id.clone(), id, name)
                     };
                     state.deploy = DeployInput::EnterName {
-                        item_id,
+                        manny_id,
                         object_id,
                         object_name,
                         name_buf: String::new(),
@@ -1067,12 +1311,12 @@ fn handle_deploy_event(
                 KeyCode::Backspace => state.deploy_backspace(),
                 KeyCode::Char(c) => state.deploy_type_char(c),
                 KeyCode::Enter => {
-                    let (item_id, object_id, name) = {
-                        let DeployInput::EnterName { ref item_id, ref object_id, ref name_buf, .. } = state.deploy else { return };
+                    let (manny_id, object_id, name) = {
+                        let DeployInput::EnterName { ref manny_id, ref object_id, ref name_buf, .. } = state.deploy else { return };
                         if name_buf.is_empty() { return }
-                        (item_id.clone(), object_id.clone(), name_buf.clone())
+                        (manny_id.clone(), object_id.clone(), name_buf.clone())
                     };
-                    fetch_deploy(item_id, object_id, name, client.clone(), tx.clone());
+                    fetch_deploy(manny_id, object_id, name, client.clone(), tx.clone());
                 }
                 _ => {}
             }
@@ -1081,10 +1325,10 @@ fn handle_deploy_event(
     }
 }
 
-fn fetch_deploy(item_id: String, object_id: String, name: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+fn fetch_deploy(manny_id: String, object_id: String, name: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     tokio::spawn(async move {
-        let msg = match client.deploy_waypoint(&item_id, &object_id, &name).await {
-            Ok(inv) => ApiMessage::DeployDone(inv),
+        let msg = match client.install_bookmark_manny(&manny_id, &object_id, &name).await {
+            Ok(_) => ApiMessage::DeployStarted,
             Err(e) => ApiMessage::DeployError(e.to_string()),
         };
         let _ = tx.send(msg).await;
@@ -1111,6 +1355,232 @@ fn handle_rename_manny_event(
         }
         _ => {}
     }
+}
+
+fn collect_asteroid_candidates(state: &AppState) -> Vec<(String, String)> {
+    let current_pos = state.probe.as_ref()
+        .and_then(|p| p.sector.as_ref())
+        .and_then(|s| s.relative.as_ref())
+        .map(|r| (r.x as i64, r.y as i64, r.z as i64));
+    let sector = if let Some(pos) = current_pos {
+        state.scan_history.iter().find(|s| {
+            (s.relative_coordinates.x as i64, s.relative_coordinates.y as i64, s.relative_coordinates.z as i64) == pos
+        })
+    } else {
+        state.scan_history.first()
+    };
+    sector
+        .and_then(|s| s.objects.as_ref())
+        .map(|objects| {
+            objects.iter()
+                .flat_map(|o| {
+                    let direct = if matches!(o.object_type, SectorObjectType::Asteroid) {
+                        o.id.as_ref().map(|id| vec![(id.clone(), o.name.clone().unwrap_or_else(|| "unnamed".into()))])
+                            .unwrap_or_default()
+                    } else { vec![] };
+                    let nested: Vec<(String, String)> = o.bookmark_targets.iter()
+                        .filter(|t| matches!(t.object_type, SectorObjectType::Asteroid))
+                        .map(|t| (t.id.clone(), t.name.clone().unwrap_or_else(|| "unnamed".into())))
+                        .collect();
+                    [direct, nested].concat()
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn handle_inspect_event(
+    code: KeyCode,
+    state: &mut AppState,
+    client: &ApiClient,
+    tx: &mpsc::Sender<ApiMessage>,
+) {
+    let InspectInput::PickAsteroid { selection: _, ref candidates, .. } = state.inspect else { return };
+    let count = candidates.len();
+    match code {
+        KeyCode::Esc => state.inspect = InspectInput::Inactive,
+        KeyCode::Up | KeyCode::Char('k') => {
+            if let InspectInput::PickAsteroid { ref mut selection, .. } = state.inspect {
+                *selection = selection.checked_sub(1).unwrap_or(count - 1);
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if let InspectInput::PickAsteroid { ref mut selection, .. } = state.inspect {
+                *selection = (*selection + 1) % count;
+            }
+        }
+        KeyCode::Enter => {
+            let (manny_id, object_id) = {
+                let InspectInput::PickAsteroid { ref manny_id, ref candidates, selection, .. } = state.inspect else { return };
+                (manny_id.clone(), candidates[selection].0.clone())
+            };
+            fetch_inspect(manny_id, object_id, client.clone(), tx.clone());
+        }
+        _ => {}
+    }
+}
+
+fn fetch_inspect(manny_id: String, object_id: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        let msg = match client.inspect_asteroid(&manny_id, &object_id).await {
+            Ok(_) => ApiMessage::InspectStarted,
+            Err(e) => ApiMessage::InspectError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
+fn handle_recover_event(
+    code: KeyCode,
+    state: &mut AppState,
+    client: &ApiClient,
+    tx: &mpsc::Sender<ApiMessage>,
+) {
+    let RecoverInput::PickContainer { selection: _, ref candidates, .. } = state.recover else { return };
+    let count = candidates.len();
+    match code {
+        KeyCode::Esc => state.recover = RecoverInput::Inactive,
+        KeyCode::Up | KeyCode::Char('k') => {
+            if let RecoverInput::PickContainer { ref mut selection, .. } = state.recover {
+                *selection = selection.checked_sub(1).unwrap_or(count - 1);
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if let RecoverInput::PickContainer { ref mut selection, .. } = state.recover {
+                *selection = (*selection + 1) % count;
+            }
+        }
+        KeyCode::Enter => {
+            let (manny_id, object_id) = {
+                let RecoverInput::PickContainer { ref manny_id, ref candidates, selection, .. } = state.recover else { return };
+                (manny_id.clone(), candidates[selection].0.clone())
+            };
+            fetch_recover(manny_id, object_id, client.clone(), tx.clone());
+        }
+        _ => {}
+    }
+}
+
+fn fetch_recover(manny_id: String, object_id: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        let msg = match client.recover_storage_container(&manny_id, &object_id).await {
+            Ok(_) => ApiMessage::RecoverStarted,
+            Err(e) => ApiMessage::RecoverError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
+pub const DETACH_MODES: [(&str, &str); 2] = [
+    ("drifting", "drifting — leave in sector"),
+    ("hidden_on_asteroid", "hidden — attach to asteroid"),
+];
+
+fn handle_detach_event(
+    code: KeyCode,
+    state: &mut AppState,
+    client: &ApiClient,
+    tx: &mpsc::Sender<ApiMessage>,
+) {
+    match &state.detach {
+        DetachInput::PickContainer { selection, containers, .. } => {
+            let sel = *selection;
+            let count = containers.len();
+            match code {
+                KeyCode::Esc => state.detach = DetachInput::Inactive,
+                KeyCode::Up | KeyCode::Char('k') => {
+                    if let DetachInput::PickContainer { ref mut selection, .. } = state.detach {
+                        *selection = sel.checked_sub(1).unwrap_or(count - 1);
+                    }
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    if let DetachInput::PickContainer { ref mut selection, .. } = state.detach {
+                        *selection = (sel + 1) % count;
+                    }
+                }
+                KeyCode::Enter => {
+                    let (manny_id, manny_name, container_id, container_name) = {
+                        let DetachInput::PickContainer { ref manny_id, ref manny_name, ref containers, selection } = state.detach else { return };
+                        let (id, name) = containers[selection].clone();
+                        (manny_id.clone(), manny_name.clone(), id, name)
+                    };
+                    state.detach = DetachInput::PickMode { manny_id, manny_name, container_id, container_name, selection: 0, error: None };
+                }
+                _ => {}
+            }
+        }
+        DetachInput::PickMode { selection, .. } => {
+            let sel = *selection;
+            let count = DETACH_MODES.len();
+            match code {
+                KeyCode::Esc => state.detach = DetachInput::Inactive,
+                KeyCode::Up | KeyCode::Char('k') => {
+                    if let DetachInput::PickMode { ref mut selection, .. } = state.detach {
+                        *selection = sel.checked_sub(1).unwrap_or(count - 1);
+                    }
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    if let DetachInput::PickMode { ref mut selection, .. } = state.detach {
+                        *selection = (sel + 1) % count;
+                    }
+                }
+                KeyCode::Enter => {
+                    let (manny_id, manny_name, container_id, container_name, sel) = {
+                        let DetachInput::PickMode { ref manny_id, ref manny_name, ref container_id, ref container_name, selection, .. } = state.detach else { return };
+                        (manny_id.clone(), manny_name.clone(), container_id.clone(), container_name.clone(), selection)
+                    };
+                    let mode = DETACH_MODES[sel].0;
+                    if mode == "hidden_on_asteroid" {
+                        let asteroids = collect_asteroid_candidates(state);
+                        if asteroids.is_empty() {
+                            state.set_detach_error("no asteroids in current sector — scan first".into());
+                        } else {
+                            state.detach = DetachInput::PickAsteroid { manny_id, manny_name, container_id, container_name, asteroids, selection: 0, error: None };
+                        }
+                    } else {
+                        fetch_detach(manny_id, container_id, "drifting".into(), None, client.clone(), tx.clone());
+                    }
+                }
+                _ => {}
+            }
+        }
+        DetachInput::PickAsteroid { selection, asteroids, .. } => {
+            let sel = *selection;
+            let count = asteroids.len();
+            match code {
+                KeyCode::Esc => state.detach = DetachInput::Inactive,
+                KeyCode::Up | KeyCode::Char('k') => {
+                    if let DetachInput::PickAsteroid { ref mut selection, .. } = state.detach {
+                        *selection = sel.checked_sub(1).unwrap_or(count - 1);
+                    }
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    if let DetachInput::PickAsteroid { ref mut selection, .. } = state.detach {
+                        *selection = (sel + 1) % count;
+                    }
+                }
+                KeyCode::Enter => {
+                    let (manny_id, container_id, object_id) = {
+                        let DetachInput::PickAsteroid { ref manny_id, ref container_id, ref asteroids, selection, .. } = state.detach else { return };
+                        (manny_id.clone(), container_id.clone(), asteroids[selection].0.clone())
+                    };
+                    fetch_detach(manny_id, container_id, "hidden_on_asteroid".into(), Some(object_id), client.clone(), tx.clone());
+                }
+                _ => {}
+            }
+        }
+        DetachInput::Inactive => {}
+    }
+}
+
+fn fetch_detach(manny_id: String, container_id: String, mode: String, object_id: Option<String>, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        let msg = match client.detach_storage_container(&manny_id, &container_id, &mode, object_id.as_deref()).await {
+            Ok(_) => ApiMessage::DetachStarted,
+            Err(e) => ApiMessage::DetachError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
 }
 
 fn fetch_rename_manny(manny_id: String, name: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {

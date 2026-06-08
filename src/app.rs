@@ -1,4 +1,4 @@
-use crate::api::types::{Manny, Probe, ProbeInventory, ProbeMovement, SectorObject, SectorObjectType, SectorObservation};
+use crate::api::types::{CraftingRecipe, Manny, Probe, ProbeInventory, ProbeMovement, SectorObject, SectorObjectType, SectorObservation};
 use chrono::{DateTime, Local, Utc};
 use std::path::Path;
 use tokio::time::Instant;
@@ -51,6 +51,16 @@ pub const RESOURCE_TYPES: [&str; 4] = ["deuterium", "metals", "ice", "carbon_com
 pub const RESOURCE_LABELS: [&str; 4] = ["deuterium", "metals", "ice", "carbon"];
 
 #[derive(Default)]
+pub enum AtomicPrinterCraftInput {
+    #[default]
+    Inactive,
+    PickRecipe {
+        selection: usize,
+        error: Option<String>,
+    },
+}
+
+#[derive(Default)]
 pub struct MapView {
     pub open: bool,
     pub center_x: i32,
@@ -84,9 +94,10 @@ pub enum MineInput {
 pub enum CraftInput {
     #[default]
     Inactive,
-    Confirm {
+    PickRecipe {
         manny_id: String,
         manny_name: String,
+        selection: usize,
         error: Option<String>,
     },
 }
@@ -137,13 +148,17 @@ pub enum RenameMannyInput {
 pub enum DeployInput {
     #[default]
     Inactive,
+    PickManny {
+        mannies: Vec<(String, String)>,
+        selection: usize,
+    },
     PickObject {
-        item_id: String,
+        manny_id: String,
         candidates: Vec<(String, String)>,
         selection: usize,
     },
     EnterName {
-        item_id: String,
+        manny_id: String,
         object_id: String,
         object_name: String,
         name_buf: String,
@@ -173,6 +188,59 @@ pub enum JettisonInput {
     },
 }
 
+#[derive(Default)]
+pub enum InspectInput {
+    #[default]
+    Inactive,
+    PickAsteroid {
+        manny_id: String,
+        manny_name: String,
+        candidates: Vec<(String, String)>,
+        selection: usize,
+    },
+}
+
+#[derive(Default)]
+pub enum RecoverInput {
+    #[default]
+    Inactive,
+    PickContainer {
+        manny_id: String,
+        manny_name: String,
+        candidates: Vec<(String, String)>,
+        selection: usize,
+    },
+}
+
+#[derive(Default)]
+pub enum DetachInput {
+    #[default]
+    Inactive,
+    PickContainer {
+        manny_id: String,
+        manny_name: String,
+        containers: Vec<(String, String)>,
+        selection: usize,
+    },
+    PickMode {
+        manny_id: String,
+        manny_name: String,
+        container_id: String,
+        container_name: String,
+        selection: usize,
+        error: Option<String>,
+    },
+    PickAsteroid {
+        manny_id: String,
+        manny_name: String,
+        container_id: String,
+        container_name: String,
+        asteroids: Vec<(String, String)>,
+        selection: usize,
+        error: Option<String>,
+    },
+}
+
 pub enum ApiMessage {
     ProbeUpdated(Probe),
     ManniesUpdated(Vec<Manny>),
@@ -193,10 +261,19 @@ pub enum ApiMessage {
     SalvageError(String),
     RecallStarted,
     RecallError(String),
-    DeployDone(ProbeInventory),
+    DeployStarted,
     DeployError(String),
+    AtomicPrinterCraftStarted,
+    AtomicPrinterCraftError(String),
+    RecipesFetched(Vec<CraftingRecipe>),
     RenameMannyDone(Manny),
     RenameMannyError(String),
+    InspectStarted,
+    InspectError(String),
+    RecoverStarted,
+    RecoverError(String),
+    DetachStarted,
+    DetachError(String),
     Error(String),
 }
 
@@ -217,17 +294,23 @@ pub struct AppState {
     pub scan_mode: ScanMode,
     pub scan_error: Option<String>,
     pub scan_batch: Option<usize>,
+    pub scan_detail_scroll: usize,
     pub travel: TravelInput,
     pub repair: RepairInput,
     pub mine: MineInput,
     pub jettison: JettisonInput,
     pub craft: CraftInput,
+    pub atomic_printer_craft: AtomicPrinterCraftInput,
     pub salvage: SalvageInput,
     pub recall: RecallInput,
     pub deploy: DeployInput,
     pub rename_manny: RenameMannyInput,
+    pub inspect: InspectInput,
+    pub recover: RecoverInput,
+    pub detach: DetachInput,
     pub map: MapView,
     pub api_version: Option<u32>,
+    pub recipes: Vec<CraftingRecipe>,
 }
 
 impl AppState {
@@ -308,6 +391,7 @@ impl AppState {
         });
         self.scan_history.insert(0, sector);
         self.scan_history_idx = 0;
+        self.scan_detail_scroll = 0;
         self.scan_loading = false;
         self.scan_error = None;
         self.scan_mode = ScanMode::Current;
@@ -319,14 +403,18 @@ impl AppState {
 
     pub fn scan_hist_next(&mut self) {
         if !self.scan_history.is_empty() {
-            self.scan_history_idx =
-                (self.scan_history_idx + 1).min(self.scan_history.len() - 1);
+            let new = (self.scan_history_idx + 1).min(self.scan_history.len() - 1);
+            if new != self.scan_history_idx {
+                self.scan_history_idx = new;
+                self.scan_detail_scroll = 0;
+            }
         }
     }
 
     pub fn scan_hist_prev(&mut self) {
         if self.scan_history_idx > 0 {
             self.scan_history_idx -= 1;
+            self.scan_detail_scroll = 0;
         }
     }
 
@@ -603,9 +691,21 @@ impl AppState {
     }
 
     pub fn set_craft_error(&mut self, msg: String) {
-        if let CraftInput::Confirm { ref mut error, .. } = self.craft {
+        if let CraftInput::PickRecipe { ref mut error, .. } = self.craft {
             *error = Some(msg);
         }
+    }
+
+    pub fn set_atomic_printer_craft_error(&mut self, msg: String) {
+        if let AtomicPrinterCraftInput::PickRecipe { ref mut error, .. } = self.atomic_printer_craft {
+            *error = Some(msg);
+        }
+    }
+
+    pub fn has_atomic_printer(&self) -> bool {
+        self.probe.as_ref()
+            .map(|p| p.inventory.items.iter().any(|i| i.item_type == "atomic_3d_printer"))
+            .unwrap_or(false)
     }
 
     pub fn set_salvage_error(&mut self, msg: String) {
@@ -697,6 +797,20 @@ impl AppState {
         }
     }
 
+    pub fn collect_idle_onboard_mannies(&self) -> Vec<(String, String)> {
+        self.mannies.as_ref()
+            .map(|ms| {
+                ms.iter()
+                    .filter(|m| {
+                        m.location.location_type == crate::api::types::MannyLocationType::Probe
+                            && m.can_receive_orders
+                    })
+                    .map(|m| (m.id.clone(), m.name.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     pub fn collect_deploy_candidates(&self) -> Vec<(String, String)> {
         let current_pos = self.probe.as_ref()
             .and_then(|p| p.sector.as_ref())
@@ -724,6 +838,75 @@ impl AppState {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    pub fn set_inspect_error(&mut self, msg: String) {
+        if let InspectInput::PickAsteroid { ref mut candidates, .. } = self.inspect {
+            let _ = candidates;
+        }
+        let _ = msg;
+    }
+
+    pub fn set_recover_error(&mut self, msg: String) {
+        let _ = msg;
+    }
+
+    pub fn set_detach_error(&mut self, msg: String) {
+        match self.detach {
+            DetachInput::PickMode { ref mut error, .. } => *error = Some(msg),
+            DetachInput::PickAsteroid { ref mut error, .. } => *error = Some(msg),
+            _ => {}
+        }
+    }
+
+    pub fn collect_detachable_containers(&self) -> Vec<(String, String)> {
+        self.probe.as_ref()
+            .map(|p| {
+                p.inventory.containers.iter()
+                    .filter(|c| c.kind != "probe")
+                    .map(|c| (c.id.clone(), c.label.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn collect_detached_containers(&self) -> Vec<(String, String)> {
+        let current_pos = self.probe.as_ref()
+            .and_then(|p| p.sector.as_ref())
+            .and_then(|s| s.relative.as_ref())
+            .map(|r| (r.x as i64, r.y as i64, r.z as i64));
+        let sector = if let Some(pos) = current_pos {
+            self.scan_history.iter().find(|s| {
+                (s.relative_coordinates.x as i64, s.relative_coordinates.y as i64, s.relative_coordinates.z as i64) == pos
+            })
+        } else {
+            self.scan_history.first()
+        };
+        sector
+            .and_then(|s| s.objects.as_ref())
+            .map(|objects| {
+                objects.iter()
+                    .filter(|o| matches!(o.object_type, SectorObjectType::DetachedContainer))
+                    .map(|o| {
+                        let id = o.id.clone().unwrap_or_default();
+                        let name = o.name.clone().unwrap_or_else(|| "unnamed container".into());
+                        (id, name)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn atomic_printer_recipes(&self) -> Vec<&CraftingRecipe> {
+        self.recipes.iter()
+            .filter(|r| r.craftable_by.iter().any(|c| c == "atomic_3d_printer"))
+            .collect()
+    }
+
+    pub fn manny_craft_recipes(&self) -> Vec<&CraftingRecipe> {
+        self.recipes.iter()
+            .filter(|r| r.craftable_by.iter().any(|c| c == "manny"))
+            .collect()
     }
 
     pub fn inventory_waypoint_bookmark_id(&self) -> Option<String> {

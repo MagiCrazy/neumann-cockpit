@@ -1,4 +1,4 @@
-use super::types::{Manny, Probe, ProbeInventory, ProbeMovement, SectorObservation};
+use super::types::{CraftingRecipe, Manny, Probe, ProbeInventory, ProbeMovement, SectorObservation};
 use anyhow::{Context, Result};
 use reqwest::{Client, StatusCode, Url};
 use serde::{Deserialize, Serialize};
@@ -234,13 +234,67 @@ impl ApiClient {
         Ok(self.patch::<Resp, _>(&path, &Body { name }).await?.manny)
     }
 
-    pub async fn deploy_waypoint(&self, item_id: &str, object_id: &str, name: &str) -> Result<ProbeInventory> {
+    pub async fn craft_atomic_printer(&self, recipe: &str) -> Result<()> {
+        #[derive(Serialize)]
+        struct Body<'a> { recipe: &'a str }
+        self.post::<serde_json::Value, _>("/api/probe/atomic-printer/craft", &Body { recipe }).await?;
+        Ok(())
+    }
+
+    pub async fn detach_storage_container(
+        &self,
+        manny_id: &str,
+        container_id: &str,
+        mode: &str,
+        object_id: Option<&str>,
+    ) -> Result<Manny> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Body<'a> {
+            container_id: &'a str,
+            mode: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            object_id: Option<&'a str>,
+        }
+        #[derive(Deserialize)]
+        struct Resp { manny: Manny }
+        let path = format!("/api/probe/mannies/{manny_id}/detach-storage-container");
+        Ok(self.post::<Resp, _>(&path, &Body { container_id, mode, object_id }).await?.manny)
+    }
+
+    pub async fn inspect_asteroid(&self, manny_id: &str, object_id: &str) -> Result<Manny> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Body<'a> { object_id: &'a str }
+        #[derive(Deserialize)]
+        struct Resp { manny: Manny }
+        let path = format!("/api/probe/mannies/{manny_id}/inspect-asteroid");
+        Ok(self.post::<Resp, _>(&path, &Body { object_id }).await?.manny)
+    }
+
+    pub async fn recover_storage_container(&self, manny_id: &str, object_id: &str) -> Result<Manny> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Body<'a> { object_id: &'a str }
+        #[derive(Deserialize)]
+        struct Resp { manny: Manny }
+        let path = format!("/api/probe/mannies/{manny_id}/recover-storage-container");
+        Ok(self.post::<Resp, _>(&path, &Body { object_id }).await?.manny)
+    }
+
+    pub async fn get_crafting_recipes(&self) -> Result<Vec<CraftingRecipe>> {
+        #[derive(Deserialize)]
+        struct Resp { recipes: Vec<CraftingRecipe> }
+        Ok(self.get::<Resp>("/api/crafting-recipes").await?.recipes)
+    }
+
+    pub async fn install_bookmark_manny(&self, manny_id: &str, object_id: &str, name: &str) -> Result<Manny> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
         struct Body<'a> { object_id: &'a str, name: &'a str }
         #[derive(Deserialize)]
-        struct Resp { inventory: ProbeInventory }
-        let path = format!("/api/probe/waypoint-bookmarks/{item_id}/deploy");
-        Ok(self.post::<Resp, _>(&path, &Body { object_id, name }).await?.inventory)
+        struct Resp { manny: Manny }
+        let path = format!("/api/probe/mannies/{manny_id}/install-bookmark");
+        Ok(self.post::<Resp, _>(&path, &Body { object_id, name }).await?.manny)
     }
 }

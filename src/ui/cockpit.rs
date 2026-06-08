@@ -2,7 +2,7 @@ use crate::api::types::{
     DangerLevel, DataFreshness, KnowledgeLevel, Manny, MannyLocationType, MannyTask,
     MovementPhase, ProbeStatus, SectorObject, SectorObjectType, SectorObservation, SensorMode,
 };
-use crate::app::{AppState, CraftInput, DeployInput, JettisonInput, MineInput, Panel, RecallInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_LABELS, RESOURCE_TYPES};
+use crate::app::{AppState, AtomicPrinterCraftInput, CraftInput, DeployInput, DetachInput, InspectInput, JettisonInput, MineInput, Panel, RecallInput, RecoverInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_LABELS, RESOURCE_TYPES};
 use chrono::Utc;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -73,6 +73,9 @@ pub fn render(frame: &mut Frame, state: &AppState) {
     if !matches!(state.craft, CraftInput::Inactive) {
         render_craft_overlay(frame, area, state);
     }
+    if !matches!(state.atomic_printer_craft, AtomicPrinterCraftInput::Inactive) {
+        render_atomic_printer_craft_overlay(frame, area, state);
+    }
     if !matches!(state.salvage, SalvageInput::Inactive) {
         render_salvage_overlay(frame, area, state);
     }
@@ -84,6 +87,15 @@ pub fn render(frame: &mut Frame, state: &AppState) {
     }
     if !matches!(state.rename_manny, RenameMannyInput::Inactive) {
         render_rename_manny_overlay(frame, area, state);
+    }
+    if !matches!(state.inspect, InspectInput::Inactive) {
+        render_inspect_overlay(frame, area, state);
+    }
+    if !matches!(state.recover, RecoverInput::Inactive) {
+        render_recover_overlay(frame, area, state);
+    }
+    if !matches!(state.detach, DetachInput::Inactive) {
+        render_detach_overlay(frame, area, state);
     }
 }
 
@@ -284,6 +296,11 @@ fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focus
             hint_spans.push(Span::styled("[d]", Style::default().fg(Color::Cyan)));
             hint_spans.push(Span::raw(" deploy"));
         }
+        if state.has_atomic_printer() {
+            hint_spans.push(Span::raw("  "));
+            hint_spans.push(Span::styled("[a]", Style::default().fg(Color::Cyan)));
+            hint_spans.push(Span::raw(" atomic craft"));
+        }
         frame.render_widget(
             Paragraph::new(Line::from(hint_spans)),
             hint_area,
@@ -307,13 +324,7 @@ fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focus
     };
 
     let items_expanded = focused && !inv.items.is_empty();
-    let items_rows: usize = if items_expanded {
-        1 + inv.items.len()
-    } else if !inv.items.is_empty() {
-        1
-    } else {
-        0
-    };
+    let items_rows: usize = items_row_count(&inv.items, items_expanded);
     let n_rows = 1 + inv.resource_stocks.len() + items_rows;
 
     let mut sections: Vec<Constraint> = (0..n_rows).map(|_| Constraint::Length(1)).collect();
@@ -365,19 +376,19 @@ fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focus
             rows[row],
         );
         row += 1;
-        for item in &inv.items {
-            let (icon, icon_color) = match item.item_type.as_str() {
-                "manny" => ("♟", Color::Green),
-                _ => ("◈", Color::White),
-            };
-            let task_span = match item.current_task.as_deref() {
-                None => Span::styled("idle", Style::default().fg(Color::DarkGray)),
-                Some(t) => Span::styled(t.to_string(), Style::default().fg(Color::Yellow)),
-            };
-            let progress = if item.current_task.is_some() {
-                format!(" {:3.0}%", item.task_progress_percent)
-            } else {
-                String::new()
+
+        // Active items: manny and atomic_3d_printer — show individually with task state
+        for item in inv.items.iter().filter(|i| is_active_item(&i.item_type)) {
+            let (icon, icon_color) = item_icon(&item.item_type);
+            let (task_span, progress) = match item.current_task.as_deref() {
+                None => (
+                    Span::styled("idle", Style::default().fg(Color::DarkGray)),
+                    String::new(),
+                ),
+                Some(t) => (
+                    Span::styled(t.to_string(), Style::default().fg(Color::Yellow)),
+                    format!(" {:3.0}%", item.task_progress_percent),
+                ),
             };
             frame.render_widget(
                 Paragraph::new(Line::from(vec![
@@ -385,6 +396,26 @@ fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focus
                     Span::raw(format!("{:<14}", item.name)),
                     task_span,
                     Span::styled(progress, Style::default().fg(Color::DarkGray)),
+                ])),
+                rows[row],
+            );
+            row += 1;
+        }
+
+        // Passive items: group by type, show count
+        let mut seen_types: Vec<&str> = Vec::new();
+        for item in inv.items.iter().filter(|i| !is_active_item(&i.item_type)) {
+            if seen_types.contains(&item.item_type.as_str()) {
+                continue;
+            }
+            seen_types.push(&item.item_type);
+            let count = inv.items.iter().filter(|i| i.item_type == item.item_type).count();
+            let (icon, icon_color) = item_icon(&item.item_type);
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled(format!("  {icon} "), Style::default().fg(icon_color)),
+                    Span::raw(format!("{:<14}", item.name)),
+                    Span::styled(format!("× {count}"), Style::default().fg(Color::White)),
                 ])),
                 rows[row],
             );
@@ -426,6 +457,8 @@ fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
         let can_order = selected_manny.map(|m| m.can_receive_orders).unwrap_or(false);
         let is_busy = selected_manny.map(|m| !m.can_receive_orders && m.current_task.is_some()).unwrap_or(false);
         if can_order {
+            let has_detachable = !state.collect_detachable_containers().is_empty();
+            let has_detached = !state.collect_detached_containers().is_empty();
             let mut spans = vec![
                 Span::styled("[Enter]", Style::default().fg(Color::Cyan)),
                 Span::raw(" repair  "),
@@ -435,9 +468,22 @@ fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
                 Span::raw(" craft  "),
                 Span::styled("[s]", Style::default().fg(Color::Cyan)),
                 Span::raw(" salvage  "),
-                Span::styled("[n]", Style::default().fg(Color::Cyan)),
-                Span::raw(" rename"),
+                Span::styled("[x]", Style::default().fg(Color::Cyan)),
+                Span::raw(" inspect"),
             ];
+            if has_detachable {
+                spans.push(Span::raw("  "));
+                spans.push(Span::styled("[D]", Style::default().fg(Color::Cyan)));
+                spans.push(Span::raw(" detach"));
+            }
+            if has_detached {
+                spans.push(Span::raw("  "));
+                spans.push(Span::styled("[v]", Style::default().fg(Color::Cyan)));
+                spans.push(Span::raw(" recover"));
+            }
+            spans.push(Span::raw("  "));
+            spans.push(Span::styled("[n]", Style::default().fg(Color::Cyan)));
+            spans.push(Span::raw(" rename"));
             if is_busy {
                 spans.push(Span::raw("  "));
                 spans.push(Span::styled("[R]", Style::default().fg(Color::Yellow)));
@@ -514,12 +560,15 @@ fn manny_list_item(m: &Manny) -> ListItem<'_> {
         None => Span::styled("idle", Style::default().fg(Color::DarkGray)),
         Some(MannyTask::Repair) => Span::styled("repair", Style::default().fg(Color::Cyan)),
         Some(MannyTask::Mining) => Span::styled("mining", Style::default().fg(Color::Yellow)),
-        Some(MannyTask::Returning) => Span::styled("returning", Style::default().fg(Color::Blue)),
-        Some(MannyTask::WaitingForSpace) => {
-            Span::styled("waiting", Style::default().fg(Color::Magenta))
-        }
         Some(MannyTask::Crafting) => Span::styled("crafting", Style::default().fg(Color::Cyan)),
+        Some(MannyTask::AssistingAtomicPrinter) => Span::styled("assisting printer", Style::default().fg(Color::Cyan)),
         Some(MannyTask::Salvage) => Span::styled("salvage", Style::default().fg(Color::Yellow)),
+        Some(MannyTask::InstallingWaypointBookmark) => Span::styled("installing waypoint", Style::default().fg(Color::Green)),
+        Some(MannyTask::DetachingStorageContainer) => Span::styled("detaching container", Style::default().fg(Color::Yellow)),
+        Some(MannyTask::InspectingAsteroid) => Span::styled("inspecting", Style::default().fg(Color::Yellow)),
+        Some(MannyTask::Returning) => Span::styled("returning", Style::default().fg(Color::Blue)),
+        Some(MannyTask::WaitingForSpace) => Span::styled("waiting", Style::default().fg(Color::Magenta)),
+        Some(MannyTask::MovingStockage) => Span::styled("moving cargo", Style::default().fg(Color::Blue)),
         Some(MannyTask::Unknown) => Span::styled("?", Style::default().fg(Color::DarkGray)),
     };
 
@@ -631,6 +680,9 @@ fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
                         s.push(Span::styled("[g]", Style::default().fg(Color::Yellow)));
                         s.push(Span::raw(" go"));
                     }
+                    s.push(Span::raw("  "));
+                    s.push(Span::styled("[J/K]", Style::default().fg(Color::Cyan)));
+                    s.push(Span::raw(" scroll"));
                     s
                 };
                 frame.render_widget(Paragraph::new(Line::from(spans)), hint_area);
@@ -797,7 +849,33 @@ fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
         }
     }
 
+    if let Some(probes) = &sector.probes {
+        if !probes.is_empty() {
+            lines.push(Line::from(Span::styled(
+                "── other probes ──",
+                Style::default().fg(Color::DarkGray),
+            )));
+            for p in probes {
+                let moving = if p.moving { " moving" } else { " idle" };
+                lines.push(Line::from(vec![
+                    Span::styled("⊕ ", Style::default().fg(Color::Cyan)),
+                    Span::raw(p.name.as_str()),
+                    Span::styled(moving, Style::default().fg(Color::DarkGray)),
+                ]));
+            }
+        }
+    }
+
     let has_objects = sector.objects.as_ref().is_some_and(|o| !o.is_empty());
+    let confirmed_empty = sector.objects.as_ref().is_some_and(|o| o.is_empty())
+        && sector.possible_objects.as_ref().is_none_or(|p| p.is_empty())
+        && sector.estimated_objects.is_none();
+    if confirmed_empty {
+        lines.push(Line::from(Span::styled(
+            "empty sector",
+            Style::default().fg(Color::DarkGray),
+        )));
+    }
     if !has_objects {
         if let Some(possible) = &sector.possible_objects {
             if !possible.is_empty() {
@@ -865,7 +943,10 @@ fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
         }
     }
 
-    frame.render_widget(Paragraph::new(lines), detail_area);
+    frame.render_widget(
+        Paragraph::new(lines).scroll((state.scan_detail_scroll as u16, 0)),
+        detail_area,
+    );
 }
 
 // ── Travel overlay ────────────────────────────────────────────────────────────
@@ -1454,9 +1535,11 @@ fn render_jettison_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
 }
 
 fn render_craft_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let CraftInput::Confirm { ref manny_name, ref error, .. } = state.craft else { return };
+    let CraftInput::PickRecipe { ref manny_name, selection, ref error, .. } = state.craft else { return };
 
-    let popup = centered_rect(48, 10, area);
+    let recipes = state.manny_craft_recipes();
+    let height = (recipes.len() as u16 + 6).min(16);
+    let popup = centered_rect(58, height, area);
     frame.render_widget(Clear, popup);
 
     let title = format!(" CRAFT — {manny_name} ");
@@ -1474,13 +1557,38 @@ fn render_craft_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
         .split(inner);
 
     let mut lines: Vec<Line> = Vec::new();
-    lines.push(Line::from(vec![
-        Span::styled("waypoint_bookmark", Style::default().fg(Color::White)),
-        Span::styled("  —  ", Style::default().fg(Color::DarkGray)),
-        Span::styled("0.01 ECE metals, 10 min", Style::default().fg(Color::DarkGray)),
-    ]));
-    lines.push(Line::default());
+    if recipes.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "loading recipes…",
+            Style::default().fg(Color::DarkGray),
+        )));
+    }
+    for (i, recipe) in recipes.iter().enumerate() {
+        let selected = i == selection;
+        let duration_min = recipe.duration_seconds / 60;
+        let ingredients: String = recipe.ingredients.iter().map(|ing| {
+            if ing.unit == "item" {
+                format!("{} × {}", ing.quantity as u32, ing.ingredient_type)
+            } else {
+                format!("{:.2} ECE {}", ing.quantity, ing.ingredient_type)
+            }
+        }).collect::<Vec<_>>().join(", ");
+        let detail = format!("  {}m  {}", duration_min, ingredients);
+        if selected {
+            lines.push(Line::from(vec![
+                Span::styled("▶ ", Style::default().fg(Color::Yellow)),
+                Span::styled(recipe.name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                Span::styled(detail, Style::default().fg(Color::DarkGray)),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(recipe.name.as_str(), Style::default().fg(Color::DarkGray)),
+            ]));
+        }
+    }
     if let Some(err) = error {
+        lines.push(Line::default());
         lines.push(Line::from(Span::styled(
             format!("✗ {err}"),
             Style::default().fg(Color::Red),
@@ -1490,8 +1598,83 @@ fn render_craft_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     frame.render_widget(Paragraph::new(lines), rows[0]);
     frame.render_widget(
         Paragraph::new(Line::from(vec![
+            Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
+            Span::raw(" select  "),
             Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-            Span::raw(" CRAFT  "),
+            Span::raw(" start  "),
+            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::raw(" cancel"),
+        ])),
+        rows[1],
+    );
+}
+
+fn render_atomic_printer_craft_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let AtomicPrinterCraftInput::PickRecipe { selection, ref error } = state.atomic_printer_craft else { return };
+
+    let recipes = state.atomic_printer_recipes();
+    let height = (recipes.len() as u16 + 6).min(16);
+    let popup = centered_rect(58, height, area);
+    frame.render_widget(Clear, popup);
+
+    let block = Block::default()
+        .title(" ATOMIC PRINTER — SELECT RECIPE ")
+        .title_alignment(Alignment::Center)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Magenta));
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let mut lines: Vec<Line> = Vec::new();
+    if recipes.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "loading recipes…",
+            Style::default().fg(Color::DarkGray),
+        )));
+    }
+    for (i, recipe) in recipes.iter().enumerate() {
+        let selected = i == selection;
+        let duration_min = recipe.duration_seconds / 60;
+        let ingredients: String = recipe.ingredients.iter().map(|ing| {
+            if ing.unit == "item" {
+                format!("{} × {}", ing.quantity as u32, ing.ingredient_type)
+            } else {
+                format!("{:.2} ECE {}", ing.quantity, ing.ingredient_type)
+            }
+        }).collect::<Vec<_>>().join(", ");
+        let detail = format!("  {}m  {}", duration_min, ingredients);
+        if selected {
+            lines.push(Line::from(vec![
+                Span::styled("▶ ", Style::default().fg(Color::Yellow)),
+                Span::styled(recipe.name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                Span::styled(detail, Style::default().fg(Color::DarkGray)),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(recipe.name.as_str(), Style::default().fg(Color::DarkGray)),
+            ]));
+        }
+    }
+    if let Some(err) = error {
+        lines.push(Line::default());
+        lines.push(Line::from(Span::styled(
+            format!("✗ {err}"),
+            Style::default().fg(Color::Red),
+        )));
+    }
+    frame.render_widget(Paragraph::new(lines), rows[0]);
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
+            Span::raw(" select  "),
+            Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::raw(" start  "),
             Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
             Span::raw(" cancel"),
         ])),
@@ -1686,6 +1869,52 @@ fn render_rename_manny_overlay(frame: &mut Frame, area: Rect, state: &AppState) 
 
 fn render_deploy_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     match &state.deploy {
+        DeployInput::PickManny { mannies, selection } => {
+            let height = (mannies.len() as u16 + 6).min(18);
+            let popup = centered_rect(52, height, area);
+            frame.render_widget(Clear, popup);
+            let block = Block::default()
+                .title(" DEPLOY WAYPOINT — SELECT MANNY ")
+                .title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan));
+            let inner = block.inner(popup);
+            frame.render_widget(block, popup);
+
+            let rows = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(1), Constraint::Length(1)])
+                .split(inner);
+
+            let mut lines: Vec<Line> = Vec::new();
+            for (i, (_, name)) in mannies.iter().enumerate() {
+                let selected = i == *selection;
+                if selected {
+                    lines.push(Line::from(vec![
+                        Span::styled("▶ ", Style::default().fg(Color::Yellow)),
+                        Span::styled(name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                    ]));
+                } else {
+                    lines.push(Line::from(vec![
+                        Span::raw("  "),
+                        Span::styled(name.as_str(), Style::default().fg(Color::DarkGray)),
+                    ]));
+                }
+            }
+            frame.render_widget(Paragraph::new(lines), rows[0]);
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" select  "),
+                    Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                    Span::raw(" confirm  "),
+                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" cancel"),
+                ])),
+                rows[1],
+            );
+        }
+
         DeployInput::PickObject { candidates, selection, .. } => {
             let height = (candidates.len() as u16 + 6).min(18);
             let popup = centered_rect(52, height, area);
@@ -1778,6 +2007,232 @@ fn render_deploy_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     }
 }
 
+fn render_inspect_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let InspectInput::PickAsteroid { ref manny_name, ref candidates, selection, .. } = state.inspect else { return };
+
+    let height = (candidates.len() as u16 + 6).min(16);
+    let popup = centered_rect(52, height, area);
+    frame.render_widget(Clear, popup);
+
+    let title = format!(" INSPECT — {manny_name} ");
+    let block = Block::default()
+        .title(title)
+        .title_alignment(Alignment::Center)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan));
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let mut lines: Vec<Line> = vec![
+        Line::from(Span::styled("Select asteroid to inspect:", Style::default().fg(Color::Cyan))),
+        Line::default(),
+    ];
+    for (i, (_, name)) in candidates.iter().enumerate() {
+        let selected = i == selection;
+        if selected {
+            lines.push(Line::from(vec![
+                Span::styled("▶ ", Style::default().fg(Color::Yellow)),
+                Span::styled(name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(name.as_str(), Style::default().fg(Color::DarkGray)),
+            ]));
+        }
+    }
+    frame.render_widget(Paragraph::new(lines), rows[0]);
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
+            Span::raw(" select  "),
+            Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::raw(" inspect  "),
+            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::raw(" cancel"),
+        ])),
+        rows[1],
+    );
+}
+
+fn render_recover_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let RecoverInput::PickContainer { ref manny_name, ref candidates, selection, .. } = state.recover else { return };
+
+    let height = (candidates.len() as u16 + 6).min(16);
+    let popup = centered_rect(52, height, area);
+    frame.render_widget(Clear, popup);
+
+    let title = format!(" RECOVER — {manny_name} ");
+    let block = Block::default()
+        .title(title)
+        .title_alignment(Alignment::Center)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan));
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let mut lines: Vec<Line> = vec![
+        Line::from(Span::styled("Select container to recover:", Style::default().fg(Color::Cyan))),
+        Line::default(),
+    ];
+    for (i, (_, name)) in candidates.iter().enumerate() {
+        let selected = i == selection;
+        if selected {
+            lines.push(Line::from(vec![
+                Span::styled("▶ ", Style::default().fg(Color::Yellow)),
+                Span::styled(name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(name.as_str(), Style::default().fg(Color::DarkGray)),
+            ]));
+        }
+    }
+    frame.render_widget(Paragraph::new(lines), rows[0]);
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
+            Span::raw(" select  "),
+            Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::raw(" recover  "),
+            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::raw(" cancel"),
+        ])),
+        rows[1],
+    );
+}
+
+fn render_detach_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    match &state.detach {
+        DetachInput::PickContainer { manny_name, containers, selection, .. } => {
+            let height = (containers.len() as u16 + 6).min(16);
+            let popup = centered_rect(52, height, area);
+            frame.render_widget(Clear, popup);
+            let title = format!(" DETACH — {manny_name} ");
+            let block = Block::default()
+                .title(title).title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan));
+            let inner = block.inner(popup);
+            frame.render_widget(block, popup);
+            let rows = Layout::default().direction(Direction::Vertical)
+                .constraints([Constraint::Min(1), Constraint::Length(1)]).split(inner);
+            let mut lines: Vec<Line> = vec![
+                Line::from(Span::styled("Select container to detach:", Style::default().fg(Color::Cyan))),
+                Line::default(),
+            ];
+            for (i, (_, name)) in containers.iter().enumerate() {
+                if i == *selection {
+                    lines.push(Line::from(vec![
+                        Span::styled("▶ ", Style::default().fg(Color::Yellow)),
+                        Span::styled(name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                    ]));
+                } else {
+                    lines.push(Line::from(vec![Span::raw("  "), Span::styled(name.as_str(), Style::default().fg(Color::DarkGray))]));
+                }
+            }
+            frame.render_widget(Paragraph::new(lines), rows[0]);
+            frame.render_widget(Paragraph::new(Line::from(vec![
+                Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)), Span::raw(" select  "),
+                Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)), Span::raw(" next  "),
+                Span::styled("[Esc]", Style::default().fg(Color::Cyan)), Span::raw(" cancel"),
+            ])), rows[1]);
+        }
+
+        DetachInput::PickMode { manny_name, container_name, selection, error, .. } => {
+            let popup = centered_rect(52, 10, area);
+            frame.render_widget(Clear, popup);
+            let title = format!(" DETACH — {container_name} ");
+            let block = Block::default()
+                .title(title).title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan));
+            let inner = block.inner(popup);
+            frame.render_widget(block, popup);
+            let rows = Layout::default().direction(Direction::Vertical)
+                .constraints([Constraint::Min(1), Constraint::Length(1)]).split(inner);
+
+            let mut lines: Vec<Line> = vec![
+                Line::from(Span::styled(format!("Detach mode  (manny: {manny_name})"), Style::default().fg(Color::Cyan))),
+                Line::default(),
+            ];
+            for (i, (_, label)) in crate::DETACH_MODES.iter().enumerate() {
+                if i == *selection {
+                    lines.push(Line::from(vec![
+                        Span::styled("▶ ", Style::default().fg(Color::Yellow)),
+                        Span::styled(*label, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                    ]));
+                } else {
+                    lines.push(Line::from(vec![Span::raw("  "), Span::styled(*label, Style::default().fg(Color::DarkGray))]));
+                }
+            }
+            if let Some(err) = error {
+                lines.push(Line::default());
+                lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(Color::Red))));
+            }
+            frame.render_widget(Paragraph::new(lines), rows[0]);
+            frame.render_widget(Paragraph::new(Line::from(vec![
+                Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)), Span::raw(" select  "),
+                Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)), Span::raw(" confirm  "),
+                Span::styled("[Esc]", Style::default().fg(Color::Cyan)), Span::raw(" cancel"),
+            ])), rows[1]);
+        }
+
+        DetachInput::PickAsteroid { manny_name, container_name, asteroids, selection, error, .. } => {
+            let height = (asteroids.len() as u16 + 8).min(18);
+            let popup = centered_rect(52, height, area);
+            frame.render_widget(Clear, popup);
+            let title = format!(" DETACH — hide {container_name} ");
+            let block = Block::default()
+                .title(title).title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan));
+            let inner = block.inner(popup);
+            frame.render_widget(block, popup);
+            let rows = Layout::default().direction(Direction::Vertical)
+                .constraints([Constraint::Min(1), Constraint::Length(1)]).split(inner);
+
+            let mut lines: Vec<Line> = vec![
+                Line::from(Span::styled(format!("Attach to asteroid  (manny: {manny_name})"), Style::default().fg(Color::Cyan))),
+                Line::default(),
+            ];
+            for (i, (_, name)) in asteroids.iter().enumerate() {
+                if i == *selection {
+                    lines.push(Line::from(vec![
+                        Span::styled("▶ ", Style::default().fg(Color::Yellow)),
+                        Span::styled(name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                    ]));
+                } else {
+                    lines.push(Line::from(vec![Span::raw("  "), Span::styled(name.as_str(), Style::default().fg(Color::DarkGray))]));
+                }
+            }
+            if let Some(err) = error {
+                lines.push(Line::default());
+                lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(Color::Red))));
+            }
+            frame.render_widget(Paragraph::new(lines), rows[0]);
+            frame.render_widget(Paragraph::new(Line::from(vec![
+                Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)), Span::raw(" select  "),
+                Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)), Span::raw(" hide here  "),
+                Span::styled("[Esc]", Style::default().fg(Color::Cyan)), Span::raw(" cancel"),
+            ])), rows[1]);
+        }
+
+        DetachInput::Inactive => {}
+    }
+}
+
 fn sector_interest_color(s: &crate::api::types::SectorObservation) -> Color {
     use crate::api::types::{DangerLevel, KnowledgeLevel, SectorObjectType};
 
@@ -1846,29 +2301,53 @@ fn sector_object_lines(obj: &SectorObject) -> Vec<Line<'_>> {
 
     let manny_state = obj.manny_state.as_deref().unwrap_or("");
 
+    let salvageable = obj.salvageable.unwrap_or(false);
+
     let mut main_spans = vec![
         Span::styled(icon, Style::default().fg(color)),
         Span::raw(" "),
         Span::styled(estimated, Style::default().fg(Color::DarkGray)),
         Span::raw(format!("{name}{danger}")),
     ];
+    if salvageable {
+        main_spans.push(Span::styled("  ⬡ salvageable", Style::default().fg(Color::Yellow)));
+    }
     if !manny_state.is_empty() {
         main_spans.push(Span::styled(
             format!("  [{manny_state}]"),
             Style::default().fg(Color::DarkGray),
         ));
     }
-    if let Some(summary) = &obj.summary {
-        main_spans.push(Span::styled(
-            format!("  {summary}"),
-            Style::default().fg(Color::DarkGray),
-        ));
+    // drifting item: show type + quantity instead of summary
+    if obj.object_type == SectorObjectType::DriftingItem {
+        if let (Some(itype), Some(qty)) = (&obj.item_type, obj.quantity) {
+            main_spans.push(Span::styled(
+                format!("  {itype} × {qty}"),
+                Style::default().fg(Color::DarkGray),
+            ));
+        }
+    } else if obj.object_type == SectorObjectType::DetachedContainer {
+        if let Some(cap) = obj.capacity {
+            let mode = obj.mode.as_deref().unwrap_or("drifting");
+            main_spans.push(Span::styled(
+                format!("  {mode}  {cap:.2} ECE"),
+                Style::default().fg(Color::DarkGray),
+            ));
+        }
+    } else if let Some(summary) = &obj.summary {
+        if !matches!(obj.object_type, SectorObjectType::SolarSystem) || obj.bookmark_targets.is_empty() {
+            main_spans.push(Span::styled(
+                format!("  {summary}"),
+                Style::default().fg(Color::DarkGray),
+            ));
+        }
     }
 
     let mut lines = vec![Line::from(main_spans)];
 
-    let has_mass = obj.mass.is_some();
-    let has_radius = obj.radius.is_some();
+    let skip_dimensions = matches!(obj.object_type, SectorObjectType::SolarSystem);
+    let has_mass = obj.mass.is_some() && !skip_dimensions;
+    let has_radius = obj.radius.is_some() && !skip_dimensions;
     let has_uid = obj.manny_uid.is_some();
     if has_mass || has_radius || has_uid {
         let mut detail_spans = vec![Span::raw("  ")];
@@ -1893,6 +2372,32 @@ fn sector_object_lines(obj: &SectorObject) -> Vec<Line<'_>> {
             detail_spans.push(Span::styled(uid.as_str(), Style::default().fg(Color::White)));
         }
         lines.push(Line::from(detail_spans));
+    }
+
+    // Nested bodies of a solar system
+    for target in &obj.bookmark_targets {
+        let (icon, color) = object_icon(&target.object_type);
+        let name = target.name.as_deref().unwrap_or("unnamed");
+        let mut spans = vec![
+            Span::styled("  ", Style::default().fg(Color::DarkGray)),
+            Span::styled(icon, Style::default().fg(color)),
+            Span::raw(" "),
+            Span::raw(name.to_string()),
+        ];
+        let mut extras: Vec<String> = Vec::new();
+        if let Some(m) = target.mass {
+            extras.push(format!("{m:.3e} {}", target.mass_unit.as_deref().unwrap_or("")));
+        }
+        if let Some(r) = target.radius {
+            extras.push(format!("r {r:.3e} {}", target.radius_unit.as_deref().unwrap_or("")));
+        }
+        if !extras.is_empty() {
+            spans.push(Span::styled(
+                format!("  {}", extras.join("  ")),
+                Style::default().fg(Color::DarkGray),
+            ));
+        }
+        lines.push(Line::from(spans));
     }
 
     lines
@@ -2135,13 +2640,8 @@ fn inventory_panel_height(state: &AppState) -> u16 {
     let inv = &probe.inventory;
     let focused = state.focused == Some(Panel::Inventory);
     let n_stocks = inv.resource_stocks.len() as u16;
-    let items_rows: u16 = if focused && !inv.items.is_empty() {
-        1 + inv.items.len() as u16
-    } else if !inv.items.is_empty() {
-        1
-    } else {
-        0
-    };
+    let expanded = focused && !inv.items.is_empty();
+    let items_rows = items_row_count(&inv.items, expanded) as u16;
     1 + n_stocks + items_rows + 2
 }
 
@@ -2150,6 +2650,35 @@ fn top_row_height(state: &AppState) -> u16 {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+fn is_active_item(item_type: &str) -> bool {
+    matches!(item_type, "manny" | "atomic_3d_printer")
+}
+
+fn item_icon(item_type: &str) -> (&'static str, Color) {
+    match item_type {
+        "manny" => ("♟", Color::Green),
+        "atomic_3d_printer" => ("⚙", Color::Magenta),
+        "additional_container" => ("□", Color::Cyan),
+        "waypoint_bookmark" => ("◎", Color::Cyan),
+        "micro_conductor" | "ceramic_insulator" | "crystal_substrate"
+        | "dopant_matrix" | "integrated_circuit" => ("◈", Color::Yellow),
+        _ => ("◈", Color::White),
+    }
+}
+
+fn items_row_count(items: &[crate::api::types::ProbeInventoryItem], expanded: bool) -> usize {
+    if items.is_empty() { return 0; }
+    if !expanded { return 1; }
+    let n_active = items.iter().filter(|i| is_active_item(&i.item_type)).count();
+    let mut seen: Vec<&str> = Vec::new();
+    for item in items.iter().filter(|i| !is_active_item(&i.item_type)) {
+        if !seen.contains(&item.item_type.as_str()) {
+            seen.push(&item.item_type);
+        }
+    }
+    1 + n_active + seen.len()
+}
 
 fn knowledge_label(k: &KnowledgeLevel) -> &'static str {
     match k {
@@ -2200,6 +2729,8 @@ fn object_icon(t: &SectorObjectType) -> (&'static str, Color) {
         SectorObjectType::BlackHole => ("◉", Color::Magenta),
         SectorObjectType::SolarSystem => ("⊙", Color::Yellow),
         SectorObjectType::Manny => ("♟", Color::Green),
+        SectorObjectType::DriftingItem => ("◌", Color::White),
+        SectorObjectType::DetachedContainer => ("□", Color::Cyan),
         SectorObjectType::Unknown => ("?", Color::DarkGray),
     }
 }
