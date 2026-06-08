@@ -2,7 +2,7 @@ use crate::api::types::{
     DangerLevel, DataFreshness, KnowledgeLevel, Manny, MannyLocationType, MannyTask,
     MovementPhase, ProbeStatus, SectorObject, SectorObjectType, SectorObservation, SensorMode,
 };
-use crate::app::{AppState, AtomicPrinterCraftInput, CraftInput, DeployInput, JettisonInput, MineInput, Panel, RecallInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_LABELS, RESOURCE_TYPES};
+use crate::app::{AppState, AtomicPrinterCraftInput, CraftInput, DeployInput, DetachInput, InspectInput, JettisonInput, MineInput, Panel, RecallInput, RecoverInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_LABELS, RESOURCE_TYPES};
 use chrono::Utc;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -87,6 +87,15 @@ pub fn render(frame: &mut Frame, state: &AppState) {
     }
     if !matches!(state.rename_manny, RenameMannyInput::Inactive) {
         render_rename_manny_overlay(frame, area, state);
+    }
+    if !matches!(state.inspect, InspectInput::Inactive) {
+        render_inspect_overlay(frame, area, state);
+    }
+    if !matches!(state.recover, RecoverInput::Inactive) {
+        render_recover_overlay(frame, area, state);
+    }
+    if !matches!(state.detach, DetachInput::Inactive) {
+        render_detach_overlay(frame, area, state);
     }
 }
 
@@ -448,6 +457,8 @@ fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
         let can_order = selected_manny.map(|m| m.can_receive_orders).unwrap_or(false);
         let is_busy = selected_manny.map(|m| !m.can_receive_orders && m.current_task.is_some()).unwrap_or(false);
         if can_order {
+            let has_detachable = !state.collect_detachable_containers().is_empty();
+            let has_detached = !state.collect_detached_containers().is_empty();
             let mut spans = vec![
                 Span::styled("[Enter]", Style::default().fg(Color::Cyan)),
                 Span::raw(" repair  "),
@@ -457,9 +468,22 @@ fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
                 Span::raw(" craft  "),
                 Span::styled("[s]", Style::default().fg(Color::Cyan)),
                 Span::raw(" salvage  "),
-                Span::styled("[n]", Style::default().fg(Color::Cyan)),
-                Span::raw(" rename"),
+                Span::styled("[x]", Style::default().fg(Color::Cyan)),
+                Span::raw(" inspect"),
             ];
+            if has_detachable {
+                spans.push(Span::raw("  "));
+                spans.push(Span::styled("[D]", Style::default().fg(Color::Cyan)));
+                spans.push(Span::raw(" detach"));
+            }
+            if has_detached {
+                spans.push(Span::raw("  "));
+                spans.push(Span::styled("[v]", Style::default().fg(Color::Cyan)));
+                spans.push(Span::raw(" recover"));
+            }
+            spans.push(Span::raw("  "));
+            spans.push(Span::styled("[n]", Style::default().fg(Color::Cyan)));
+            spans.push(Span::raw(" rename"));
             if is_busy {
                 spans.push(Span::raw("  "));
                 spans.push(Span::styled("[R]", Style::default().fg(Color::Yellow)));
@@ -1980,6 +2004,232 @@ fn render_deploy_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
         }
 
         DeployInput::Inactive => {}
+    }
+}
+
+fn render_inspect_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let InspectInput::PickAsteroid { ref manny_name, ref candidates, selection, .. } = state.inspect else { return };
+
+    let height = (candidates.len() as u16 + 6).min(16);
+    let popup = centered_rect(52, height, area);
+    frame.render_widget(Clear, popup);
+
+    let title = format!(" INSPECT — {manny_name} ");
+    let block = Block::default()
+        .title(title)
+        .title_alignment(Alignment::Center)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan));
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let mut lines: Vec<Line> = vec![
+        Line::from(Span::styled("Select asteroid to inspect:", Style::default().fg(Color::Cyan))),
+        Line::default(),
+    ];
+    for (i, (_, name)) in candidates.iter().enumerate() {
+        let selected = i == selection;
+        if selected {
+            lines.push(Line::from(vec![
+                Span::styled("▶ ", Style::default().fg(Color::Yellow)),
+                Span::styled(name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(name.as_str(), Style::default().fg(Color::DarkGray)),
+            ]));
+        }
+    }
+    frame.render_widget(Paragraph::new(lines), rows[0]);
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
+            Span::raw(" select  "),
+            Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::raw(" inspect  "),
+            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::raw(" cancel"),
+        ])),
+        rows[1],
+    );
+}
+
+fn render_recover_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let RecoverInput::PickContainer { ref manny_name, ref candidates, selection, .. } = state.recover else { return };
+
+    let height = (candidates.len() as u16 + 6).min(16);
+    let popup = centered_rect(52, height, area);
+    frame.render_widget(Clear, popup);
+
+    let title = format!(" RECOVER — {manny_name} ");
+    let block = Block::default()
+        .title(title)
+        .title_alignment(Alignment::Center)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan));
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let mut lines: Vec<Line> = vec![
+        Line::from(Span::styled("Select container to recover:", Style::default().fg(Color::Cyan))),
+        Line::default(),
+    ];
+    for (i, (_, name)) in candidates.iter().enumerate() {
+        let selected = i == selection;
+        if selected {
+            lines.push(Line::from(vec![
+                Span::styled("▶ ", Style::default().fg(Color::Yellow)),
+                Span::styled(name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(name.as_str(), Style::default().fg(Color::DarkGray)),
+            ]));
+        }
+    }
+    frame.render_widget(Paragraph::new(lines), rows[0]);
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
+            Span::raw(" select  "),
+            Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::raw(" recover  "),
+            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::raw(" cancel"),
+        ])),
+        rows[1],
+    );
+}
+
+fn render_detach_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    match &state.detach {
+        DetachInput::PickContainer { manny_name, containers, selection, .. } => {
+            let height = (containers.len() as u16 + 6).min(16);
+            let popup = centered_rect(52, height, area);
+            frame.render_widget(Clear, popup);
+            let title = format!(" DETACH — {manny_name} ");
+            let block = Block::default()
+                .title(title).title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan));
+            let inner = block.inner(popup);
+            frame.render_widget(block, popup);
+            let rows = Layout::default().direction(Direction::Vertical)
+                .constraints([Constraint::Min(1), Constraint::Length(1)]).split(inner);
+            let mut lines: Vec<Line> = vec![
+                Line::from(Span::styled("Select container to detach:", Style::default().fg(Color::Cyan))),
+                Line::default(),
+            ];
+            for (i, (_, name)) in containers.iter().enumerate() {
+                if i == *selection {
+                    lines.push(Line::from(vec![
+                        Span::styled("▶ ", Style::default().fg(Color::Yellow)),
+                        Span::styled(name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                    ]));
+                } else {
+                    lines.push(Line::from(vec![Span::raw("  "), Span::styled(name.as_str(), Style::default().fg(Color::DarkGray))]));
+                }
+            }
+            frame.render_widget(Paragraph::new(lines), rows[0]);
+            frame.render_widget(Paragraph::new(Line::from(vec![
+                Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)), Span::raw(" select  "),
+                Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)), Span::raw(" next  "),
+                Span::styled("[Esc]", Style::default().fg(Color::Cyan)), Span::raw(" cancel"),
+            ])), rows[1]);
+        }
+
+        DetachInput::PickMode { manny_name, container_name, selection, error, .. } => {
+            let popup = centered_rect(52, 10, area);
+            frame.render_widget(Clear, popup);
+            let title = format!(" DETACH — {container_name} ");
+            let block = Block::default()
+                .title(title).title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan));
+            let inner = block.inner(popup);
+            frame.render_widget(block, popup);
+            let rows = Layout::default().direction(Direction::Vertical)
+                .constraints([Constraint::Min(1), Constraint::Length(1)]).split(inner);
+
+            let mut lines: Vec<Line> = vec![
+                Line::from(Span::styled(format!("Detach mode  (manny: {manny_name})"), Style::default().fg(Color::Cyan))),
+                Line::default(),
+            ];
+            for (i, (_, label)) in crate::DETACH_MODES.iter().enumerate() {
+                if i == *selection {
+                    lines.push(Line::from(vec![
+                        Span::styled("▶ ", Style::default().fg(Color::Yellow)),
+                        Span::styled(*label, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                    ]));
+                } else {
+                    lines.push(Line::from(vec![Span::raw("  "), Span::styled(*label, Style::default().fg(Color::DarkGray))]));
+                }
+            }
+            if let Some(err) = error {
+                lines.push(Line::default());
+                lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(Color::Red))));
+            }
+            frame.render_widget(Paragraph::new(lines), rows[0]);
+            frame.render_widget(Paragraph::new(Line::from(vec![
+                Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)), Span::raw(" select  "),
+                Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)), Span::raw(" confirm  "),
+                Span::styled("[Esc]", Style::default().fg(Color::Cyan)), Span::raw(" cancel"),
+            ])), rows[1]);
+        }
+
+        DetachInput::PickAsteroid { manny_name, container_name, asteroids, selection, error, .. } => {
+            let height = (asteroids.len() as u16 + 8).min(18);
+            let popup = centered_rect(52, height, area);
+            frame.render_widget(Clear, popup);
+            let title = format!(" DETACH — hide {container_name} ");
+            let block = Block::default()
+                .title(title).title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan));
+            let inner = block.inner(popup);
+            frame.render_widget(block, popup);
+            let rows = Layout::default().direction(Direction::Vertical)
+                .constraints([Constraint::Min(1), Constraint::Length(1)]).split(inner);
+
+            let mut lines: Vec<Line> = vec![
+                Line::from(Span::styled(format!("Attach to asteroid  (manny: {manny_name})"), Style::default().fg(Color::Cyan))),
+                Line::default(),
+            ];
+            for (i, (_, name)) in asteroids.iter().enumerate() {
+                if i == *selection {
+                    lines.push(Line::from(vec![
+                        Span::styled("▶ ", Style::default().fg(Color::Yellow)),
+                        Span::styled(name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                    ]));
+                } else {
+                    lines.push(Line::from(vec![Span::raw("  "), Span::styled(name.as_str(), Style::default().fg(Color::DarkGray))]));
+                }
+            }
+            if let Some(err) = error {
+                lines.push(Line::default());
+                lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(Color::Red))));
+            }
+            frame.render_widget(Paragraph::new(lines), rows[0]);
+            frame.render_widget(Paragraph::new(Line::from(vec![
+                Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)), Span::raw(" select  "),
+                Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)), Span::raw(" hide here  "),
+                Span::styled("[Esc]", Style::default().fg(Color::Cyan)), Span::raw(" cancel"),
+            ])), rows[1]);
+        }
+
+        DetachInput::Inactive => {}
     }
 }
 

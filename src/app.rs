@@ -188,6 +188,59 @@ pub enum JettisonInput {
     },
 }
 
+#[derive(Default)]
+pub enum InspectInput {
+    #[default]
+    Inactive,
+    PickAsteroid {
+        manny_id: String,
+        manny_name: String,
+        candidates: Vec<(String, String)>,
+        selection: usize,
+    },
+}
+
+#[derive(Default)]
+pub enum RecoverInput {
+    #[default]
+    Inactive,
+    PickContainer {
+        manny_id: String,
+        manny_name: String,
+        candidates: Vec<(String, String)>,
+        selection: usize,
+    },
+}
+
+#[derive(Default)]
+pub enum DetachInput {
+    #[default]
+    Inactive,
+    PickContainer {
+        manny_id: String,
+        manny_name: String,
+        containers: Vec<(String, String)>,
+        selection: usize,
+    },
+    PickMode {
+        manny_id: String,
+        manny_name: String,
+        container_id: String,
+        container_name: String,
+        selection: usize,
+        error: Option<String>,
+    },
+    PickAsteroid {
+        manny_id: String,
+        manny_name: String,
+        container_id: String,
+        container_name: String,
+        asteroids: Vec<(String, String)>,
+        selection: usize,
+        error: Option<String>,
+    },
+}
+
 pub enum ApiMessage {
     ProbeUpdated(Probe),
     ManniesUpdated(Vec<Manny>),
@@ -215,6 +268,12 @@ pub enum ApiMessage {
     RecipesFetched(Vec<CraftingRecipe>),
     RenameMannyDone(Manny),
     RenameMannyError(String),
+    InspectStarted,
+    InspectError(String),
+    RecoverStarted,
+    RecoverError(String),
+    DetachStarted,
+    DetachError(String),
     Error(String),
 }
 
@@ -246,6 +305,9 @@ pub struct AppState {
     pub recall: RecallInput,
     pub deploy: DeployInput,
     pub rename_manny: RenameMannyInput,
+    pub inspect: InspectInput,
+    pub recover: RecoverInput,
+    pub detach: DetachInput,
     pub map: MapView,
     pub api_version: Option<u32>,
     pub recipes: Vec<CraftingRecipe>,
@@ -771,6 +833,63 @@ impl AppState {
                     .map(|o: &SectorObject| {
                         let id = o.id.clone().unwrap();
                         let name = o.name.clone().unwrap_or_else(|| format!("{:?}", o.object_type).to_lowercase());
+                        (id, name)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn set_inspect_error(&mut self, msg: String) {
+        if let InspectInput::PickAsteroid { ref mut candidates, .. } = self.inspect {
+            let _ = candidates;
+        }
+        let _ = msg;
+    }
+
+    pub fn set_recover_error(&mut self, msg: String) {
+        let _ = msg;
+    }
+
+    pub fn set_detach_error(&mut self, msg: String) {
+        match self.detach {
+            DetachInput::PickMode { ref mut error, .. } => *error = Some(msg),
+            DetachInput::PickAsteroid { ref mut error, .. } => *error = Some(msg),
+            _ => {}
+        }
+    }
+
+    pub fn collect_detachable_containers(&self) -> Vec<(String, String)> {
+        self.probe.as_ref()
+            .map(|p| {
+                p.inventory.containers.iter()
+                    .filter(|c| c.kind != "probe")
+                    .map(|c| (c.id.clone(), c.label.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn collect_detached_containers(&self) -> Vec<(String, String)> {
+        let current_pos = self.probe.as_ref()
+            .and_then(|p| p.sector.as_ref())
+            .and_then(|s| s.relative.as_ref())
+            .map(|r| (r.x as i64, r.y as i64, r.z as i64));
+        let sector = if let Some(pos) = current_pos {
+            self.scan_history.iter().find(|s| {
+                (s.relative_coordinates.x as i64, s.relative_coordinates.y as i64, s.relative_coordinates.z as i64) == pos
+            })
+        } else {
+            self.scan_history.first()
+        };
+        sector
+            .and_then(|s| s.objects.as_ref())
+            .map(|objects| {
+                objects.iter()
+                    .filter(|o| matches!(o.object_type, SectorObjectType::DetachedContainer))
+                    .map(|o| {
+                        let id = o.id.clone().unwrap_or_default();
+                        let name = o.name.clone().unwrap_or_else(|| "unnamed container".into());
                         (id, name)
                     })
                     .collect()

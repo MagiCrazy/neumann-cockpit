@@ -241,6 +241,47 @@ impl ApiClient {
         Ok(())
     }
 
+    pub async fn detach_storage_container(
+        &self,
+        manny_id: &str,
+        container_id: &str,
+        mode: &str,
+        object_id: Option<&str>,
+    ) -> Result<Manny> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Body<'a> {
+            container_id: &'a str,
+            mode: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            object_id: Option<&'a str>,
+        }
+        #[derive(Deserialize)]
+        struct Resp { manny: Manny }
+        let path = format!("/api/probe/mannies/{manny_id}/detach-storage-container");
+        Ok(self.post::<Resp, _>(&path, &Body { container_id, mode, object_id }).await?.manny)
+    }
+
+    pub async fn inspect_asteroid(&self, manny_id: &str, object_id: &str) -> Result<Manny> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Body<'a> { object_id: &'a str }
+        #[derive(Deserialize)]
+        struct Resp { manny: Manny }
+        let path = format!("/api/probe/mannies/{manny_id}/inspect-asteroid");
+        Ok(self.post::<Resp, _>(&path, &Body { object_id }).await?.manny)
+    }
+
+    pub async fn recover_storage_container(&self, manny_id: &str, object_id: &str) -> Result<Manny> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Body<'a> { object_id: &'a str }
+        #[derive(Deserialize)]
+        struct Resp { manny: Manny }
+        let path = format!("/api/probe/mannies/{manny_id}/recover-storage-container");
+        Ok(self.post::<Resp, _>(&path, &Body { object_id }).await?.manny)
+    }
+
     pub async fn get_crafting_recipes(&self) -> Result<Vec<CraftingRecipe>> {
         #[derive(Deserialize)]
         struct Resp { recipes: Vec<CraftingRecipe> }
