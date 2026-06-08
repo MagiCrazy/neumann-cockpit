@@ -50,6 +50,24 @@ pub enum Panel {
 pub const RESOURCE_TYPES: [&str; 4] = ["deuterium", "metals", "ice", "carbon_compounds"];
 pub const RESOURCE_LABELS: [&str; 4] = ["deuterium", "metals", "ice", "carbon"];
 
+pub const ATOMIC_RECIPES: &[(&str, &str)] = &[
+    ("micro_conductor",    "Micro-conductor"),
+    ("ceramic_insulator",  "Ceramic insulator"),
+    ("crystal_substrate",  "Crystal substrate"),
+    ("dopant_matrix",      "Dopant matrix"),
+    ("integrated_circuit", "Integrated circuit"),
+];
+
+#[derive(Default)]
+pub enum AtomicPrinterCraftInput {
+    #[default]
+    Inactive,
+    PickRecipe {
+        selection: usize,
+        error: Option<String>,
+    },
+}
+
 #[derive(Default)]
 pub struct MapView {
     pub open: bool,
@@ -199,6 +217,8 @@ pub enum ApiMessage {
     RecallError(String),
     DeployStarted,
     DeployError(String),
+    AtomicPrinterCraftStarted,
+    AtomicPrinterCraftError(String),
     RenameMannyDone(Manny),
     RenameMannyError(String),
     Error(String),
@@ -226,6 +246,7 @@ pub struct AppState {
     pub mine: MineInput,
     pub jettison: JettisonInput,
     pub craft: CraftInput,
+    pub atomic_printer_craft: AtomicPrinterCraftInput,
     pub salvage: SalvageInput,
     pub recall: RecallInput,
     pub deploy: DeployInput,
@@ -610,6 +631,18 @@ impl AppState {
         if let CraftInput::Confirm { ref mut error, .. } = self.craft {
             *error = Some(msg);
         }
+    }
+
+    pub fn set_atomic_printer_craft_error(&mut self, msg: String) {
+        if let AtomicPrinterCraftInput::PickRecipe { ref mut error, .. } = self.atomic_printer_craft {
+            *error = Some(msg);
+        }
+    }
+
+    pub fn has_atomic_printer(&self) -> bool {
+        self.probe.as_ref()
+            .map(|p| p.inventory.items.iter().any(|i| i.item_type == "atomic_3d_printer"))
+            .unwrap_or(false)
     }
 
     pub fn set_salvage_error(&mut self, msg: String) {

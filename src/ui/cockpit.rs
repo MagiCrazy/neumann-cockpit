@@ -2,7 +2,7 @@ use crate::api::types::{
     DangerLevel, DataFreshness, KnowledgeLevel, Manny, MannyLocationType, MannyTask,
     MovementPhase, ProbeStatus, SectorObject, SectorObjectType, SectorObservation, SensorMode,
 };
-use crate::app::{AppState, CraftInput, DeployInput, JettisonInput, MineInput, Panel, RecallInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_LABELS, RESOURCE_TYPES};
+use crate::app::{AppState, AtomicPrinterCraftInput, ATOMIC_RECIPES, CraftInput, DeployInput, JettisonInput, MineInput, Panel, RecallInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_LABELS, RESOURCE_TYPES};
 use chrono::Utc;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -72,6 +72,9 @@ pub fn render(frame: &mut Frame, state: &AppState) {
     }
     if !matches!(state.craft, CraftInput::Inactive) {
         render_craft_overlay(frame, area, state);
+    }
+    if !matches!(state.atomic_printer_craft, AtomicPrinterCraftInput::Inactive) {
+        render_atomic_printer_craft_overlay(frame, area, state);
     }
     if !matches!(state.salvage, SalvageInput::Inactive) {
         render_salvage_overlay(frame, area, state);
@@ -283,6 +286,11 @@ fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focus
             hint_spans.push(Span::raw("  "));
             hint_spans.push(Span::styled("[d]", Style::default().fg(Color::Cyan)));
             hint_spans.push(Span::raw(" deploy"));
+        }
+        if state.has_atomic_printer() {
+            hint_spans.push(Span::raw("  "));
+            hint_spans.push(Span::styled("[a]", Style::default().fg(Color::Cyan)));
+            hint_spans.push(Span::raw(" atomic craft"));
         }
         frame.render_widget(
             Paragraph::new(Line::from(hint_spans)),
@@ -1495,6 +1503,62 @@ fn render_craft_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
         Paragraph::new(Line::from(vec![
             Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
             Span::raw(" CRAFT  "),
+            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::raw(" cancel"),
+        ])),
+        rows[1],
+    );
+}
+
+fn render_atomic_printer_craft_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let AtomicPrinterCraftInput::PickRecipe { selection, ref error } = state.atomic_printer_craft else { return };
+
+    let height = (ATOMIC_RECIPES.len() as u16 + 6).min(16);
+    let popup = centered_rect(52, height, area);
+    frame.render_widget(Clear, popup);
+
+    let block = Block::default()
+        .title(" ATOMIC PRINTER — SELECT RECIPE ")
+        .title_alignment(Alignment::Center)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Magenta));
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let mut lines: Vec<Line> = Vec::new();
+    for (i, (_, label)) in ATOMIC_RECIPES.iter().enumerate() {
+        let selected = i == selection;
+        if selected {
+            lines.push(Line::from(vec![
+                Span::styled("▶ ", Style::default().fg(Color::Yellow)),
+                Span::styled(*label, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(*label, Style::default().fg(Color::DarkGray)),
+            ]));
+        }
+    }
+    if let Some(err) = error {
+        lines.push(Line::default());
+        lines.push(Line::from(Span::styled(
+            format!("✗ {err}"),
+            Style::default().fg(Color::Red),
+        )));
+    }
+    frame.render_widget(Paragraph::new(lines), rows[0]);
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
+            Span::raw(" select  "),
+            Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::raw(" start  "),
             Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
             Span::raw(" cancel"),
         ])),

@@ -234,6 +234,13 @@ impl ApiClient {
         Ok(self.patch::<Resp, _>(&path, &Body { name }).await?.manny)
     }
 
+    pub async fn craft_atomic_printer(&self, recipe: &str) -> Result<()> {
+        #[derive(Serialize)]
+        struct Body<'a> { recipe: &'a str }
+        self.post::<serde_json::Value, _>("/api/probe/atomic-printer/craft", &Body { recipe }).await?;
+        Ok(())
+    }
+
     pub async fn install_bookmark_manny(&self, manny_id: &str, object_id: &str, name: &str) -> Result<Manny> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
