@@ -315,13 +315,7 @@ fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focus
     };
 
     let items_expanded = focused && !inv.items.is_empty();
-    let items_rows: usize = if items_expanded {
-        1 + inv.items.len()
-    } else if !inv.items.is_empty() {
-        1
-    } else {
-        0
-    };
+    let items_rows: usize = items_row_count(&inv.items, items_expanded);
     let n_rows = 1 + inv.resource_stocks.len() + items_rows;
 
     let mut sections: Vec<Constraint> = (0..n_rows).map(|_| Constraint::Length(1)).collect();
@@ -373,19 +367,19 @@ fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focus
             rows[row],
         );
         row += 1;
-        for item in &inv.items {
-            let (icon, icon_color) = match item.item_type.as_str() {
-                "manny" => ("♟", Color::Green),
-                _ => ("◈", Color::White),
-            };
-            let task_span = match item.current_task.as_deref() {
-                None => Span::styled("idle", Style::default().fg(Color::DarkGray)),
-                Some(t) => Span::styled(t.to_string(), Style::default().fg(Color::Yellow)),
-            };
-            let progress = if item.current_task.is_some() {
-                format!(" {:3.0}%", item.task_progress_percent)
-            } else {
-                String::new()
+
+        // Active items: manny and atomic_3d_printer — show individually with task state
+        for item in inv.items.iter().filter(|i| is_active_item(&i.item_type)) {
+            let (icon, icon_color) = item_icon(&item.item_type);
+            let (task_span, progress) = match item.current_task.as_deref() {
+                None => (
+                    Span::styled("idle", Style::default().fg(Color::DarkGray)),
+                    String::new(),
+                ),
+                Some(t) => (
+                    Span::styled(t.to_string(), Style::default().fg(Color::Yellow)),
+                    format!(" {:3.0}%", item.task_progress_percent),
+                ),
             };
             frame.render_widget(
                 Paragraph::new(Line::from(vec![
@@ -393,6 +387,26 @@ fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focus
                     Span::raw(format!("{:<14}", item.name)),
                     task_span,
                     Span::styled(progress, Style::default().fg(Color::DarkGray)),
+                ])),
+                rows[row],
+            );
+            row += 1;
+        }
+
+        // Passive items: group by type, show count
+        let mut seen_types: Vec<&str> = Vec::new();
+        for item in inv.items.iter().filter(|i| !is_active_item(&i.item_type)) {
+            if seen_types.contains(&item.item_type.as_str()) {
+                continue;
+            }
+            seen_types.push(&item.item_type);
+            let count = inv.items.iter().filter(|i| i.item_type == item.item_type).count();
+            let (icon, icon_color) = item_icon(&item.item_type);
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled(format!("  {icon} "), Style::default().fg(icon_color)),
+                    Span::raw(format!("{:<14}", item.name)),
+                    Span::styled(format!("× {count}"), Style::default().fg(Color::White)),
                 ])),
                 rows[row],
             );
@@ -2257,13 +2271,8 @@ fn inventory_panel_height(state: &AppState) -> u16 {
     let inv = &probe.inventory;
     let focused = state.focused == Some(Panel::Inventory);
     let n_stocks = inv.resource_stocks.len() as u16;
-    let items_rows: u16 = if focused && !inv.items.is_empty() {
-        1 + inv.items.len() as u16
-    } else if !inv.items.is_empty() {
-        1
-    } else {
-        0
-    };
+    let expanded = focused && !inv.items.is_empty();
+    let items_rows = items_row_count(&inv.items, expanded) as u16;
     1 + n_stocks + items_rows + 2
 }
 
@@ -2272,6 +2281,35 @@ fn top_row_height(state: &AppState) -> u16 {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+fn is_active_item(item_type: &str) -> bool {
+    matches!(item_type, "manny" | "atomic_3d_printer")
+}
+
+fn item_icon(item_type: &str) -> (&'static str, Color) {
+    match item_type {
+        "manny" => ("♟", Color::Green),
+        "atomic_3d_printer" => ("⚙", Color::Magenta),
+        "additional_container" => ("□", Color::Cyan),
+        "waypoint_bookmark" => ("◎", Color::Cyan),
+        "micro_conductor" | "ceramic_insulator" | "crystal_substrate"
+        | "dopant_matrix" | "integrated_circuit" => ("◈", Color::Yellow),
+        _ => ("◈", Color::White),
+    }
+}
+
+fn items_row_count(items: &[crate::api::types::ProbeInventoryItem], expanded: bool) -> usize {
+    if items.is_empty() { return 0; }
+    if !expanded { return 1; }
+    let n_active = items.iter().filter(|i| is_active_item(&i.item_type)).count();
+    let mut seen: Vec<&str> = Vec::new();
+    for item in items.iter().filter(|i| !is_active_item(&i.item_type)) {
+        if !seen.contains(&item.item_type.as_str()) {
+            seen.push(&item.item_type);
+        }
+    }
+    1 + n_active + seen.len()
+}
 
 fn knowledge_label(k: &KnowledgeLevel) -> &'static str {
     match k {

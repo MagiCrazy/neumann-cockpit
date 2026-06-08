@@ -99,6 +99,49 @@ pub struct ProbeMovement {
     pub estimated_velocity_c: Option<f64>,
 }
 
+// ── Storage containers ────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageContainerSummary {
+    pub id: String,
+    pub kind: String,
+    pub label: String,
+    pub sort_order: i32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageContainerRules {
+    #[serde(default)]
+    pub priority: Vec<String>,
+    #[serde(default)]
+    pub exclusion: Vec<String>,
+    #[serde(default)]
+    pub strict_exclusion: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageContainer {
+    pub id: String,
+    pub kind: String,
+    pub label: String,
+    pub sort_order: i32,
+    pub capacity: f64,
+    pub used_capacity: f64,
+    pub free_capacity: f64,
+    pub rules: StorageContainerRules,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceStockContainerLine {
+    pub container: StorageContainerSummary,
+    pub amount: f64,
+    pub container_space: f64,
+}
+
 // ── Inventory ─────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
@@ -144,6 +187,7 @@ pub struct ProbeInventoryItem {
     pub task_progress_percent: f64,
     pub location: Option<MannyLocation>,
     pub cargo: Option<MannyCargo>,
+    pub container: Option<StorageContainerSummary>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -155,6 +199,8 @@ pub struct ProbeResourceStock {
     pub name: String,
     pub amount: f64,
     pub container_space: f64,
+    #[serde(default)]
+    pub containers: Vec<ResourceStockContainerLine>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -176,6 +222,8 @@ pub struct ProbeInventory {
     pub items: Vec<ProbeInventoryItem>,
     pub resource_stocks: Vec<ProbeResourceStock>,
     pub external_tanks: Vec<ProbeExternalTank>,
+    #[serde(default)]
+    pub containers: Vec<StorageContainer>,
 }
 
 // ── Systems ───────────────────────────────────────────────────────────────────
