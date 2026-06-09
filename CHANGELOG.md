@@ -1,5 +1,12 @@
 # Changelog
 
+## [23.1.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v23.1.0...neumann-cockpit-v23.1.1) (2026-06-09)
+
+
+### Bug Fixes
+
+* **app:** propagate inspect/recover errors to overlay + update CLAUDE.md ([#25](https://github.com/MagiCrazy/neumann-cockpit/issues/25)) ([3d6c56d](https://github.com/MagiCrazy/neumann-cockpit/commit/3d6c56dd518d47801a9ba430b63f88c7b3702650))
+
 ## [23.1.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v23.0.0...neumann-cockpit-v23.1.0) (2026-06-08)
 
 
