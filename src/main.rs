@@ -567,6 +567,7 @@ fn handle_event(
                                     manny_name: manny.name.clone(),
                                     candidates,
                                     selection: 0,
+                                    error: None,
                                 };
                             }
                         }
@@ -591,6 +592,7 @@ fn handle_event(
                                     manny_name: manny.name.clone(),
                                     candidates,
                                     selection: 0,
+                                    error: None,
                                 };
                             }
                         }

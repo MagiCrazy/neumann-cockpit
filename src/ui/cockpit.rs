@@ -2008,9 +2008,10 @@ fn render_deploy_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
 }
 
 fn render_inspect_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let InspectInput::PickAsteroid { ref manny_name, ref candidates, selection, .. } = state.inspect else { return };
+    let InspectInput::PickAsteroid { ref manny_name, ref candidates, selection, ref error, .. } = state.inspect else { return };
 
-    let height = (candidates.len() as u16 + 6).min(16);
+    let error_lines = if error.is_some() { 2u16 } else { 0 };
+    let height = (candidates.len() as u16 + 6 + error_lines).min(18);
     let popup = centered_rect(52, height, area);
     frame.render_widget(Clear, popup);
 
@@ -2046,6 +2047,10 @@ fn render_inspect_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
             ]));
         }
     }
+    if let Some(err) = error {
+        lines.push(Line::default());
+        lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(Color::Red))));
+    }
     frame.render_widget(Paragraph::new(lines), rows[0]);
     frame.render_widget(
         Paragraph::new(Line::from(vec![
@@ -2061,9 +2066,10 @@ fn render_inspect_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
 }
 
 fn render_recover_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let RecoverInput::PickContainer { ref manny_name, ref candidates, selection, .. } = state.recover else { return };
+    let RecoverInput::PickContainer { ref manny_name, ref candidates, selection, ref error, .. } = state.recover else { return };
 
-    let height = (candidates.len() as u16 + 6).min(16);
+    let error_lines = if error.is_some() { 2u16 } else { 0 };
+    let height = (candidates.len() as u16 + 6 + error_lines).min(18);
     let popup = centered_rect(52, height, area);
     frame.render_widget(Clear, popup);
 
@@ -2098,6 +2104,10 @@ fn render_recover_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
                 Span::styled(name.as_str(), Style::default().fg(Color::DarkGray)),
             ]));
         }
+    }
+    if let Some(err) = error {
+        lines.push(Line::default());
+        lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(Color::Red))));
     }
     frame.render_widget(Paragraph::new(lines), rows[0]);
     frame.render_widget(

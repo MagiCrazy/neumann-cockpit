@@ -197,6 +197,7 @@ pub enum InspectInput {
         manny_name: String,
         candidates: Vec<(String, String)>,
         selection: usize,
+        error: Option<String>,
     },
 }
 
@@ -209,6 +210,7 @@ pub enum RecoverInput {
         manny_name: String,
         candidates: Vec<(String, String)>,
         selection: usize,
+        error: Option<String>,
     },
 }
 
@@ -841,14 +843,15 @@ impl AppState {
     }
 
     pub fn set_inspect_error(&mut self, msg: String) {
-        if let InspectInput::PickAsteroid { ref mut candidates, .. } = self.inspect {
-            let _ = candidates;
+        if let InspectInput::PickAsteroid { ref mut error, .. } = self.inspect {
+            *error = Some(msg);
         }
-        let _ = msg;
     }
 
     pub fn set_recover_error(&mut self, msg: String) {
-        let _ = msg;
+        if let RecoverInput::PickContainer { ref mut error, .. } = self.recover {
+            *error = Some(msg);
+        }
     }
 
     pub fn set_detach_error(&mut self, msg: String) {
