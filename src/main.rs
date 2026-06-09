@@ -9,20 +9,16 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io;
 use tokio::sync::mpsc;
 
-mod api;
-mod app;
-mod config;
-mod input;
-mod ui;
-
-use api::client::ApiClient;
-use api::tasks::{fetch_all, fetch_api_version, fetch_crafting_recipes, fetch_mannies};
-use app::{
+use neumann_cockpit::api::client::ApiClient;
+use neumann_cockpit::api::tasks::{fetch_all, fetch_api_version, fetch_crafting_recipes, fetch_mannies};
+use neumann_cockpit::app::{
     ApiMessage, AppState, AtomicPrinterCraftInput, CraftInput, DeployInput, DetachInput,
     InspectInput, JettisonInput, MineInput, RecallInput, RecoverInput, RenameMannyInput,
     RepairInput, SalvageInput,
 };
-use input::handle_event;
+use neumann_cockpit::config;
+use neumann_cockpit::input::handle_event;
+use neumann_cockpit::ui;
 
 #[tokio::main]
 async fn main() -> Result<()> {
