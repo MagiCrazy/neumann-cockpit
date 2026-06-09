@@ -659,8 +659,10 @@ fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
                     vec![
                         Span::styled("● SENSORS BLIND", Style::default().fg(Color::Red)),
                         Span::raw("  "),
-                        Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
-                        Span::raw(" history"),
+                        Span::styled("[↑↓/jk]", Style::default().fg(Color::Cyan)),
+                        Span::raw(" history  "),
+                        Span::styled("[JK]", Style::default().fg(Color::Cyan)),
+                        Span::raw(" scroll"),
                     ]
                 } else {
                     let mut s = vec![
@@ -672,17 +674,16 @@ fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
                         Span::raw(" neighbors  "),
                         Span::styled("[d]", Style::default().fg(Color::Cyan)),
                         Span::raw(" deep  "),
-                        Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
-                        Span::raw(" history"),
+                        Span::styled("[↑↓/jk]", Style::default().fg(Color::Cyan)),
+                        Span::raw(" history  "),
+                        Span::styled("[JK]", Style::default().fg(Color::Cyan)),
+                        Span::raw(" scroll"),
                     ];
                     if state.current_sector().is_some() {
                         s.push(Span::raw("  "));
                         s.push(Span::styled("[g]", Style::default().fg(Color::Yellow)));
                         s.push(Span::raw(" go"));
                     }
-                    s.push(Span::raw("  "));
-                    s.push(Span::styled("[J/K]", Style::default().fg(Color::Cyan)));
-                    s.push(Span::raw(" scroll"));
                     s
                 };
                 frame.render_widget(Paragraph::new(Line::from(spans)), hint_area);
@@ -1080,55 +1081,80 @@ fn estimate_mine_duration(target_amount: f64) -> (i64, i64) {
     (trips, total_secs)
 }
 
+#[allow(clippy::too_many_arguments)]
+fn render_pick_list(
+    frame: &mut Frame,
+    area: Rect,
+    title: &str,
+    width: u16,
+    height: u16,
+    prompt: Option<&str>,
+    items: &[&str],
+    selection: usize,
+    error: Option<&str>,
+    action: &str,
+) {
+    let popup = centered_rect(width, height, area);
+    frame.render_widget(Clear, popup);
+    let block = Block::default()
+        .title(title.to_owned())
+        .title_alignment(Alignment::Center)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan));
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let mut lines: Vec<Line> = Vec::new();
+    if let Some(p) = prompt {
+        lines.push(Line::from(Span::styled(p.to_owned(), Style::default().fg(Color::Cyan))));
+        lines.push(Line::default());
+    }
+    for (i, name) in items.iter().enumerate() {
+        if i == selection {
+            lines.push(Line::from(vec![
+                Span::styled("▶ ", Style::default().fg(Color::Yellow)),
+                Span::styled(name.to_string(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(name.to_string(), Style::default().fg(Color::DarkGray)),
+            ]));
+        }
+    }
+    if let Some(err) = error {
+        lines.push(Line::default());
+        lines.push(Line::from(Span::styled(
+            format!("✗ {err}"),
+            Style::default().fg(Color::Red),
+        )));
+    }
+    frame.render_widget(Paragraph::new(lines), rows[0]);
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
+            Span::raw(" select  "),
+            Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::raw(format!(" {action}  ")),
+            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::raw(" cancel"),
+        ])),
+        rows[1],
+    );
+}
+
 fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     match &state.mine {
         MineInput::PickAsteroid { manny_name, candidates, selection, .. } => {
+            let names: Vec<&str> = candidates.iter().map(|(_, n)| n.as_str()).collect();
             let height = (candidates.len() as u16 + 6).min(16);
-            let popup = centered_rect(50, height, area);
-            frame.render_widget(Clear, popup);
-            let block = Block::default()
-                .title(format!(" MINE — {manny_name} "))
-                .title_alignment(Alignment::Center)
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan));
-            let inner = block.inner(popup);
-            frame.render_widget(block, popup);
-
-            let rows = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Min(1), Constraint::Length(1)])
-                .split(inner);
-
-            let mut lines: Vec<Line> = vec![
-                Line::from(Span::styled("Select mining target:", Style::default().fg(Color::Cyan))),
-                Line::default(),
-            ];
-            for (i, (_, name)) in candidates.iter().enumerate() {
-                let selected = i == *selection;
-                if selected {
-                    lines.push(Line::from(vec![
-                        Span::styled("▶ ", Style::default().fg(Color::Yellow)),
-                        Span::styled(name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-                    ]));
-                } else {
-                    lines.push(Line::from(vec![
-                        Span::raw("  "),
-                        Span::styled(name.as_str(), Style::default().fg(Color::DarkGray)),
-                    ]));
-                }
-            }
-            frame.render_widget(Paragraph::new(lines), rows[0]);
-            frame.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
-                    Span::raw(" select  "),
-                    Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-                    Span::raw(" confirm  "),
-                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
-                    Span::raw(" cancel"),
-                ])),
-                rows[1],
-            );
+            render_pick_list(frame, area, &format!(" MINE — {manny_name} "), 50, height,
+                Some("Select mining target:"), &names, *selection, None, "confirm");
         }
 
         MineInput::Configure { manny_name, object_name, resources, amount_buf, amount_mode, error, .. } => {
@@ -1685,52 +1711,10 @@ fn render_atomic_printer_craft_overlay(frame: &mut Frame, area: Rect, state: &Ap
 fn render_salvage_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     match &state.salvage {
         SalvageInput::PickTarget { manny_name, candidates, selection, .. } => {
+            let names: Vec<&str> = candidates.iter().map(|(_, n)| n.as_str()).collect();
             let height = (candidates.len() as u16 + 6).min(16);
-            let popup = centered_rect(50, height, area);
-            frame.render_widget(Clear, popup);
-            let block = Block::default()
-                .title(format!(" SALVAGE — {manny_name} "))
-                .title_alignment(Alignment::Center)
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan));
-            let inner = block.inner(popup);
-            frame.render_widget(block, popup);
-
-            let rows = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Min(1), Constraint::Length(1)])
-                .split(inner);
-
-            let mut lines: Vec<Line> = vec![
-                Line::from(Span::styled("Select salvage target:", Style::default().fg(Color::Cyan))),
-                Line::default(),
-            ];
-            for (i, (_, name)) in candidates.iter().enumerate() {
-                let selected = i == *selection;
-                if selected {
-                    lines.push(Line::from(vec![
-                        Span::styled("▶ ", Style::default().fg(Color::Yellow)),
-                        Span::styled(name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-                    ]));
-                } else {
-                    lines.push(Line::from(vec![
-                        Span::raw("  "),
-                        Span::styled(name.as_str(), Style::default().fg(Color::DarkGray)),
-                    ]));
-                }
-            }
-            frame.render_widget(Paragraph::new(lines), rows[0]);
-            frame.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
-                    Span::raw(" select  "),
-                    Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-                    Span::raw(" confirm  "),
-                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
-                    Span::raw(" cancel"),
-                ])),
-                rows[1],
-            );
+            render_pick_list(frame, area, &format!(" SALVAGE — {manny_name} "), 50, height,
+                Some("Select salvage target:"), &names, *selection, None, "confirm");
         }
 
         SalvageInput::Confirm { manny_name, object_name, error, .. } => {
@@ -1870,95 +1854,17 @@ fn render_rename_manny_overlay(frame: &mut Frame, area: Rect, state: &AppState) 
 fn render_deploy_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     match &state.deploy {
         DeployInput::PickManny { mannies, selection } => {
+            let names: Vec<&str> = mannies.iter().map(|(_, n)| n.as_str()).collect();
             let height = (mannies.len() as u16 + 6).min(18);
-            let popup = centered_rect(52, height, area);
-            frame.render_widget(Clear, popup);
-            let block = Block::default()
-                .title(" DEPLOY WAYPOINT — SELECT MANNY ")
-                .title_alignment(Alignment::Center)
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan));
-            let inner = block.inner(popup);
-            frame.render_widget(block, popup);
-
-            let rows = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Min(1), Constraint::Length(1)])
-                .split(inner);
-
-            let mut lines: Vec<Line> = Vec::new();
-            for (i, (_, name)) in mannies.iter().enumerate() {
-                let selected = i == *selection;
-                if selected {
-                    lines.push(Line::from(vec![
-                        Span::styled("▶ ", Style::default().fg(Color::Yellow)),
-                        Span::styled(name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-                    ]));
-                } else {
-                    lines.push(Line::from(vec![
-                        Span::raw("  "),
-                        Span::styled(name.as_str(), Style::default().fg(Color::DarkGray)),
-                    ]));
-                }
-            }
-            frame.render_widget(Paragraph::new(lines), rows[0]);
-            frame.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
-                    Span::raw(" select  "),
-                    Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-                    Span::raw(" confirm  "),
-                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
-                    Span::raw(" cancel"),
-                ])),
-                rows[1],
-            );
+            render_pick_list(frame, area, " DEPLOY WAYPOINT — SELECT MANNY ", 52, height,
+                None, &names, *selection, None, "confirm");
         }
 
         DeployInput::PickObject { candidates, selection, .. } => {
+            let names: Vec<&str> = candidates.iter().map(|(_, n)| n.as_str()).collect();
             let height = (candidates.len() as u16 + 6).min(18);
-            let popup = centered_rect(52, height, area);
-            frame.render_widget(Clear, popup);
-            let block = Block::default()
-                .title(" DEPLOY WAYPOINT ")
-                .title_alignment(Alignment::Center)
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan));
-            let inner = block.inner(popup);
-            frame.render_widget(block, popup);
-
-            let rows = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Min(1), Constraint::Length(1)])
-                .split(inner);
-
-            let mut lines: Vec<Line> = Vec::new();
-            for (i, (_, name)) in candidates.iter().enumerate() {
-                let selected = i == *selection;
-                if selected {
-                    lines.push(Line::from(vec![
-                        Span::styled("▶ ", Style::default().fg(Color::Yellow)),
-                        Span::styled(name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-                    ]));
-                } else {
-                    lines.push(Line::from(vec![
-                        Span::raw("  "),
-                        Span::styled(name.as_str(), Style::default().fg(Color::DarkGray)),
-                    ]));
-                }
-            }
-            frame.render_widget(Paragraph::new(lines), rows[0]);
-            frame.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
-                    Span::raw(" select  "),
-                    Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-                    Span::raw(" confirm  "),
-                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
-                    Span::raw(" cancel"),
-                ])),
-                rows[1],
-            );
+            render_pick_list(frame, area, " DEPLOY WAYPOINT ", 52, height,
+                None, &names, *selection, None, "confirm");
         }
 
         DeployInput::EnterName { object_name, name_buf, error, .. } => {
@@ -2009,234 +1915,44 @@ fn render_deploy_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
 
 fn render_inspect_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let InspectInput::PickAsteroid { ref manny_name, ref candidates, selection, ref error, .. } = state.inspect else { return };
-
+    let names: Vec<&str> = candidates.iter().map(|(_, n)| n.as_str()).collect();
     let error_lines = if error.is_some() { 2u16 } else { 0 };
     let height = (candidates.len() as u16 + 6 + error_lines).min(18);
-    let popup = centered_rect(52, height, area);
-    frame.render_widget(Clear, popup);
-
-    let title = format!(" INSPECT — {manny_name} ");
-    let block = Block::default()
-        .title(title)
-        .title_alignment(Alignment::Center)
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan));
-    let inner = block.inner(popup);
-    frame.render_widget(block, popup);
-
-    let rows = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(1)])
-        .split(inner);
-
-    let mut lines: Vec<Line> = vec![
-        Line::from(Span::styled("Select asteroid to inspect:", Style::default().fg(Color::Cyan))),
-        Line::default(),
-    ];
-    for (i, (_, name)) in candidates.iter().enumerate() {
-        let selected = i == selection;
-        if selected {
-            lines.push(Line::from(vec![
-                Span::styled("▶ ", Style::default().fg(Color::Yellow)),
-                Span::styled(name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-            ]));
-        } else {
-            lines.push(Line::from(vec![
-                Span::raw("  "),
-                Span::styled(name.as_str(), Style::default().fg(Color::DarkGray)),
-            ]));
-        }
-    }
-    if let Some(err) = error {
-        lines.push(Line::default());
-        lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(Color::Red))));
-    }
-    frame.render_widget(Paragraph::new(lines), rows[0]);
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
-            Span::raw(" select  "),
-            Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-            Span::raw(" inspect  "),
-            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
-            Span::raw(" cancel"),
-        ])),
-        rows[1],
-    );
+    render_pick_list(frame, area, &format!(" INSPECT — {manny_name} "), 52, height,
+        Some("Select asteroid to inspect:"), &names, selection, error.as_deref(), "inspect");
 }
 
 fn render_recover_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let RecoverInput::PickContainer { ref manny_name, ref candidates, selection, ref error, .. } = state.recover else { return };
-
+    let names: Vec<&str> = candidates.iter().map(|(_, n)| n.as_str()).collect();
     let error_lines = if error.is_some() { 2u16 } else { 0 };
     let height = (candidates.len() as u16 + 6 + error_lines).min(18);
-    let popup = centered_rect(52, height, area);
-    frame.render_widget(Clear, popup);
-
-    let title = format!(" RECOVER — {manny_name} ");
-    let block = Block::default()
-        .title(title)
-        .title_alignment(Alignment::Center)
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan));
-    let inner = block.inner(popup);
-    frame.render_widget(block, popup);
-
-    let rows = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(1)])
-        .split(inner);
-
-    let mut lines: Vec<Line> = vec![
-        Line::from(Span::styled("Select container to recover:", Style::default().fg(Color::Cyan))),
-        Line::default(),
-    ];
-    for (i, (_, name)) in candidates.iter().enumerate() {
-        let selected = i == selection;
-        if selected {
-            lines.push(Line::from(vec![
-                Span::styled("▶ ", Style::default().fg(Color::Yellow)),
-                Span::styled(name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-            ]));
-        } else {
-            lines.push(Line::from(vec![
-                Span::raw("  "),
-                Span::styled(name.as_str(), Style::default().fg(Color::DarkGray)),
-            ]));
-        }
-    }
-    if let Some(err) = error {
-        lines.push(Line::default());
-        lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(Color::Red))));
-    }
-    frame.render_widget(Paragraph::new(lines), rows[0]);
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
-            Span::raw(" select  "),
-            Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-            Span::raw(" recover  "),
-            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
-            Span::raw(" cancel"),
-        ])),
-        rows[1],
-    );
+    render_pick_list(frame, area, &format!(" RECOVER — {manny_name} "), 52, height,
+        Some("Select container to recover:"), &names, selection, error.as_deref(), "recover");
 }
 
 fn render_detach_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     match &state.detach {
         DetachInput::PickContainer { manny_name, containers, selection, .. } => {
+            let names: Vec<&str> = containers.iter().map(|(_, n)| n.as_str()).collect();
             let height = (containers.len() as u16 + 6).min(16);
-            let popup = centered_rect(52, height, area);
-            frame.render_widget(Clear, popup);
-            let title = format!(" DETACH — {manny_name} ");
-            let block = Block::default()
-                .title(title).title_alignment(Alignment::Center)
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan));
-            let inner = block.inner(popup);
-            frame.render_widget(block, popup);
-            let rows = Layout::default().direction(Direction::Vertical)
-                .constraints([Constraint::Min(1), Constraint::Length(1)]).split(inner);
-            let mut lines: Vec<Line> = vec![
-                Line::from(Span::styled("Select container to detach:", Style::default().fg(Color::Cyan))),
-                Line::default(),
-            ];
-            for (i, (_, name)) in containers.iter().enumerate() {
-                if i == *selection {
-                    lines.push(Line::from(vec![
-                        Span::styled("▶ ", Style::default().fg(Color::Yellow)),
-                        Span::styled(name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-                    ]));
-                } else {
-                    lines.push(Line::from(vec![Span::raw("  "), Span::styled(name.as_str(), Style::default().fg(Color::DarkGray))]));
-                }
-            }
-            frame.render_widget(Paragraph::new(lines), rows[0]);
-            frame.render_widget(Paragraph::new(Line::from(vec![
-                Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)), Span::raw(" select  "),
-                Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)), Span::raw(" next  "),
-                Span::styled("[Esc]", Style::default().fg(Color::Cyan)), Span::raw(" cancel"),
-            ])), rows[1]);
+            render_pick_list(frame, area, &format!(" DETACH — {manny_name} "), 52, height,
+                Some("Select container to detach:"), &names, *selection, None, "next");
         }
 
         DetachInput::PickMode { manny_name, container_name, selection, error, .. } => {
-            let popup = centered_rect(52, 10, area);
-            frame.render_widget(Clear, popup);
-            let title = format!(" DETACH — {container_name} ");
-            let block = Block::default()
-                .title(title).title_alignment(Alignment::Center)
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan));
-            let inner = block.inner(popup);
-            frame.render_widget(block, popup);
-            let rows = Layout::default().direction(Direction::Vertical)
-                .constraints([Constraint::Min(1), Constraint::Length(1)]).split(inner);
-
-            let mut lines: Vec<Line> = vec![
-                Line::from(Span::styled(format!("Detach mode  (manny: {manny_name})"), Style::default().fg(Color::Cyan))),
-                Line::default(),
-            ];
-            for (i, (_, label)) in crate::DETACH_MODES.iter().enumerate() {
-                if i == *selection {
-                    lines.push(Line::from(vec![
-                        Span::styled("▶ ", Style::default().fg(Color::Yellow)),
-                        Span::styled(*label, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-                    ]));
-                } else {
-                    lines.push(Line::from(vec![Span::raw("  "), Span::styled(*label, Style::default().fg(Color::DarkGray))]));
-                }
-            }
-            if let Some(err) = error {
-                lines.push(Line::default());
-                lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(Color::Red))));
-            }
-            frame.render_widget(Paragraph::new(lines), rows[0]);
-            frame.render_widget(Paragraph::new(Line::from(vec![
-                Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)), Span::raw(" select  "),
-                Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)), Span::raw(" confirm  "),
-                Span::styled("[Esc]", Style::default().fg(Color::Cyan)), Span::raw(" cancel"),
-            ])), rows[1]);
+            let names: Vec<&str> = crate::app::DETACH_MODES.iter().map(|(_, l)| *l).collect();
+            let prompt = format!("Detach mode  (manny: {manny_name})");
+            render_pick_list(frame, area, &format!(" DETACH — {container_name} "), 52, 10,
+                Some(&prompt), &names, *selection, error.as_deref(), "confirm");
         }
 
         DetachInput::PickAsteroid { manny_name, container_name, asteroids, selection, error, .. } => {
+            let names: Vec<&str> = asteroids.iter().map(|(_, n)| n.as_str()).collect();
             let height = (asteroids.len() as u16 + 8).min(18);
-            let popup = centered_rect(52, height, area);
-            frame.render_widget(Clear, popup);
-            let title = format!(" DETACH — hide {container_name} ");
-            let block = Block::default()
-                .title(title).title_alignment(Alignment::Center)
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan));
-            let inner = block.inner(popup);
-            frame.render_widget(block, popup);
-            let rows = Layout::default().direction(Direction::Vertical)
-                .constraints([Constraint::Min(1), Constraint::Length(1)]).split(inner);
-
-            let mut lines: Vec<Line> = vec![
-                Line::from(Span::styled(format!("Attach to asteroid  (manny: {manny_name})"), Style::default().fg(Color::Cyan))),
-                Line::default(),
-            ];
-            for (i, (_, name)) in asteroids.iter().enumerate() {
-                if i == *selection {
-                    lines.push(Line::from(vec![
-                        Span::styled("▶ ", Style::default().fg(Color::Yellow)),
-                        Span::styled(name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-                    ]));
-                } else {
-                    lines.push(Line::from(vec![Span::raw("  "), Span::styled(name.as_str(), Style::default().fg(Color::DarkGray))]));
-                }
-            }
-            if let Some(err) = error {
-                lines.push(Line::default());
-                lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(Color::Red))));
-            }
-            frame.render_widget(Paragraph::new(lines), rows[0]);
-            frame.render_widget(Paragraph::new(Line::from(vec![
-                Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)), Span::raw(" select  "),
-                Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)), Span::raw(" hide here  "),
-                Span::styled("[Esc]", Style::default().fg(Color::Cyan)), Span::raw(" cancel"),
-            ])), rows[1]);
+            let prompt = format!("Attach to asteroid  (manny: {manny_name})");
+            render_pick_list(frame, area, &format!(" DETACH — hide {container_name} "), 52, height,
+                Some(&prompt), &names, *selection, error.as_deref(), "hide here");
         }
 
         DetachInput::Inactive => {}

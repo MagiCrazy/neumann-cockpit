@@ -268,11 +268,6 @@ pub struct Probe {
 
 // ── Mannies list ──────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct ManniesResponse {
-    pub mannies: Vec<Manny>,
-}
-
 // ── Crafting recipes ─────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
