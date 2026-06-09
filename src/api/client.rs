@@ -24,15 +24,20 @@ impl ApiClient {
         self.base_url.join(path).expect("static paths are valid")
     }
 
-    async fn patch<T: for<'de> Deserialize<'de>, B: Serialize>(&self, path: &str, body: &B) -> Result<T> {
+    async fn send_with_body<T: for<'de> Deserialize<'de>, B: Serialize>(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+        body: &B,
+    ) -> Result<T> {
         let resp = self
             .client
-            .patch(self.url(path))
+            .request(method.clone(), self.url(path))
             .bearer_auth(&self.api_key)
             .json(body)
             .send()
             .await
-            .with_context(|| format!("PATCH {path}"))?;
+            .with_context(|| format!("{method} {path}"))?;
 
         let status = resp.status();
         if status == StatusCode::UNAUTHORIZED {
@@ -47,33 +52,15 @@ impl ApiClient {
             anyhow::bail!("{msg}");
         }
 
-        resp.json::<T>().await.with_context(|| format!("Parsing PATCH {path}"))
+        resp.json::<T>().await.with_context(|| format!("Parsing {method} {path}"))
     }
 
     async fn post<T: for<'de> Deserialize<'de>, B: Serialize>(&self, path: &str, body: &B) -> Result<T> {
-        let resp = self
-            .client
-            .post(self.url(path))
-            .bearer_auth(&self.api_key)
-            .json(body)
-            .send()
-            .await
-            .with_context(|| format!("POST {path}"))?;
+        self.send_with_body(reqwest::Method::POST, path, body).await
+    }
 
-        let status = resp.status();
-        if status == StatusCode::UNAUTHORIZED {
-            anyhow::bail!("Unauthorized — check your api_key in config.toml");
-        }
-        if !status.is_success() {
-            let text = resp.text().await.unwrap_or_default();
-            let msg = serde_json::from_str::<serde_json::Value>(&text)
-                .ok()
-                .and_then(|v| v["error"]["message"].as_str().map(String::from))
-                .unwrap_or(text);
-            anyhow::bail!("{msg}");
-        }
-
-        resp.json::<T>().await.with_context(|| format!("Parsing POST {path}"))
+    async fn patch<T: for<'de> Deserialize<'de>, B: Serialize>(&self, path: &str, body: &B) -> Result<T> {
+        self.send_with_body(reqwest::Method::PATCH, path, body).await
     }
 
     async fn get<T: for<'de> Deserialize<'de>>(&self, path: &str) -> Result<T> {

@@ -49,6 +49,10 @@ pub enum Panel {
 
 pub const RESOURCE_TYPES: [&str; 4] = ["deuterium", "metals", "ice", "carbon_compounds"];
 pub const RESOURCE_LABELS: [&str; 4] = ["deuterium", "metals", "ice", "carbon"];
+pub const DETACH_MODES: [(&str, &str); 2] = [
+    ("drifting", "drifting — leave in sector"),
+    ("hidden_on_asteroid", "hidden — attach to asteroid"),
+];
 
 #[derive(Default)]
 pub enum AtomicPrinterCraftInput {
@@ -403,6 +407,20 @@ impl AppState {
         self.scan_history.get(self.scan_history_idx)
     }
 
+    fn probe_current_sector_scan(&self) -> Option<&SectorObservation> {
+        let current_pos = self.probe.as_ref()
+            .and_then(|p| p.sector.as_ref())
+            .and_then(|s| s.relative.as_ref())
+            .map(|r| (r.x as i64, r.y as i64, r.z as i64));
+        if let Some(pos) = current_pos {
+            self.scan_history.iter().find(|s| {
+                (s.relative_coordinates.x as i64, s.relative_coordinates.y as i64, s.relative_coordinates.z as i64) == pos
+            })
+        } else {
+            self.scan_history.first()
+        }
+    }
+
     pub fn scan_hist_next(&mut self) {
         if !self.scan_history.is_empty() {
             let new = (self.scan_history_idx + 1).min(self.scan_history.len() - 1);
@@ -515,7 +533,7 @@ impl AppState {
         self.travel = TravelInput::Confirming { x, y, z, sector_distance, fuel_cost, eta_minutes, error };
     }
 
-    pub fn travel_go_sector(&mut self, x: i32, y: i32, z: i32, _dist_hint: Option<i64>) {
+    pub fn travel_go_sector(&mut self, x: i32, y: i32, z: i32) {
         let (sector_distance, fuel_cost, eta_minutes) = self.travel_preview(x, y, z);
         self.travel = TravelInput::Confirming { x, y, z, sector_distance, fuel_cost, eta_minutes, error: None };
     }
@@ -722,21 +740,44 @@ impl AppState {
         }
     }
 
-    pub fn collect_salvage_candidates(&self) -> Vec<(String, String)> {
-        let current_pos = self.probe.as_ref()
-            .and_then(|p| p.sector.as_ref())
-            .and_then(|s| s.relative.as_ref())
-            .map(|r| (r.x as i64, r.y as i64, r.z as i64));
-
-        let sector = if let Some(pos) = current_pos {
-            self.scan_history.iter().find(|s| {
-                (s.relative_coordinates.x as i64, s.relative_coordinates.y as i64, s.relative_coordinates.z as i64) == pos
-            })
-        } else {
-            self.scan_history.first()
-        };
-
+    pub fn collect_mineable_candidates(&self) -> Vec<(String, String)> {
+        let sector = self.probe_current_sector_scan();
         sector
+            .and_then(|s| s.objects.as_ref())
+            .map(|objects| {
+                objects.iter()
+                    .flat_map(|o| o.minable_targets.iter().flatten())
+                    .filter(|t| matches!(t.object_type, SectorObjectType::Asteroid))
+                    .map(|t| (t.id.clone(), t.name.clone().unwrap_or_else(|| "unnamed".into())))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn collect_asteroid_candidates(&self) -> Vec<(String, String)> {
+        let sector = self.probe_current_sector_scan();
+        sector
+            .and_then(|s| s.objects.as_ref())
+            .map(|objects| {
+                objects.iter()
+                    .flat_map(|o| {
+                        let direct = if matches!(o.object_type, SectorObjectType::Asteroid) {
+                            o.id.as_ref().map(|id| vec![(id.clone(), o.name.clone().unwrap_or_else(|| "unnamed".into()))])
+                                .unwrap_or_default()
+                        } else { vec![] };
+                        let nested: Vec<(String, String)> = o.bookmark_targets.iter()
+                            .filter(|t| matches!(t.object_type, SectorObjectType::Asteroid))
+                            .map(|t| (t.id.clone(), t.name.clone().unwrap_or_else(|| "unnamed".into())))
+                            .collect();
+                        [direct, nested].concat()
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn collect_salvage_candidates(&self) -> Vec<(String, String)> {
+        self.probe_current_sector_scan()
             .and_then(|s| s.objects.as_ref())
             .map(|objects| {
                 objects.iter()
@@ -814,20 +855,7 @@ impl AppState {
     }
 
     pub fn collect_deploy_candidates(&self) -> Vec<(String, String)> {
-        let current_pos = self.probe.as_ref()
-            .and_then(|p| p.sector.as_ref())
-            .and_then(|s| s.relative.as_ref())
-            .map(|r| (r.x as i64, r.y as i64, r.z as i64));
-
-        let sector = if let Some(pos) = current_pos {
-            self.scan_history.iter().find(|s| {
-                (s.relative_coordinates.x as i64, s.relative_coordinates.y as i64, s.relative_coordinates.z as i64) == pos
-            })
-        } else {
-            self.scan_history.first()
-        };
-
-        sector
+        self.probe_current_sector_scan()
             .and_then(|s| s.objects.as_ref())
             .map(|objects| {
                 objects.iter()
@@ -874,18 +902,7 @@ impl AppState {
     }
 
     pub fn collect_detached_containers(&self) -> Vec<(String, String)> {
-        let current_pos = self.probe.as_ref()
-            .and_then(|p| p.sector.as_ref())
-            .and_then(|s| s.relative.as_ref())
-            .map(|r| (r.x as i64, r.y as i64, r.z as i64));
-        let sector = if let Some(pos) = current_pos {
-            self.scan_history.iter().find(|s| {
-                (s.relative_coordinates.x as i64, s.relative_coordinates.y as i64, s.relative_coordinates.z as i64) == pos
-            })
-        } else {
-            self.scan_history.first()
-        };
-        sector
+        self.probe_current_sector_scan()
             .and_then(|s| s.objects.as_ref())
             .map(|objects| {
                 objects.iter()
