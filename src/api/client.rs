@@ -1,4 +1,4 @@
-use super::types::{CraftingRecipe, Manny, Probe, ProbeInventory, ProbeMovement, SectorObservation};
+use super::types::{CraftingRecipe, Manny, Probe, ProbeInventory, ProbeMovement, SectorObservation, VisitedSector};
 use anyhow::{Context, Result};
 use reqwest::{Client, StatusCode, Url};
 use serde::{Deserialize, Serialize};
@@ -267,6 +267,13 @@ impl ApiClient {
         struct Resp { manny: Manny }
         let path = format!("/api/probe/mannies/{manny_id}/recover-storage-container");
         Ok(self.post::<Resp, _>(&path, &Body { object_id }).await?.manny)
+    }
+
+    pub async fn get_visited_sectors(&self) -> Result<Vec<VisitedSector>> {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Resp { visited_sectors: Vec<VisitedSector> }
+        Ok(self.get::<Resp>("/api/probe/visited-sectors").await?.visited_sectors)
     }
 
     pub async fn get_crafting_recipes(&self) -> Result<Vec<CraftingRecipe>> {

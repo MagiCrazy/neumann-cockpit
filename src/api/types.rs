@@ -226,6 +226,17 @@ pub struct ProbeInventory {
     pub containers: Vec<StorageContainer>,
 }
 
+// ── Visited sectors ───────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VisitedSector {
+    pub relative_coordinates: Vector,
+    pub first_visited_at: DateTime<Utc>,
+    pub last_visited_at: DateTime<Utc>,
+    pub visit_count: i64,
+}
+
 // ── Systems ───────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
