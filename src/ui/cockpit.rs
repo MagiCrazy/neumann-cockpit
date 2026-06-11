@@ -709,29 +709,24 @@ fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
         let hist_inner = hist_block.inner(history_area);
         frame.render_widget(hist_block, history_area);
 
-        let items: Vec<Line> = state
+        let items: Vec<ListItem> = state
             .scan_history
             .iter()
-            .enumerate()
-            .map(|(i, s)| {
+            .map(|s| {
                 let c = &s.relative_coordinates;
                 let label = format!("{},{},{}", c.x as i64, c.y as i64, c.z as i64);
                 let color = sector_interest_color(s);
-                let selected = i == state.scan_history_idx;
-                if selected {
-                    Line::from(vec![
-                        Span::styled("▶ ", Style::default().fg(Color::White)),
-                        Span::styled(label, Style::default().fg(color).add_modifier(Modifier::BOLD)),
-                    ])
-                } else {
-                    Line::from(vec![
-                        Span::raw("  "),
-                        Span::styled(label, Style::default().fg(color)),
-                    ])
-                }
+                ListItem::new(Line::from(Span::styled(label, Style::default().fg(color))))
             })
             .collect();
-        frame.render_widget(Paragraph::new(items), hist_inner);
+
+        let list = List::new(items)
+            .highlight_style(Style::default().add_modifier(Modifier::BOLD))
+            .highlight_symbol("▶ ");
+
+        let mut list_state = ListState::default();
+        list_state.select(Some(state.scan_history_idx));
+        frame.render_stateful_widget(list, hist_inner, &mut list_state);
     }
 
     // Detail area
