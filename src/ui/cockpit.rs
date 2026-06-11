@@ -844,14 +844,15 @@ fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
         }
         ScanMode::Current => {
             if let Some(remaining) = state.scan_batch {
+                let total = state.scan_batch_total.max(1);
+                let done = total.saturating_sub(remaining);
+                let ratio = (done as f64 / total as f64).clamp(0.0, 1.0);
                 frame.render_widget(
-                    Paragraph::new(Line::from(vec![
-                        Span::styled("⟳ scanning  ", Style::default().fg(Color::Yellow)),
-                        Span::styled(
-                            format!("{remaining} remaining"),
-                            Style::default().fg(Color::White),
-                        ),
-                    ])),
+                    make_line_gauge(
+                        &format!("⟳ scanning {done}/{total}"),
+                        ratio,
+                        Color::Yellow,
+                    ),
                     hint_area,
                 );
             } else if focused {
