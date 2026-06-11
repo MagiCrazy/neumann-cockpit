@@ -54,6 +54,64 @@ pub const DETACH_MODES: [(&str, &str); 2] = [
     ("hidden_on_asteroid", "hidden — attach to asteroid"),
 ];
 
+/// Action applicable to a sector object from the scanner panel.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ObjectAction {
+    Mine,
+    Inspect,
+    Salvage,
+    Recover,
+    DeployWaypoint,
+}
+
+impl ObjectAction {
+    pub fn label(&self) -> &'static str {
+        match self {
+            ObjectAction::Mine => "mine",
+            ObjectAction::Inspect => "inspect",
+            ObjectAction::Salvage => "salvage",
+            ObjectAction::Recover => "recover",
+            ObjectAction::DeployWaypoint => "deploy waypoint",
+        }
+    }
+}
+
+/// Where a scanner object entry comes from; determines which actions apply
+/// (mirrors the candidate sets of the manny-first flows).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ObjectProvenance {
+    TopLevel,
+    MinableTarget,
+    BookmarkTarget,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScannerObjectEntry {
+    pub id: String,
+    pub name: String,
+    pub object_type: SectorObjectType,
+    pub provenance: ObjectProvenance,
+}
+
+#[derive(Default)]
+pub enum ObjectActionInput {
+    #[default]
+    Inactive,
+    PickAction {
+        object_id: String,
+        object_name: String,
+        actions: Vec<ObjectAction>,
+        selection: usize,
+    },
+    PickManny {
+        object_id: String,
+        object_name: String,
+        action: ObjectAction,
+        mannies: Vec<(String, String)>,
+        selection: usize,
+    },
+}
+
 #[derive(Default)]
 pub enum AtomicPrinterCraftInput {
     #[default]
@@ -312,6 +370,9 @@ pub struct AppState {
     pub scan_error: Option<String>,
     pub scan_batch: Option<usize>,
     pub scan_detail_scroll: usize,
+    /// Some(idx) when the scanner panel is in object-browsing mode.
+    pub scanner_obj_selection: Option<usize>,
+    pub object_action: ObjectActionInput,
     pub travel: TravelInput,
     pub repair: RepairInput,
     pub mine: MineInput,
@@ -422,6 +483,112 @@ impl AppState {
         self.scan_loading = false;
         self.scan_error = None;
         self.scan_mode = ScanMode::Current;
+        // Object list may have changed — leave browsing mode.
+        self.scanner_obj_selection = None;
+    }
+
+    /// True when the displayed history entry is the sector the probe is in.
+    pub fn viewing_probe_sector(&self) -> bool {
+        match (self.current_sector(), self.probe_sector_coords()) {
+            (Some(s), Some(pos)) => {
+                (
+                    s.relative_coordinates.x.round() as i32,
+                    s.relative_coordinates.y.round() as i32,
+                    s.relative_coordinates.z.round() as i32,
+                ) == pos
+            }
+            _ => false,
+        }
+    }
+
+    /// Actionable objects of the probe's current sector, in display order:
+    /// for each top-level object, the object itself (if it has an id), then
+    /// its minable targets, then its bookmark-target asteroids.
+    pub fn scanner_objects(&self) -> Vec<ScannerObjectEntry> {
+        if !self.viewing_probe_sector() {
+            return vec![];
+        }
+        let Some(objects) = self.current_sector().and_then(|s| s.objects.as_ref()) else {
+            return vec![];
+        };
+        let mut out: Vec<ScannerObjectEntry> = Vec::new();
+        let push = |out: &mut Vec<ScannerObjectEntry>, entry: ScannerObjectEntry| {
+            if !out.iter().any(|e| e.id == entry.id) {
+                out.push(entry);
+            }
+        };
+        for o in objects {
+            if let Some(id) = &o.id {
+                push(&mut out, ScannerObjectEntry {
+                    id: id.clone(),
+                    name: o.name.clone().unwrap_or_else(|| format!("{:?}", o.object_type).to_lowercase()),
+                    object_type: o.object_type.clone(),
+                    provenance: ObjectProvenance::TopLevel,
+                });
+            }
+            for t in o.minable_targets.iter().flatten() {
+                push(&mut out, ScannerObjectEntry {
+                    id: t.id.clone(),
+                    name: t.name.clone().unwrap_or_else(|| "unnamed".into()),
+                    object_type: t.object_type.clone(),
+                    provenance: ObjectProvenance::MinableTarget,
+                });
+            }
+            for t in &o.bookmark_targets {
+                if matches!(t.object_type, SectorObjectType::Asteroid) {
+                    push(&mut out, ScannerObjectEntry {
+                        id: t.id.clone(),
+                        name: t.name.clone().unwrap_or_else(|| "unnamed".into()),
+                        object_type: t.object_type.clone(),
+                        provenance: ObjectProvenance::BookmarkTarget,
+                    });
+                }
+            }
+        }
+        out
+    }
+
+    /// Actions available for an entry, mirroring the manny-first candidate
+    /// sets (mine ← minable targets; inspect ← top-level + bookmark-target
+    /// asteroids; salvage ← sector mannies; recover ← detached containers;
+    /// deploy ← any top-level object, when a bookmark is in inventory).
+    pub fn actions_for_object(&self, entry: &ScannerObjectEntry) -> Vec<ObjectAction> {
+        let mut actions: Vec<ObjectAction> = Vec::new();
+        match (entry.provenance, &entry.object_type) {
+            (ObjectProvenance::MinableTarget, SectorObjectType::Asteroid) => {
+                actions.push(ObjectAction::Mine);
+            }
+            (ObjectProvenance::TopLevel | ObjectProvenance::BookmarkTarget, SectorObjectType::Asteroid) => {
+                actions.push(ObjectAction::Inspect);
+            }
+            (ObjectProvenance::TopLevel, SectorObjectType::Manny) => {
+                actions.push(ObjectAction::Salvage);
+            }
+            (ObjectProvenance::TopLevel, SectorObjectType::DetachedContainer) => {
+                actions.push(ObjectAction::Recover);
+            }
+            _ => {}
+        }
+        if entry.provenance == ObjectProvenance::TopLevel
+            && self.inventory_waypoint_bookmark_id().is_some()
+        {
+            actions.push(ObjectAction::DeployWaypoint);
+        }
+        actions
+    }
+
+    pub fn scanner_obj_next(&mut self) {
+        let count = self.scanner_objects().len();
+        if let (Some(sel), true) = (self.scanner_obj_selection, count > 0) {
+            self.scanner_obj_selection = Some((sel + 1) % count);
+        }
+    }
+
+    pub fn scanner_obj_prev(&mut self) {
+        let count = self.scanner_objects().len();
+        if let (Some(sel), true) = (self.scanner_obj_selection, count > 0) {
+            self.scanner_obj_selection = Some(sel.checked_sub(1).unwrap_or(count - 1));
+        }
     }
 
     pub fn current_sector(&self) -> Option<&SectorObservation> {
@@ -962,12 +1129,18 @@ impl AppState {
     pub fn set_inspect_error(&mut self, msg: String) {
         if let InspectInput::PickAsteroid { ref mut error, .. } = self.inspect {
             *error = Some(msg);
+        } else {
+            // Inspect was dispatched without the picker overlay (single
+            // candidate or object-first flow) — surface in the status bar.
+            self.error = Some(format!("inspect: {msg}"));
         }
     }
 
     pub fn set_recover_error(&mut self, msg: String) {
         if let RecoverInput::PickContainer { ref mut error, .. } = self.recover {
             *error = Some(msg);
+        } else {
+            self.error = Some(format!("recover: {msg}"));
         }
     }
 
@@ -1834,5 +2007,109 @@ mod tests {
         ]"#)];
         let result = state.collect_detached_containers();
         assert_eq!(result[0].1, "unnamed container");
+    }
+
+    // ── scanner_objects / actions_for_object ─────────────────────────────────
+
+    const MIXED_OBJECTS: &str = r#"[
+        {
+            "id": "planet-1", "type": "planet", "name": "P1",
+            "estimated": null, "summary": null, "mass": null, "massUnit": null,
+            "radius": null, "radiusUnit": null, "dangerLevel": null, "salvageable": null,
+            "mannyState": null, "mannyUid": null, "cargo": null, "itemType": null,
+            "quantity": null, "containerSpace": null, "mode": null, "targetObjectId": null,
+            "capacity": null, "capacityUnit": null,
+            "minableTargets": [
+                {"id": "ast-1", "type": "asteroid", "name": "Rock A", "mass": null, "resourceTypes": ["metals"]}
+            ],
+            "waypointBookmarks": [], "bookmarkTargets": []
+        },
+        {
+            "id": "wreck-1", "type": "manny", "name": "Lost Manny",
+            "estimated": null, "summary": null, "mass": null, "massUnit": null,
+            "radius": null, "radiusUnit": null, "dangerLevel": null, "salvageable": true,
+            "mannyState": "wreck", "mannyUid": null, "cargo": null, "itemType": null,
+            "quantity": null, "containerSpace": null, "mode": null, "targetObjectId": null,
+            "capacity": null, "capacityUnit": null, "minableTargets": null,
+            "waypointBookmarks": [], "bookmarkTargets": []
+        },
+        {
+            "id": "dc-1", "type": "detached_container", "name": "Floater",
+            "estimated": null, "summary": null, "mass": null, "massUnit": null,
+            "radius": null, "radiusUnit": null, "dangerLevel": null, "salvageable": null,
+            "mannyState": null, "mannyUid": null, "cargo": null, "itemType": null,
+            "quantity": null, "containerSpace": null, "mode": null, "targetObjectId": null,
+            "capacity": null, "capacityUnit": null, "minableTargets": null,
+            "waypointBookmarks": [], "bookmarkTargets": []
+        }
+    ]"#;
+
+    #[test]
+    fn scanner_objects_empty_when_not_in_probe_sector() {
+        let mut state = AppState::default();
+        state.probe = Some(probe_at(4., 0., 0.));
+        state.scan_history = vec![make_sector_with_objects(0., 0., 0., MIXED_OBJECTS)];
+        assert!(!state.viewing_probe_sector());
+        assert!(state.scanner_objects().is_empty());
+    }
+
+    #[test]
+    fn scanner_objects_order_top_level_then_nested() {
+        let mut state = AppState::default();
+        state.probe = Some(probe_at(0., 0., 0.));
+        state.scan_history = vec![make_sector_with_objects(0., 0., 0., MIXED_OBJECTS)];
+        assert!(state.viewing_probe_sector());
+        let entries = state.scanner_objects();
+        let ids: Vec<&str> = entries.iter().map(|e| e.id.as_str()).collect();
+        assert_eq!(ids, vec!["planet-1", "ast-1", "wreck-1", "dc-1"]);
+        assert_eq!(entries[1].provenance, ObjectProvenance::MinableTarget);
+        assert_eq!(entries[2].provenance, ObjectProvenance::TopLevel);
+    }
+
+    #[test]
+    fn actions_for_object_by_kind() {
+        let mut state = AppState::default();
+        state.probe = Some(probe_at(0., 0., 0.));
+        state.scan_history = vec![make_sector_with_objects(0., 0., 0., MIXED_OBJECTS)];
+        let entries = state.scanner_objects();
+
+        // planet (top-level, no bookmark in inventory): no actions
+        assert!(state.actions_for_object(&entries[0]).is_empty());
+        // minable asteroid: mine
+        assert_eq!(state.actions_for_object(&entries[1]), vec![ObjectAction::Mine]);
+        // manny wreck: salvage
+        assert_eq!(state.actions_for_object(&entries[2]), vec![ObjectAction::Salvage]);
+        // detached container: recover
+        assert_eq!(state.actions_for_object(&entries[3]), vec![ObjectAction::Recover]);
+    }
+
+    #[test]
+    fn actions_include_deploy_when_bookmark_in_inventory() {
+        let mut state = AppState::default();
+        let items = r#"[{"id": "wb-1", "type": "waypoint_bookmark", "name": "Bookmark",
+            "containerSpace": 0.1, "currentTask": null, "taskProgressPercent": 0.0,
+            "location": null, "cargo": null, "container": null}]"#;
+        state.probe = Some(probe_with_inventory(items, "[]"));
+        // probe_with_inventory has no sector — give it one at origin
+        if let Some(ref mut p) = state.probe {
+            p.sector = Some(serde_json::from_str(r#"{"relative": {"x": 0.0, "y": 0.0, "z": 0.0}}"#).unwrap());
+        }
+        state.scan_history = vec![make_sector_with_objects(0., 0., 0., MIXED_OBJECTS)];
+        let entries = state.scanner_objects();
+        // top-level planet gains deploy; nested minable target does not
+        assert_eq!(state.actions_for_object(&entries[0]), vec![ObjectAction::DeployWaypoint]);
+        assert_eq!(state.actions_for_object(&entries[1]), vec![ObjectAction::Mine]);
+    }
+
+    #[test]
+    fn scanner_obj_nav_wraps() {
+        let mut state = AppState::default();
+        state.probe = Some(probe_at(0., 0., 0.));
+        state.scan_history = vec![make_sector_with_objects(0., 0., 0., MIXED_OBJECTS)];
+        state.scanner_obj_selection = Some(0);
+        state.scanner_obj_prev();
+        assert_eq!(state.scanner_obj_selection, Some(3));
+        state.scanner_obj_next();
+        assert_eq!(state.scanner_obj_selection, Some(0));
     }
 }

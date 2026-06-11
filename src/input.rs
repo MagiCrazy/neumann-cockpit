@@ -9,8 +9,9 @@ use crate::api::tasks::{
 };
 use crate::app::{
     ApiMessage, AppState, AtomicPrinterCraftInput, CraftInput, DeployInput, DetachInput,
-    InspectInput, JettisonInput, MineInput, Panel, RecallInput, RecoverInput, RenameMannyInput,
-    RepairInput, SalvageInput, ScanMode, TravelInput, DETACH_MODES, RESOURCE_TYPES,
+    InspectInput, JettisonInput, MineInput, ObjectAction, ObjectActionInput, Panel, RecallInput,
+    RecoverInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, TravelInput,
+    DETACH_MODES, RESOURCE_TYPES,
 };
 
 fn neighbors_d1() -> Vec<(i32, i32, i32)> {
@@ -137,6 +138,11 @@ pub fn handle_event(
         return;
     }
 
+    if !matches!(state.object_action, ObjectActionInput::Inactive) {
+        handle_object_action_event(k.code, state, client, tx);
+        return;
+    }
+
     if in_travel {
         handle_travel_event(k.code, state, client, tx);
         return;
@@ -189,10 +195,43 @@ pub fn handle_event(
         return;
     }
 
+    let in_object_mode =
+        state.focused == Some(Panel::Scanner) && state.scanner_obj_selection.is_some();
+
     match k.code {
         KeyCode::Char('q') => state.set_quit(),
         KeyCode::Char('b') => state.open_map(),
+        KeyCode::Esc if in_object_mode => state.scanner_obj_selection = None,
         KeyCode::Esc => state.focused = None,
+        KeyCode::Char('o') if state.focused == Some(Panel::Scanner) => {
+            if state.scanner_obj_selection.is_some() {
+                state.scanner_obj_selection = None;
+            } else if !state.scanner_objects().is_empty() {
+                state.scanner_obj_selection = Some(0);
+            } else if state.viewing_probe_sector() {
+                state.error = Some("no actionable objects in current sector".into());
+            } else {
+                state.error = Some("object actions only available in the probe's sector".into());
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') if in_object_mode => state.scanner_obj_next(),
+        KeyCode::Up | KeyCode::Char('k') if in_object_mode => state.scanner_obj_prev(),
+        KeyCode::Enter if in_object_mode => {
+            let entries = state.scanner_objects();
+            if let Some(entry) = state.scanner_obj_selection.and_then(|i| entries.get(i)) {
+                let actions = state.actions_for_object(entry);
+                if actions.is_empty() {
+                    state.error = Some(format!("no actions available for {}", entry.name));
+                } else {
+                    state.object_action = ObjectActionInput::PickAction {
+                        object_id: entry.id.clone(),
+                        object_name: entry.name.clone(),
+                        actions,
+                        selection: 0,
+                    };
+                }
+            }
+        }
         KeyCode::Char('t') => {
             state.travel = TravelInput::Typing(String::new());
         }
@@ -1089,6 +1128,133 @@ fn handle_detach_event(
             }
         }
         DetachInput::Inactive => {}
+    }
+}
+
+/// Send the chosen object action, reusing the existing wizards/endpoints.
+fn dispatch_object_action(
+    state: &mut AppState,
+    client: &ApiClient,
+    tx: &mpsc::Sender<ApiMessage>,
+    action: ObjectAction,
+    object: (String, String),
+    manny: (String, String),
+) {
+    let (object_id, object_name) = object;
+    let (manny_id, manny_name) = manny;
+    state.object_action = ObjectActionInput::Inactive;
+    state.scanner_obj_selection = None;
+    match action {
+        ObjectAction::Mine => {
+            state.mine = MineInput::Configure {
+                manny_id,
+                manny_name,
+                object_id,
+                object_name,
+                resources: [false, true, false, false],
+                amount_buf: "0.30".into(),
+                amount_mode: false,
+                error: None,
+            };
+        }
+        ObjectAction::Inspect => {
+            fetch_inspect(manny_id, object_id, client.clone(), tx.clone());
+        }
+        ObjectAction::Salvage => {
+            state.salvage = SalvageInput::Confirm {
+                manny_id,
+                manny_name,
+                object_id,
+                object_name,
+                error: None,
+            };
+        }
+        ObjectAction::Recover => {
+            fetch_recover(manny_id, object_id, client.clone(), tx.clone());
+        }
+        ObjectAction::DeployWaypoint => {
+            state.deploy = DeployInput::EnterName {
+                manny_id,
+                object_id,
+                object_name,
+                name_buf: String::new(),
+                error: None,
+            };
+        }
+    }
+}
+
+fn handle_object_action_event(
+    code: KeyCode,
+    state: &mut AppState,
+    client: &ApiClient,
+    tx: &mpsc::Sender<ApiMessage>,
+) {
+    match &state.object_action {
+        ObjectActionInput::PickAction { selection, actions, .. } => {
+            let sel = *selection;
+            let count = actions.len();
+            match code {
+                KeyCode::Esc => state.object_action = ObjectActionInput::Inactive,
+                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                    if let Some(new_sel) = list_nav(code, sel, count) {
+                        if let ObjectActionInput::PickAction { ref mut selection, .. } = state.object_action {
+                            *selection = new_sel;
+                        }
+                    }
+                }
+                KeyCode::Enter => {
+                    let (object_id, object_name, action) = {
+                        let ObjectActionInput::PickAction { ref object_id, ref object_name, ref actions, selection } = state.object_action else { return };
+                        (object_id.clone(), object_name.clone(), actions[selection])
+                    };
+                    let mannies = state.collect_idle_onboard_mannies();
+                    match mannies.len() {
+                        0 => {
+                            state.object_action = ObjectActionInput::Inactive;
+                            state.error = Some("no idle Manny on board".into());
+                        }
+                        1 => {
+                            let manny = mannies.into_iter().next().unwrap();
+                            dispatch_object_action(state, client, tx, action, (object_id, object_name), manny);
+                        }
+                        _ => {
+                            state.object_action = ObjectActionInput::PickManny {
+                                object_id,
+                                object_name,
+                                action,
+                                mannies,
+                                selection: 0,
+                            };
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        ObjectActionInput::PickManny { selection, mannies, .. } => {
+            let sel = *selection;
+            let count = mannies.len();
+            match code {
+                KeyCode::Esc => state.object_action = ObjectActionInput::Inactive,
+                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                    if let Some(new_sel) = list_nav(code, sel, count) {
+                        if let ObjectActionInput::PickManny { ref mut selection, .. } = state.object_action {
+                            *selection = new_sel;
+                        }
+                    }
+                }
+                KeyCode::Enter => {
+                    let (object, action, manny) = {
+                        let ObjectActionInput::PickManny { ref object_id, ref object_name, action, ref mannies, selection } = state.object_action else { return };
+                        ((object_id.clone(), object_name.clone()), action, mannies[selection].clone())
+                    };
+                    dispatch_object_action(state, client, tx, action, object, manny);
+                }
+                _ => {}
+            }
+        }
+        ObjectActionInput::Inactive => {}
     }
 }
 
