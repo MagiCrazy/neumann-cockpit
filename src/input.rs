@@ -746,6 +746,7 @@ fn handle_jettison_event(
             match code {
                 KeyCode::Esc => state.jettison = JettisonInput::Inactive,
                 KeyCode::Backspace => state.jettison_backspace(),
+                KeyCode::Char('m') | KeyCode::Char('M') => state.jettison_fill_max(),
                 KeyCode::Char(c) => state.jettison_type_char(c),
                 KeyCode::Enter => {
                     let (item_id, amount) = {

@@ -1888,6 +1888,9 @@ fn render_jettison_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
             lines.push(Line::from(vec![
                 Span::styled("MAX  ", Style::default().fg(Color::DarkGray)),
                 Span::styled(format!("{max_amount:.3}"), Style::default().fg(Color::White)),
+                Span::raw("   "),
+                Span::styled("[M]", Style::default().fg(Color::Yellow)),
+                Span::styled(" fill", Style::default().fg(Color::DarkGray)),
                 Span::styled("  [empty = all]", Style::default().fg(Color::DarkGray)),
             ]));
             if let Some(err) = error {

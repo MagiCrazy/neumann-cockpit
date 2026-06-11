@@ -1197,6 +1197,13 @@ impl AppState {
         }
     }
 
+    pub fn jettison_fill_max(&mut self) {
+        if let JettisonInput::EnterAmount { ref mut buf, max_amount, ref mut error, .. } = self.jettison {
+            *buf = format!("{max_amount:.4}");
+            *error = None;
+        }
+    }
+
     pub fn set_craft_error(&mut self, msg: String) {
         if let CraftInput::PickRecipe { ref mut error, .. } = self.craft {
             *error = Some(msg);
@@ -1802,6 +1809,25 @@ mod tests {
             "location": null, "cargo": null, "container": null}]"#;
         state.probe = Some(probe_with_inventory(items, "[]"));
         assert!(state.jettison_for_selected().is_err());
+    }
+
+    #[test]
+    fn jettison_fill_max_sets_buffer() {
+        let mut state = AppState::default();
+        state.jettison = JettisonInput::EnterAmount {
+            item_id: "stock-metals".into(),
+            item_name: "Metals".into(),
+            max_amount: 0.5,
+            buf: "0.1".into(),
+            error: Some("previous".into()),
+        };
+        state.jettison_fill_max();
+        if let JettisonInput::EnterAmount { ref buf, ref error, .. } = state.jettison {
+            assert_eq!(buf, "0.5000");
+            assert!(error.is_none());
+        } else {
+            panic!("expected EnterAmount");
+        }
     }
 
     #[test]
