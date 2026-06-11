@@ -459,6 +459,8 @@ pub struct AppState {
     pub object_action: ObjectActionInput,
     pub waypoints: WaypointsInput,
     pub help_open: bool,
+    /// Read-only detail popup for the selected inventory row.
+    pub inventory_detail_open: bool,
     pub travel: TravelInput,
     pub repair: RepairInput,
     pub mine: MineInput,
