@@ -62,6 +62,8 @@ pub fn handle_event(
     tx: &mpsc::Sender<ApiMessage>,
 ) {
     let Event::Key(k) = event else { return };
+    // Toasts are transient: any keypress dismisses the current one.
+    state.toast = None;
     let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
     let in_scan_input = matches!(state.scan_mode, ScanMode::Input(_));
     let in_direction_pick = matches!(state.scan_mode, ScanMode::DirectionPick);

@@ -2920,6 +2920,11 @@ fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
         String::new()
     };
 
+    let toast_part = state
+        .active_toast()
+        .map(|t| format!("  ✓ {t}"))
+        .unwrap_or_default();
+
     let left = Line::from(vec![
         Span::styled("[r]", Style::default().fg(Color::Cyan)),
         Span::raw(" refresh  "),
@@ -2941,6 +2946,7 @@ fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
         Span::raw(" help  "),
         Span::styled("[q]", Style::default().fg(Color::Cyan)),
         Span::raw(" quit"),
+        Span::styled(toast_part, Style::default().fg(Color::Green)),
         Span::styled(error_part, Style::default().fg(Color::Red)),
     ]);
 

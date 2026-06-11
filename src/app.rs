@@ -461,6 +461,8 @@ pub struct AppState {
     pub help_open: bool,
     /// Read-only detail popup for the selected inventory row.
     pub inventory_detail_open: bool,
+    /// Transient success message shown in the status bar.
+    pub toast: Option<(String, DateTime<Local>)>,
     pub travel: TravelInput,
     pub repair: RepairInput,
     pub mine: MineInput,
@@ -513,6 +515,18 @@ impl AppState {
 
     pub fn set_error(&mut self, msg: String) {
         self.error = Some(msg);
+    }
+
+    pub fn set_toast(&mut self, msg: impl Into<String>) {
+        self.toast = Some((msg.into(), Local::now()));
+    }
+
+    /// Toast message while fresh (< 5 s); expired toasts are not shown.
+    pub fn active_toast(&self) -> Option<&str> {
+        self.toast
+            .as_ref()
+            .filter(|(_, t)| (Local::now() - *t).num_seconds() < 5)
+            .map(|(m, _)| m.as_str())
     }
 
     pub fn clear_error(&mut self) {
@@ -1851,6 +1865,18 @@ mod tests {
         } else {
             panic!("expected EnterAmount");
         }
+    }
+
+    #[test]
+    fn toast_expires_after_five_seconds() {
+        let mut state = AppState::default();
+        state.set_toast("mining order sent");
+        assert_eq!(state.active_toast(), Some("mining order sent"));
+        // age the toast artificially
+        if let Some((_, ref mut t)) = state.toast {
+            *t -= chrono::Duration::seconds(6);
+        }
+        assert_eq!(state.active_toast(), None);
     }
 
     #[test]
