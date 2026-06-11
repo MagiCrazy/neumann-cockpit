@@ -112,6 +112,34 @@ pub enum ObjectActionInput {
     },
 }
 
+/// Category of a known destination shown in the waypoints overlay.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum WaypointKind {
+    Bookmark,
+    Star,
+    Minable,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WaypointEntry {
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+    pub distance: i64,
+    pub label: String,
+    pub kind: WaypointKind,
+}
+
+#[derive(Default)]
+pub enum WaypointsInput {
+    #[default]
+    Inactive,
+    Browsing {
+        entries: Vec<WaypointEntry>,
+        selection: usize,
+    },
+}
+
 #[derive(Default)]
 pub enum AtomicPrinterCraftInput {
     #[default]
@@ -373,6 +401,7 @@ pub struct AppState {
     /// Some(idx) when the scanner panel is in object-browsing mode.
     pub scanner_obj_selection: Option<usize>,
     pub object_action: ObjectActionInput,
+    pub waypoints: WaypointsInput,
     pub travel: TravelInput,
     pub repair: RepairInput,
     pub mine: MineInput,
@@ -575,6 +604,78 @@ impl AppState {
             actions.push(ObjectAction::DeployWaypoint);
         }
         actions
+    }
+
+    /// Known destinations aggregated from scan history: deployed waypoint
+    /// bookmarks first, then sectors with a star, then sectors with minable
+    /// targets. One entry per (sector, category); bookmarks listed per name.
+    pub fn collect_waypoints(&self) -> Vec<WaypointEntry> {
+        let mut bookmarks: Vec<WaypointEntry> = Vec::new();
+        let mut stars: Vec<WaypointEntry> = Vec::new();
+        let mut minables: Vec<WaypointEntry> = Vec::new();
+
+        for s in &self.scan_history {
+            let (x, y, z) = (
+                s.relative_coordinates.x.round() as i32,
+                s.relative_coordinates.y.round() as i32,
+                s.relative_coordinates.z.round() as i32,
+            );
+            let Some(objects) = &s.objects else { continue };
+
+            for o in objects {
+                let obj_name = o.name.clone().unwrap_or_else(|| "object".into());
+                for wb in &o.waypoint_bookmarks {
+                    bookmarks.push(WaypointEntry {
+                        x, y, z,
+                        distance: s.distance,
+                        label: format!("{} @ {}", wb.name, obj_name),
+                        kind: WaypointKind::Bookmark,
+                    });
+                }
+                for t in &o.bookmark_targets {
+                    let t_name = t.name.clone().unwrap_or_else(|| "object".into());
+                    for wb in &t.waypoint_bookmarks {
+                        bookmarks.push(WaypointEntry {
+                            x, y, z,
+                            distance: s.distance,
+                            label: format!("{} @ {}", wb.name, t_name),
+                            kind: WaypointKind::Bookmark,
+                        });
+                    }
+                }
+            }
+
+            let has_star = objects.iter().any(|o| {
+                matches!(o.object_type, SectorObjectType::Star | SectorObjectType::SolarSystem)
+            });
+            if has_star {
+                stars.push(WaypointEntry {
+                    x, y, z,
+                    distance: s.distance,
+                    label: "star".into(),
+                    kind: WaypointKind::Star,
+                });
+            }
+
+            let has_minable = objects.iter().any(|o| {
+                o.minable_targets.as_ref().is_some_and(|t| !t.is_empty())
+            });
+            if has_minable {
+                minables.push(WaypointEntry {
+                    x, y, z,
+                    distance: s.distance,
+                    label: "minable resources".into(),
+                    kind: WaypointKind::Minable,
+                });
+            }
+        }
+
+        stars.sort_by_key(|e| e.distance);
+        minables.sort_by_key(|e| e.distance);
+        let mut out = bookmarks;
+        out.extend(stars);
+        out.extend(minables);
+        out
     }
 
     pub fn scanner_obj_next(&mut self) {
@@ -2099,6 +2200,66 @@ mod tests {
         // top-level planet gains deploy; nested minable target does not
         assert_eq!(state.actions_for_object(&entries[0]), vec![ObjectAction::DeployWaypoint]);
         assert_eq!(state.actions_for_object(&entries[1]), vec![ObjectAction::Mine]);
+    }
+
+    // ── collect_waypoints ─────────────────────────────────────────────────────
+
+    #[test]
+    fn collect_waypoints_empty_history() {
+        assert!(AppState::default().collect_waypoints().is_empty());
+    }
+
+    #[test]
+    fn collect_waypoints_bookmarks_first_then_sorted_by_distance() {
+        let mut state = AppState::default();
+        let star_far: SectorObservation = serde_json::from_str(r#"{
+            "relativeCoordinates": {"x": 6.0, "y": 0.0, "z": 0.0},
+            "distance": 6, "knowledgeLevel": "detailed", "confidence": 1.0,
+            "objects": [{
+                "id": "star-1", "type": "star", "name": "Sun",
+                "estimated": null, "summary": null, "mass": null, "massUnit": null,
+                "radius": null, "radiusUnit": null, "dangerLevel": null, "salvageable": null,
+                "mannyState": null, "mannyUid": null, "cargo": null, "itemType": null,
+                "quantity": null, "containerSpace": null, "mode": null, "targetObjectId": null,
+                "capacity": null, "capacityUnit": null, "minableTargets": null,
+                "waypointBookmarks": [], "bookmarkTargets": []
+            }],
+            "probes": null, "possibleObjects": null, "estimatedObjects": null,
+            "navigationalRisk": null, "message": null, "sensorMode": null, "dataFreshness": null,
+            "scan": {"currentSectorResidenceSeconds": 0, "requiredResidenceSeconds": 0, "scanQuality": 1.0}
+        }"#).unwrap();
+        let bookmark_near: SectorObservation = serde_json::from_str(r#"{
+            "relativeCoordinates": {"x": 2.0, "y": 0.0, "z": 0.0},
+            "distance": 2, "knowledgeLevel": "detailed", "confidence": 1.0,
+            "objects": [{
+                "id": "planet-1", "type": "planet", "name": "P1",
+                "estimated": null, "summary": null, "mass": null, "massUnit": null,
+                "radius": null, "radiusUnit": null, "dangerLevel": null, "salvageable": null,
+                "mannyState": null, "mannyUid": null, "cargo": null, "itemType": null,
+                "quantity": null, "containerSpace": null, "mode": null, "targetObjectId": null,
+                "capacity": null, "capacityUnit": null,
+                "minableTargets": [{"id": "ast-1", "type": "asteroid", "name": "Rock", "mass": null, "resourceTypes": null}],
+                "waypointBookmarks": [{"name": "home", "playerId": 1, "playerName": "me", "createdAt": "2026-01-01T00:00:00Z"}],
+                "bookmarkTargets": []
+            }],
+            "probes": null, "possibleObjects": null, "estimatedObjects": null,
+            "navigationalRisk": null, "message": null, "sensorMode": null, "dataFreshness": null,
+            "scan": {"currentSectorResidenceSeconds": 0, "requiredResidenceSeconds": 0, "scanQuality": 1.0}
+        }"#).unwrap();
+        // far star scanned first (more recent in history)
+        state.scan_history = vec![star_far, bookmark_near];
+
+        let entries = state.collect_waypoints();
+        assert_eq!(entries.len(), 3);
+        // bookmark first regardless of history order
+        assert_eq!(entries[0].kind, WaypointKind::Bookmark);
+        assert!(entries[0].label.contains("home"));
+        assert_eq!((entries[0].x, entries[0].y, entries[0].z), (2, 0, 0));
+        // then star, then minable
+        assert_eq!(entries[1].kind, WaypointKind::Star);
+        assert_eq!(entries[1].distance, 6);
+        assert_eq!(entries[2].kind, WaypointKind::Minable);
+        assert_eq!(entries[2].distance, 2);
     }
 
     #[test]

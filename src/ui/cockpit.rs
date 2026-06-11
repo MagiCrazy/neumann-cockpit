@@ -2,7 +2,7 @@ use crate::api::types::{
     DangerLevel, DataFreshness, KnowledgeLevel, Manny, MannyLocationType, MannyTask,
     MovementPhase, ProbeStatus, SectorObject, SectorObjectType, SectorObservation, SensorMode,
 };
-use crate::app::{is_active_item, AppState, AtomicPrinterCraftInput, CraftInput, DeployInput, DetachInput, InspectInput, JettisonInput, MineInput, ObjectActionInput, Panel, RecallInput, RecoverInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_LABELS, RESOURCE_TYPES};
+use crate::app::{is_active_item, AppState, AtomicPrinterCraftInput, CraftInput, DeployInput, DetachInput, InspectInput, JettisonInput, MineInput, ObjectActionInput, Panel, RecallInput, RecoverInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, TravelInput, WaypointKind, WaypointsInput, RESOURCE_LABELS, RESOURCE_TYPES};
 use chrono::Utc;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -99,6 +99,9 @@ pub fn render(frame: &mut Frame, state: &AppState) {
     }
     if !matches!(state.object_action, ObjectActionInput::Inactive) {
         render_object_action_overlay(frame, area, state);
+    }
+    if !matches!(state.waypoints, WaypointsInput::Inactive) {
+        render_waypoints_overlay(frame, area, state);
     }
 }
 
@@ -2014,6 +2017,65 @@ fn render_detach_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     }
 }
 
+fn render_waypoints_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let WaypointsInput::Browsing { ref entries, selection } = state.waypoints else { return };
+
+    let height = (entries.len() as u16 + 5).min(20);
+    let popup = centered_rect(58, height, area);
+    frame.render_widget(Clear, popup);
+    let block = Block::default()
+        .title(" WAYPOINTS ")
+        .title_alignment(Alignment::Center)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan));
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let items: Vec<ListItem> = entries
+        .iter()
+        .map(|e| {
+            let (icon, color) = match e.kind {
+                WaypointKind::Bookmark => ("◎", Color::Cyan),
+                WaypointKind::Star => ("★", Color::Yellow),
+                WaypointKind::Minable => ("◆", Color::White),
+            };
+            ListItem::new(Line::from(vec![
+                Span::styled(format!("{icon} "), Style::default().fg(color)),
+                Span::raw(format!("{:<28}", e.label)),
+                Span::styled(
+                    format!("({},{},{})", e.x, e.y, e.z),
+                    Style::default().fg(Color::White),
+                ),
+                Span::styled(format!("  d:{}", e.distance), Style::default().fg(Color::DarkGray)),
+            ]))
+        })
+        .collect();
+
+    let list = List::new(items)
+        .highlight_style(Style::default().add_modifier(Modifier::BOLD))
+        .highlight_symbol("▶ ");
+    let mut list_state = ListState::default();
+    list_state.select(Some(selection));
+    frame.render_stateful_widget(list, rows[0], &mut list_state);
+
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
+            Span::raw(" select  "),
+            Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::raw(" travel  "),
+            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::raw(" close"),
+        ])),
+        rows[1],
+    );
+}
+
 fn render_object_action_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     match &state.object_action {
         ObjectActionInput::PickAction { object_name, actions, selection, .. } => {
@@ -2459,6 +2521,8 @@ fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState) {
         Span::raw(" travel  "),
         Span::styled("[b]", Style::default().fg(Color::Cyan)),
         Span::raw(" map  "),
+        Span::styled("[w]", Style::default().fg(Color::Cyan)),
+        Span::raw(" waypoints  "),
         Span::styled("[q]", Style::default().fg(Color::Cyan)),
         Span::raw(" quit"),
         Span::styled(error_part, Style::default().fg(Color::Red)),
