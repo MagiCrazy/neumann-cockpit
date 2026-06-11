@@ -174,10 +174,6 @@ pub enum DeployInput {
 pub enum JettisonInput {
     #[default]
     Inactive,
-    PickItem {
-        items: Vec<(String, String, bool)>,
-        selection: usize,
-    },
     ConfirmManny {
         item_id: String,
         manny_name: String,
@@ -283,6 +279,20 @@ pub enum ApiMessage {
     Error(String),
 }
 
+/// Active items (manny, atomic printer) are listed individually in the
+/// inventory panel; passive items are grouped by type.
+pub fn is_active_item(item_type: &str) -> bool {
+    matches!(item_type, "manny" | "atomic_3d_printer")
+}
+
+/// One navigable row of the inventory panel, in display order.
+#[derive(Debug, Clone, PartialEq)]
+pub enum InventoryRow {
+    Stock { id: String },
+    ActiveItem { id: String },
+    PassiveGroup { item_type: String },
+}
+
 #[derive(Default)]
 pub struct AppState {
     pub probe: Option<Probe>,
@@ -294,6 +304,7 @@ pub struct AppState {
     pub quit: bool,
     pub focused: Option<Panel>,
     pub mannies_selection: usize,
+    pub inventory_selection: usize,
     pub scan_history: Vec<SectorObservation>,
     pub scan_history_idx: usize,
     pub scan_loading: bool,
@@ -329,6 +340,16 @@ impl AppState {
         self.probe = Some(probe);
         self.last_update = Some(Local::now());
         self.error = None;
+        self.clamp_inventory_selection();
+    }
+
+    fn clamp_inventory_selection(&mut self) {
+        let count = self.inventory_rows().len();
+        self.inventory_selection = if count == 0 {
+            0
+        } else {
+            self.inventory_selection.min(count - 1)
+        };
     }
 
     pub fn update_mannies(&mut self, mannies: Vec<Manny>) {
@@ -666,34 +687,102 @@ impl AppState {
         self.map.center_z -= dy;
     }
 
-    pub fn build_jettison_items(&self) -> Vec<(String, String, bool)> {
+    /// Navigable rows of the inventory panel, in display order:
+    /// resource stocks, then active items, then passive groups.
+    pub fn inventory_rows(&self) -> Vec<InventoryRow> {
         let Some(probe) = &self.probe else { return vec![] };
         let inv = &probe.inventory;
-        let mut out: Vec<(String, String, bool)> = Vec::new();
+        let mut out: Vec<InventoryRow> = Vec::new();
         for stock in &inv.resource_stocks {
-            if stock.amount > 0.0 {
-                let label = format!("{} ({:.3} ECE)", stock.name, stock.amount);
-                out.push((stock.id.clone(), label, false));
-            }
+            out.push(InventoryRow::Stock { id: stock.id.clone() });
         }
-        for item in &inv.items {
-            if item.item_type == "manny" {
-                let in_probe = item.location.as_ref()
-                    .map(|l| l.location_type == crate::api::types::MannyLocationType::Probe)
-                    .unwrap_or(false);
-                let idle = item.current_task.is_none();
-                if in_probe && idle {
-                    out.push((item.id.clone(), item.name.clone(), true));
-                }
+        for item in inv.items.iter().filter(|i| is_active_item(&i.item_type)) {
+            out.push(InventoryRow::ActiveItem { id: item.id.clone() });
+        }
+        let mut seen: Vec<&str> = Vec::new();
+        for item in inv.items.iter().filter(|i| !is_active_item(&i.item_type)) {
+            if !seen.contains(&item.item_type.as_str()) {
+                seen.push(&item.item_type);
+                out.push(InventoryRow::PassiveGroup { item_type: item.item_type.clone() });
             }
         }
         out
+    }
+
+    pub fn selected_inventory_row(&self) -> Option<InventoryRow> {
+        self.inventory_rows().into_iter().nth(self.inventory_selection)
+    }
+
+    pub fn inventory_next(&mut self) {
+        let count = self.inventory_rows().len();
+        if count > 0 {
+            self.inventory_selection = (self.inventory_selection + 1) % count;
+        }
+    }
+
+    pub fn inventory_prev(&mut self) {
+        let count = self.inventory_rows().len();
+        if count > 0 {
+            self.inventory_selection = self
+                .inventory_selection
+                .checked_sub(1)
+                .unwrap_or(count - 1);
+        }
+    }
+
+    /// Build the jettison wizard state for the currently selected inventory row.
+    pub fn jettison_for_selected(&self) -> Result<JettisonInput, String> {
+        let Some(probe) = &self.probe else { return Err("no probe data".into()) };
+        match self.selected_inventory_row() {
+            Some(InventoryRow::Stock { id }) => {
+                let stock = probe.inventory.resource_stocks.iter()
+                    .find(|s| s.id == id)
+                    .ok_or_else(|| "stock not found".to_string())?;
+                if stock.amount <= 0.0 {
+                    return Err(format!("{} stock is empty", stock.name));
+                }
+                Ok(JettisonInput::EnterAmount {
+                    item_id: stock.id.clone(),
+                    item_name: stock.name.clone(),
+                    max_amount: stock.amount,
+                    buf: String::new(),
+                    error: None,
+                })
+            }
+            Some(InventoryRow::ActiveItem { id }) => {
+                let item = probe.inventory.items.iter()
+                    .find(|i| i.id == id)
+                    .ok_or_else(|| "item not found".to_string())?;
+                if item.item_type != "manny" {
+                    return Err("only resource stocks and mannies can be jettisoned".into());
+                }
+                let in_probe = item.location.as_ref()
+                    .map(|l| l.location_type == crate::api::types::MannyLocationType::Probe)
+                    .unwrap_or(false);
+                if !in_probe {
+                    return Err(format!("{} is not aboard the probe", item.name));
+                }
+                if item.current_task.is_some() {
+                    return Err(format!("{} is busy", item.name));
+                }
+                Ok(JettisonInput::ConfirmManny {
+                    item_id: item.id.clone(),
+                    manny_name: item.name.clone(),
+                    error: None,
+                })
+            }
+            Some(InventoryRow::PassiveGroup { .. }) => {
+                Err("only resource stocks and mannies can be jettisoned".into())
+            }
+            None => Err("inventory is empty".into()),
+        }
     }
 
     pub fn update_inventory(&mut self, inv: ProbeInventory) {
         if let Some(ref mut probe) = self.probe {
             probe.inventory = inv;
         }
+        self.clamp_inventory_selection();
     }
 
     pub fn jettison_type_char(&mut self, c: char) {
@@ -1154,92 +1243,131 @@ mod tests {
         assert_eq!(state.mine_max_amount(), 0.0);
     }
 
-    // ── build_jettison_items ──────────────────────────────────────────────────
+    // ── inventory_rows / jettison_for_selected ────────────────────────────────
 
-    #[test]
-    fn build_jettison_items_no_probe_is_empty() {
-        let state = AppState::default();
-        assert!(state.build_jettison_items().is_empty());
-    }
-
-    #[test]
-    fn build_jettison_items_resource_stock_included() {
-        let mut state = AppState::default();
-        let probe: Probe = serde_json::from_str(r#"{
+    fn probe_with_inventory(items_json: &str, stocks_json: &str) -> Probe {
+        serde_json::from_str(&format!(r#"{{
             "id": 1, "name": "test", "status": "idle",
-            "fuel": {"deuterium": 100.0}, "sensorMode": "normal",
+            "fuel": {{"deuterium": 100.0}}, "sensorMode": "normal",
             "sector": null, "movement": null, "systems": null,
-            "inventory": {
-                "capacity": 10.0, "usedCapacity": 0.5, "freeCapacity": 9.5,
-                "items": [],
-                "resourceStocks": [{
-                    "id": "stock-metals", "type": "metals", "name": "Metals",
-                    "amount": 0.5, "containerSpace": 0.5, "containers": []
-                }],
+            "inventory": {{
+                "capacity": 10.0, "usedCapacity": 1.0, "freeCapacity": 9.0,
+                "items": {items_json},
+                "resourceStocks": {stocks_json},
                 "externalTanks": [], "containers": []
-            }
-        }"#).unwrap();
-        state.probe = Some(probe);
-        let items = state.build_jettison_items();
-        assert_eq!(items.len(), 1);
-        assert_eq!(items[0].0, "stock-metals");
-        assert!(!items[0].2, "resource stock should not be is_manny");
-        assert!(items[0].1.contains("Metals"));
-        assert!(items[0].1.contains("0.500"));
+            }}
+        }}"#)).unwrap()
+    }
+
+    const STOCK_METALS: &str = r#"[{
+        "id": "stock-metals", "type": "metals", "name": "Metals",
+        "amount": 0.5, "containerSpace": 0.5, "containers": []
+    }]"#;
+
+    fn manny_item(task: Option<&str>) -> String {
+        let task_json = task.map(|t| format!("\"{t}\"")).unwrap_or("null".into());
+        format!(r#"{{
+            "id": "manny-1", "type": "manny", "name": "Manny-1",
+            "containerSpace": 1.0,
+            "currentTask": {task_json},
+            "taskProgressPercent": 0.0,
+            "location": {{"type": "probe", "sector": null}},
+            "cargo": null,
+            "container": null
+        }}"#)
     }
 
     #[test]
-    fn build_jettison_items_idle_probe_manny_included() {
-        let mut state = AppState::default();
-        let probe: Probe = serde_json::from_str(r#"{
-            "id": 1, "name": "test", "status": "idle",
-            "fuel": {"deuterium": 100.0}, "sensorMode": "normal",
-            "sector": null, "movement": null, "systems": null,
-            "inventory": {
-                "capacity": 10.0, "usedCapacity": 1.0, "freeCapacity": 9.0,
-                "items": [{
-                    "id": "manny-1", "type": "manny", "name": "Manny-1",
-                    "containerSpace": 1.0,
-                    "currentTask": null,
-                    "taskProgressPercent": 0.0,
-                    "location": {"type": "probe", "sector": null},
-                    "cargo": null,
-                    "container": null
-                }],
-                "resourceStocks": [], "externalTanks": [], "containers": []
-            }
-        }"#).unwrap();
-        state.probe = Some(probe);
-        let items = state.build_jettison_items();
-        assert_eq!(items.len(), 1);
-        assert_eq!(items[0].0, "manny-1");
-        assert!(items[0].2, "manny item should have is_manny=true");
+    fn inventory_rows_no_probe_is_empty() {
+        let state = AppState::default();
+        assert!(state.inventory_rows().is_empty());
+        assert_eq!(state.selected_inventory_row(), None);
     }
 
     #[test]
-    fn build_jettison_items_busy_manny_excluded() {
+    fn inventory_rows_order_stocks_active_passive() {
         let mut state = AppState::default();
-        let probe: Probe = serde_json::from_str(r#"{
-            "id": 1, "name": "test", "status": "idle",
-            "fuel": {"deuterium": 100.0}, "sensorMode": "normal",
-            "sector": null, "movement": null, "systems": null,
-            "inventory": {
-                "capacity": 10.0, "usedCapacity": 1.0, "freeCapacity": 9.0,
-                "items": [{
-                    "id": "manny-1", "type": "manny", "name": "Manny-1",
-                    "containerSpace": 1.0,
-                    "currentTask": "mining",
-                    "taskProgressPercent": 50.0,
-                    "location": {"type": "probe", "sector": null},
-                    "cargo": null,
-                    "container": null
-                }],
-                "resourceStocks": [], "externalTanks": [], "containers": []
+        let items = format!(r#"[
+            {{"id": "wb-1", "type": "waypoint_bookmark", "name": "Bookmark",
+              "containerSpace": 0.1, "currentTask": null, "taskProgressPercent": 0.0,
+              "location": null, "cargo": null, "container": null}},
+            {{"id": "wb-2", "type": "waypoint_bookmark", "name": "Bookmark",
+              "containerSpace": 0.1, "currentTask": null, "taskProgressPercent": 0.0,
+              "location": null, "cargo": null, "container": null}},
+            {}
+        ]"#, manny_item(None));
+        state.probe = Some(probe_with_inventory(&items, STOCK_METALS));
+        let rows = state.inventory_rows();
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0], InventoryRow::Stock { id: "stock-metals".into() });
+        assert_eq!(rows[1], InventoryRow::ActiveItem { id: "manny-1".into() });
+        assert_eq!(rows[2], InventoryRow::PassiveGroup { item_type: "waypoint_bookmark".into() });
+    }
+
+    #[test]
+    fn inventory_nav_wraps() {
+        let mut state = AppState::default();
+        state.probe = Some(probe_with_inventory(&format!("[{}]", manny_item(None)), STOCK_METALS));
+        assert_eq!(state.inventory_rows().len(), 2);
+        state.inventory_next();
+        assert_eq!(state.inventory_selection, 1);
+        state.inventory_next();
+        assert_eq!(state.inventory_selection, 0);
+        state.inventory_prev();
+        assert_eq!(state.inventory_selection, 1);
+    }
+
+    #[test]
+    fn jettison_for_selected_stock_enters_amount() {
+        let mut state = AppState::default();
+        state.probe = Some(probe_with_inventory("[]", STOCK_METALS));
+        match state.jettison_for_selected() {
+            Ok(JettisonInput::EnterAmount { item_id, item_name, max_amount, .. }) => {
+                assert_eq!(item_id, "stock-metals");
+                assert_eq!(item_name, "Metals");
+                assert_eq!(max_amount, 0.5);
             }
-        }"#).unwrap();
-        state.probe = Some(probe);
-        let items = state.build_jettison_items();
-        assert!(items.is_empty(), "busy manny should not be jettison candidate");
+            other => panic!("expected EnterAmount, got {:?}", std::mem::discriminant(&other.unwrap_or_default())),
+        }
+    }
+
+    #[test]
+    fn jettison_for_selected_idle_manny_confirms() {
+        let mut state = AppState::default();
+        state.probe = Some(probe_with_inventory(&format!("[{}]", manny_item(None)), "[]"));
+        match state.jettison_for_selected() {
+            Ok(JettisonInput::ConfirmManny { item_id, manny_name, .. }) => {
+                assert_eq!(item_id, "manny-1");
+                assert_eq!(manny_name, "Manny-1");
+            }
+            _ => panic!("expected ConfirmManny"),
+        }
+    }
+
+    #[test]
+    fn jettison_for_selected_busy_manny_errors() {
+        let mut state = AppState::default();
+        state.probe = Some(probe_with_inventory(&format!("[{}]", manny_item(Some("mining"))), "[]"));
+        let err = state.jettison_for_selected().err().expect("busy manny should error");
+        assert!(err.contains("busy"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn jettison_for_selected_passive_group_errors() {
+        let mut state = AppState::default();
+        let items = r#"[{"id": "wb-1", "type": "waypoint_bookmark", "name": "Bookmark",
+            "containerSpace": 0.1, "currentTask": null, "taskProgressPercent": 0.0,
+            "location": null, "cargo": null, "container": null}]"#;
+        state.probe = Some(probe_with_inventory(items, "[]"));
+        assert!(state.jettison_for_selected().is_err());
+    }
+
+    #[test]
+    fn update_probe_clamps_inventory_selection() {
+        let mut state = AppState::default();
+        state.inventory_selection = 5;
+        state.update_probe(probe_with_inventory("[]", STOCK_METALS));
+        assert_eq!(state.inventory_selection, 0);
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

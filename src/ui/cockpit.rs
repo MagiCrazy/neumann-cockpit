@@ -2,7 +2,7 @@ use crate::api::types::{
     DangerLevel, DataFreshness, KnowledgeLevel, Manny, MannyLocationType, MannyTask,
     MovementPhase, ProbeStatus, SectorObject, SectorObjectType, SectorObservation, SensorMode,
 };
-use crate::app::{AppState, AtomicPrinterCraftInput, CraftInput, DeployInput, DetachInput, InspectInput, JettisonInput, MineInput, Panel, RecallInput, RecoverInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_LABELS, RESOURCE_TYPES};
+use crate::app::{is_active_item, AppState, AtomicPrinterCraftInput, CraftInput, DeployInput, DetachInput, InspectInput, JettisonInput, MineInput, Panel, RecallInput, RecoverInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_LABELS, RESOURCE_TYPES};
 use chrono::Utc;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -288,6 +288,8 @@ fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focus
 
     if let Some(hint_area) = hint_area_opt {
         let mut hint_spans = vec![
+            Span::styled("[↑↓]", Style::default().fg(Color::Cyan)),
+            Span::raw(" select  "),
             Span::styled("[j]", Style::default().fg(Color::Cyan)),
             Span::raw(" jettison"),
         ];
@@ -325,7 +327,9 @@ fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focus
 
     let items_expanded = focused && !inv.items.is_empty();
     let items_rows: usize = items_row_count(&inv.items, items_expanded);
-    let n_rows = 1 + inv.resource_stocks.len() + items_rows;
+    let containers_rows = containers_row_count(inv, focused);
+    let tanks_rows = tanks_row_count(inv, focused);
+    let n_rows = 1 + inv.resource_stocks.len() + items_rows + containers_rows + tanks_rows;
 
     let mut sections: Vec<Constraint> = (0..n_rows).map(|_| Constraint::Length(1)).collect();
     sections.push(Constraint::Min(0));
@@ -336,6 +340,25 @@ fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focus
         .split(inner);
 
     let mut row = 0;
+    // Index into the navigable rows (stocks, active items, passive groups),
+    // must advance in the same order as AppState::inventory_rows().
+    let mut nav_idx: usize = 0;
+    let sel_prefix = |selected: bool| {
+        if selected {
+            Span::styled("▶ ", Style::default().fg(Color::Yellow))
+        } else {
+            Span::raw("  ")
+        }
+    };
+    let name_style = |selected: bool, dim: bool| {
+        if selected {
+            Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+        } else if dim {
+            Style::default().fg(Color::DarkGray)
+        } else {
+            Style::default()
+        }
+    };
 
     frame.render_widget(
         make_line_gauge(
@@ -348,6 +371,8 @@ fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focus
     row += 1;
 
     for stock in &inv.resource_stocks {
+        let selected = focused && nav_idx == state.inventory_selection;
+        nav_idx += 1;
         let (icon, color, label) = match stock.stock_type.as_str() {
             "metals" => ("◆", Color::White, "Metals"),
             "ice" => ("❄", Color::Cyan, "Ice"),
@@ -356,8 +381,9 @@ fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focus
         };
         frame.render_widget(
             Paragraph::new(Line::from(vec![
-                Span::styled(format!("  {icon} "), Style::default().fg(color)),
-                Span::raw(format!("{:<11}", label)),
+                sel_prefix(selected),
+                Span::styled(format!("{icon} "), Style::default().fg(color)),
+                Span::styled(format!("{:<11}", label), name_style(selected, false)),
                 Span::styled(format!("{:.3}", stock.amount), Style::default().fg(Color::White)),
                 Span::styled(" ECE", Style::default().fg(Color::DarkGray)),
             ])),
@@ -379,6 +405,8 @@ fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focus
 
         // Active items: manny and atomic_3d_printer — show individually with task state
         for item in inv.items.iter().filter(|i| is_active_item(&i.item_type)) {
+            let selected = focused && nav_idx == state.inventory_selection;
+            nav_idx += 1;
             let (icon, icon_color) = item_icon(&item.item_type);
             let (task_span, progress) = match item.current_task.as_deref() {
                 None => (
@@ -392,8 +420,9 @@ fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focus
             };
             frame.render_widget(
                 Paragraph::new(Line::from(vec![
-                    Span::styled(format!("  {icon} "), Style::default().fg(icon_color)),
-                    Span::raw(format!("{:<14}", item.name)),
+                    sel_prefix(selected),
+                    Span::styled(format!("{icon} "), Style::default().fg(icon_color)),
+                    Span::styled(format!("{:<14}", item.name), name_style(selected, false)),
                     task_span,
                     Span::styled(progress, Style::default().fg(Color::DarkGray)),
                 ])),
@@ -409,12 +438,15 @@ fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focus
                 continue;
             }
             seen_types.push(&item.item_type);
+            let selected = focused && nav_idx == state.inventory_selection;
+            nav_idx += 1;
             let count = inv.items.iter().filter(|i| i.item_type == item.item_type).count();
             let (icon, icon_color) = item_icon(&item.item_type);
             frame.render_widget(
                 Paragraph::new(Line::from(vec![
-                    Span::styled(format!("  {icon} "), Style::default().fg(icon_color)),
-                    Span::raw(format!("{:<14}", item.name)),
+                    sel_prefix(selected),
+                    Span::styled(format!("{icon} "), Style::default().fg(icon_color)),
+                    Span::styled(format!("{:<14}", item.name), name_style(selected, false)),
                     Span::styled(format!("× {count}"), Style::default().fg(Color::White)),
                 ])),
                 rows[row],
@@ -433,7 +465,69 @@ fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focus
         row += 1;
     }
 
+    // ── Containers ── (display only, expanded view)
+    if containers_rows > 0 {
+        frame.render_widget(
+            Paragraph::new(Line::from(Span::styled(
+                "── containers ──",
+                Style::default().fg(Color::DarkGray),
+            ))),
+            rows[row],
+        );
+        row += 1;
+
+        let mut containers: Vec<_> = inv.containers.iter().collect();
+        containers.sort_by_key(|c| c.sort_order);
+        for c in containers {
+            let name = if c.kind == "probe" {
+                c.label.clone()
+            } else {
+                format!("{} ({})", c.label, c.kind)
+            };
+            let ratio = if c.capacity > 0.0 {
+                (c.used_capacity / c.capacity).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            frame.render_widget(
+                make_line_gauge(
+                    &format!("  {:<18}{:.2} / {:.2}", name, c.used_capacity, c.capacity),
+                    ratio,
+                    Color::Blue,
+                ),
+                rows[row],
+            );
+            row += 1;
+        }
+    }
+
+    // ── External tanks ── (display only, expanded view)
+    if tanks_rows > 0 {
+        frame.render_widget(
+            Paragraph::new(Line::from(Span::styled(
+                "── tanks ──",
+                Style::default().fg(Color::DarkGray),
+            ))),
+            rows[row],
+        );
+        row += 1;
+
+        for tank in &inv.external_tanks {
+            let ratio = (tank.fill_percent / 100.0).clamp(0.0, 1.0);
+            frame.render_widget(
+                make_line_gauge(
+                    &format!("  {:<18}{:.1}%", tank.name, tank.fill_percent),
+                    ratio,
+                    gauge_color(ratio),
+                ),
+                rows[row],
+            );
+            row += 1;
+        }
+    }
+
     let _ = row;
+    let _ = nav_idx;
 }
 
 // ── Mannies panel ─────────────────────────────────────────────────────────────
@@ -1404,67 +1498,6 @@ fn render_repair_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
 
 fn render_jettison_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     match &state.jettison {
-        JettisonInput::PickItem { items, selection } => {
-            let height = (items.len() as u16 + 6).min(20);
-            let popup = centered_rect(50, height, area);
-            frame.render_widget(Clear, popup);
-            let block = Block::default()
-                .title(" JETTISON ")
-                .title_alignment(Alignment::Center)
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Yellow));
-            let inner = block.inner(popup);
-            frame.render_widget(block, popup);
-
-            let rows = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Min(1), Constraint::Length(1)])
-                .split(inner);
-
-            let mut lines: Vec<Line> = Vec::new();
-            for (i, (id, label, is_manny)) in items.iter().enumerate() {
-                let selected = i == *selection;
-                let (icon, icon_color) = if *is_manny {
-                    ("♟", Color::Green)
-                } else if id.contains("metals") {
-                    ("◆", Color::White)
-                } else if id.contains("ice") {
-                    ("❄", Color::Cyan)
-                } else if id.contains("carbon") {
-                    ("◇", Color::Green)
-                } else {
-                    ("◆", Color::White)
-                };
-                if selected {
-                    lines.push(Line::from(vec![
-                        Span::styled("▶ ", Style::default().fg(Color::Yellow)),
-                        Span::styled(icon, Style::default().fg(icon_color)),
-                        Span::raw(" "),
-                        Span::styled(label.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-                    ]));
-                } else {
-                    lines.push(Line::from(vec![
-                        Span::raw("  "),
-                        Span::styled(icon, Style::default().fg(icon_color)),
-                        Span::raw(" "),
-                        Span::styled(label.as_str(), Style::default().fg(Color::DarkGray)),
-                    ]));
-                }
-            }
-            frame.render_widget(Paragraph::new(lines), rows[0]);
-            frame.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
-                    Span::raw(" select  "),
-                    Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-                    Span::raw(" confirm  "),
-                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
-                    Span::raw(" cancel"),
-                ])),
-                rows[1],
-            );
-        }
-
         JettisonInput::ConfirmManny { manny_name, error, .. } => {
             let popup = centered_rect(48, 8, area);
             frame.render_widget(Clear, popup);
@@ -2392,7 +2425,10 @@ fn inventory_panel_height(state: &AppState) -> u16 {
     let n_stocks = inv.resource_stocks.len() as u16;
     let expanded = focused && !inv.items.is_empty();
     let items_rows = items_row_count(&inv.items, expanded) as u16;
-    1 + n_stocks + items_rows + 2
+    let containers_rows = containers_row_count(inv, focused) as u16;
+    let tanks_rows = tanks_row_count(inv, focused) as u16;
+    let hint_row = if focused { 1 } else { 0 };
+    1 + n_stocks + items_rows + containers_rows + tanks_rows + hint_row + 2
 }
 
 fn top_row_height(state: &AppState) -> u16 {
@@ -2401,8 +2437,20 @@ fn top_row_height(state: &AppState) -> u16 {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-fn is_active_item(item_type: &str) -> bool {
-    matches!(item_type, "manny" | "atomic_3d_printer")
+fn containers_row_count(inv: &crate::api::types::ProbeInventory, focused: bool) -> usize {
+    if focused && !inv.containers.is_empty() {
+        1 + inv.containers.len()
+    } else {
+        0
+    }
+}
+
+fn tanks_row_count(inv: &crate::api::types::ProbeInventory, focused: bool) -> usize {
+    if focused && !inv.external_tanks.is_empty() {
+        1 + inv.external_tanks.len()
+    } else {
+        0
+    }
 }
 
 fn item_icon(item_type: &str) -> (&'static str, Color) {

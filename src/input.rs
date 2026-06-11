@@ -213,10 +213,16 @@ pub fn handle_event(
         KeyCode::Char('i') => state.toggle_focus(Panel::Inventory),
         KeyCode::Char('m') => state.toggle_focus(Panel::Mannies),
         KeyCode::Char('j') if state.focused == Some(Panel::Inventory) => {
-            let items = state.build_jettison_items();
-            if !items.is_empty() {
-                state.jettison = JettisonInput::PickItem { items, selection: 0 };
+            match state.jettison_for_selected() {
+                Ok(input) => state.jettison = input,
+                Err(msg) => state.error = Some(msg),
             }
+        }
+        KeyCode::Down if state.focused == Some(Panel::Inventory) => {
+            state.inventory_next();
+        }
+        KeyCode::Up if state.focused == Some(Panel::Inventory) => {
+            state.inventory_prev();
         }
         KeyCode::Char('d') if state.focused == Some(Panel::Inventory) => {
             if state.inventory_waypoint_bookmark_id().is_none() {
@@ -648,47 +654,6 @@ fn handle_jettison_event(
     tx: &mpsc::Sender<ApiMessage>,
 ) {
     match &state.jettison {
-        JettisonInput::PickItem { selection, items, .. } => {
-            let sel = *selection;
-            let count = items.len();
-            match code {
-                KeyCode::Esc => state.jettison = JettisonInput::Inactive,
-                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
-                    if let Some(new_sel) = list_nav(code, sel, count) {
-                        if let JettisonInput::PickItem { ref mut selection, .. } = state.jettison {
-                            *selection = new_sel;
-                        }
-                    }
-                }
-                KeyCode::Enter => {
-                    let (item_id, is_manny) = {
-                        let JettisonInput::PickItem { ref items, selection, .. } = state.jettison else { return };
-                        let (id, _, manny) = &items[selection];
-                        (id.clone(), *manny)
-                    };
-                    if is_manny {
-                        let manny_name = state.probe.as_ref()
-                            .and_then(|p| p.inventory.items.iter().find(|i| i.id == item_id))
-                            .map(|i| i.name.clone())
-                            .unwrap_or_else(|| item_id.clone());
-                        state.jettison = JettisonInput::ConfirmManny { item_id, manny_name, error: None };
-                    } else {
-                        let (item_name, max_amount) = state.probe.as_ref()
-                            .and_then(|p| p.inventory.resource_stocks.iter().find(|s| s.id == item_id))
-                            .map(|s| (s.name.clone(), s.amount))
-                            .unwrap_or_else(|| (item_id.clone(), 0.0));
-                        state.jettison = JettisonInput::EnterAmount {
-                            item_id,
-                            item_name,
-                            max_amount,
-                            buf: String::new(),
-                            error: None,
-                        };
-                    }
-                }
-                _ => {}
-            }
-        }
         JettisonInput::ConfirmManny { .. } => {
             match code {
                 KeyCode::Esc => state.jettison = JettisonInput::Inactive,
