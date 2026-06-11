@@ -10,9 +10,8 @@ cargo build          # debug build
 cargo build --release
 cargo run            # run the TUI (requires config, see below)
 cargo clippy         # lints
+cargo test           # unit tests (app.rs, input.rs) + serde fixtures (tests/)
 ```
-
-No test suite yet.
 
 ## Config
 
@@ -39,19 +38,20 @@ Single `tokio::select!` loop over three sources:
 
 The timer deadline is set to `movement.arrival_at` (ISO 8601) converted to a `tokio::time::Instant`. When no movement is in progress the deadline is 24 h away — no polling, no tick loop.
 
-`fetch_all()` spawns **three** independent `tokio::spawn` tasks: probe, mannies, and sector. Mannies and sector failures are non-fatal.
+`fetch_all()` spawns **four** independent `tokio::spawn` tasks: probe, mannies, sector, and visited sectors. All but probe are non-fatal.
 
-All other API calls (move, repair, mine, craft, etc.) are also spawned tasks that send results back via the `mpsc::Sender<ApiMessage>`.
-
-`main.rs` is currently large (~1600 lines) and mixes three concerns: the `tokio::select!` loop, all keyboard handlers (`handle_*_event`), and all `fetch_*` spawner functions. Planned refactor: extract handlers to `src/input.rs` and fetchers to `src/api/tasks.rs`.
+All other API calls (move, repair, mine, craft, etc.) are also spawned tasks that send results back via the `mpsc::Sender<ApiMessage>`. Keyboard handlers live in `src/input.rs` (`handle_event` + per-overlay `handle_*_event`); fetch spawners live in `src/api/tasks.rs`. `main.rs` only contains the select loop and the `ApiMessage` dispatch (which also sets the success toasts).
 
 ### State (`src/app.rs`)
 
 `AppState` is the single source of truth passed to the renderer. Key design choices:
 
-- Each interactive action (travel, repair, mine, craft, jettison, salvage, recall, rename, deploy, inspect, recover, detach, atomic printer craft) has its own input state enum (`TravelInput`, `RepairInput`, etc.) with variants for each wizard step. All start as `Inactive`.
+- Each interactive action (travel, repair, mine, craft, jettison, salvage, recall, rename, deploy, inspect, recover, detach, atomic printer craft, object actions, waypoints) has its own input state enum (`TravelInput`, `RepairInput`, `ObjectActionInput`, `WaypointsInput`, etc.) with variants for each wizard step. All start as `Inactive`.
 - `update_probe()` extracts `movement_arrival` from the response and stores it separately so the event loop can compute the next deadline without re-reading the full probe struct.
-- Scan history is cached in `AppState::scan_history` (a `Vec<SectorObservation>`) and persisted to disk asynchronously after each sector fetch.
+- Scan history is cached in `AppState::scan_history` (a `Vec<SectorObservation>`) and persisted to disk asynchronously after each sector fetch. Each observation is stamped with a local `scanned_at` on receipt (serde-defaulted, so old history files load).
+- Panel cursors: `mannies_selection`, `inventory_selection` (rows built by `inventory_rows()` — stocks, active items, passive groups), `scan_history_idx` (moves within `filtered_history_indices()` when a `ScanFilter` is active), `scanner_obj_selection` (object-browsing mode, entries from `scanner_objects()`).
+- `jettison_for_selected()` builds the jettison wizard from the selected inventory row; `actions_for_object()` maps a `ScannerObjectEntry` to its available `ObjectAction`s, mirroring the manny-first candidate sets (`collect_*_candidates`).
+- Transient success toasts: `set_toast()` / `active_toast()` (5 s expiry, dismissed by any keypress).
 - `RESOURCE_TYPES` and `DETACH_MODES` constants live here (not in `main.rs` or `cockpit.rs`).
 
 ### API layer (`src/api/`)
@@ -67,21 +67,24 @@ All other API calls (move, repair, mine, craft, etc.) are also spawned tasks tha
 ┌─ NEUMANN COCKPIT ─────────────────────────────────────────────┐
 │  ┌─ PROBE ─────────────────┐  ┌─ INVENTORY ─────────────────┐ │
 │  │ name · status · sector  │  │ capacity gauge              │ │
-│  │ movement phase + ETA    │  │ resource stocks             │ │
+│  │ movement phase + ETA    │  │ resource stocks (cursor)    │ │
 │  │ progress gauge          │  │ items list (expandable)     │ │
-│  │ speed gauge             │  │ [j] jettison  [d] deploy    │ │
-│  │ fuel gauge              │  │ [a] atomic craft            │ │
-│  │ integrity gauge         │  └─────────────────────────────┘ │
-│  └─────────────────────────┘                                  │
-│  ┌─ SCANNER ───────────────┐  ┌─ MANNIES ───────────────────┐ │
-│  │ sector detail / history │  │ ● manny-1  idle             │ │
-│  │ [↑/↓] scroll history   │  │ ◌ manny-2  mining   42%     │ │
-│  │ [enter] drill-down      │  │ [c] craft  [n] mine         │ │
-│  │ [f] batch scan          │  │ [x] repair [l] recall       │ │
-│  └─────────────────────────┘  │ [v] salvage [e] rename      │ │
+│  │ speed gauge             │  │ containers + tanks gauges   │ │
+│  │ fuel gauge              │  │ [↑↓] select [Enter] detail  │ │
+│  │ integrity gauge         │  │ [j] jettison [d] deploy     │ │
+│  └─────────────────────────┘  │ [a] atomic craft            │ │
 │                               └─────────────────────────────┘ │
-│ [r] refresh [p][i][m][s] focus [t] travel [b] map [q] quit    │
-│                                    v23.0.0  API v23  ⟳ HH:MM  │
+│  ┌─ SCANNER ───────────────┐  ┌─ MANNIES ───────────────────┐ │
+│  │ sector detail │ history │  │ ● manny-1  idle             │ │
+│  │ [↑↓/jk] history [JK]    │  │ ◌ manny-2  mining   42%     │ │
+│  │ [Enter] rescan [c] coord│  │ [Enter] repair [e] mine     │ │
+│  │ [n] neighbors [d] deep  │  │ [c] craft  [s] salvage      │ │
+│  │ [f] filter  [o] objects │  │ [x] inspect [D] detach      │ │
+│  │ [g] go to sector        │  │ [v] recover [n] rename      │ │
+│  └─────────────────────────┘  │ [R] recall (busy)           │ │
+│                               └─────────────────────────────┘ │
+│ [r] refresh [p][i][m][s]/Tab focus [t] travel [b] map         │
+│ [w] waypoints [?] help [q] quit     v23.x  API v23  ⟳ HH:MM   │
 └───────────────────────────────────────────────────────────────┘
 ```
 
@@ -91,21 +94,18 @@ Gauge colors: green > 50 %, yellow 25–50 %, red < 25 %. Probe status and senso
 
 Movement progress is derived from `started_at` / `arrival_at` timestamps client-side (more accurate than the API's `secondsRemaining` snapshot).
 
+Scanner specifics: the history column shows symbol + coords + distance, scrolls with the selection (`List`/`ListState`), and `[f]` cycles a filter (all → objects → minable → danger). `[o]` enters object-browsing mode on the probe's current sector: `Enter` on an object opens a contextual action menu (mine / inspect / salvage / recover / deploy waypoint) that reuses the existing wizards.
+
 **Overlays** (rendered on top of the 4-panel layout):
-- Travel — coordinate input + fuel cost preview + confirmation
+- Travel (`[t]`) — coordinate input (absolute, or relative with a leading `+`) with live parity check, fuel cost preview + confirmation
 - Repair / Mine / Craft / Atomic printer craft — manny/target/recipe pickers
 - Jettison / Salvage / Recall / Rename / Inspect / Recover / Detach — inventory/sector object pickers
 - Deploy waypoint — 3-step wizard: pick manny → pick object → enter bookmark name
-- Map (`[b]`) — isometric sector overview with pan (`[↑↓←→]`) and layer selection
-
-### Known issues / planned refactors
-
-- `set_inspect_error` and `set_recover_error` in `app.rs` are no-ops: errors from the API on inspect/recover are silently dropped. Fix: add `error: Option<String>` to `InspectInput::PickAsteroid` and `RecoverInput::PickContainer`.
-- `collect_mineable_candidates` and `collect_asteroid_candidates` are free functions in `main.rs`; the other `collect_*` functions are methods on `AppState`. Consolidate all into `AppState` methods.
-- List navigation (Up/Down/Esc/Enter) is copy-pasted ~9× across handlers. Extract a `list_nav(code, sel, count) -> NavResult` helper.
-- Selection overlays (mine, salvage, deploy, inspect, recover, detach) are structurally identical. Extract a `render_selection_overlay(...)` helper to remove ~300 lines of duplication.
-- `ManniesResponse` in `types.rs` is unused — delete it.
-- `travel_go_sector` has an unused `_dist_hint` parameter — remove it and the call-site calculation.
+- Object actions — action picker for the selected scanner object (+ manny picker when several idle)
+- Waypoints (`[w]`) — known destinations from scan history (bookmarks, stars, minable), `Enter` → travel confirmation
+- Inventory detail (`Enter` in inventory) — read-only detail of the selected row
+- Map (`[b]`) — isometric sector overview: pan (`[hjkl/←↓↑→]`), `[u/d]` y±1, `[0]` recenter on probe, `[c]` jump to coords, `[g]` travel to center; info line (distance, ETA, sector summary) + legend; visited-but-unscanned sectors shown as `○`
+- Help (`[?]`) — all keybindings grouped by context
 
 ## Implemented API endpoints (v23)
 
@@ -130,5 +130,5 @@ Movement progress is derived from `started_at` / `arrival_at` timestamps client-
 | `/api/probe/atomic-printer/craft` | POST | ✓ |
 | `/api/crafting-recipes` | GET | ✓ |
 | `/api/sector` | GET | ✓ |
-| `/api/probe/visited-sectors` | GET | ✗ (not implemented) |
+| `/api/probe/visited-sectors` | GET | ✓ |
 | `/api/probe/messages` | GET/POST | ✗ (not implemented) |
