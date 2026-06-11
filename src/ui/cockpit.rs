@@ -2,7 +2,7 @@ use crate::api::types::{
     DangerLevel, DataFreshness, KnowledgeLevel, Manny, MannyLocationType, MannyTask,
     MovementPhase, ProbeStatus, SectorObject, SectorObjectType, SectorObservation, SensorMode,
 };
-use crate::app::{is_active_item, AppState, AtomicPrinterCraftInput, CraftInput, DeployInput, DetachInput, InspectInput, JettisonInput, MineInput, Panel, RecallInput, RecoverInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_LABELS, RESOURCE_TYPES};
+use crate::app::{is_active_item, AppState, AtomicPrinterCraftInput, CraftInput, DeployInput, DetachInput, InspectInput, JettisonInput, MineInput, ObjectActionInput, Panel, RecallInput, RecoverInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, TravelInput, RESOURCE_LABELS, RESOURCE_TYPES};
 use chrono::Utc;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -96,6 +96,9 @@ pub fn render(frame: &mut Frame, state: &AppState) {
     }
     if !matches!(state.detach, DetachInput::Inactive) {
         render_detach_overlay(frame, area, state);
+    }
+    if !matches!(state.object_action, ObjectActionInput::Inactive) {
+        render_object_action_overlay(frame, area, state);
     }
 }
 
@@ -749,7 +752,16 @@ fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
                     hint_area,
                 );
             } else if focused {
-                let spans = if is_blind {
+                let spans = if state.scanner_obj_selection.is_some() {
+                    vec![
+                        Span::styled("[↑↓/jk]", Style::default().fg(Color::Cyan)),
+                        Span::raw(" object  "),
+                        Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                        Span::raw(" actions  "),
+                        Span::styled("[Esc/o]", Style::default().fg(Color::Cyan)),
+                        Span::raw(" back"),
+                    ]
+                } else if is_blind {
                     vec![
                         Span::styled("● SENSORS BLIND", Style::default().fg(Color::Red)),
                         Span::raw("  "),
@@ -773,6 +785,11 @@ fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
                         Span::styled("[JK]", Style::default().fg(Color::Cyan)),
                         Span::raw(" scroll"),
                     ];
+                    if !state.scanner_objects().is_empty() {
+                        s.push(Span::raw("  "));
+                        s.push(Span::styled("[o]", Style::default().fg(Color::Yellow)));
+                        s.push(Span::raw(" objects"));
+                    }
                     if state.current_sector().is_some() {
                         s.push(Span::raw("  "));
                         s.push(Span::styled("[g]", Style::default().fg(Color::Yellow)));
@@ -927,6 +944,16 @@ fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
         }
     }
 
+    let browsing = focused && state.scanner_obj_selection.is_some() && state.viewing_probe_sector();
+    let selected_obj_id: Option<String> = if browsing {
+        state
+            .scanner_obj_selection
+            .and_then(|i| state.scanner_objects().into_iter().nth(i))
+            .map(|e| e.id)
+    } else {
+        None
+    };
+
     if let Some(objects) = &sector.objects {
         if !objects.is_empty() {
             lines.push(Line::from(Span::styled(
@@ -934,7 +961,7 @@ fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
                 Style::default().fg(Color::DarkGray),
             )));
             for obj in objects {
-                lines.extend(sector_object_lines(obj));
+                lines.extend(sector_object_lines(obj, browsing, selected_obj_id.as_deref()));
             }
         }
     }
@@ -1987,6 +2014,25 @@ fn render_detach_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     }
 }
 
+fn render_object_action_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    match &state.object_action {
+        ObjectActionInput::PickAction { object_name, actions, selection, .. } => {
+            let labels: Vec<&str> = actions.iter().map(|a| a.label()).collect();
+            let height = (actions.len() as u16 + 6).min(14);
+            render_pick_list(frame, area, &format!(" {object_name} "), 46, height,
+                Some("Action:"), &labels, *selection, None, "select");
+        }
+        ObjectActionInput::PickManny { object_name, action, mannies, selection, .. } => {
+            let names: Vec<&str> = mannies.iter().map(|(_, n)| n.as_str()).collect();
+            let height = (mannies.len() as u16 + 6).min(16);
+            let prompt = format!("{} — select manny:", action.label());
+            render_pick_list(frame, area, &format!(" {object_name} "), 46, height,
+                Some(&prompt), &names, *selection, None, "confirm");
+        }
+        ObjectActionInput::Inactive => {}
+    }
+}
+
 fn sector_interest_color(s: &crate::api::types::SectorObservation) -> Color {
     use crate::api::types::{DangerLevel, KnowledgeLevel, SectorObjectType};
 
@@ -2039,7 +2085,22 @@ fn sector_interest_color(s: &crate::api::types::SectorObservation) -> Color {
     Color::DarkGray
 }
 
-fn sector_object_lines(obj: &SectorObject) -> Vec<Line<'_>> {
+fn obj_sel_prefix(browsing: bool, selected: bool) -> Option<Span<'static>> {
+    if !browsing {
+        return None;
+    }
+    Some(if selected {
+        Span::styled("▶ ", Style::default().fg(Color::Yellow))
+    } else {
+        Span::raw("  ")
+    })
+}
+
+fn sector_object_lines<'a>(
+    obj: &'a SectorObject,
+    browsing: bool,
+    selected_id: Option<&str>,
+) -> Vec<Line<'a>> {
     let (icon, color) = object_icon(&obj.object_type);
     let estimated = if obj.estimated.unwrap_or(false) { "~ " } else { "" };
     let name = obj.name.as_deref().unwrap_or("unnamed");
@@ -2057,12 +2118,22 @@ fn sector_object_lines(obj: &SectorObject) -> Vec<Line<'_>> {
 
     let salvageable = obj.salvageable.unwrap_or(false);
 
-    let mut main_spans = vec![
+    let main_selected = browsing && obj.id.is_some() && obj.id.as_deref() == selected_id;
+    let name_style = if main_selected {
+        Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default()
+    };
+    let mut main_spans: Vec<Span> = Vec::new();
+    if let Some(prefix) = obj_sel_prefix(browsing, main_selected) {
+        main_spans.push(prefix);
+    }
+    main_spans.extend([
         Span::styled(icon, Style::default().fg(color)),
         Span::raw(" "),
         Span::styled(estimated, Style::default().fg(Color::DarkGray)),
-        Span::raw(format!("{name}{danger}")),
-    ];
+        Span::styled(format!("{name}{danger}"), name_style),
+    ]);
     if salvageable {
         main_spans.push(Span::styled("  ⬡ salvageable", Style::default().fg(Color::Yellow)));
     }
@@ -2133,12 +2204,22 @@ fn sector_object_lines(obj: &SectorObject) -> Vec<Line<'_>> {
         for target in targets {
             let (icon, color) = object_icon(&target.object_type);
             let name = target.name.as_deref().unwrap_or("unnamed");
-            let mut spans = vec![
+            let selected = browsing && selected_id == Some(target.id.as_str());
+            let target_style = if selected {
+                Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            };
+            let mut spans: Vec<Span> = Vec::new();
+            if let Some(prefix) = obj_sel_prefix(browsing, selected) {
+                spans.push(prefix);
+            }
+            spans.extend([
                 Span::styled("  ", Style::default().fg(Color::DarkGray)),
                 Span::styled(icon, Style::default().fg(color)),
                 Span::raw(" "),
-                Span::raw(name.to_string()),
-            ];
+                Span::styled(name.to_string(), target_style),
+            ]);
             if let Some(resources) = &target.resource_types {
                 let res_str = resources.iter().map(|r| match r.as_str() {
                     "metals" => "metals",
@@ -2161,12 +2242,22 @@ fn sector_object_lines(obj: &SectorObject) -> Vec<Line<'_>> {
     for target in &obj.bookmark_targets {
         let (icon, color) = object_icon(&target.object_type);
         let name = target.name.as_deref().unwrap_or("unnamed");
-        let mut spans = vec![
+        let selected = browsing && selected_id == Some(target.id.as_str());
+        let target_style = if selected {
+            Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+        };
+        let mut spans: Vec<Span> = Vec::new();
+        if let Some(prefix) = obj_sel_prefix(browsing, selected) {
+            spans.push(prefix);
+        }
+        spans.extend([
             Span::styled("  ", Style::default().fg(Color::DarkGray)),
             Span::styled(icon, Style::default().fg(color)),
             Span::raw(" "),
-            Span::raw(name.to_string()),
-        ];
+            Span::styled(name.to_string(), target_style),
+        ]);
         let mut extras: Vec<String> = Vec::new();
         if let Some(m) = target.mass {
             extras.push(format!("{m:.3e} {}", target.mass_unit.as_deref().unwrap_or("")));
