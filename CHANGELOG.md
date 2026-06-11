@@ -1,5 +1,12 @@
 # Changelog
 
+## [23.2.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v23.1.2...neumann-cockpit-v23.2.0) (2026-06-11)
+
+
+### Features
+
+* **inventory:** selectable rows, direct jettison, containers and tanks display ([#32](https://github.com/MagiCrazy/neumann-cockpit/issues/32)) ([a28172d](https://github.com/MagiCrazy/neumann-cockpit/commit/a28172db8b7de97f96d941abec62f2e987afb855))
+
 ## [23.1.2](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v23.1.1...neumann-cockpit-v23.1.2) (2026-06-11)
 
 
