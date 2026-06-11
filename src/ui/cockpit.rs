@@ -1,4 +1,4 @@
-use crate::app::{AppState, AtomicPrinterCraftInput, CraftInput, DeployInput, DetachInput, InspectInput, JettisonInput, MineInput, ObjectActionInput, Panel, RecallInput, RecoverInput, RenameMannyInput, RepairInput, SalvageInput, TravelInput, WaypointsInput};
+use crate::app::{AppState, Panel};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style},
@@ -7,14 +7,7 @@ use ratatui::{
     Frame,
 };
 
-use super::overlays::{
-    render_atomic_printer_craft_overlay, render_craft_overlay, render_deploy_overlay,
-    render_detach_overlay, render_help_overlay, render_inspect_overlay,
-    render_inventory_detail_overlay, render_jettison_overlay, render_map_overlay,
-    render_mine_overlay, render_object_action_overlay, render_recall_overlay,
-    render_recover_overlay, render_rename_manny_overlay, render_repair_overlay,
-    render_salvage_overlay, render_travel_overlay, render_waypoints_overlay,
-};
+use super::overlays::render_active_overlays;
 use super::panels::{
     inventory_panel_height, probe_panel_height, render_inventory_panel, render_mannies_panel,
     render_probe_panel, render_scanner_panel,
@@ -63,60 +56,7 @@ pub fn render(frame: &mut Frame, state: &AppState) {
     render_scanner_panel(frame, bottom[0], state, state.focused == Some(Panel::Scanner));
     render_mannies_panel(frame, bottom[1], state, state.focused == Some(Panel::Mannies));
     render_status_bar(frame, status_area, state);
-    if !matches!(state.travel, TravelInput::Inactive) {
-        render_travel_overlay(frame, area, state);
-    }
-    if !matches!(state.repair, RepairInput::Inactive) {
-        render_repair_overlay(frame, area, state);
-    }
-    if !matches!(state.mine, MineInput::Inactive) {
-        render_mine_overlay(frame, area, state);
-    }
-    if state.map.open {
-        render_map_overlay(frame, area, state);
-    }
-    if !matches!(state.jettison, JettisonInput::Inactive) {
-        render_jettison_overlay(frame, area, state);
-    }
-    if !matches!(state.craft, CraftInput::Inactive) {
-        render_craft_overlay(frame, area, state);
-    }
-    if !matches!(state.atomic_printer_craft, AtomicPrinterCraftInput::Inactive) {
-        render_atomic_printer_craft_overlay(frame, area, state);
-    }
-    if !matches!(state.salvage, SalvageInput::Inactive) {
-        render_salvage_overlay(frame, area, state);
-    }
-    if !matches!(state.recall, RecallInput::Inactive) {
-        render_recall_overlay(frame, area, state);
-    }
-    if !matches!(state.deploy, DeployInput::Inactive) {
-        render_deploy_overlay(frame, area, state);
-    }
-    if !matches!(state.rename_manny, RenameMannyInput::Inactive) {
-        render_rename_manny_overlay(frame, area, state);
-    }
-    if !matches!(state.inspect, InspectInput::Inactive) {
-        render_inspect_overlay(frame, area, state);
-    }
-    if !matches!(state.recover, RecoverInput::Inactive) {
-        render_recover_overlay(frame, area, state);
-    }
-    if !matches!(state.detach, DetachInput::Inactive) {
-        render_detach_overlay(frame, area, state);
-    }
-    if !matches!(state.object_action, ObjectActionInput::Inactive) {
-        render_object_action_overlay(frame, area, state);
-    }
-    if !matches!(state.waypoints, WaypointsInput::Inactive) {
-        render_waypoints_overlay(frame, area, state);
-    }
-    if state.inventory_detail_open {
-        render_inventory_detail_overlay(frame, area, state);
-    }
-    if state.help_open {
-        render_help_overlay(frame, area);
-    }
+    render_active_overlays(frame, area, state);
 }
 
 // ── Status bar ────────────────────────────────────────────────────────────────

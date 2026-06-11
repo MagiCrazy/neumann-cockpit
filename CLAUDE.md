@@ -59,6 +59,12 @@ All other API calls (move, repair, mine, craft, etc.) are also spawned tasks tha
 - `types.rs` — all OpenAPI types. Structs use `#[serde(rename_all = "camelCase")]`; enums use `#[serde(rename_all = "snake_case")]` with `#[serde(other)] Unknown` fallbacks. `#![allow(dead_code)]` suppresses warnings on fields not yet consumed by the UI.
 - `client.rs` — `ApiClient` (cloneable, wraps `reqwest::Client`). Each endpoint has a typed wrapper with an inline `struct Resp` that deserializes the envelope and returns the inner value. HTTP errors extract `error.message` from the JSON body; 401 produces a specific "check your api_key" message.
 
+### Retro theme (`src/ui/retro/`)
+
+Optional phosphor-CRT skin (Alien-style), selected with `theme = "retro"` in config or toggled at runtime with `F2`. Entirely self-contained: `ui::render` dispatches on `AppState::ui_theme` between `cockpit::render` (classic, default) and `retro::render`. Components: `palette.rs` (4-intensity monochrome, green or amber via `phosphor`), `banner.rs`, `systems.rs` (block gauges + probe schematic LEDs), `radar.rs` (sweeping dial, blips for `scanner_objects()`), `drones.rs`, `ticker.rs` (COMMS + pseudo-telemetry), `boot.rs` (teletype boot sequence, any key skips).
+
+Animations are driven by a 100 ms render tick in the main `select!`, guarded by `anim_tick_active()` — it only advances `AnimState::frame` and redraws, **never** triggers API calls; with the classic theme or `animations = false` the branch is disabled and behaviour is exactly the pre-existing event-driven one. All animations are pure functions of the frame counter (`app/anim.rs`, `anim_hash` for deterministic noise). Wizard overlays are shared between themes via `overlays::render_active_overlays`.
+
 ### UI (`src/ui/`)
 
 `cockpit::render(frame, state)` is the single render entry point called every loop iteration. Module layout: `cockpit.rs` (entry point, 4-panel layout, status bar), `panels/` (one file per panel, each with its height helper), `overlays/` (one file per wizard overlay; `pickers.rs` groups the seven pick-list-based ones; `mod.rs` hosts `centered_rect` + `render_pick_list`), `theme.rs` (colours, icons, labels, `format_duration`/`format_age`). Layout — two rows, each split into two columns:
