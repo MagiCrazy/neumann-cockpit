@@ -2365,6 +2365,44 @@ fn map_cell_symbol(s: &SectorObservation) -> (&'static str, Style) {
     ("·", Style::default().fg(Color::White))
 }
 
+/// Short content summary of a scanned sector for the map info line.
+fn sector_brief(s: &SectorObservation) -> String {
+    let Some(objects) = &s.objects else {
+        return "estimated only".into();
+    };
+    if objects.is_empty() {
+        return "empty".into();
+    }
+    let mut parts: Vec<String> = Vec::new();
+    if objects.iter().any(|o| matches!(o.object_type, SectorObjectType::BlackHole)) {
+        parts.push("black hole".into());
+    }
+    if objects.iter().any(|o| {
+        matches!(o.object_type, SectorObjectType::Star | SectorObjectType::SolarSystem)
+    }) {
+        parts.push("star".into());
+    }
+    let planets = objects.iter().filter(|o| matches!(o.object_type, SectorObjectType::Planet)).count()
+        + objects.iter().flat_map(|o| &o.bookmark_targets)
+            .filter(|t| matches!(t.object_type, SectorObjectType::Planet)).count();
+    if planets > 0 {
+        parts.push(format!("{planets} planet(s)"));
+    }
+    let minables: usize = objects.iter()
+        .map(|o| o.minable_targets.as_ref().map(|t| t.len()).unwrap_or(0))
+        .sum();
+    if minables > 0 {
+        parts.push(format!("{minables} minable"));
+    }
+    if objects.iter().any(|o| matches!(o.danger_level, Some(DangerLevel::Extreme))) {
+        parts.push("extreme danger".into());
+    }
+    if parts.is_empty() {
+        parts.push(format!("{} object(s)", objects.len()));
+    }
+    parts.join("  ")
+}
+
 fn render_map_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     use std::collections::HashMap;
 
@@ -2388,24 +2426,17 @@ fn render_map_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
 
     let rows_layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .constraints([
+            Constraint::Min(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
         .split(map_inner);
     let map_area = rows_layout[0];
-    let hint_area = rows_layout[1];
-
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled("[hjkl]", Style::default().fg(Color::Cyan)),
-            Span::raw(" pan  "),
-            Span::styled("[u/d]", Style::default().fg(Color::Cyan)),
-            Span::raw(" y±1  "),
-            Span::styled("[g]", Style::default().fg(Color::Yellow)),
-            Span::raw(" travel  "),
-            Span::styled("[b/Esc]", Style::default().fg(Color::Cyan)),
-            Span::raw(" close"),
-        ])),
-        hint_area,
-    );
+    let info_area = rows_layout[1];
+    let legend_area = rows_layout[2];
+    let hint_area = rows_layout[3];
 
     // Fast lookup: (x,y,z) → sector
     let sector_lookup: HashMap<(i32, i32, i32), &SectorObservation> = state
@@ -2433,6 +2464,91 @@ fn render_map_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let cx = state.map.center_x;
     let cz = state.map.center_z;
     let y = state.map.y_layer;
+
+    // ── Center cell info ──
+    let mut info_spans: Vec<Span> = vec![
+        Span::styled(
+            format!("({cx},{y},{cz})"),
+            Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+        ),
+    ];
+    if let Some(d) = state.map_center_distance() {
+        info_spans.push(Span::styled(
+            format!("  d:{d}"),
+            Style::default().fg(Color::DarkGray),
+        ));
+        if d > 0 {
+            info_spans.push(Span::styled(
+                format!("  ETA ~{}", format_duration((5 + 35 * d) * 60)),
+                Style::default().fg(Color::Yellow),
+            ));
+        }
+    }
+    let brief = sector_lookup
+        .get(&(cx, y, cz))
+        .map(|s| sector_brief(s))
+        .unwrap_or_else(|| "unscanned".into());
+    info_spans.push(Span::styled(
+        format!("  {brief}"),
+        Style::default().fg(Color::DarkGray),
+    ));
+    frame.render_widget(Paragraph::new(Line::from(info_spans)), info_area);
+
+    // ── Legend ──
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("⊕", Style::default().fg(Color::Cyan)),
+            Span::styled(" probe  ", Style::default().fg(Color::DarkGray)),
+            Span::styled("★", Style::default().fg(Color::Yellow)),
+            Span::styled(" star  ", Style::default().fg(Color::DarkGray)),
+            Span::styled("●", Style::default().fg(Color::Green)),
+            Span::styled(" objects  ", Style::default().fg(Color::DarkGray)),
+            Span::styled("◉", Style::default().fg(Color::Magenta)),
+            Span::styled(" black hole  ", Style::default().fg(Color::DarkGray)),
+            Span::styled("!", Style::default().fg(Color::Red)),
+            Span::styled(" danger  ", Style::default().fg(Color::DarkGray)),
+            Span::styled("·", Style::default().fg(Color::White)),
+            Span::styled(" empty  ", Style::default().fg(Color::DarkGray)),
+            Span::styled("·", Style::default().fg(Color::DarkGray)),
+            Span::styled(" unscanned", Style::default().fg(Color::DarkGray)),
+        ])),
+        legend_area,
+    );
+
+    // ── Hint / coordinate input ──
+    if let Some(buf) = &state.map.coord_input {
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled("go to (x y z): ", Style::default().fg(Color::Cyan)),
+                Span::raw(buf.as_str()),
+                Span::styled("█", Style::default().fg(Color::Cyan)),
+                Span::raw("  "),
+                Span::styled("[Enter]", Style::default().fg(Color::Green)),
+                Span::raw(" center  "),
+                Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                Span::raw(" cancel"),
+            ])),
+            hint_area,
+        );
+    } else {
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled("[hjkl]", Style::default().fg(Color::Cyan)),
+                Span::raw(" pan  "),
+                Span::styled("[u/d]", Style::default().fg(Color::Cyan)),
+                Span::raw(" y±1  "),
+                Span::styled("[0]", Style::default().fg(Color::Cyan)),
+                Span::raw(" probe  "),
+                Span::styled("[c]", Style::default().fg(Color::Cyan)),
+                Span::raw(" go to  "),
+                Span::styled("[g]", Style::default().fg(Color::Yellow)),
+                Span::raw(" travel  "),
+                Span::styled("[b/Esc]", Style::default().fg(Color::Cyan)),
+                Span::raw(" close"),
+            ])),
+            hint_area,
+        );
+    }
     let w = map_area.width as i32;
     let h = map_area.height as i32;
     let center_col = map_area.x as i32 + w / 2;
