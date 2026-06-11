@@ -11,7 +11,7 @@ use crate::app::{
     ApiMessage, AppState, AtomicPrinterCraftInput, CraftInput, DeployInput, DetachInput,
     InspectInput, JettisonInput, MineInput, ObjectAction, ObjectActionInput, Panel, RecallInput,
     RecoverInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, TravelInput,
-    DETACH_MODES, RESOURCE_TYPES,
+    WaypointsInput, DETACH_MODES, RESOURCE_TYPES,
 };
 
 fn neighbors_d1() -> Vec<(i32, i32, i32)> {
@@ -143,6 +143,11 @@ pub fn handle_event(
         return;
     }
 
+    if !matches!(state.waypoints, WaypointsInput::Inactive) {
+        handle_waypoints_event(k.code, state);
+        return;
+    }
+
     if in_travel {
         handle_travel_event(k.code, state, client, tx);
         return;
@@ -201,6 +206,14 @@ pub fn handle_event(
     match k.code {
         KeyCode::Char('q') => state.set_quit(),
         KeyCode::Char('b') => state.open_map(),
+        KeyCode::Char('w') => {
+            let entries = state.collect_waypoints();
+            if entries.is_empty() {
+                state.error = Some("no known waypoints — scan sectors first".into());
+            } else {
+                state.waypoints = WaypointsInput::Browsing { entries, selection: 0 };
+            }
+        }
         KeyCode::Esc if in_object_mode => state.scanner_obj_selection = None,
         KeyCode::Esc => state.focused = None,
         KeyCode::Char('o') if state.focused == Some(Panel::Scanner) => {
@@ -1181,6 +1194,31 @@ fn dispatch_object_action(
                 error: None,
             };
         }
+    }
+}
+
+fn handle_waypoints_event(code: KeyCode, state: &mut AppState) {
+    let WaypointsInput::Browsing { ref entries, selection } = state.waypoints else { return };
+    let count = entries.len();
+    match code {
+        KeyCode::Esc | KeyCode::Char('w') => state.waypoints = WaypointsInput::Inactive,
+        KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+            if let Some(new_sel) = list_nav(code, selection, count) {
+                if let WaypointsInput::Browsing { ref mut selection, .. } = state.waypoints {
+                    *selection = new_sel;
+                }
+            }
+        }
+        KeyCode::Enter => {
+            let (x, y, z) = {
+                let WaypointsInput::Browsing { ref entries, selection } = state.waypoints else { return };
+                let e = &entries[selection];
+                (e.x, e.y, e.z)
+            };
+            state.waypoints = WaypointsInput::Inactive;
+            state.travel_go_sector(x, y, z);
+        }
+        _ => {}
     }
 }
 
