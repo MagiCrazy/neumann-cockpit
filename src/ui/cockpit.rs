@@ -1216,14 +1216,57 @@ fn render_travel_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
         TravelInput::Inactive => {}
 
         TravelInput::Typing(buf) => {
-            frame.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled("Destination (x y z): ", Style::default().fg(Color::Cyan)),
-                    Span::raw(buf.as_str()),
-                    Span::styled("█", Style::default().fg(Color::Cyan)),
-                ])),
-                body,
-            );
+            let mut lines: Vec<Line> = Vec::new();
+
+            if let Some((px, py, pz)) = state.probe_sector_coords() {
+                lines.push(Line::from(vec![
+                    Span::styled("From: ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        format!("({px},{py},{pz})"),
+                        Style::default().fg(Color::White),
+                    ),
+                ]));
+            }
+
+            lines.push(Line::from(vec![
+                Span::styled("Destination (x y z): ", Style::default().fg(Color::Cyan)),
+                Span::raw(buf.as_str()),
+                Span::styled("█", Style::default().fg(Color::Cyan)),
+            ]));
+            lines.push(Line::from(Span::styled(
+                "prefix with + for relative (e.g. +2 0 -2)",
+                Style::default().fg(Color::DarkGray),
+            )));
+
+            // Live resolution + parity check
+            if let Some((x, y, z)) = state.resolve_travel_target() {
+                let parity_ok = (x + y + z) % 2 == 0;
+                let mut spans = vec![
+                    Span::styled("→ ", Style::default().fg(Color::Yellow)),
+                    Span::styled(
+                        format!("({x},{y},{z})"),
+                        Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                    ),
+                ];
+                if parity_ok {
+                    spans.push(Span::styled("  ✓", Style::default().fg(Color::Green)));
+                } else {
+                    spans.push(Span::styled(
+                        "  ✗ x+y+z must be even",
+                        Style::default().fg(Color::Red),
+                    ));
+                }
+                lines.push(Line::default());
+                lines.push(Line::from(spans));
+            } else if buf.trim_start().starts_with('+') && state.probe_sector_coords().is_none() {
+                lines.push(Line::default());
+                lines.push(Line::from(Span::styled(
+                    "✗ relative input needs a known probe position",
+                    Style::default().fg(Color::Red),
+                )));
+            }
+
+            frame.render_widget(Paragraph::new(lines), body);
             frame.render_widget(
                 Paragraph::new(Line::from(vec![
                     Span::styled("[Enter]", Style::default().fg(Color::Cyan)),
