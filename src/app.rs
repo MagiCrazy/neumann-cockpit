@@ -11,6 +11,57 @@ pub enum ScanMode {
     DirectionPick,
 }
 
+/// Cyclic filter applied to the scan history list ([f] in the scanner).
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub enum ScanFilter {
+    #[default]
+    All,
+    Objects,
+    Minable,
+    Danger,
+}
+
+impl ScanFilter {
+    pub fn next(self) -> Self {
+        match self {
+            ScanFilter::All => ScanFilter::Objects,
+            ScanFilter::Objects => ScanFilter::Minable,
+            ScanFilter::Minable => ScanFilter::Danger,
+            ScanFilter::Danger => ScanFilter::All,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            ScanFilter::All => "all",
+            ScanFilter::Objects => "objects",
+            ScanFilter::Minable => "minable",
+            ScanFilter::Danger => "danger",
+        }
+    }
+}
+
+pub fn sector_matches_filter(s: &SectorObservation, f: ScanFilter) -> bool {
+    match f {
+        ScanFilter::All => true,
+        ScanFilter::Objects => s.objects.as_ref().is_some_and(|o| !o.is_empty()),
+        ScanFilter::Minable => s.objects.iter().flatten().any(|o| {
+            o.minable_targets.as_ref().is_some_and(|t| !t.is_empty())
+        }),
+        ScanFilter::Danger => {
+            let observed = s.objects.iter().flatten().any(|o| {
+                matches!(o.object_type, crate::api::types::SectorObjectType::BlackHole)
+                    || matches!(o.danger_level, Some(crate::api::types::DangerLevel::Extreme))
+            });
+            let estimated = s.estimated_objects.as_ref().is_some_and(|e| {
+                matches!(e.danger_estimate, Some(crate::api::types::DangerLevel::Extreme))
+                    || e.black_hole_probability.unwrap_or(0.0) > 0.5
+            });
+            observed || estimated
+        }
+    }
+}
+
 #[derive(Default)]
 pub enum RepairInput {
     #[default]
@@ -400,6 +451,7 @@ pub struct AppState {
     pub scan_error: Option<String>,
     pub scan_batch: Option<usize>,
     pub scan_detail_scroll: usize,
+    pub scan_filter: ScanFilter,
     /// Some(idx) when the scanner panel is in object-browsing mode.
     pub scanner_obj_selection: Option<usize>,
     pub object_action: ObjectActionInput,
@@ -713,19 +765,53 @@ impl AppState {
         }
     }
 
-    pub fn scan_hist_next(&mut self) {
-        if !self.scan_history.is_empty() {
-            let new = (self.scan_history_idx + 1).min(self.scan_history.len() - 1);
-            if new != self.scan_history_idx {
-                self.scan_history_idx = new;
+    /// Indices into scan_history matching the active filter, in history order.
+    pub fn filtered_history_indices(&self) -> Vec<usize> {
+        self.scan_history
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| sector_matches_filter(s, self.scan_filter))
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    pub fn cycle_scan_filter(&mut self) {
+        self.scan_filter = self.scan_filter.next();
+        let idxs = self.filtered_history_indices();
+        if !idxs.contains(&self.scan_history_idx) {
+            if let Some(&first) = idxs.first() {
+                self.scan_history_idx = first;
                 self.scan_detail_scroll = 0;
             }
         }
     }
 
+    pub fn scan_hist_next(&mut self) {
+        let idxs = self.filtered_history_indices();
+        let Some(pos) = idxs.iter().position(|&i| i == self.scan_history_idx) else {
+            if let Some(&first) = idxs.first() {
+                self.scan_history_idx = first;
+                self.scan_detail_scroll = 0;
+            }
+            return;
+        };
+        if pos + 1 < idxs.len() {
+            self.scan_history_idx = idxs[pos + 1];
+            self.scan_detail_scroll = 0;
+        }
+    }
+
     pub fn scan_hist_prev(&mut self) {
-        if self.scan_history_idx > 0 {
-            self.scan_history_idx -= 1;
+        let idxs = self.filtered_history_indices();
+        let Some(pos) = idxs.iter().position(|&i| i == self.scan_history_idx) else {
+            if let Some(&first) = idxs.first() {
+                self.scan_history_idx = first;
+                self.scan_detail_scroll = 0;
+            }
+            return;
+        };
+        if pos > 0 {
+            self.scan_history_idx = idxs[pos - 1];
             self.scan_detail_scroll = 0;
         }
     }
@@ -2216,6 +2302,58 @@ mod tests {
         // top-level planet gains deploy; nested minable target does not
         assert_eq!(state.actions_for_object(&entries[0]), vec![ObjectAction::DeployWaypoint]);
         assert_eq!(state.actions_for_object(&entries[1]), vec![ObjectAction::Mine]);
+    }
+
+    // ── scan filter ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn scan_filter_cycles() {
+        assert_eq!(ScanFilter::All.next(), ScanFilter::Objects);
+        assert_eq!(ScanFilter::Danger.next(), ScanFilter::All);
+    }
+
+    #[test]
+    fn filtered_history_respects_objects_filter() {
+        let mut state = AppState::default();
+        state.scan_history = vec![
+            make_sector_with_objects(0., 0., 0., MIXED_OBJECTS), // has objects
+            make_sector(2., 0., 0.),                              // objects: null
+        ];
+        state.scan_filter = ScanFilter::Objects;
+        assert_eq!(state.filtered_history_indices(), vec![0]);
+        state.scan_filter = ScanFilter::Minable;
+        assert_eq!(state.filtered_history_indices(), vec![0]);
+        state.scan_filter = ScanFilter::Danger;
+        assert!(state.filtered_history_indices().is_empty());
+    }
+
+    #[test]
+    fn hist_nav_skips_filtered_out_entries() {
+        let mut state = AppState::default();
+        state.scan_history = vec![
+            make_sector_with_objects(0., 0., 0., MIXED_OBJECTS),
+            make_sector(2., 0., 0.),
+            make_sector_with_objects(4., 0., 0., MIXED_OBJECTS),
+        ];
+        state.scan_filter = ScanFilter::Objects;
+        state.scan_history_idx = 0;
+        state.scan_hist_next();
+        // skips index 1 (no objects)
+        assert_eq!(state.scan_history_idx, 2);
+        state.scan_hist_prev();
+        assert_eq!(state.scan_history_idx, 0);
+    }
+
+    #[test]
+    fn cycle_filter_snaps_selection_into_filter() {
+        let mut state = AppState::default();
+        state.scan_history = vec![
+            make_sector_with_objects(0., 0., 0., MIXED_OBJECTS),
+            make_sector(2., 0., 0.),
+        ];
+        state.scan_history_idx = 1;
+        state.cycle_scan_filter(); // All → Objects, idx 1 no longer visible
+        assert_eq!(state.scan_history_idx, 0);
     }
 
     // ── collect_waypoints ─────────────────────────────────────────────────────

@@ -893,6 +893,16 @@ fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
                         s.push(Span::styled("[o]", Style::default().fg(Color::Yellow)));
                         s.push(Span::raw(" objects"));
                     }
+                    s.push(Span::raw("  "));
+                    s.push(Span::styled("[f]", Style::default().fg(Color::Cyan)));
+                    if state.scan_filter == crate::app::ScanFilter::All {
+                        s.push(Span::raw(" filter"));
+                    } else {
+                        s.push(Span::styled(
+                            format!(" {}", state.scan_filter.label()),
+                            Style::default().fg(Color::Yellow),
+                        ));
+                    }
                     if state.current_sector().is_some() {
                         s.push(Span::raw("  "));
                         s.push(Span::styled("[g]", Style::default().fg(Color::Yellow)));
@@ -906,8 +916,9 @@ fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
     }
 
     // Horizontal split: detail on left, history list on right
-    let history_len = state.scan_history.len();
-    let history_width: u16 = if history_len > 0 { 14 } else { 0 };
+    let filtered = state.filtered_history_indices();
+    let history_len = filtered.len();
+    let history_width: u16 = if history_len > 0 { 22 } else { 0 };
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Min(1), Constraint::Length(history_width)])
@@ -923,14 +934,19 @@ fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
         let hist_inner = hist_block.inner(history_area);
         frame.render_widget(hist_block, history_area);
 
-        let items: Vec<ListItem> = state
-            .scan_history
+        let items: Vec<ListItem> = filtered
             .iter()
-            .map(|s| {
+            .map(|&i| {
+                let s = &state.scan_history[i];
                 let c = &s.relative_coordinates;
                 let label = format!("{},{},{}", c.x as i64, c.y as i64, c.z as i64);
                 let color = sector_interest_color(s);
-                ListItem::new(Line::from(Span::styled(label, Style::default().fg(color))))
+                let (sym, sym_style) = map_cell_symbol(s);
+                ListItem::new(Line::from(vec![
+                    Span::styled(format!("{sym} "), sym_style),
+                    Span::styled(format!("{label:<9}"), Style::default().fg(color)),
+                    Span::styled(format!("d:{}", s.distance), Style::default().fg(Color::DarkGray)),
+                ]))
             })
             .collect();
 
@@ -939,7 +955,7 @@ fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
             .highlight_symbol("▶ ");
 
         let mut list_state = ListState::default();
-        list_state.select(Some(state.scan_history_idx));
+        list_state.select(filtered.iter().position(|&i| i == state.scan_history_idx));
         frame.render_stateful_widget(list, hist_inner, &mut list_state);
     }
 
