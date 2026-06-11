@@ -880,7 +880,7 @@ impl AppState {
 
     pub fn travel_type_char(&mut self, c: char) {
         if let TravelInput::Typing(ref mut buf) = self.travel {
-            if c == '-' || c == ' ' || c.is_ascii_digit() {
+            if c == '-' || c == ' ' || c.is_ascii_digit() || (c == '+' && buf.is_empty()) {
                 buf.push(c);
             }
         }
@@ -892,16 +892,38 @@ impl AppState {
         }
     }
 
-    pub fn travel_submit(&mut self) {
-        let (x, y, z) = {
-            let TravelInput::Typing(ref buf) = self.travel else { return };
-            let parts: Vec<&str> = buf.split_whitespace().collect();
-            if parts.len() != 3 { return }
-            let Ok(x) = parts[0].parse::<i32>() else { return };
-            let Ok(y) = parts[1].parse::<i32>() else { return };
-            let Ok(z) = parts[2].parse::<i32>() else { return };
-            (x, y, z)
+    /// Parse a travel destination buffer: absolute "x y z", or relative
+    /// "+dx dy dz" applied to `current`.
+    fn parse_travel_buf(buf: &str, current: Option<(i32, i32, i32)>) -> Option<(i32, i32, i32)> {
+        let trimmed = buf.trim();
+        let (relative, rest) = match trimmed.strip_prefix('+') {
+            Some(r) => (true, r),
+            None => (false, trimmed),
         };
+        let parts: Vec<&str> = rest.split_whitespace().collect();
+        if parts.len() != 3 {
+            return None;
+        }
+        let x = parts[0].parse::<i32>().ok()?;
+        let y = parts[1].parse::<i32>().ok()?;
+        let z = parts[2].parse::<i32>().ok()?;
+        if relative {
+            let (cx, cy, cz) = current?;
+            Some((cx + x, cy + y, cz + z))
+        } else {
+            Some((x, y, z))
+        }
+    }
+
+    /// Destination currently typed in the travel overlay, resolved to
+    /// absolute coordinates (None while incomplete or invalid).
+    pub fn resolve_travel_target(&self) -> Option<(i32, i32, i32)> {
+        let TravelInput::Typing(ref buf) = self.travel else { return None };
+        Self::parse_travel_buf(buf, self.probe_sector_coords())
+    }
+
+    pub fn travel_submit(&mut self) {
+        let Some((x, y, z)) = self.resolve_travel_target() else { return };
         let error = if (x + y + z) % 2 != 0 {
             Some("x+y+z must be even".to_string())
         } else {
@@ -1548,6 +1570,44 @@ mod tests {
         state.travel = TravelInput::Typing("abc".into());
         state.travel_submit();
         assert!(matches!(state.travel, TravelInput::Typing(_)));
+    }
+
+    #[test]
+    fn travel_relative_input_resolves_from_probe_position() {
+        let mut state = AppState::default();
+        state.probe = Some(make_probe(7.0, 2.0, 0.0, -2.0));
+        state.travel = TravelInput::Typing("+2 0 -2".into());
+        assert_eq!(state.resolve_travel_target(), Some((4, 0, -4)));
+        state.travel_submit();
+        if let TravelInput::Confirming { x, y, z, error, .. } = &state.travel {
+            assert_eq!((*x, *y, *z), (4, 0, -4));
+            assert!(error.is_none());
+        } else {
+            panic!("expected Confirming variant");
+        }
+    }
+
+    #[test]
+    fn travel_relative_without_probe_position_is_noop() {
+        let mut state = AppState::default();
+        state.travel = TravelInput::Typing("+2 0 0".into());
+        assert_eq!(state.resolve_travel_target(), None);
+        state.travel_submit();
+        assert!(matches!(state.travel, TravelInput::Typing(_)));
+    }
+
+    #[test]
+    fn travel_plus_only_accepted_as_first_char() {
+        let mut state = AppState::default();
+        state.travel = TravelInput::Typing(String::new());
+        state.travel_type_char('+');
+        state.travel_type_char('2');
+        state.travel_type_char('+'); // rejected mid-buffer
+        if let TravelInput::Typing(ref buf) = state.travel {
+            assert_eq!(buf, "+2");
+        } else {
+            panic!("expected Typing variant");
+        }
     }
 
     // ── scan_hist_next / scan_hist_prev ───────────────────────────────────────
