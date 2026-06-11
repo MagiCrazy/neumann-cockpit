@@ -1,5 +1,12 @@
 # Changelog
 
+## [23.1.2](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v23.1.1...neumann-cockpit-v23.1.2) (2026-06-11)
+
+
+### Bug Fixes
+
+* **ui:** scroll scan history list with selection ([#30](https://github.com/MagiCrazy/neumann-cockpit/issues/30)) ([7047b71](https://github.com/MagiCrazy/neumann-cockpit/commit/7047b710ad623fd8c1028a5ce079cf766d039e18))
+
 ## [23.1.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v23.1.0...neumann-cockpit-v23.1.1) (2026-06-09)
 
 
