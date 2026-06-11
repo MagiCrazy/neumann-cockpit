@@ -40,11 +40,11 @@ The timer deadline is set to `movement.arrival_at` (ISO 8601) converted to a `to
 
 `fetch_all()` spawns **four** independent `tokio::spawn` tasks: probe, mannies, sector, and visited sectors. All but probe are non-fatal.
 
-All other API calls (move, repair, mine, craft, etc.) are also spawned tasks that send results back via the `mpsc::Sender<ApiMessage>`. Keyboard handlers live in `src/input.rs` (`handle_event` + per-overlay `handle_*_event`); fetch spawners live in `src/api/tasks.rs`. `main.rs` only contains the select loop and the `ApiMessage` dispatch (which also sets the success toasts).
+All other API calls (move, repair, mine, craft, etc.) are also spawned tasks that send results back via the `mpsc::Sender<ApiMessage>`. Keyboard handlers live in `src/input/` (`mod.rs` holds `handle_event` — overlay dispatch + global key match; one module per wizard handler, `pickers.rs` grouping the seven pick-list ones, `geometry.rs` for the scan offset helpers); fetch spawners live in `src/api/tasks.rs`. `main.rs` only contains the select loop and the `ApiMessage` dispatch (which also sets the success toasts).
 
-### State (`src/app.rs`)
+### State (`src/app/`)
 
-`AppState` is the single source of truth passed to the renderer. Key design choices:
+`AppState` is the single source of truth passed to the renderer. Split by domain: `mod.rs` (struct `Panel` + `AppState`, core impl — updates, focus, toasts, refresh deadline — and `pub use` re-exports keeping `crate::app::*` paths stable), `inputs.rs` (all wizard input enums + constants), `scan.rs`, `travel.rs`, `inventory.rs`, `mannies.rs`, `map.rs`, `waypoints.rs`, `message.rs` (`ApiMessage`), `tests.rs` (unit tests). Key design choices:
 
 - Each interactive action (travel, repair, mine, craft, jettison, salvage, recall, rename, deploy, inspect, recover, detach, atomic printer craft, object actions, waypoints) has its own input state enum (`TravelInput`, `RepairInput`, `ObjectActionInput`, `WaypointsInput`, etc.) with variants for each wizard step. All start as `Inactive`.
 - `update_probe()` extracts `movement_arrival` from the response and stores it separately so the event loop can compute the next deadline without re-reading the full probe struct.
@@ -59,9 +59,9 @@ All other API calls (move, repair, mine, craft, etc.) are also spawned tasks tha
 - `types.rs` — all OpenAPI types. Structs use `#[serde(rename_all = "camelCase")]`; enums use `#[serde(rename_all = "snake_case")]` with `#[serde(other)] Unknown` fallbacks. `#![allow(dead_code)]` suppresses warnings on fields not yet consumed by the UI.
 - `client.rs` — `ApiClient` (cloneable, wraps `reqwest::Client`). Each endpoint has a typed wrapper with an inline `struct Resp` that deserializes the envelope and returns the inner value. HTTP errors extract `error.message` from the JSON body; 401 produces a specific "check your api_key" message.
 
-### UI (`src/ui/cockpit.rs`)
+### UI (`src/ui/`)
 
-`render(frame, state)` is the single render entry point called every loop iteration. Layout — two rows, each split into two columns:
+`cockpit::render(frame, state)` is the single render entry point called every loop iteration. Module layout: `cockpit.rs` (entry point, 4-panel layout, status bar), `panels/` (one file per panel, each with its height helper), `overlays/` (one file per wizard overlay; `pickers.rs` groups the seven pick-list-based ones; `mod.rs` hosts `centered_rect` + `render_pick_list`), `theme.rs` (colours, icons, labels, `format_duration`/`format_age`). Layout — two rows, each split into two columns:
 
 ```
 ┌─ NEUMANN COCKPIT ─────────────────────────────────────────────┐
