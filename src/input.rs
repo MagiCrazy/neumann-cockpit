@@ -90,6 +90,13 @@ pub fn handle_event(
         return;
     }
 
+    if state.inventory_detail_open {
+        if matches!(k.code, KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q')) {
+            state.inventory_detail_open = false;
+        }
+        return;
+    }
+
     if state.map.open {
         handle_map_event(k.code, state);
         return;
@@ -283,6 +290,11 @@ pub fn handle_event(
         }
         KeyCode::Up if state.focused == Some(Panel::Inventory) => {
             state.inventory_prev();
+        }
+        KeyCode::Enter if state.focused == Some(Panel::Inventory) => {
+            if state.selected_inventory_row().is_some() {
+                state.inventory_detail_open = true;
+            }
         }
         KeyCode::Char('d') if state.focused == Some(Panel::Inventory) => {
             if state.inventory_waypoint_bookmark_id().is_none() {
