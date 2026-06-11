@@ -556,6 +556,9 @@ pub fn handle_event(
         KeyCode::Char('d') if state.focused == Some(Panel::Scanner) && state.scan_batch.is_none() => {
             state.scan_mode = ScanMode::DirectionPick;
         }
+        KeyCode::Char('f') if state.focused == Some(Panel::Scanner) => {
+            state.cycle_scan_filter();
+        }
         KeyCode::Char('s') => state.toggle_focus(Panel::Scanner),
         _ => {}
     }
