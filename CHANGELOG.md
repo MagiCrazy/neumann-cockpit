@@ -1,5 +1,12 @@
 # Changelog
 
+## [23.4.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v23.3.1...neumann-cockpit-v23.4.0) (2026-06-11)
+
+
+### Features
+
+* **ui:** retro phosphor-CRT theme with idle animations ([#54](https://github.com/MagiCrazy/neumann-cockpit/issues/54)) ([0fcaced](https://github.com/MagiCrazy/neumann-cockpit/commit/0fcaced7fc3fadec9836fc05080833dd8ce00bbe))
+
 ## [23.3.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v23.3.0...neumann-cockpit-v23.3.1) (2026-06-11)
 
 
