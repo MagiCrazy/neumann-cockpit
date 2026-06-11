@@ -1,5 +1,29 @@
 # Changelog
 
+## [23.3.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v23.2.0...neumann-cockpit-v23.3.0) (2026-06-11)
+
+
+### Features
+
+* **api:** implement /api/probe/visited-sectors and show visited cells on the map ([#46](https://github.com/MagiCrazy/neumann-cockpit/issues/46)) ([1df25b9](https://github.com/MagiCrazy/neumann-cockpit/commit/1df25b98df1d0f4de881cb4c29b70c883945dec4))
+* **inventory:** [M] fills max amount in jettison input ([#43](https://github.com/MagiCrazy/neumann-cockpit/issues/43)) ([a89460f](https://github.com/MagiCrazy/neumann-cockpit/commit/a89460faea66cabf7f6ffa68b3ee73d7a432582c))
+* **inventory:** read-only detail popup for the selected row ([#42](https://github.com/MagiCrazy/neumann-cockpit/issues/42)) ([07110c1](https://github.com/MagiCrazy/neumann-cockpit/commit/07110c1b83c6f19ae3178dfdad076117f1714247))
+* **map:** center cell info line, legend, recenter and jump to coords ([#36](https://github.com/MagiCrazy/neumann-cockpit/issues/36)) ([025c661](https://github.com/MagiCrazy/neumann-cockpit/commit/025c661e041fa78a70fead0fafd62c96d24f327c))
+* **nav:** waypoints overlay listing known destinations ([#34](https://github.com/MagiCrazy/neumann-cockpit/issues/34)) ([49930e7](https://github.com/MagiCrazy/neumann-cockpit/commit/49930e7935a323abba50c6d9c43db159ea637cea))
+* **scanner:** batch scan progress gauge ([#40](https://github.com/MagiCrazy/neumann-cockpit/issues/40)) ([e54ca88](https://github.com/MagiCrazy/neumann-cockpit/commit/e54ca8837c89b9ae3767668388278ae09bd57f8a))
+* **scanner:** object-first actions on sector objects ([#33](https://github.com/MagiCrazy/neumann-cockpit/issues/33)) ([c68e980](https://github.com/MagiCrazy/neumann-cockpit/commit/c68e980e10a0dcb3929b9cfde9654828245ab6c5))
+* **scanner:** richer history list with icons, distance and cyclic filter ([#38](https://github.com/MagiCrazy/neumann-cockpit/issues/38)) ([7731aa4](https://github.com/MagiCrazy/neumann-cockpit/commit/7731aa4aabfcce7f28dbf7b13c611e424d39db19))
+* **scanner:** stamp and display scan age ([#41](https://github.com/MagiCrazy/neumann-cockpit/issues/41)) ([e2cf7c7](https://github.com/MagiCrazy/neumann-cockpit/commit/e2cf7c732ff0d08a51708d874f2a1c33d8c3ca63))
+* **travel:** live validation, relative input and current position ([#39](https://github.com/MagiCrazy/neumann-cockpit/issues/39)) ([a025409](https://github.com/MagiCrazy/neumann-cockpit/commit/a02540979e6acc423c008d79fd5ac8e7269e72d6))
+* **ui:** help overlay listing all keybindings ([#37](https://github.com/MagiCrazy/neumann-cockpit/issues/37)) ([737c927](https://github.com/MagiCrazy/neumann-cockpit/commit/737c9279c99e90370bd688ceee146c9fa48b2ff9))
+* **ui:** Tab cycles panel focus ([#44](https://github.com/MagiCrazy/neumann-cockpit/issues/44)) ([bde6929](https://github.com/MagiCrazy/neumann-cockpit/commit/bde692911a0e13a97bf965e68923f791ed2cb3d4))
+* **ui:** transient success toasts in the status bar ([#45](https://github.com/MagiCrazy/neumann-cockpit/issues/45)) ([8ee0d1d](https://github.com/MagiCrazy/neumann-cockpit/commit/8ee0d1d96cb83c5ac6a796243b2462b9fdeea94f))
+
+
+### Documentation
+
+* refresh CLAUDE.md after the TUI improvements series ([#47](https://github.com/MagiCrazy/neumann-cockpit/issues/47)) ([5174884](https://github.com/MagiCrazy/neumann-cockpit/commit/51748842485fa916008922394392260570b4a9f8))
+
 ## [23.2.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v23.1.2...neumann-cockpit-v23.2.0) (2026-06-11)
 
 
