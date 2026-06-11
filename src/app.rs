@@ -404,6 +404,7 @@ pub struct AppState {
     pub scanner_obj_selection: Option<usize>,
     pub object_action: ObjectActionInput,
     pub waypoints: WaypointsInput,
+    pub help_open: bool,
     pub travel: TravelInput,
     pub repair: RepairInput,
     pub mine: MineInput,

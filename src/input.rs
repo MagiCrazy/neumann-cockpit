@@ -83,6 +83,13 @@ pub fn handle_event(
         return;
     }
 
+    if state.help_open {
+        if matches!(k.code, KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q')) {
+            state.help_open = false;
+        }
+        return;
+    }
+
     if state.map.open {
         handle_map_event(k.code, state);
         return;
@@ -206,6 +213,7 @@ pub fn handle_event(
     match k.code {
         KeyCode::Char('q') => state.set_quit(),
         KeyCode::Char('b') => state.open_map(),
+        KeyCode::Char('?') => state.help_open = true,
         KeyCode::Char('w') => {
             let entries = state.collect_waypoints();
             if entries.is_empty() {
