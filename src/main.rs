@@ -93,62 +93,76 @@ async fn run(
                             state.set_scan_error(e);
                         }
                     }
-                    ApiMessage::MoveStarted(mv) => state.apply_movement(mv),
+                    ApiMessage::MoveStarted(mv) => {
+                        state.apply_movement(mv);
+                        state.set_toast("travel order sent");
+                    }
                     ApiMessage::MoveError(e) => state.set_travel_error(e),
                     ApiMessage::RepairStarted => {
                         state.repair = RepairInput::Inactive;
+                        state.set_toast("repair order sent");
                         fetch_mannies(client.clone(), tx.clone());
                     }
                     ApiMessage::RepairError(e) => state.set_repair_error(e),
                     ApiMessage::MineStarted => {
                         state.mine = MineInput::Inactive;
+                        state.set_toast("mining order sent");
                         fetch_mannies(client.clone(), tx.clone());
                     }
                     ApiMessage::MineError(e) => state.set_mine_error(e),
                     ApiMessage::JettisonDone(inv) => {
                         state.update_inventory(inv);
                         state.jettison = JettisonInput::Inactive;
+                        state.set_toast("jettisoned");
                         fetch_mannies(client.clone(), tx.clone());
                     }
                     ApiMessage::JettisonError(e) => state.set_jettison_error(e),
                     ApiMessage::CraftStarted => {
                         state.craft = CraftInput::Inactive;
+                        state.set_toast("craft order sent");
                         fetch_mannies(client.clone(), tx.clone());
                     }
                     ApiMessage::CraftError(e) => state.set_craft_error(e),
                     ApiMessage::SalvageStarted => {
                         state.salvage = SalvageInput::Inactive;
+                        state.set_toast("salvage order sent");
                         fetch_mannies(client.clone(), tx.clone());
                     }
                     ApiMessage::SalvageError(e) => state.set_salvage_error(e),
                     ApiMessage::RecallStarted => {
                         state.recall = RecallInput::Inactive;
+                        state.set_toast("recall order sent");
                         fetch_mannies(client.clone(), tx.clone());
                     }
                     ApiMessage::RecallError(e) => state.set_recall_error(e),
                     ApiMessage::DeployStarted => {
                         state.deploy = DeployInput::Inactive;
+                        state.set_toast("waypoint deploy order sent");
                         fetch_all(client.clone(), tx.clone());
                     }
                     ApiMessage::DeployError(e) => state.set_deploy_error(e),
                     ApiMessage::AtomicPrinterCraftStarted => {
                         state.atomic_printer_craft = AtomicPrinterCraftInput::Inactive;
+                        state.set_toast("atomic printer craft started");
                         fetch_all(client.clone(), tx.clone());
                     }
                     ApiMessage::AtomicPrinterCraftError(e) => state.set_atomic_printer_craft_error(e),
                     ApiMessage::RecipesFetched(recipes) => state.recipes = recipes,
                     ApiMessage::InspectStarted => {
                         state.inspect = InspectInput::Inactive;
+                        state.set_toast("inspect order sent");
                         fetch_mannies(client.clone(), tx.clone());
                     }
                     ApiMessage::InspectError(e) => state.set_inspect_error(e),
                     ApiMessage::RecoverStarted => {
                         state.recover = RecoverInput::Inactive;
+                        state.set_toast("recover order sent");
                         fetch_all(client.clone(), tx.clone());
                     }
                     ApiMessage::RecoverError(e) => state.set_recover_error(e),
                     ApiMessage::DetachStarted => {
                         state.detach = DetachInput::Inactive;
+                        state.set_toast("detach order sent");
                         fetch_all(client.clone(), tx.clone());
                     }
                     ApiMessage::DetachError(e) => state.set_detach_error(e),
@@ -159,6 +173,7 @@ async fn run(
                             }
                         }
                         state.rename_manny = RenameMannyInput::Inactive;
+                        state.set_toast("manny renamed");
                     }
                     ApiMessage::RenameMannyError(e) => state.set_rename_manny_error(e),
                     ApiMessage::VersionFetched(v) => state.api_version = Some(v),
