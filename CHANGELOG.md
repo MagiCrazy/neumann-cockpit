@@ -1,5 +1,12 @@
 # Changelog
 
+## [23.3.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v23.3.0...neumann-cockpit-v23.3.1) (2026-06-11)
+
+
+### Documentation
+
+* align CLAUDE.md architecture paths with the module split ([#52](https://github.com/MagiCrazy/neumann-cockpit/issues/52)) ([34521cb](https://github.com/MagiCrazy/neumann-cockpit/commit/34521cb52eca80a1400cab5bfa01a3819d9e9b95))
+
 ## [23.3.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v23.2.0...neumann-cockpit-v23.3.0) (2026-06-11)
 
 
