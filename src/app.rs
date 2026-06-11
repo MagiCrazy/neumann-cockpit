@@ -549,7 +549,8 @@ impl AppState {
         }
     }
 
-    pub fn update_sector(&mut self, sector: SectorObservation) {
+    pub fn update_sector(&mut self, mut sector: SectorObservation) {
+        sector.scanned_at = Some(Utc::now());
         let key = (
             sector.relative_coordinates.x as i64,
             sector.relative_coordinates.y as i64,
@@ -2035,6 +2036,16 @@ mod tests {
         state.update_sector(make_sector(2., 0., -2.));
         assert_eq!(state.scan_history.len(), 1);
         assert_eq!(state.scan_history_idx, 0);
+    }
+
+    #[test]
+    fn update_sector_stamps_scanned_at() {
+        let mut state = AppState::default();
+        // fixture JSON has no scannedAt field — defaults to None
+        let sector = make_sector(2., 0., -2.);
+        assert!(sector.scanned_at.is_none());
+        state.update_sector(sector);
+        assert!(state.scan_history[0].scanned_at.is_some());
     }
 
     #[test]

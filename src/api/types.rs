@@ -462,4 +462,8 @@ pub struct SectorObservation {
     pub sensor_mode: Option<SensorMode>,
     pub data_freshness: Option<DataFreshness>,
     pub scan: SectorScan,
+    /// Local timestamp of when this observation was received (not an API
+    /// field — stamped client-side and persisted in scan_history.json).
+    #[serde(default)]
+    pub scanned_at: Option<DateTime<Utc>>,
 }

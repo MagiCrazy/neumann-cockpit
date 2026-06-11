@@ -1021,7 +1021,7 @@ fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
     let freshness_str = sector.data_freshness.as_ref().map(freshness_label).unwrap_or("—");
     let freshness_color = sector.data_freshness.as_ref().map(freshness_color).unwrap_or(Color::DarkGray);
     let scan_q = sector.scan.scan_quality;
-    lines.push(Line::from(vec![
+    let mut freshness_spans = vec![
         Span::styled(freshness_str, Style::default().fg(freshness_color)),
         Span::raw("  quality: "),
         Span::styled(
@@ -1030,7 +1030,15 @@ fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppState, focused
         ),
         Span::raw("  sensors: "),
         Span::styled(sensor_dot(&sensor), sensor_style(&sensor)),
-    ]));
+    ];
+    if let Some(scanned_at) = sector.scanned_at {
+        let age_secs = (Utc::now() - scanned_at).num_seconds().max(0);
+        freshness_spans.push(Span::styled(
+            format!("  scanned {}", format_age(age_secs)),
+            Style::default().fg(Color::DarkGray),
+        ));
+    }
+    lines.push(Line::from(freshness_spans));
 
     let req = sector.scan.required_residence_seconds;
     let cur = sector.scan.current_sector_residence_seconds;
@@ -3051,6 +3059,19 @@ fn gauge_color(ratio: f64) -> Color {
         Color::Yellow
     } else {
         Color::Red
+    }
+}
+
+/// Compact human age: "just now", "5m ago", "3h ago", "2d ago".
+pub fn format_age(secs: i64) -> String {
+    if secs < 60 {
+        "just now".to_string()
+    } else if secs < 3600 {
+        format!("{}m ago", secs / 60)
+    } else if secs < 86400 {
+        format!("{}h ago", secs / 3600)
+    } else {
+        format!("{}d ago", secs / 86400)
     }
 }
 
