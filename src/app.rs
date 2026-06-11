@@ -1,4 +1,4 @@
-use crate::api::types::{CraftingRecipe, Manny, Probe, ProbeInventory, ProbeMovement, SectorObject, SectorObjectType, SectorObservation};
+use crate::api::types::{CraftingRecipe, Manny, Probe, ProbeInventory, ProbeMovement, SectorObject, SectorObjectType, SectorObservation, VisitedSector};
 use chrono::{DateTime, Local, Utc};
 use std::path::Path;
 use tokio::time::Instant;
@@ -394,6 +394,7 @@ pub enum ApiMessage {
     MineStarted,
     MineError(String),
     VersionFetched(u32),
+    VisitedSectorsFetched(Vec<VisitedSector>),
     JettisonDone(ProbeInventory),
     JettisonError(String),
     CraftStarted,
@@ -463,6 +464,8 @@ pub struct AppState {
     pub inventory_detail_open: bool,
     /// Transient success message shown in the status bar.
     pub toast: Option<(String, DateTime<Local>)>,
+    /// Sectors already visited by the probe (server-side history).
+    pub visited_sectors: Vec<VisitedSector>,
     pub travel: TravelInput,
     pub repair: RepairInput,
     pub mine: MineInput,
@@ -1865,6 +1868,23 @@ mod tests {
         } else {
             panic!("expected EnterAmount");
         }
+    }
+
+    #[test]
+    fn visited_sector_parses_spec_example() {
+        let v: Vec<VisitedSector> = serde_json::from_str(r#"[
+            {"relativeCoordinates": {"x": 0, "y": 0, "z": 0},
+             "firstVisitedAt": "2026-06-01T12:00:00+00:00",
+             "lastVisitedAt": "2026-06-01T12:00:00+00:00",
+             "visitCount": 1},
+            {"relativeCoordinates": {"x": 1, "y": 1, "z": 0},
+             "firstVisitedAt": "2026-06-01T13:15:00+00:00",
+             "lastVisitedAt": "2026-06-01T15:45:00+00:00",
+             "visitCount": 2}
+        ]"#).unwrap();
+        assert_eq!(v.len(), 2);
+        assert_eq!(v[1].visit_count, 2);
+        assert_eq!(v[1].relative_coordinates.x as i32, 1);
     }
 
     #[test]

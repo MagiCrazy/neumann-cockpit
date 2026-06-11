@@ -177,6 +177,7 @@ async fn run(
                     }
                     ApiMessage::RenameMannyError(e) => state.set_rename_manny_error(e),
                     ApiMessage::VersionFetched(v) => state.api_version = Some(v),
+                    ApiMessage::VisitedSectorsFetched(v) => state.visited_sectors = v,
                     ApiMessage::Error(e) => state.set_error(e),
                 }
             }

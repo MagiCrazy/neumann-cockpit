@@ -2759,6 +2759,18 @@ fn render_map_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
         .and_then(|s| s.relative.as_ref())
         .map(|r| (r.x as i32, r.y as i32, r.z as i32));
 
+    let visited: std::collections::HashSet<(i32, i32, i32)> = state
+        .visited_sectors
+        .iter()
+        .map(|v| {
+            (
+                v.relative_coordinates.x.round() as i32,
+                v.relative_coordinates.y.round() as i32,
+                v.relative_coordinates.z.round() as i32,
+            )
+        })
+        .collect();
+
     let cx = state.map.center_x;
     let cz = state.map.center_z;
     let y = state.map.y_layer;
@@ -2785,7 +2797,19 @@ fn render_map_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let brief = sector_lookup
         .get(&(cx, y, cz))
         .map(|s| sector_brief(s))
-        .unwrap_or_else(|| "unscanned".into());
+        .unwrap_or_else(|| {
+            if let Some(v) = state.visited_sectors.iter().find(|v| {
+                (
+                    v.relative_coordinates.x.round() as i32,
+                    v.relative_coordinates.y.round() as i32,
+                    v.relative_coordinates.z.round() as i32,
+                ) == (cx, y, cz)
+            }) {
+                format!("visited ×{} — no scan data", v.visit_count)
+            } else {
+                "unscanned".into()
+            }
+        });
     info_spans.push(Span::styled(
         format!("  {brief}"),
         Style::default().fg(Color::DarkGray),
@@ -2805,6 +2829,8 @@ fn render_map_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
             Span::styled(" black hole  ", Style::default().fg(Color::DarkGray)),
             Span::styled("!", Style::default().fg(Color::Red)),
             Span::styled(" danger  ", Style::default().fg(Color::DarkGray)),
+            Span::styled("○", Style::default().fg(Color::Blue)),
+            Span::styled(" visited  ", Style::default().fg(Color::DarkGray)),
             Span::styled("·", Style::default().fg(Color::White)),
             Span::styled(" empty  ", Style::default().fg(Color::DarkGray)),
             Span::styled("·", Style::default().fg(Color::DarkGray)),
@@ -2888,6 +2914,13 @@ fn render_map_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
                     (s, st.add_modifier(Modifier::REVERSED))
                 } else {
                     (s, st)
+                }
+            } else if visited.contains(&(x, y, z)) {
+                let st = Style::default().fg(Color::Blue);
+                if is_center {
+                    ("○", st.add_modifier(Modifier::REVERSED))
+                } else {
+                    ("○", st)
                 }
             } else if is_center {
                 ("+", Style::default().fg(Color::DarkGray).add_modifier(Modifier::REVERSED))

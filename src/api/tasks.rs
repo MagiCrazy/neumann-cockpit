@@ -29,11 +29,20 @@ pub fn fetch_all(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
         }
     });
 
-    let c3 = client;
-    let tx3 = tx;
+    let c3 = client.clone();
+    let tx3 = tx.clone();
     tokio::spawn(async move {
         if let Ok(s) = c3.get_probe_sector().await {
             let _ = tx3.send(ApiMessage::SectorUpdated(s)).await;
+        }
+    });
+
+    // Non-fatal, like mannies and sector.
+    let c4 = client;
+    let tx4 = tx;
+    tokio::spawn(async move {
+        if let Ok(v) = c4.get_visited_sectors().await {
+            let _ = tx4.send(ApiMessage::VisitedSectorsFetched(v)).await;
         }
     });
 }
