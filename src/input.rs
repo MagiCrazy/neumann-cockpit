@@ -276,6 +276,8 @@ pub fn handle_event(
             state.loading = true;
             fetch_all(client.clone(), tx.clone());
         }
+        KeyCode::Tab => state.focus_next_panel(),
+        KeyCode::BackTab => state.focus_prev_panel(),
         KeyCode::Char('p') => state.toggle_focus(Panel::Probe),
         KeyCode::Char('i') => state.toggle_focus(Panel::Inventory),
         KeyCode::Char('m') => state.toggle_focus(Panel::Mannies),

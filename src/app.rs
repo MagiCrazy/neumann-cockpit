@@ -532,6 +532,29 @@ impl AppState {
         }
     }
 
+    /// Visual order for Tab cycling: top-left → top-right → bottom-left → bottom-right.
+    const PANEL_ORDER: [Panel; 4] = [Panel::Probe, Panel::Inventory, Panel::Scanner, Panel::Mannies];
+
+    pub fn focus_next_panel(&mut self) {
+        self.focused = Some(match self.focused {
+            None => Self::PANEL_ORDER[0],
+            Some(p) => {
+                let i = Self::PANEL_ORDER.iter().position(|&x| x == p).unwrap_or(0);
+                Self::PANEL_ORDER[(i + 1) % Self::PANEL_ORDER.len()]
+            }
+        });
+    }
+
+    pub fn focus_prev_panel(&mut self) {
+        self.focused = Some(match self.focused {
+            None => Self::PANEL_ORDER[Self::PANEL_ORDER.len() - 1],
+            Some(p) => {
+                let i = Self::PANEL_ORDER.iter().position(|&x| x == p).unwrap_or(0);
+                Self::PANEL_ORDER[(i + Self::PANEL_ORDER.len() - 1) % Self::PANEL_ORDER.len()]
+            }
+        });
+    }
+
     pub fn manny_next(&mut self) {
         if let Some(mannies) = &self.mannies {
             if !mannies.is_empty() {
@@ -1902,6 +1925,30 @@ mod tests {
         state.toggle_focus(Panel::Probe);
         state.toggle_focus(Panel::Mannies);
         assert_eq!(state.focused, Some(Panel::Mannies));
+    }
+
+    #[test]
+    fn focus_next_panel_cycles_in_visual_order() {
+        let mut state = AppState::default();
+        state.focus_next_panel();
+        assert_eq!(state.focused, Some(Panel::Probe));
+        state.focus_next_panel();
+        assert_eq!(state.focused, Some(Panel::Inventory));
+        state.focus_next_panel();
+        assert_eq!(state.focused, Some(Panel::Scanner));
+        state.focus_next_panel();
+        assert_eq!(state.focused, Some(Panel::Mannies));
+        state.focus_next_panel();
+        assert_eq!(state.focused, Some(Panel::Probe));
+    }
+
+    #[test]
+    fn focus_prev_panel_cycles_backwards() {
+        let mut state = AppState::default();
+        state.focus_prev_panel();
+        assert_eq!(state.focused, Some(Panel::Mannies));
+        state.focus_prev_panel();
+        assert_eq!(state.focused, Some(Panel::Scanner));
     }
 
     // ── manny_next / manny_prev ───────────────────────────────────────────────

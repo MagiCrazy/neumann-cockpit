@@ -272,6 +272,7 @@ fn render_help_overlay(frame: &mut Frame, area: Rect) {
         help_section("Global"),
         help_key_line("r", "refresh all"),
         help_key_line("p i m s", "focus probe / inventory / mannies / scanner"),
+        help_key_line("Tab", "cycle panel focus (Shift-Tab reverse)"),
         help_key_line("t", "travel to coordinates"),
         help_key_line("b", "map"),
         help_key_line("w", "waypoints"),
