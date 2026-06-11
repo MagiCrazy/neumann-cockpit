@@ -7,6 +7,35 @@ use std::path::PathBuf;
 pub struct Config {
     pub base_url: String,
     pub api_key: String,
+    /// UI theme: "classic" (default) or "retro".
+    #[serde(default)]
+    pub theme: Option<String>,
+    /// Retro phosphor tint: "green" (default) or "amber".
+    #[serde(default)]
+    pub phosphor: Option<String>,
+    /// Retro idle animations (render tick only, never API polling).
+    #[serde(default = "default_true")]
+    pub animations: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl Config {
+    pub fn ui_theme(&self) -> crate::app::UiTheme {
+        match self.theme.as_deref() {
+            Some("retro") => crate::app::UiTheme::Retro,
+            _ => crate::app::UiTheme::Classic,
+        }
+    }
+
+    pub fn ui_phosphor(&self) -> crate::app::Phosphor {
+        match self.phosphor.as_deref() {
+            Some("amber") => crate::app::Phosphor::Amber,
+            _ => crate::app::Phosphor::Green,
+        }
+    }
 }
 
 impl Config {

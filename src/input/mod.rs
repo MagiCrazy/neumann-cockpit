@@ -65,6 +65,17 @@ pub fn handle_event(
         return;
     }
 
+    // Retro boot sequence: any key skips it.
+    if state.anim.booting {
+        state.skip_boot();
+        return;
+    }
+
+    if k.code == KeyCode::F(2) {
+        state.toggle_theme();
+        return;
+    }
+
     if state.help_open {
         if matches!(k.code, KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q')) {
             state.help_open = false;
