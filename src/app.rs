@@ -450,6 +450,8 @@ pub struct AppState {
     pub scan_mode: ScanMode,
     pub scan_error: Option<String>,
     pub scan_batch: Option<usize>,
+    /// Size of the batch in flight (for the progress gauge).
+    pub scan_batch_total: usize,
     pub scan_detail_scroll: usize,
     pub scan_filter: ScanFilter,
     /// Some(idx) when the scanner panel is in object-browsing mode.
@@ -823,6 +825,7 @@ impl AppState {
 
     pub fn start_batch(&mut self, n: usize) {
         self.scan_batch = Some(n);
+        self.scan_batch_total = n;
         self.scan_error = None;
     }
 
@@ -1995,6 +1998,18 @@ mod tests {
         state.scan_batch = Some(3);
         state.batch_tick();
         assert_eq!(state.scan_batch, Some(2));
+    }
+
+    #[test]
+    fn start_batch_records_total() {
+        let mut state = AppState::default();
+        state.start_batch(12);
+        assert_eq!(state.scan_batch, Some(12));
+        assert_eq!(state.scan_batch_total, 12);
+        state.batch_tick();
+        // total is preserved while remaining decreases
+        assert_eq!(state.scan_batch, Some(11));
+        assert_eq!(state.scan_batch_total, 12);
     }
 
     #[test]
