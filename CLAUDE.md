@@ -38,21 +38,21 @@ Single `tokio::select!` loop over three sources:
 
 The timer deadline is set to `movement.arrival_at` (ISO 8601) converted to a `tokio::time::Instant`. When no movement is in progress the deadline is 24 h away — no polling, no tick loop.
 
-`fetch_all()` spawns **four** independent `tokio::spawn` tasks: probe, mannies, sector, and visited sectors. All but probe are non-fatal.
+`fetch_all()` spawns **six** independent `tokio::spawn` tasks: probe, mannies, sector, visited sectors, alerts, and damage warnings. All but probe are non-fatal.
 
-All other API calls (move, repair, mine, craft, etc.) are also spawned tasks that send results back via the `mpsc::Sender<ApiMessage>`. Keyboard handlers live in `src/input/` (`mod.rs` holds `handle_event` — overlay dispatch + global key match; one module per wizard handler, `pickers.rs` grouping the seven pick-list ones, `geometry.rs` for the scan offset helpers); fetch spawners live in `src/api/tasks.rs`. `main.rs` only contains the select loop and the `ApiMessage` dispatch (which also sets the success toasts).
+All other API calls (move, repair, mine, craft, storage container CRUD, storage moves, etc.) are also spawned tasks that send results back via the `mpsc::Sender<ApiMessage>`. Keyboard handlers live in `src/input/` (`mod.rs` holds `handle_event` — overlay dispatch + global key match; one module per wizard handler — `pickers.rs` groups the manny pick-list/confirm ones, `containers.rs` the storage-container ones, `storage_move.rs`, `alerts.rs`, `geometry.rs` for the scan offset helpers); fetch spawners live in `src/api/tasks.rs`. `main.rs` only contains the select loop and the `ApiMessage` dispatch (which also sets the success toasts).
 
 ### State (`src/app/`)
 
-`AppState` is the single source of truth passed to the renderer. Split by domain: `mod.rs` (struct `Panel` + `AppState`, core impl — updates, focus, toasts, refresh deadline — and `pub use` re-exports keeping `crate::app::*` paths stable), `inputs.rs` (all wizard input enums + constants), `scan.rs`, `travel.rs`, `inventory.rs`, `mannies.rs`, `map.rs`, `waypoints.rs`, `message.rs` (`ApiMessage`), `tests.rs` (unit tests). Key design choices:
+`AppState` is the single source of truth passed to the renderer. Split by domain: `mod.rs` (struct `Panel` + `AppState`, core impl — updates, focus, toasts, refresh deadline — and `pub use` re-exports keeping `crate::app::*` paths stable), `inputs.rs` (all wizard input enums + constants), `scan.rs`, `travel.rs`, `inventory.rs`, `mannies.rs`, `containers.rs` (storage-container/move helpers), `map.rs`, `waypoints.rs`, `message.rs` (`ApiMessage`), `tests.rs` (unit tests). Key design choices:
 
-- Each interactive action (travel, repair, mine, craft, jettison, salvage, recall, rename, deploy, inspect, recover, detach, atomic printer craft, object actions, waypoints) has its own input state enum (`TravelInput`, `RepairInput`, `ObjectActionInput`, `WaypointsInput`, etc.) with variants for each wizard step. All start as `Inactive`.
+- Each interactive action (travel, repair, mine, craft, jettison, salvage, recall, rename, deploy, inspect, recover, detach, atomic printer craft, object actions, waypoints, alerts, storage containers + rename + routing rules, storage moves, drop cargo) has its own input state enum (`TravelInput`, `RepairInput`, `ObjectActionInput`, `AlertsInput`, `ContainersInput`, `ContainerRulesInput`, `StorageMoveInput`, etc.) with variants for each wizard step. All start as `Inactive`.
 - `update_probe()` extracts `movement_arrival` from the response and stores it separately so the event loop can compute the next deadline without re-reading the full probe struct.
 - Scan history is cached in `AppState::scan_history` (a `Vec<SectorObservation>`) and persisted to disk asynchronously after each sector fetch. Each observation is stamped with a local `scanned_at` on receipt (serde-defaulted, so old history files load).
 - Panel cursors: `mannies_selection`, `inventory_selection` (rows built by `inventory_rows()` — stocks, active items, passive groups), `scan_history_idx` (moves within `filtered_history_indices()` when a `ScanFilter` is active), `scanner_obj_selection` (object-browsing mode, entries from `scanner_objects()`).
 - `jettison_for_selected()` builds the jettison wizard from the selected inventory row; `actions_for_object()` maps a `ScannerObjectEntry` to its available `ObjectAction`s, mirroring the manny-first candidate sets (`collect_*_candidates`).
 - Transient success toasts: `set_toast()` / `active_toast()` (5 s expiry, dismissed by any keypress).
-- `RESOURCE_TYPES` and `DETACH_MODES` constants live here (not in `main.rs` or `cockpit.rs`).
+- `RESOURCE_TYPES`, `MOVE_RESOURCE_TYPES`, and `DETACH_MODES` constants live here (not in `main.rs` or `cockpit.rs`).
 
 ### API layer (`src/api/`)
 
@@ -67,7 +67,7 @@ Animations are driven by a 100 ms render tick in the main `select!`, guarded by 
 
 ### UI (`src/ui/`)
 
-`cockpit::render(frame, state)` is the single render entry point called every loop iteration. Module layout: `cockpit.rs` (entry point, 4-panel layout, status bar), `panels/` (one file per panel, each with its height helper), `overlays/` (one file per wizard overlay; `pickers.rs` groups the seven pick-list-based ones; `mod.rs` hosts `centered_rect` + `render_pick_list`), `theme.rs` (colours, icons, labels, `format_duration`/`format_age`). Layout — two rows, each split into two columns:
+`cockpit::render(frame, state)` is the single render entry point called every loop iteration. Module layout: `cockpit.rs` (entry point, 4-panel layout, status bar), `panels/` (one file per panel, each with its height helper), `overlays/` (one file per wizard overlay; `pickers.rs` groups the manny pick-list/confirm ones, `containers.rs` the storage-container ones, plus `alerts.rs` / `storage_move.rs`; `mod.rs` hosts `centered_rect` + `render_pick_list`), `theme.rs` (colours, icons, labels, `format_duration`/`format_age`). Layout — two rows, each split into two columns:
 
 ```
 ┌─ NEUMANN COCKPIT ─────────────────────────────────────────────┐
@@ -78,7 +78,8 @@ Animations are driven by a 100 ms render tick in the main `select!`, guarded by 
 │  │ speed gauge             │  │ containers + tanks gauges   │ │
 │  │ fuel gauge              │  │ [↑↓] select [Enter] detail  │ │
 │  │ integrity gauge         │  │ [j] jettison [d] deploy     │ │
-│  └─────────────────────────┘  │ [a] atomic craft            │ │
+│  │ [!] alert badge         │  │ [a] atomic [C] containers   │ │
+│  └─────────────────────────┘  │ [M] move stock              │ │
 │                               └─────────────────────────────┘ │
 │  ┌─ SCANNER ───────────────┐  ┌─ MANNIES ───────────────────┐ │
 │  │ sector detail │ history │  │ ● manny-1  idle             │ │
@@ -87,10 +88,10 @@ Animations are driven by a 100 ms render tick in the main `select!`, guarded by 
 │  │ [n] neighbors [d] deep  │  │ [c] craft  [s] salvage      │ │
 │  │ [f] filter  [o] objects │  │ [x] inspect [D] detach      │ │
 │  │ [g] go to sector        │  │ [v] recover [n] rename      │ │
-│  └─────────────────────────┘  │ [R] recall (busy)           │ │
+│  └─────────────────────────┘  │ [R] recall [X] drop cargo   │ │
 │                               └─────────────────────────────┘ │
 │ [r] refresh [p][i][m][s]/Tab focus [t] travel [b] map         │
-│ [w] waypoints [?] help [q] quit     v23.x  API v23  ⟳ HH:MM   │
+│ [w] waypoints [A] alerts [?] help [q] quit  v23.x  API v44    │
 └───────────────────────────────────────────────────────────────┘
 ```
 
@@ -108,12 +109,16 @@ Scanner specifics: the history column shows symbol + coords + distance, scrolls 
 - Jettison / Salvage / Recall / Rename / Inspect / Recover / Detach — inventory/sector object pickers
 - Deploy waypoint — 3-step wizard: pick manny → pick object → enter bookmark name
 - Object actions — action picker for the selected scanner object (+ manny picker when several idle)
+- Alerts (`[A]`) — tabbed Alerts / Damage-warnings list, `Tab` switches tab, `Enter` marks read; `[!]` badge on the probe panel + status bar when unread
+- Storage containers (`[C]` in Inventory) — container browser with capacity bars; `Enter` content view, `[n]` rename, `[e]` routing-rules editor (cycle each type none → priority → exclusion → strict)
+- Storage move (`[M]` in Inventory) — pick actor manny → kind (resource / item) → source/destination + amount, or multi-select items + destination
+- Drop cargo (`[X]` on a Manny waiting for space) — one-step confirmation (resource cargo is lost)
 - Waypoints (`[w]`) — known destinations from scan history (bookmarks, stars, minable), `Enter` → travel confirmation
 - Inventory detail (`Enter` in inventory) — read-only detail of the selected row
 - Map (`[b]`) — isometric sector overview: pan (`[hjkl/←↓↑→]`), `[u/d]` y±1, `[0]` recenter on probe, `[c]` jump to coords, `[g]` travel to center; info line (distance, ETA, sector summary) + legend; visited-but-unscanned sectors shown as `○`
 - Help (`[?]`) — all keybindings grouped by context
 
-## Implemented API endpoints (v23)
+## Implemented API endpoints (API v44)
 
 | Endpoint | Method | Status |
 |---|---|---|
@@ -132,9 +137,20 @@ Scanner specifics: the history column shows symbol + coords + distance, scrolls 
 | `/api/probe/mannies/{id}/inspect-asteroid` | POST | ✓ |
 | `/api/probe/mannies/{id}/recover-storage-container` | POST | ✓ |
 | `/api/probe/mannies/{id}/detach-storage-container` | POST | ✓ |
+| `/api/probe/mannies/{id}/drop-manny-cargo` | POST | ✓ |
 | `/api/probe/inventory/{id}/jettison` | POST | ✓ |
 | `/api/probe/atomic-printer/craft` | POST | ✓ |
+| `/api/probe/alerts` | GET | ✓ |
+| `/api/probe/alerts/{id}` | PATCH | ✓ (mark read) |
+| `/api/probe/damage-warnings` | GET | ✓ |
+| `/api/probe/damage-warnings/{id}` | PATCH | ✓ (mark read) |
+| `/api/probe/storage-containers` | GET | ✓ |
+| `/api/probe/storage-containers/{id}` | GET | ✓ |
+| `/api/probe/storage-containers/{id}` | PATCH | ✓ (rename) |
+| `/api/probe/storage-containers/{id}/rules` | PATCH | ✓ |
+| `/api/probe/storage-moves` | POST | ✓ |
 | `/api/crafting-recipes` | GET | ✓ |
 | `/api/sector` | GET | ✓ |
 | `/api/probe/visited-sectors` | GET | ✓ |
+| `/api/probe/mannies/{id}/drop-storage-container` | POST | ✗ (bloc 5b, in review) |
 | `/api/probe/messages` | GET/POST | ✗ (not implemented) |
