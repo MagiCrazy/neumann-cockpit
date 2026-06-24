@@ -1,5 +1,12 @@
 # Changelog
 
+## [23.4.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v23.4.0...neumann-cockpit-v23.4.1) (2026-06-24)
+
+
+### Bug Fixes
+
+* **input:** ignore non-press key events to prevent double-trigger on Windows ([#57](https://github.com/MagiCrazy/neumann-cockpit/issues/57)) ([f7c3822](https://github.com/MagiCrazy/neumann-cockpit/commit/f7c3822280a416e7a533b6ae36e4926cc3dc2fbd))
+
 ## [23.4.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v23.3.1...neumann-cockpit-v23.4.0) (2026-06-11)
 
 
