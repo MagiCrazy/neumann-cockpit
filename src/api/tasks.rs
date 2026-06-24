@@ -83,6 +83,38 @@ pub fn fetch_ack_damage_warning(id: i64, client: ApiClient, tx: mpsc::Sender<Api
     });
 }
 
+#[allow(clippy::too_many_arguments)]
+pub fn fetch_storage_move(
+    actor_manny_id: String,
+    kind: String,
+    to_container_id: String,
+    from_container_id: Option<String>,
+    resource_type: Option<String>,
+    amount: Option<f64>,
+    item_ids: Option<Vec<String>>,
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+) {
+    tokio::spawn(async move {
+        let msg = match client
+            .storage_move(
+                &actor_manny_id,
+                &kind,
+                &to_container_id,
+                from_container_id.as_deref(),
+                resource_type.as_deref(),
+                amount,
+                item_ids,
+            )
+            .await
+        {
+            Ok((m, inv)) => ApiMessage::StorageMoveDone(m, inv),
+            Err(e) => ApiMessage::StorageMoveError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
 pub fn fetch_storage_containers(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     tokio::spawn(async move {
         if let Ok(c) = client.get_storage_containers().await {

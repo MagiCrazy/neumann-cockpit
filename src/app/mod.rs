@@ -71,6 +71,7 @@ pub struct AppState {
     pub containers_input: ContainersInput,
     pub rename_container: RenameContainerInput,
     pub container_rules: ContainerRulesInput,
+    pub storage_move: StorageMoveInput,
     pub help_open: bool,
     /// Read-only detail popup for the selected inventory row.
     pub inventory_detail_open: bool,
@@ -169,6 +170,14 @@ impl AppState {
     pub fn set_container_rules_error(&mut self, msg: String) {
         if let ContainerRulesInput::Editing { ref mut error, .. } = self.container_rules {
             *error = Some(msg);
+        }
+    }
+
+    pub fn set_storage_move_error(&mut self, msg: String) {
+        match &mut self.storage_move {
+            StorageMoveInput::ConfigureResource { error, .. }
+            | StorageMoveInput::ConfigureItem { error, .. } => *error = Some(msg),
+            _ => {}
         }
     }
 

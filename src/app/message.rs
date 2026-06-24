@@ -47,5 +47,7 @@ pub enum ApiMessage {
     RenameContainerError(String),
     UpdateContainerRulesDone(StorageContainer, ProbeInventory),
     UpdateContainerRulesError(String),
+    StorageMoveDone(Manny, ProbeInventory),
+    StorageMoveError(String),
     Error(String),
 }

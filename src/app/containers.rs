@@ -35,6 +35,39 @@ impl AppState {
         set.into_iter().collect()
     }
 
+    /// Containers available as move source/destination, from the probe
+    /// inventory (always loaded), as (id, label) pairs.
+    pub fn collect_move_containers(&self) -> Vec<(String, String)> {
+        match &self.probe {
+            Some(p) => p
+                .inventory
+                .containers
+                .iter()
+                .map(|c| (c.id.clone(), c.label.clone()))
+                .collect(),
+            None => Vec::new(),
+        }
+    }
+
+    /// Unit items movable between containers (excludes mannies, which use the
+    /// dedicated `manny` move kind). Label shows the current container.
+    pub fn collect_movable_items(&self) -> Vec<(String, String)> {
+        let Some(p) = &self.probe else { return Vec::new() };
+        p.inventory
+            .items
+            .iter()
+            .filter(|it| it.item_type != "manny")
+            .map(|it| {
+                let loc = it
+                    .container
+                    .as_ref()
+                    .map(|c| c.label.clone())
+                    .unwrap_or_else(|| "—".to_string());
+                (it.id.clone(), format!("{} [{}]", it.name, loc))
+            })
+            .collect()
+    }
+
     /// Build the routing-rules editor for a container (by id), seeded from its
     /// current rules. Returns `None` if the container is not in the list.
     pub fn rules_editor_for(&self, container_id: &str) -> Option<ContainerRulesInput> {
