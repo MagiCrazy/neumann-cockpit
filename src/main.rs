@@ -12,9 +12,9 @@ use tokio::sync::mpsc;
 use neumann_cockpit::api::client::ApiClient;
 use neumann_cockpit::api::tasks::{fetch_all, fetch_api_version, fetch_crafting_recipes, fetch_mannies};
 use neumann_cockpit::app::{
-    ApiMessage, AppState, AtomicPrinterCraftInput, CraftInput, DeployInput, DetachInput,
-    InspectInput, JettisonInput, MineInput, Phosphor, RecallInput, RecoverInput,
-    RenameMannyInput, RepairInput, SalvageInput, UiTheme,
+    ApiMessage, AppState, AtomicPrinterCraftInput, ContainerRulesInput, CraftInput, DeployInput,
+    DetachInput, InspectInput, JettisonInput, MineInput, Phosphor, RecallInput, RecoverInput,
+    RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, UiTheme,
 };
 use neumann_cockpit::config;
 use neumann_cockpit::input::handle_event;
@@ -203,6 +203,22 @@ async fn run(
                         state.replace_damage_warning(w);
                         state.set_toast("warning acknowledged");
                     }
+                    ApiMessage::StorageContainersFetched(c) => state.storage_containers = c,
+                    ApiMessage::StorageContainerDetailFetched(c, inv) => {
+                        state.storage_container_detail = Some((c, inv));
+                    }
+                    ApiMessage::RenameContainerDone(c, inv) => {
+                        state.apply_container_update(c, inv);
+                        state.rename_container = RenameContainerInput::Inactive;
+                        state.set_toast("container renamed");
+                    }
+                    ApiMessage::RenameContainerError(e) => state.set_rename_container_error(e),
+                    ApiMessage::UpdateContainerRulesDone(c, inv) => {
+                        state.apply_container_update(c, inv);
+                        state.container_rules = ContainerRulesInput::Inactive;
+                        state.set_toast("routing rules updated");
+                    }
+                    ApiMessage::UpdateContainerRulesError(e) => state.set_container_rules_error(e),
                     ApiMessage::RenameMannyDone(manny) => {
                         if let Some(ref mut mannies) = state.mannies {
                             if let Some(m) = mannies.iter_mut().find(|m| m.id == manny.id) {

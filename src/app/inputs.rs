@@ -77,6 +77,46 @@ pub enum AlertsInput {
 }
 
 #[derive(Default)]
+pub enum ContainersInput {
+    #[default]
+    Inactive,
+    /// Browsing the storage-container list (entries live in
+    /// `AppState::storage_containers`).
+    Browsing { selection: usize },
+}
+
+#[derive(Default)]
+pub enum RenameContainerInput {
+    #[default]
+    Inactive,
+    Typing {
+        container_id: String,
+        current_label: String,
+        buf: String,
+        error: Option<String>,
+    },
+}
+
+#[derive(Default)]
+pub enum ContainerRulesInput {
+    #[default]
+    Inactive,
+    /// Each routable type in `types` is assigned to at most one of the three
+    /// lists; `selection` cursors `types`, cycled none → priority → exclusion
+    /// → strict via Space.
+    Editing {
+        container_id: String,
+        container_label: String,
+        types: Vec<String>,
+        priority: Vec<String>,
+        exclusion: Vec<String>,
+        strict_exclusion: Vec<String>,
+        selection: usize,
+        error: Option<String>,
+    },
+}
+
+#[derive(Default)]
 pub enum WaypointsInput {
     #[default]
     Inactive,

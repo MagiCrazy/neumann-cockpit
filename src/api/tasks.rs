@@ -83,6 +83,49 @@ pub fn fetch_ack_damage_warning(id: i64, client: ApiClient, tx: mpsc::Sender<Api
     });
 }
 
+pub fn fetch_storage_containers(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        if let Ok(c) = client.get_storage_containers().await {
+            let _ = tx.send(ApiMessage::StorageContainersFetched(c)).await;
+        }
+    });
+}
+
+pub fn fetch_storage_container_detail(id: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        if let Ok((c, inv)) = client.get_storage_container(&id).await {
+            let _ = tx.send(ApiMessage::StorageContainerDetailFetched(c, inv)).await;
+        }
+    });
+}
+
+pub fn fetch_rename_container(id: String, label: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        let msg = match client.rename_storage_container(&id, &label).await {
+            Ok((c, inv)) => ApiMessage::RenameContainerDone(c, inv),
+            Err(e) => ApiMessage::RenameContainerError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
+pub fn fetch_update_container_rules(
+    id: String,
+    priority: Vec<String>,
+    exclusion: Vec<String>,
+    strict_exclusion: Vec<String>,
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+) {
+    tokio::spawn(async move {
+        let msg = match client.update_container_rules(&id, priority, exclusion, strict_exclusion).await {
+            Ok((c, inv)) => ApiMessage::UpdateContainerRulesDone(c, inv),
+            Err(e) => ApiMessage::UpdateContainerRulesError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
 pub fn fetch_mannies(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     tokio::spawn(async move {
         if let Ok(m) = client.get_mannies().await {
