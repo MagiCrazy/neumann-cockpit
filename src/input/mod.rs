@@ -5,15 +5,16 @@ use crate::api::client::ApiClient;
 use crate::api::tasks::{
     fetch_all,
     fetch_inspect,
-    fetch_recover, fetch_sector,
+    fetch_recover, fetch_sector, fetch_storage_containers,
 };
 use crate::app::{
-    AlertsInput, ApiMessage, AppState, AtomicPrinterCraftInput, CraftInput, DeployInput,
-    DetachInput, InspectInput, JettisonInput, MineInput, ObjectActionInput, Panel, RecallInput,
-    RecoverInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, TravelInput,
-    WaypointsInput,
+    AlertsInput, ApiMessage, AppState, AtomicPrinterCraftInput, ContainerRulesInput,
+    ContainersInput, CraftInput, DeployInput, DetachInput, InspectInput, JettisonInput, MineInput,
+    ObjectActionInput, Panel, RecallInput, RecoverInput, RenameContainerInput, RenameMannyInput,
+    RepairInput, SalvageInput, ScanMode, TravelInput, WaypointsInput,
 };
 mod alerts;
+mod containers;
 mod craft;
 mod geometry;
 mod jettison;
@@ -25,6 +26,9 @@ mod scanner;
 mod travel;
 
 use alerts::handle_alerts_event;
+use containers::{
+    handle_container_rules_event, handle_containers_event, handle_rename_container_event,
+};
 use craft::{handle_atomic_printer_craft_event, handle_craft_event};
 use geometry::{face_d2, neighbors_d1};
 use jettison::handle_jettison_event;
@@ -63,6 +67,9 @@ pub fn handle_event(
     let in_recover = !matches!(state.recover, RecoverInput::Inactive);
     let in_detach = !matches!(state.detach, DetachInput::Inactive);
     let in_alerts = !matches!(state.alerts_input, AlertsInput::Inactive);
+    let in_rename_container = !matches!(state.rename_container, RenameContainerInput::Inactive);
+    let in_container_rules = !matches!(state.container_rules, ContainerRulesInput::Inactive);
+    let in_containers = !matches!(state.containers_input, ContainersInput::Inactive);
 
     if ctrl && k.code == KeyCode::Char('c') {
         state.set_quit();
@@ -151,6 +158,21 @@ pub fn handle_event(
 
     if in_alerts {
         handle_alerts_event(k.code, state, client, tx);
+        return;
+    }
+
+    if in_rename_container {
+        handle_rename_container_event(k.code, state, client, tx);
+        return;
+    }
+
+    if in_container_rules {
+        handle_container_rules_event(k.code, state, client, tx);
+        return;
+    }
+
+    if in_containers {
+        handle_containers_event(k.code, state, client, tx);
         return;
     }
 
@@ -347,6 +369,10 @@ pub fn handle_event(
                     error: None,
                 };
             }
+        }
+        KeyCode::Char('C') if state.focused == Some(Panel::Inventory) => {
+            fetch_storage_containers(client.clone(), tx.clone());
+            state.containers_input = ContainersInput::Browsing { selection: 0 };
         }
         KeyCode::Down | KeyCode::Char('j') if state.focused == Some(Panel::Mannies) => {
             state.manny_next();

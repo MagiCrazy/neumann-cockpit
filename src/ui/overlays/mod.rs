@@ -1,4 +1,5 @@
 pub(crate) mod alerts;
+pub(crate) mod containers;
 pub(crate) mod craft;
 pub(crate) mod help;
 pub(crate) mod inventory_detail;
@@ -12,6 +13,10 @@ pub(crate) mod travel;
 pub(crate) mod waypoints;
 
 pub(crate) use alerts::render_alerts_overlay;
+pub(crate) use containers::{
+    render_container_detail_overlay, render_container_rules_overlay, render_containers_overlay,
+    render_rename_container_overlay,
+};
 pub(crate) use craft::{render_atomic_printer_craft_overlay, render_craft_overlay};
 pub(crate) use help::render_help_overlay;
 pub(crate) use inventory_detail::render_inventory_detail_overlay;
@@ -28,9 +33,10 @@ pub(crate) use travel::render_travel_overlay;
 pub(crate) use waypoints::render_waypoints_overlay;
 
 use crate::app::{
-    AlertsInput, AppState, AtomicPrinterCraftInput, CraftInput, DeployInput, DetachInput,
-    InspectInput, JettisonInput, MineInput, ObjectActionInput, RecallInput, RecoverInput,
-    RenameMannyInput, RepairInput, SalvageInput, TravelInput, WaypointsInput,
+    AlertsInput, AppState, AtomicPrinterCraftInput, ContainerRulesInput, ContainersInput,
+    CraftInput, DeployInput, DetachInput, InspectInput, JettisonInput, MineInput,
+    ObjectActionInput, RecallInput, RecoverInput, RenameContainerInput, RenameMannyInput,
+    RepairInput, SalvageInput, TravelInput, WaypointsInput,
 };
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -46,6 +52,9 @@ pub(crate) fn render_active_overlays(frame: &mut Frame, area: Rect, state: &AppS
     // Informational overlays first (lowest in the stack); action wizards on top.
     if !matches!(state.alerts_input, AlertsInput::Inactive) {
         render_alerts_overlay(frame, area, state);
+    }
+    if !matches!(state.containers_input, ContainersInput::Inactive) {
+        render_containers_overlay(frame, area, state);
     }
     if !matches!(state.travel, TravelInput::Inactive) {
         render_travel_overlay(frame, area, state);
@@ -97,6 +106,16 @@ pub(crate) fn render_active_overlays(frame: &mut Frame, area: Rect, state: &AppS
     }
     if state.inventory_detail_open {
         render_inventory_detail_overlay(frame, area, state);
+    }
+    // Container action wizards + read-only detail sit above the list.
+    if !matches!(state.rename_container, RenameContainerInput::Inactive) {
+        render_rename_container_overlay(frame, area, state);
+    }
+    if !matches!(state.container_rules, ContainerRulesInput::Inactive) {
+        render_container_rules_overlay(frame, area, state);
+    }
+    if state.storage_container_detail.is_some() {
+        render_container_detail_overlay(frame, area, state);
     }
     if state.help_open {
         render_help_overlay(frame, area);

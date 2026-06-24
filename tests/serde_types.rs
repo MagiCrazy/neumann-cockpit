@@ -1,7 +1,8 @@
 use neumann_cockpit::api::types::{
-    AlertPhase, AlertStatus, AlertType, CraftingRecipe, DamageWarningRule, DataFreshness,
-    KnowledgeLevel, Manny, MannyLocationType, MannyTask, MovementPhase, Probe, ProbeAlert,
-    ProbeInventory, ProbeMovement, ProbeStatus, SectorObjectType, SectorObservation, SensorMode,
+    AlertPhase, AlertStatus, AlertType, ContainerInventory, CraftingRecipe, DamageWarningRule,
+    DataFreshness, KnowledgeLevel, Manny, MannyLocationType, MannyTask, MovementPhase, Probe,
+    ProbeAlert, ProbeInventory, ProbeMovement, ProbeStatus, SectorObjectType, SectorObservation,
+    SensorMode, StorageContainer,
 };
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -544,4 +545,46 @@ struct AlertsResponseProbe {
 struct DamageWarningsResponseProbe {
     damage_warnings: Vec<ProbeAlert>,
     rule: DamageWarningRule,
+}
+
+// ── Storage containers ──────────────────────────────────────────────────────
+// Shape per api-specs/v44.yaml StorageContainerInventoryResponse + StorageContainer.
+
+const CONTAINER_DETAIL_JSON: &str = r#"{
+  "container": {
+    "id": "container-itm_extra",
+    "kind": "container",
+    "label": "Soute metaux",
+    "sortOrder": 2,
+    "capacity": 1.0,
+    "usedCapacity": 0.4,
+    "freeCapacity": 0.6,
+    "capacityUnit": "earth_container_equivalent",
+    "rules": { "priority": ["metals"], "exclusion": ["ice"], "strictExclusion": ["manny"] }
+  },
+  "inventory": {
+    "capacityUnit": "earth_container_equivalent",
+    "items": [],
+    "resourceStocks": [
+      { "id": "stock-metals", "type": "metals", "name": "Metals", "amount": 0.4, "containerSpace": 0.4, "containers": [] }
+    ]
+  }
+}"#;
+
+#[test]
+fn container_detail_deser() {
+    #[derive(serde::Deserialize)]
+    struct Resp {
+        container: StorageContainer,
+        inventory: ContainerInventory,
+    }
+    let r: Resp = deser(CONTAINER_DETAIL_JSON);
+    assert_eq!(r.container.id, "container-itm_extra");
+    assert_eq!(r.container.kind, "container");
+    assert_eq!(r.container.capacity_unit.as_deref(), Some("earth_container_equivalent"));
+    assert_eq!(r.container.rules.priority, vec!["metals"]);
+    assert_eq!(r.container.rules.strict_exclusion, vec!["manny"]);
+    assert_eq!(r.inventory.resource_stocks.len(), 1);
+    assert_eq!(r.inventory.resource_stocks[0].amount, 0.4);
+    assert!(r.inventory.items.is_empty());
 }

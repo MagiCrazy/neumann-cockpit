@@ -1,6 +1,6 @@
 use crate::api::types::{
-    CraftingRecipe, DamageWarningRule, Manny, Probe, ProbeAlert, ProbeInventory, ProbeMovement,
-    SectorObservation, VisitedSector,
+    ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, Probe, ProbeAlert,
+    ProbeInventory, ProbeMovement, SectorObservation, StorageContainer, VisitedSector,
 };
 
 pub enum ApiMessage {
@@ -41,5 +41,11 @@ pub enum ApiMessage {
     DamageWarningAcknowledged(ProbeAlert),
     AlertsFetched(Vec<ProbeAlert>),
     AlertAcknowledged(ProbeAlert),
+    StorageContainersFetched(Vec<StorageContainer>),
+    StorageContainerDetailFetched(StorageContainer, ContainerInventory),
+    RenameContainerDone(StorageContainer, ProbeInventory),
+    RenameContainerError(String),
+    UpdateContainerRulesDone(StorageContainer, ProbeInventory),
+    UpdateContainerRulesError(String),
     Error(String),
 }

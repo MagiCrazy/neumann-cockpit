@@ -1,4 +1,5 @@
 mod anim;
+mod containers;
 mod inputs;
 mod inventory;
 mod mannies;
@@ -19,7 +20,8 @@ pub use scan::*;
 pub use waypoints::*;
 
 use crate::api::types::{
-    CraftingRecipe, DamageWarningRule, Manny, Probe, ProbeAlert, SectorObservation, VisitedSector,
+    ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, Probe, ProbeAlert,
+    ProbeInventory, SectorObservation, StorageContainer, VisitedSector,
 };
 use chrono::{DateTime, Local, Utc};
 use tokio::time::Instant;
@@ -63,6 +65,12 @@ pub struct AppState {
     pub damage_warnings: Vec<ProbeAlert>,
     pub damage_warning_rule: Option<DamageWarningRule>,
     pub alerts_input: AlertsInput,
+    /// Storage containers fetched on demand when the containers overlay opens.
+    pub storage_containers: Vec<StorageContainer>,
+    pub storage_container_detail: Option<(StorageContainer, ContainerInventory)>,
+    pub containers_input: ContainersInput,
+    pub rename_container: RenameContainerInput,
+    pub container_rules: ContainerRulesInput,
     pub help_open: bool,
     /// Read-only detail popup for the selected inventory row.
     pub inventory_detail_open: bool,
@@ -141,6 +149,27 @@ impl AppState {
             .chain(self.damage_warnings.iter())
             .filter(|a| a.is_unread())
             .count()
+    }
+
+    /// Apply a rename/rules response: refresh the container in the list and the
+    /// probe inventory in one shot.
+    pub fn apply_container_update(&mut self, container: StorageContainer, inventory: ProbeInventory) {
+        if let Some(c) = self.storage_containers.iter_mut().find(|c| c.id == container.id) {
+            *c = container;
+        }
+        self.update_inventory(inventory);
+    }
+
+    pub fn set_rename_container_error(&mut self, msg: String) {
+        if let RenameContainerInput::Typing { ref mut error, .. } = self.rename_container {
+            *error = Some(msg);
+        }
+    }
+
+    pub fn set_container_rules_error(&mut self, msg: String) {
+        if let ContainerRulesInput::Editing { ref mut error, .. } = self.container_rules {
+            *error = Some(msg);
+        }
     }
 
     pub fn set_toast(&mut self, msg: impl Into<String>) {

@@ -1,6 +1,6 @@
 use super::types::{
-    CraftingRecipe, DamageWarningRule, Manny, Probe, ProbeAlert, ProbeInventory, ProbeMovement,
-    SectorObservation, VisitedSector,
+    ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, Probe, ProbeAlert,
+    ProbeInventory, ProbeMovement, SectorObservation, StorageContainer, VisitedSector,
 };
 use anyhow::{Context, Result};
 use reqwest::{Client, StatusCode, Url};
@@ -336,5 +336,56 @@ impl ApiClient {
         struct Resp { alert: ProbeAlert }
         let path = format!("/api/probe/alerts/{id}");
         Ok(self.patch::<Resp, _>(&path, &serde_json::json!({})).await?.alert)
+    }
+
+    pub async fn get_storage_containers(&self) -> Result<Vec<StorageContainer>> {
+        #[derive(Deserialize)]
+        struct Resp { containers: Vec<StorageContainer> }
+        Ok(self.get::<Resp>("/api/probe/storage-containers").await?.containers)
+    }
+
+    pub async fn get_storage_container(&self, id: &str) -> Result<(StorageContainer, ContainerInventory)> {
+        #[derive(Deserialize)]
+        struct Resp { container: StorageContainer, inventory: ContainerInventory }
+        let path = format!("/api/probe/storage-containers/{id}");
+        let r = self.get::<Resp>(&path).await?;
+        Ok((r.container, r.inventory))
+    }
+
+    pub async fn rename_storage_container(
+        &self,
+        id: &str,
+        label: &str,
+    ) -> Result<(StorageContainer, ProbeInventory)> {
+        #[derive(Serialize)]
+        struct Body<'a> { label: &'a str }
+        #[derive(Deserialize)]
+        struct Resp { container: StorageContainer, inventory: ProbeInventory }
+        let path = format!("/api/probe/storage-containers/{id}");
+        let r = self.patch::<Resp, _>(&path, &Body { label }).await?;
+        Ok((r.container, r.inventory))
+    }
+
+    pub async fn update_container_rules(
+        &self,
+        id: &str,
+        priority: Vec<String>,
+        exclusion: Vec<String>,
+        strict_exclusion: Vec<String>,
+    ) -> Result<(StorageContainer, ProbeInventory)> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Body {
+            priority: Vec<String>,
+            exclusion: Vec<String>,
+            strict_exclusion: Vec<String>,
+        }
+        #[derive(Deserialize)]
+        struct Resp { container: StorageContainer, inventory: ProbeInventory }
+        let path = format!("/api/probe/storage-containers/{id}/rules");
+        let r = self
+            .patch::<Resp, _>(&path, &Body { priority, exclusion, strict_exclusion })
+            .await?;
+        Ok((r.container, r.inventory))
     }
 }

@@ -64,6 +64,7 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect) {
         help_key_line("j", "jettison selection"),
         help_key_line("d", "deploy waypoint"),
         help_key_line("a", "atomic printer craft"),
+        help_key_line("C", "storage containers"),
         Line::default(),
         help_section("Map"),
         help_key_line("hjkl/←↓↑→", "pan"),

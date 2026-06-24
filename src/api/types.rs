@@ -132,7 +132,20 @@ pub struct StorageContainer {
     pub capacity: f64,
     pub used_capacity: f64,
     pub free_capacity: f64,
+    pub capacity_unit: Option<String>,
     pub rules: StorageContainerRules,
+}
+
+/// Inner inventory of a single storage container
+/// (`GET /api/probe/storage-containers/{id}`).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContainerInventory {
+    pub capacity_unit: Option<String>,
+    #[serde(default)]
+    pub items: Vec<ProbeInventoryItem>,
+    #[serde(default)]
+    pub resource_stocks: Vec<ProbeResourceStock>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
