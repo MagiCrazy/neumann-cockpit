@@ -1,5 +1,22 @@
 # Changelog
 
+## [23.5.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v23.4.1...neumann-cockpit-v23.5.0) (2026-06-24)
+
+
+### Features
+
+* **alerts:** persistent alerts & damage warnings (v47 bloc 2) ([#61](https://github.com/MagiCrazy/neumann-cockpit/issues/61)) ([d1d1054](https://github.com/MagiCrazy/neumann-cockpit/commit/d1d10540ce5041fa0d8d4c0e4f3f770e8900be4d))
+* **api:** v47 prerequisite type patches and mine targetContainerId ([#59](https://github.com/MagiCrazy/neumann-cockpit/issues/59)) ([74c43a5](https://github.com/MagiCrazy/neumann-cockpit/commit/74c43a54dc8b62efab9414b2dcd91f40dcb5a5d5))
+* **containers:** storage containers CRUD and routing rules ([#62](https://github.com/MagiCrazy/neumann-cockpit/issues/62)) ([3c92b20](https://github.com/MagiCrazy/neumann-cockpit/commit/3c92b200e8879f5493b210bfa92192a4ecf591cc))
+* **mannies:** drop storage container on a planet ([#65](https://github.com/MagiCrazy/neumann-cockpit/issues/65)) ([399902f](https://github.com/MagiCrazy/neumann-cockpit/commit/399902fba4a6ed717de49e2c0631fcd9f64c52bb))
+* **mannies:** drop-manny-cargo action ([#64](https://github.com/MagiCrazy/neumann-cockpit/issues/64)) ([e3dafc9](https://github.com/MagiCrazy/neumann-cockpit/commit/e3dafc94c09be04df15913152e951705e81e0b89))
+* **storage-move:** inter-container stock transfers ([#63](https://github.com/MagiCrazy/neumann-cockpit/issues/63)) ([7fc953e](https://github.com/MagiCrazy/neumann-cockpit/commit/7fc953eeaf79b5b4fd723d5317c84dfeee1e6653))
+
+
+### Documentation
+
+* **claude:** sync architecture & endpoints with v47 blocs 1-5a ([#66](https://github.com/MagiCrazy/neumann-cockpit/issues/66)) ([01b1067](https://github.com/MagiCrazy/neumann-cockpit/commit/01b10676807ea840c91718c17c2519399476adf5))
+
 ## [23.4.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v23.4.0...neumann-cockpit-v23.4.1) (2026-06-24)
 
 
