@@ -1,6 +1,7 @@
 pub(crate) mod alerts;
 pub(crate) mod containers;
 pub(crate) mod craft;
+pub(crate) mod drop_container;
 pub(crate) mod help;
 pub(crate) mod inventory_detail;
 pub(crate) mod jettison;
@@ -19,6 +20,7 @@ pub(crate) use containers::{
     render_rename_container_overlay,
 };
 pub(crate) use craft::{render_atomic_printer_craft_overlay, render_craft_overlay};
+pub(crate) use drop_container::render_drop_container_overlay;
 pub(crate) use help::render_help_overlay;
 pub(crate) use inventory_detail::render_inventory_detail_overlay;
 pub(crate) use jettison::render_jettison_overlay;
@@ -37,7 +39,8 @@ pub(crate) use waypoints::render_waypoints_overlay;
 
 use crate::app::{
     AlertsInput, AppState, AtomicPrinterCraftInput, ContainerRulesInput, ContainersInput,
-    CraftInput, DeployInput, DetachInput, DropCargoInput, InspectInput, JettisonInput, MineInput,
+    CraftInput, DeployInput, DetachInput, DropCargoInput, DropStorageContainerInput, InspectInput,
+    JettisonInput, MineInput,
     ObjectActionInput, RecallInput, RecoverInput, RenameContainerInput, RenameMannyInput,
     RepairInput, SalvageInput, StorageMoveInput, TravelInput, WaypointsInput,
 };
@@ -103,6 +106,9 @@ pub(crate) fn render_active_overlays(frame: &mut Frame, area: Rect, state: &AppS
     }
     if !matches!(state.detach, DetachInput::Inactive) {
         render_detach_overlay(frame, area, state);
+    }
+    if !matches!(state.drop_container, DropStorageContainerInput::Inactive) {
+        render_drop_container_overlay(frame, area, state);
     }
     if !matches!(state.object_action, ObjectActionInput::Inactive) {
         render_object_action_overlay(frame, area, state);

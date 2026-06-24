@@ -157,6 +157,27 @@ pub enum StorageMoveInput {
 }
 
 #[derive(Default)]
+pub enum DropStorageContainerInput {
+    #[default]
+    Inactive,
+    PickContainer {
+        manny_id: String,
+        manny_name: String,
+        containers: Vec<(String, String)>,
+        selection: usize,
+    },
+    PickPlanet {
+        manny_id: String,
+        manny_name: String,
+        container_id: String,
+        container_name: String,
+        planets: Vec<(String, String)>,
+        selection: usize,
+        error: Option<String>,
+    },
+}
+
+#[derive(Default)]
 pub enum DropCargoInput {
     #[default]
     Inactive,

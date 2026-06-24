@@ -73,6 +73,7 @@ pub struct AppState {
     pub container_rules: ContainerRulesInput,
     pub storage_move: StorageMoveInput,
     pub drop_cargo: DropCargoInput,
+    pub drop_container: DropStorageContainerInput,
     pub help_open: bool,
     /// Read-only detail popup for the selected inventory row.
     pub inventory_detail_open: bool,
@@ -184,6 +185,12 @@ impl AppState {
 
     pub fn set_drop_cargo_error(&mut self, msg: String) {
         if let DropCargoInput::Confirm { ref mut error, .. } = self.drop_cargo {
+            *error = Some(msg);
+        }
+    }
+
+    pub fn set_drop_container_error(&mut self, msg: String) {
+        if let DropStorageContainerInput::PickPlanet { ref mut error, .. } = self.drop_container {
             *error = Some(msg);
         }
     }

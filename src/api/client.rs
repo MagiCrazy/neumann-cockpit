@@ -219,6 +219,24 @@ impl ApiClient {
         Ok(self.post::<Resp, _>(&path, &serde_json::json!({})).await?.manny)
     }
 
+    /// Drop an additional storage container onto a planet in the current sector
+    /// (`POST /api/probe/mannies/{id}/drop-storage-container`). Consumes an
+    /// atmospheric_drop_kit; the container leaves the probe inventory.
+    pub async fn drop_storage_container_on_planet(
+        &self,
+        manny_id: &str,
+        container_id: &str,
+        planet_id: &str,
+    ) -> Result<Manny> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Body<'a> { container_id: &'a str, planet_id: &'a str }
+        #[derive(Deserialize)]
+        struct Resp { manny: Manny }
+        let path = format!("/api/probe/mannies/{manny_id}/drop-storage-container");
+        Ok(self.post::<Resp, _>(&path, &Body { container_id, planet_id }).await?.manny)
+    }
+
     /// Drop the cargo of a Manny waiting outside for storage space and retry
     /// docking (`POST /api/probe/mannies/{id}/drop-manny-cargo`). Resource cargo
     /// is lost; recoverable objects are restored to the current sector.

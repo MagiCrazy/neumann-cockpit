@@ -323,6 +323,25 @@ pub fn fetch_detach(
     });
 }
 
+pub fn fetch_drop_storage_container(
+    manny_id: String,
+    container_id: String,
+    planet_id: String,
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+) {
+    tokio::spawn(async move {
+        let msg = match client
+            .drop_storage_container_on_planet(&manny_id, &container_id, &planet_id)
+            .await
+        {
+            Ok(m) => ApiMessage::DropStorageContainerStarted(m),
+            Err(e) => ApiMessage::DropStorageContainerError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
 pub fn fetch_drop_manny_cargo(manny_id: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     tokio::spawn(async move {
         let msg = match client.drop_manny_cargo(&manny_id).await {

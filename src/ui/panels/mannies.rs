@@ -51,6 +51,11 @@ pub(crate) fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppSta
                 spans.push(Span::styled("[D]", Style::default().fg(Color::Cyan)));
                 spans.push(Span::raw(" detach"));
             }
+            if has_detachable && state.has_atmospheric_drop_kit() {
+                spans.push(Span::raw("  "));
+                spans.push(Span::styled("[P]", Style::default().fg(Color::Cyan)));
+                spans.push(Span::raw(" drop on planet"));
+            }
             if has_detached {
                 spans.push(Span::raw("  "));
                 spans.push(Span::styled("[v]", Style::default().fg(Color::Cyan)));
