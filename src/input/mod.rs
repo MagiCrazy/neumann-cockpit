@@ -1,4 +1,4 @@
-use crossterm::event::{Event, KeyCode, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
 use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
@@ -42,6 +42,7 @@ pub fn handle_event(
     tx: &mpsc::Sender<ApiMessage>,
 ) {
     let Event::Key(k) = event else { return };
+    if k.kind != KeyEventKind::Press { return };
     // Toasts are transient: any keypress dismisses the current one.
     state.toast = None;
     let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
