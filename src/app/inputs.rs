@@ -157,6 +157,18 @@ pub enum StorageMoveInput {
 }
 
 #[derive(Default)]
+pub enum DropCargoInput {
+    #[default]
+    Inactive,
+    /// Confirmation for the irreversible cargo drop (resources are lost).
+    Confirm {
+        manny_id: String,
+        manny_name: String,
+        error: Option<String>,
+    },
+}
+
+#[derive(Default)]
 pub enum WaypointsInput {
     #[default]
     Inactive,

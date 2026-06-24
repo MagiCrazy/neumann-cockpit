@@ -219,6 +219,16 @@ impl ApiClient {
         Ok(self.post::<Resp, _>(&path, &serde_json::json!({})).await?.manny)
     }
 
+    /// Drop the cargo of a Manny waiting outside for storage space and retry
+    /// docking (`POST /api/probe/mannies/{id}/drop-manny-cargo`). Resource cargo
+    /// is lost; recoverable objects are restored to the current sector.
+    pub async fn drop_manny_cargo(&self, manny_id: &str) -> Result<Manny> {
+        #[derive(Deserialize)]
+        struct Resp { manny: Manny }
+        let path = format!("/api/probe/mannies/{manny_id}/drop-manny-cargo");
+        Ok(self.post::<Resp, _>(&path, &serde_json::json!({})).await?.manny)
+    }
+
     pub async fn rename_manny(&self, manny_id: &str, name: &str) -> Result<Manny> {
         #[derive(Serialize)]
         struct Body<'a> { name: &'a str }
