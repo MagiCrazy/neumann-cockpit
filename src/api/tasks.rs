@@ -323,6 +323,16 @@ pub fn fetch_detach(
     });
 }
 
+pub fn fetch_drop_manny_cargo(manny_id: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        let msg = match client.drop_manny_cargo(&manny_id).await {
+            Ok(m) => ApiMessage::DropMannyCargoStarted(m),
+            Err(e) => ApiMessage::DropMannyCargoError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
 pub fn fetch_rename_manny(manny_id: String, name: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     tokio::spawn(async move {
         let msg = match client.rename_manny(&manny_id, &name).await {

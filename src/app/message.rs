@@ -49,5 +49,7 @@ pub enum ApiMessage {
     UpdateContainerRulesError(String),
     StorageMoveDone(Manny, ProbeInventory),
     StorageMoveError(String),
+    DropMannyCargoStarted(Manny),
+    DropMannyCargoError(String),
     Error(String),
 }

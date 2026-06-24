@@ -66,16 +66,22 @@ pub(crate) fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppSta
             }
             frame.render_widget(Paragraph::new(Line::from(spans)), hint_area);
         } else if is_busy {
-            frame.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled("busy  ", Style::default().fg(Color::DarkGray)),
-                    Span::styled("[R]", Style::default().fg(Color::Yellow)),
-                    Span::raw(" recall  "),
-                    Span::styled("[n]", Style::default().fg(Color::Cyan)),
-                    Span::raw(" rename"),
-                ])),
-                hint_area,
-            );
+            let is_waiting = selected_manny
+                .map(|m| m.current_task == Some(MannyTask::WaitingForSpace))
+                .unwrap_or(false);
+            let mut spans = vec![
+                Span::styled("busy  ", Style::default().fg(Color::DarkGray)),
+                Span::styled("[R]", Style::default().fg(Color::Yellow)),
+                Span::raw(" recall  "),
+                Span::styled("[n]", Style::default().fg(Color::Cyan)),
+                Span::raw(" rename"),
+            ];
+            if is_waiting {
+                spans.push(Span::raw("  "));
+                spans.push(Span::styled("[X]", Style::default().fg(Color::Red)));
+                spans.push(Span::raw(" drop cargo"));
+            }
+            frame.render_widget(Paragraph::new(Line::from(spans)), hint_area);
         } else {
             frame.render_widget(
                 Paragraph::new(Line::from(vec![

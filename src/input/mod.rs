@@ -7,11 +7,13 @@ use crate::api::tasks::{
     fetch_inspect,
     fetch_recover, fetch_sector, fetch_storage_containers,
 };
+use crate::api::types::MannyTask;
 use crate::app::{
     AlertsInput, ApiMessage, AppState, AtomicPrinterCraftInput, ContainerRulesInput,
-    ContainersInput, CraftInput, DeployInput, DetachInput, InspectInput, JettisonInput, MineInput,
-    ObjectActionInput, Panel, RecallInput, RecoverInput, RenameContainerInput, RenameMannyInput,
-    RepairInput, SalvageInput, ScanMode, StorageMoveInput, TravelInput, WaypointsInput,
+    ContainersInput, CraftInput, DeployInput, DetachInput, DropCargoInput, InspectInput,
+    JettisonInput, MineInput, ObjectActionInput, Panel, RecallInput, RecoverInput,
+    RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, StorageMoveInput,
+    TravelInput, WaypointsInput,
 };
 mod alerts;
 mod containers;
@@ -36,8 +38,8 @@ use jettison::handle_jettison_event;
 use map::handle_map_event;
 use mine::handle_mine_event;
 use pickers::{
-    handle_deploy_event, handle_detach_event, handle_inspect_event, handle_recall_event,
-    handle_recover_event, handle_rename_manny_event, handle_salvage_event,
+    handle_deploy_event, handle_detach_event, handle_drop_cargo_event, handle_inspect_event,
+    handle_recall_event, handle_recover_event, handle_rename_manny_event, handle_salvage_event,
 };
 use repair::handle_repair_event;
 use scanner::{handle_object_action_event, handle_waypoints_event};
@@ -73,6 +75,7 @@ pub fn handle_event(
     let in_container_rules = !matches!(state.container_rules, ContainerRulesInput::Inactive);
     let in_containers = !matches!(state.containers_input, ContainersInput::Inactive);
     let in_storage_move = !matches!(state.storage_move, StorageMoveInput::Inactive);
+    let in_drop_cargo = !matches!(state.drop_cargo, DropCargoInput::Inactive);
 
     if ctrl && k.code == KeyCode::Char('c') {
         state.set_quit();
@@ -181,6 +184,11 @@ pub fn handle_event(
 
     if in_storage_move {
         handle_storage_move_event(k.code, state, client, tx);
+        return;
+    }
+
+    if in_drop_cargo {
+        handle_drop_cargo_event(k.code, state, client, tx);
         return;
     }
 
@@ -523,6 +531,21 @@ pub fn handle_event(
                         buf: manny.name.clone(),
                         error: None,
                     };
+                }
+            }
+        }
+        KeyCode::Char('X') if state.focused == Some(Panel::Mannies) => {
+            if let Some(mannies) = &state.mannies {
+                if let Some(manny) = mannies.get(state.mannies_selection) {
+                    if manny.current_task == Some(MannyTask::WaitingForSpace) {
+                        state.drop_cargo = DropCargoInput::Confirm {
+                            manny_id: manny.id.clone(),
+                            manny_name: manny.name.clone(),
+                            error: None,
+                        };
+                    } else {
+                        state.error = Some("manny is not waiting for storage space".into());
+                    }
                 }
             }
         }

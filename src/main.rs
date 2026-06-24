@@ -13,8 +13,9 @@ use neumann_cockpit::api::client::ApiClient;
 use neumann_cockpit::api::tasks::{fetch_all, fetch_api_version, fetch_crafting_recipes, fetch_mannies};
 use neumann_cockpit::app::{
     ApiMessage, AppState, AtomicPrinterCraftInput, ContainerRulesInput, CraftInput, DeployInput,
-    DetachInput, InspectInput, JettisonInput, MineInput, Phosphor, RecallInput, RecoverInput,
-    RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, StorageMoveInput, UiTheme,
+    DetachInput, DropCargoInput, InspectInput, JettisonInput, MineInput, Phosphor, RecallInput,
+    RecoverInput, RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput,
+    StorageMoveInput, UiTheme,
 };
 use neumann_cockpit::config;
 use neumann_cockpit::input::handle_event;
@@ -230,6 +231,18 @@ async fn run(
                         state.set_toast("storage move order sent");
                     }
                     ApiMessage::StorageMoveError(e) => state.set_storage_move_error(e),
+                    ApiMessage::DropMannyCargoStarted(manny) => {
+                        if let Some(ref mut mannies) = state.mannies {
+                            if let Some(m) = mannies.iter_mut().find(|m| m.id == manny.id) {
+                                *m = manny;
+                            }
+                        }
+                        state.drop_cargo = DropCargoInput::Inactive;
+                        state.set_toast("cargo dropped");
+                        // Recoverable objects may reappear in the sector.
+                        fetch_all(client.clone(), tx.clone());
+                    }
+                    ApiMessage::DropMannyCargoError(e) => state.set_drop_cargo_error(e),
                     ApiMessage::RenameMannyDone(manny) => {
                         if let Some(ref mut mannies) = state.mannies {
                             if let Some(m) = mannies.iter_mut().find(|m| m.id == manny.id) {

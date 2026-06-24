@@ -87,6 +87,7 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect) {
         help_key_line("v", "recover container"),
         help_key_line("n", "rename"),
         help_key_line("R", "recall (busy manny)"),
+        help_key_line("X", "drop cargo (waiting manny)"),
         Line::default(),
         help_section("Scanner (focused)"),
         help_key_line("Enter", "rescan current sector"),
