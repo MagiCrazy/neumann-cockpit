@@ -1,8 +1,36 @@
 use super::*;
-use crate::api::types::StorageContainerRules;
+use crate::api::types::{SectorObjectType, StorageContainerRules};
 use std::collections::BTreeSet;
 
 impl AppState {
+    /// Planets in the probe's current sector, as (id, name) pairs — drop-target
+    /// candidates for dropping a storage container.
+    pub fn collect_planet_candidates(&self) -> Vec<(String, String)> {
+        self.probe_current_sector_scan()
+            .and_then(|s| s.objects.as_ref())
+            .map(|objects| {
+                objects
+                    .iter()
+                    .filter(|o| matches!(o.object_type, SectorObjectType::Planet) && o.id.is_some())
+                    .map(|o| {
+                        let id = o.id.clone().unwrap();
+                        let name = o.name.clone().unwrap_or_else(|| "unnamed planet".into());
+                        (id, name)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Whether the probe inventory holds an atmospheric drop kit (required to
+    /// drop a container on a planet).
+    pub fn has_atmospheric_drop_kit(&self) -> bool {
+        self.probe
+            .as_ref()
+            .map(|p| p.inventory.items.iter().any(|it| it.item_type == "atmospheric_drop_kit"))
+            .unwrap_or(false)
+    }
+
     /// All storage containers as (id, label) pairs.
     pub fn collect_renameable_containers(&self) -> Vec<(String, String)> {
         self.storage_containers

@@ -3,12 +3,12 @@ use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
 use crate::api::tasks::{
-    fetch_deploy, fetch_detach, fetch_drop_manny_cargo,
+    fetch_deploy, fetch_detach, fetch_drop_manny_cargo, fetch_drop_storage_container,
     fetch_inspect, fetch_recall,
     fetch_recover, fetch_rename_manny, fetch_salvage,
 };
 use crate::app::{
-    ApiMessage, AppState, DeployInput, DetachInput, DropCargoInput,
+    ApiMessage, AppState, DeployInput, DetachInput, DropCargoInput, DropStorageContainerInput,
     InspectInput, RecallInput,
     RecoverInput, RenameMannyInput, SalvageInput, DETACH_MODES,
 };
@@ -78,6 +78,77 @@ pub(super) fn handle_recall_event(
             fetch_recall(manny_id, client.clone(), tx.clone());
         }
         _ => {}
+    }
+}
+
+pub(super) fn handle_drop_container_event(
+    code: KeyCode,
+    state: &mut AppState,
+    client: &ApiClient,
+    tx: &mpsc::Sender<ApiMessage>,
+) {
+    match &state.drop_container {
+        DropStorageContainerInput::PickContainer { selection, containers, .. } => {
+            let (sel, count) = (*selection, containers.len());
+            match code {
+                KeyCode::Esc => state.drop_container = DropStorageContainerInput::Inactive,
+                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                    if let Some(ns) = list_nav(code, sel, count) {
+                        if let DropStorageContainerInput::PickContainer { selection, .. } =
+                            &mut state.drop_container
+                        {
+                            *selection = ns;
+                        }
+                    }
+                }
+                KeyCode::Enter => {
+                    let (manny_id, manny_name, container_id, container_name) = {
+                        let DropStorageContainerInput::PickContainer {
+                            manny_id, manny_name, containers, selection,
+                        } = &state.drop_container else { return };
+                        let (id, name) = containers[*selection].clone();
+                        (manny_id.clone(), manny_name.clone(), id, name)
+                    };
+                    let planets = state.collect_planet_candidates();
+                    if planets.is_empty() {
+                        state.drop_container = DropStorageContainerInput::Inactive;
+                        state.error = Some("no planet in current sector — scan first".into());
+                        return;
+                    }
+                    state.drop_container = DropStorageContainerInput::PickPlanet {
+                        manny_id, manny_name, container_id, container_name,
+                        planets, selection: 0, error: None,
+                    };
+                }
+                _ => {}
+            }
+        }
+        DropStorageContainerInput::PickPlanet { selection, planets, .. } => {
+            let (sel, count) = (*selection, planets.len());
+            match code {
+                KeyCode::Esc => state.drop_container = DropStorageContainerInput::Inactive,
+                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                    if let Some(ns) = list_nav(code, sel, count) {
+                        if let DropStorageContainerInput::PickPlanet { selection, .. } =
+                            &mut state.drop_container
+                        {
+                            *selection = ns;
+                        }
+                    }
+                }
+                KeyCode::Enter => {
+                    let (manny_id, container_id, planet_id) = {
+                        let DropStorageContainerInput::PickPlanet {
+                            manny_id, container_id, planets, selection, ..
+                        } = &state.drop_container else { return };
+                        (manny_id.clone(), container_id.clone(), planets[*selection].0.clone())
+                    };
+                    fetch_drop_storage_container(manny_id, container_id, planet_id, client.clone(), tx.clone());
+                }
+                _ => {}
+            }
+        }
+        DropStorageContainerInput::Inactive => {}
     }
 }
 
