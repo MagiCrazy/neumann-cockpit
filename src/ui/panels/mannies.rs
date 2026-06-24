@@ -144,6 +144,7 @@ pub(crate) fn manny_list_item(m: &Manny) -> ListItem<'_> {
         Some(MannyTask::Returning) => Span::styled("returning", Style::default().fg(Color::Blue)),
         Some(MannyTask::WaitingForSpace) => Span::styled("waiting", Style::default().fg(Color::Magenta)),
         Some(MannyTask::MovingStockage) => Span::styled("moving cargo", Style::default().fg(Color::Blue)),
+        Some(MannyTask::DroppingStorageContainer) => Span::styled("dropping container", Style::default().fg(Color::Yellow)),
         Some(MannyTask::Unknown) => Span::styled("?", Style::default().fg(Color::DarkGray)),
     };
 

@@ -92,7 +92,7 @@ pub(super) fn handle_mine_event(
                         if amount <= 0.0 { return }
                         (manny_id.clone(), object_id.clone(), selected, amount)
                     };
-                    fetch_mine(manny_id, object_id, selected_resources, amount, client.clone(), tx.clone());
+                    fetch_mine(manny_id, object_id, selected_resources, amount, None, client.clone(), tx.clone());
                 }
                 _ => {}
             }

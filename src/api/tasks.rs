@@ -80,11 +80,12 @@ pub fn fetch_mine(
     object_id: String,
     resources: Vec<String>,
     target_amount: f64,
+    target_container_id: Option<String>,
     client: ApiClient,
     tx: mpsc::Sender<ApiMessage>,
 ) {
     tokio::spawn(async move {
-        let msg = match client.mine_manny(&manny_id, &object_id, resources, target_amount).await {
+        let msg = match client.mine_manny(&manny_id, &object_id, resources, target_amount, target_container_id).await {
             Ok(_) => ApiMessage::MineStarted,
             Err(e) => ApiMessage::MineError(e.to_string()),
         };

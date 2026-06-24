@@ -144,6 +144,7 @@ impl ApiClient {
         object_id: &str,
         resources: Vec<String>,
         target_amount: f64,
+        target_container_id: Option<String>,
     ) -> Result<Manny> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
@@ -151,6 +152,8 @@ impl ApiClient {
             object_id: String,
             resources: Vec<String>,
             target_amount: f64,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            target_container_id: Option<String>,
         }
         #[derive(Deserialize)]
         struct Resp { manny: Manny }
@@ -160,6 +163,7 @@ impl ApiClient {
                 object_id: object_id.to_string(),
                 resources,
                 target_amount,
+                target_container_id,
             })
             .await?
             .manny)

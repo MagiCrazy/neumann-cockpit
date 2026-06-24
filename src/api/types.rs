@@ -68,6 +68,7 @@ pub enum MannyTask {
     Returning,
     WaitingForSpace,
     MovingStockage,
+    DroppingStorageContainer,
     #[serde(other)]
     Unknown,
 }
@@ -402,6 +403,7 @@ pub struct WaypointBookmarkTarget {
     pub mass_unit: Option<String>,
     pub radius: Option<f64>,
     pub radius_unit: Option<String>,
+    pub habitability_score: Option<f64>,
     #[serde(default)]
     pub waypoint_bookmarks: Vec<WaypointBookmarkHistory>,
 }
@@ -428,6 +430,7 @@ pub struct SectorObject {
     pub radius: Option<f64>,
     pub radius_unit: Option<String>,
     pub danger_level: Option<DangerLevel>,
+    pub habitability_score: Option<f64>,
     pub salvageable: Option<bool>,
     pub manny_state: Option<String>,
     pub manny_uid: Option<String>,
@@ -455,6 +458,8 @@ pub struct MinableTarget {
     pub name: Option<String>,
     pub mass: Option<f64>,
     pub resource_types: Option<Vec<String>>,
+    pub resource_amounts: Option<serde_json::Value>,
+    pub resource_composition: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
