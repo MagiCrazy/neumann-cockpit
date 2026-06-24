@@ -9,6 +9,7 @@ pub(crate) mod mine;
 pub(crate) mod object_actions;
 pub(crate) mod pickers;
 pub(crate) mod repair;
+pub(crate) mod storage_move;
 pub(crate) mod travel;
 pub(crate) mod waypoints;
 
@@ -29,6 +30,7 @@ pub(crate) use pickers::{
     render_recover_overlay, render_rename_manny_overlay, render_salvage_overlay,
 };
 pub(crate) use repair::render_repair_overlay;
+pub(crate) use storage_move::render_storage_move_overlay;
 pub(crate) use travel::render_travel_overlay;
 pub(crate) use waypoints::render_waypoints_overlay;
 
@@ -36,7 +38,7 @@ use crate::app::{
     AlertsInput, AppState, AtomicPrinterCraftInput, ContainerRulesInput, ContainersInput,
     CraftInput, DeployInput, DetachInput, InspectInput, JettisonInput, MineInput,
     ObjectActionInput, RecallInput, RecoverInput, RenameContainerInput, RenameMannyInput,
-    RepairInput, SalvageInput, TravelInput, WaypointsInput,
+    RepairInput, SalvageInput, StorageMoveInput, TravelInput, WaypointsInput,
 };
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -116,6 +118,9 @@ pub(crate) fn render_active_overlays(frame: &mut Frame, area: Rect, state: &AppS
     }
     if state.storage_container_detail.is_some() {
         render_container_detail_overlay(frame, area, state);
+    }
+    if !matches!(state.storage_move, StorageMoveInput::Inactive) {
+        render_storage_move_overlay(frame, area, state);
     }
     if state.help_open {
         render_help_overlay(frame, area);

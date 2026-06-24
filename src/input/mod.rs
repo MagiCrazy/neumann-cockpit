@@ -11,7 +11,7 @@ use crate::app::{
     AlertsInput, ApiMessage, AppState, AtomicPrinterCraftInput, ContainerRulesInput,
     ContainersInput, CraftInput, DeployInput, DetachInput, InspectInput, JettisonInput, MineInput,
     ObjectActionInput, Panel, RecallInput, RecoverInput, RenameContainerInput, RenameMannyInput,
-    RepairInput, SalvageInput, ScanMode, TravelInput, WaypointsInput,
+    RepairInput, SalvageInput, ScanMode, StorageMoveInput, TravelInput, WaypointsInput,
 };
 mod alerts;
 mod containers;
@@ -23,6 +23,7 @@ mod mine;
 mod pickers;
 mod repair;
 mod scanner;
+mod storage_move;
 mod travel;
 
 use alerts::handle_alerts_event;
@@ -40,6 +41,7 @@ use pickers::{
 };
 use repair::handle_repair_event;
 use scanner::{handle_object_action_event, handle_waypoints_event};
+use storage_move::handle_storage_move_event;
 use travel::handle_travel_event;
 pub fn handle_event(
     event: Event,
@@ -70,6 +72,7 @@ pub fn handle_event(
     let in_rename_container = !matches!(state.rename_container, RenameContainerInput::Inactive);
     let in_container_rules = !matches!(state.container_rules, ContainerRulesInput::Inactive);
     let in_containers = !matches!(state.containers_input, ContainersInput::Inactive);
+    let in_storage_move = !matches!(state.storage_move, StorageMoveInput::Inactive);
 
     if ctrl && k.code == KeyCode::Char('c') {
         state.set_quit();
@@ -173,6 +176,11 @@ pub fn handle_event(
 
     if in_containers {
         handle_containers_event(k.code, state, client, tx);
+        return;
+    }
+
+    if in_storage_move {
+        handle_storage_move_event(k.code, state, client, tx);
         return;
     }
 
@@ -373,6 +381,21 @@ pub fn handle_event(
         KeyCode::Char('C') if state.focused == Some(Panel::Inventory) => {
             fetch_storage_containers(client.clone(), tx.clone());
             state.containers_input = ContainersInput::Browsing { selection: 0 };
+        }
+        KeyCode::Char('M') if state.focused == Some(Panel::Inventory) => {
+            let mannies = state.collect_idle_onboard_mannies();
+            match mannies.len() {
+                0 => state.error = Some("no idle Manny on board".into()),
+                1 => {
+                    let (id, name) = mannies.into_iter().next().unwrap();
+                    state.storage_move = StorageMoveInput::PickKind {
+                        actor_manny_id: id,
+                        actor_manny_name: name,
+                        selection: 0,
+                    };
+                }
+                _ => state.storage_move = StorageMoveInput::PickManny { mannies, selection: 0 },
+            }
         }
         KeyCode::Down | KeyCode::Char('j') if state.focused == Some(Panel::Mannies) => {
             state.manny_next();

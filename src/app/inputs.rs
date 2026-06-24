@@ -116,6 +116,46 @@ pub enum ContainerRulesInput {
     },
 }
 
+/// Resource types movable between containers — deuterium lives in the tank,
+/// not in storage containers, so it is excluded (matches the v44 schema).
+pub const MOVE_RESOURCE_TYPES: [&str; 3] = ["metals", "ice", "carbon_compounds"];
+
+#[derive(Default)]
+pub enum StorageMoveInput {
+    #[default]
+    Inactive,
+    PickManny {
+        mannies: Vec<(String, String)>,
+        selection: usize,
+    },
+    PickKind {
+        actor_manny_id: String,
+        actor_manny_name: String,
+        selection: usize, // 0 = resource, 1 = item
+    },
+    ConfigureResource {
+        actor_manny_id: String,
+        actor_manny_name: String,
+        containers: Vec<(String, String)>,
+        resource_idx: usize,
+        from_sel: usize,
+        to_sel: usize,
+        amount_buf: String,
+        field: u8, // 0 resource, 1 from, 2 to, 3 amount
+        error: Option<String>,
+    },
+    ConfigureItem {
+        actor_manny_id: String,
+        actor_manny_name: String,
+        containers: Vec<(String, String)>,
+        items: Vec<(String, String, bool)>, // (id, label, selected)
+        to_sel: usize,
+        item_cursor: usize,
+        field: u8, // 0 items list, 1 destination
+        error: Option<String>,
+    },
+}
+
 #[derive(Default)]
 pub enum WaypointsInput {
     #[default]

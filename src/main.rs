@@ -14,7 +14,7 @@ use neumann_cockpit::api::tasks::{fetch_all, fetch_api_version, fetch_crafting_r
 use neumann_cockpit::app::{
     ApiMessage, AppState, AtomicPrinterCraftInput, ContainerRulesInput, CraftInput, DeployInput,
     DetachInput, InspectInput, JettisonInput, MineInput, Phosphor, RecallInput, RecoverInput,
-    RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, UiTheme,
+    RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, StorageMoveInput, UiTheme,
 };
 use neumann_cockpit::config;
 use neumann_cockpit::input::handle_event;
@@ -219,6 +219,17 @@ async fn run(
                         state.set_toast("routing rules updated");
                     }
                     ApiMessage::UpdateContainerRulesError(e) => state.set_container_rules_error(e),
+                    ApiMessage::StorageMoveDone(manny, inv) => {
+                        if let Some(ref mut mannies) = state.mannies {
+                            if let Some(m) = mannies.iter_mut().find(|m| m.id == manny.id) {
+                                *m = manny;
+                            }
+                        }
+                        state.update_inventory(inv);
+                        state.storage_move = StorageMoveInput::Inactive;
+                        state.set_toast("storage move order sent");
+                    }
+                    ApiMessage::StorageMoveError(e) => state.set_storage_move_error(e),
                     ApiMessage::RenameMannyDone(manny) => {
                         if let Some(ref mut mannies) = state.mannies {
                             if let Some(m) = mannies.iter_mut().find(|m| m.id == manny.id) {

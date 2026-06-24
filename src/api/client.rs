@@ -338,6 +338,44 @@ impl ApiClient {
         Ok(self.patch::<Resp, _>(&path, &serde_json::json!({})).await?.alert)
     }
 
+    /// Assign an idle Manny to move stock between containers
+    /// (`POST /api/probe/storage-moves`). `manny` kind is intentionally
+    /// unsupported here — only `resource` and `item` are wired in the UI.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn storage_move(
+        &self,
+        actor_manny_id: &str,
+        kind: &str,
+        to_container_id: &str,
+        from_container_id: Option<&str>,
+        resource_type: Option<&str>,
+        amount: Option<f64>,
+        item_ids: Option<Vec<String>>,
+    ) -> Result<(Manny, ProbeInventory)> {
+        let mut body = serde_json::Map::new();
+        body.insert("actorMannyId".into(), serde_json::json!(actor_manny_id));
+        body.insert("kind".into(), serde_json::json!(kind));
+        body.insert("toContainerId".into(), serde_json::json!(to_container_id));
+        if let Some(v) = from_container_id {
+            body.insert("fromContainerId".into(), serde_json::json!(v));
+        }
+        if let Some(v) = resource_type {
+            body.insert("resourceType".into(), serde_json::json!(v));
+        }
+        if let Some(v) = amount {
+            body.insert("amount".into(), serde_json::json!(v));
+        }
+        if let Some(v) = item_ids {
+            body.insert("itemIds".into(), serde_json::json!(v));
+        }
+        #[derive(Deserialize)]
+        struct Resp { manny: Manny, inventory: ProbeInventory }
+        let r = self
+            .post::<Resp, _>("/api/probe/storage-moves", &serde_json::Value::Object(body))
+            .await?;
+        Ok((r.manny, r.inventory))
+    }
+
     pub async fn get_storage_containers(&self) -> Result<Vec<StorageContainer>> {
         #[derive(Deserialize)]
         struct Resp { containers: Vec<StorageContainer> }
