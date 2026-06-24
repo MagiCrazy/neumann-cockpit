@@ -38,11 +38,47 @@ pub fn fetch_all(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     });
 
     // Non-fatal, like mannies and sector.
-    let c4 = client;
-    let tx4 = tx;
+    let c4 = client.clone();
+    let tx4 = tx.clone();
     tokio::spawn(async move {
         if let Ok(v) = c4.get_visited_sectors().await {
             let _ = tx4.send(ApiMessage::VisitedSectorsFetched(v)).await;
+        }
+    });
+
+    // Alerts + damage warnings: non-fatal, same pattern as mannies/sector.
+    fetch_alerts(client.clone(), tx.clone());
+    fetch_damage_warnings(client, tx);
+}
+
+pub fn fetch_alerts(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        if let Ok(a) = client.get_alerts().await {
+            let _ = tx.send(ApiMessage::AlertsFetched(a)).await;
+        }
+    });
+}
+
+pub fn fetch_damage_warnings(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        if let Ok((warnings, rule)) = client.get_damage_warnings().await {
+            let _ = tx.send(ApiMessage::DamageWarningsFetched(warnings, rule)).await;
+        }
+    });
+}
+
+pub fn fetch_ack_alert(id: i64, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        if let Ok(a) = client.ack_alert(id).await {
+            let _ = tx.send(ApiMessage::AlertAcknowledged(a)).await;
+        }
+    });
+}
+
+pub fn fetch_ack_damage_warning(id: i64, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        if let Ok(w) = client.ack_damage_warning(id).await {
+            let _ = tx.send(ApiMessage::DamageWarningAcknowledged(w)).await;
         }
     });
 }

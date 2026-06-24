@@ -18,7 +18,9 @@ pub use message::*;
 pub use scan::*;
 pub use waypoints::*;
 
-use crate::api::types::{CraftingRecipe, Manny, Probe, SectorObservation, VisitedSector};
+use crate::api::types::{
+    CraftingRecipe, DamageWarningRule, Manny, Probe, ProbeAlert, SectorObservation, VisitedSector,
+};
 use chrono::{DateTime, Local, Utc};
 use tokio::time::Instant;
 
@@ -56,6 +58,11 @@ pub struct AppState {
     pub scanner_obj_selection: Option<usize>,
     pub object_action: ObjectActionInput,
     pub waypoints: WaypointsInput,
+    /// Persistent alerts and damage warnings (fetched in `fetch_all`).
+    pub alerts: Vec<ProbeAlert>,
+    pub damage_warnings: Vec<ProbeAlert>,
+    pub damage_warning_rule: Option<DamageWarningRule>,
+    pub alerts_input: AlertsInput,
     pub help_open: bool,
     /// Read-only detail popup for the selected inventory row.
     pub inventory_detail_open: bool,
@@ -111,6 +118,29 @@ impl AppState {
 
     pub fn set_error(&mut self, msg: String) {
         self.error = Some(msg);
+    }
+
+    /// Replace an acknowledged alert in place (matched by id).
+    pub fn replace_alert(&mut self, alert: ProbeAlert) {
+        if let Some(a) = self.alerts.iter_mut().find(|a| a.id == alert.id) {
+            *a = alert;
+        }
+    }
+
+    /// Replace an acknowledged damage warning in place (matched by id).
+    pub fn replace_damage_warning(&mut self, warning: ProbeAlert) {
+        if let Some(w) = self.damage_warnings.iter_mut().find(|w| w.id == warning.id) {
+            *w = warning;
+        }
+    }
+
+    /// Count of alerts still needing attention — drives the `[!]` badge.
+    pub fn unread_alert_count(&self) -> usize {
+        self.alerts
+            .iter()
+            .chain(self.damage_warnings.iter())
+            .filter(|a| a.is_unread())
+            .count()
     }
 
     pub fn set_toast(&mut self, msg: impl Into<String>) {

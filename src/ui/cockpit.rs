@@ -100,6 +100,11 @@ pub(crate) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
         Span::raw(" map  "),
         Span::styled("[w]", Style::default().fg(Color::Cyan)),
         Span::raw(" waypoints  "),
+        Span::styled(
+            "[A]",
+            Style::default().fg(if state.unread_alert_count() > 0 { Color::Red } else { Color::Cyan }),
+        ),
+        Span::raw(" alerts  "),
         Span::styled("[?]", Style::default().fg(Color::Cyan)),
         Span::raw(" help  "),
         Span::styled("[q]", Style::default().fg(Color::Cyan)),

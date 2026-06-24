@@ -1,4 +1,7 @@
-use crate::api::types::{CraftingRecipe, Manny, Probe, ProbeInventory, ProbeMovement, SectorObservation, VisitedSector};
+use crate::api::types::{
+    CraftingRecipe, DamageWarningRule, Manny, Probe, ProbeAlert, ProbeInventory, ProbeMovement,
+    SectorObservation, VisitedSector,
+};
 
 pub enum ApiMessage {
     ProbeUpdated(Probe),
@@ -34,5 +37,9 @@ pub enum ApiMessage {
     RecoverError(String),
     DetachStarted,
     DetachError(String),
+    DamageWarningsFetched(Vec<ProbeAlert>, DamageWarningRule),
+    DamageWarningAcknowledged(ProbeAlert),
+    AlertsFetched(Vec<ProbeAlert>),
+    AlertAcknowledged(ProbeAlert),
     Error(String),
 }

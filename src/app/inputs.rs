@@ -65,6 +65,18 @@ pub enum ObjectActionInput {
 }
 
 #[derive(Default)]
+pub enum AlertsInput {
+    #[default]
+    Inactive,
+    /// `show_warnings` selects the Warnings tab; otherwise the Alerts tab.
+    /// The entries themselves live in `AppState::alerts` / `damage_warnings`.
+    Browsing {
+        selection: usize,
+        show_warnings: bool,
+    },
+}
+
+#[derive(Default)]
 pub enum WaypointsInput {
     #[default]
     Inactive,

@@ -190,6 +190,19 @@ async fn run(
                         fetch_all(client.clone(), tx.clone());
                     }
                     ApiMessage::DetachError(e) => state.set_detach_error(e),
+                    ApiMessage::AlertsFetched(a) => state.alerts = a,
+                    ApiMessage::DamageWarningsFetched(w, rule) => {
+                        state.damage_warnings = w;
+                        state.damage_warning_rule = Some(rule);
+                    }
+                    ApiMessage::AlertAcknowledged(a) => {
+                        state.replace_alert(a);
+                        state.set_toast("alert acknowledged");
+                    }
+                    ApiMessage::DamageWarningAcknowledged(w) => {
+                        state.replace_damage_warning(w);
+                        state.set_toast("warning acknowledged");
+                    }
                     ApiMessage::RenameMannyDone(manny) => {
                         if let Some(ref mut mannies) = state.mannies {
                             if let Some(m) = mannies.iter_mut().find(|m| m.id == manny.id) {

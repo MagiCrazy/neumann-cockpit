@@ -8,11 +8,12 @@ use crate::api::tasks::{
     fetch_recover, fetch_sector,
 };
 use crate::app::{
-    ApiMessage, AppState, AtomicPrinterCraftInput, CraftInput, DeployInput, DetachInput,
-    InspectInput, JettisonInput, MineInput, ObjectActionInput, Panel, RecallInput,
+    AlertsInput, ApiMessage, AppState, AtomicPrinterCraftInput, CraftInput, DeployInput,
+    DetachInput, InspectInput, JettisonInput, MineInput, ObjectActionInput, Panel, RecallInput,
     RecoverInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, TravelInput,
     WaypointsInput,
 };
+mod alerts;
 mod craft;
 mod geometry;
 mod jettison;
@@ -23,6 +24,7 @@ mod repair;
 mod scanner;
 mod travel;
 
+use alerts::handle_alerts_event;
 use craft::{handle_atomic_printer_craft_event, handle_craft_event};
 use geometry::{face_d2, neighbors_d1};
 use jettison::handle_jettison_event;
@@ -60,6 +62,7 @@ pub fn handle_event(
     let in_inspect = !matches!(state.inspect, InspectInput::Inactive);
     let in_recover = !matches!(state.recover, RecoverInput::Inactive);
     let in_detach = !matches!(state.detach, DetachInput::Inactive);
+    let in_alerts = !matches!(state.alerts_input, AlertsInput::Inactive);
 
     if ctrl && k.code == KeyCode::Char('c') {
         state.set_quit();
@@ -146,6 +149,11 @@ pub fn handle_event(
         return;
     }
 
+    if in_alerts {
+        handle_alerts_event(k.code, state, client, tx);
+        return;
+    }
+
     if !matches!(state.object_action, ObjectActionInput::Inactive) {
         handle_object_action_event(k.code, state, client, tx);
         return;
@@ -213,6 +221,11 @@ pub fn handle_event(
 
     match k.code {
         KeyCode::Char('q') => state.set_quit(),
+        KeyCode::Char('A') => {
+            // Open on the tab that actually has entries (warnings if alerts empty).
+            let show_warnings = state.alerts.is_empty() && !state.damage_warnings.is_empty();
+            state.alerts_input = AlertsInput::Browsing { selection: 0, show_warnings };
+        }
         KeyCode::Char('b') => state.open_map(),
         KeyCode::Char('?') => state.help_open = true,
         KeyCode::Char('w') => {
