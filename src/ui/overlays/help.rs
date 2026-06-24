@@ -53,6 +53,7 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect) {
         help_key_line("t", "travel to coordinates"),
         help_key_line("b", "map"),
         help_key_line("w", "waypoints"),
+        help_key_line("A", "alerts & damage warnings"),
         help_key_line("?", "this help"),
         help_key_line("q", "quit"),
         help_key_line("Esc", "unfocus / close"),

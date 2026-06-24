@@ -1,4 +1,7 @@
-use super::types::{CraftingRecipe, Manny, Probe, ProbeInventory, ProbeMovement, SectorObservation, VisitedSector};
+use super::types::{
+    CraftingRecipe, DamageWarningRule, Manny, Probe, ProbeAlert, ProbeInventory, ProbeMovement,
+    SectorObservation, VisitedSector,
+};
 use anyhow::{Context, Result};
 use reqwest::{Client, StatusCode, Url};
 use serde::{Deserialize, Serialize};
@@ -294,5 +297,44 @@ impl ApiClient {
         struct Resp { manny: Manny }
         let path = format!("/api/probe/mannies/{manny_id}/install-bookmark");
         Ok(self.post::<Resp, _>(&path, &Body { object_id, name }).await?.manny)
+    }
+
+    pub async fn get_damage_warnings(&self) -> Result<(Vec<ProbeAlert>, DamageWarningRule)> {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Resp {
+            #[serde(default)]
+            damage_warnings: Vec<ProbeAlert>,
+            #[serde(default)]
+            rule: DamageWarningRule,
+        }
+        let resp = self.get::<Resp>("/api/probe/damage-warnings").await?;
+        Ok((resp.damage_warnings, resp.rule))
+    }
+
+    /// Mark a damage warning as read (`PATCH /api/probe/damage-warnings/{id}`).
+    pub async fn ack_damage_warning(&self, id: i64) -> Result<ProbeAlert> {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Resp { damage_warning: ProbeAlert }
+        let path = format!("/api/probe/damage-warnings/{id}");
+        Ok(self.patch::<Resp, _>(&path, &serde_json::json!({})).await?.damage_warning)
+    }
+
+    pub async fn get_alerts(&self) -> Result<Vec<ProbeAlert>> {
+        #[derive(Deserialize)]
+        struct Resp {
+            #[serde(default)]
+            alerts: Vec<ProbeAlert>,
+        }
+        Ok(self.get::<Resp>("/api/probe/alerts").await?.alerts)
+    }
+
+    /// Mark an alert as read (`PATCH /api/probe/alerts/{id}`).
+    pub async fn ack_alert(&self, id: i64) -> Result<ProbeAlert> {
+        #[derive(Deserialize)]
+        struct Resp { alert: ProbeAlert }
+        let path = format!("/api/probe/alerts/{id}");
+        Ok(self.patch::<Resp, _>(&path, &serde_json::json!({})).await?.alert)
     }
 }

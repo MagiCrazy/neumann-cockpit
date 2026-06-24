@@ -227,6 +227,124 @@ pub struct ProbeInventory {
     pub containers: Vec<StorageContainer>,
 }
 
+// ── Alerts & damage warnings ──────────────────────────────────────────────────
+//
+// `/api/probe/alerts` and `/api/probe/damage-warnings` both return the same
+// `ProbeDamageWarning` schema; we model both with `ProbeAlert`. Only the
+// response envelope differs (`alerts` + keyed `rules` vs `damageWarnings` +
+// single `rule`). Sub-objects are present only for specific alert types, hence
+// `Option<T>`; enums carry an `Unknown` fallback for forward compatibility.
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum AlertType {
+    StorageContainerBreak,
+    IntelligentLife,
+    SectorObjectDetected,
+    #[serde(other)]
+    Unknown,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum AlertStatus {
+    Unread,
+    Read,
+    #[serde(other)]
+    Unknown,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum AlertPhase {
+    AccelerationEnd,
+    DecelerationStart,
+    Arrival,
+    Detection,
+    #[serde(other)]
+    Unknown,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AlertContainerRef {
+    pub id: String,
+    pub label: Option<String>,
+    pub object_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AlertRisk {
+    pub percent: i64,
+    pub additional_container_count: i64,
+    pub rule_starts_at_additional_containers: Option<i64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AlertPlanetRef {
+    pub id: String,
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AlertObjectRef {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub object_type: String,
+    pub label: Option<String>,
+    #[serde(default)]
+    pub resource_types: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AlertSector {
+    pub relative: Option<Vector>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeAlert {
+    pub id: i64,
+    #[serde(rename = "type")]
+    pub alert_type: AlertType,
+    pub status: AlertStatus,
+    pub message: String,
+    pub phase: AlertPhase,
+    pub scheduled_at: Option<DateTime<Utc>>,
+    pub sector: Option<AlertSector>,
+    pub container: Option<AlertContainerRef>,
+    pub risk: Option<AlertRisk>,
+    pub planet: Option<AlertPlanetRef>,
+    pub object: Option<AlertObjectRef>,
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
+    pub read_at: Option<DateTime<Utc>>,
+    pub resolved_at: Option<DateTime<Utc>>,
+}
+
+impl ProbeAlert {
+    /// An alert still needs the operator's attention while unread and unresolved.
+    pub fn is_unread(&self) -> bool {
+        self.status == AlertStatus::Unread && self.resolved_at.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct DamageWarningRule {
+    #[serde(rename = "type", default)]
+    pub rule_type: String,
+    pub starts_at_additional_containers: Option<i64>,
+    pub risk_per_additional_container_after_four_percent: Option<i64>,
+    pub maximum_risk_percent: Option<i64>,
+    #[serde(default)]
+    pub message: String,
+}
+
 // ── Visited sectors ───────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]

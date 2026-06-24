@@ -1,7 +1,7 @@
 use neumann_cockpit::api::types::{
-    CraftingRecipe, DataFreshness, KnowledgeLevel, Manny, MannyLocationType, MannyTask,
-    MovementPhase, Probe, ProbeInventory, ProbeMovement, ProbeStatus, SectorObjectType,
-    SectorObservation, SensorMode,
+    AlertPhase, AlertStatus, AlertType, CraftingRecipe, DamageWarningRule, DataFreshness,
+    KnowledgeLevel, Manny, MannyLocationType, MannyTask, MovementPhase, Probe, ProbeAlert,
+    ProbeInventory, ProbeMovement, ProbeStatus, SectorObjectType, SectorObservation, SensorMode,
 };
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -409,4 +409,139 @@ fn sector_unknown_knowledge_fallback() {
     let json = SECTOR_JSON.replace("\"detailed\"", "\"alien_tech\"");
     let s: SectorObservation = deser(&json);
     assert_eq!(s.knowledge_level, KnowledgeLevel::Unknown);
+}
+
+// ── Alerts & damage warnings ────────────────────────────────────────────────
+// Payloads copied verbatim from the OpenAPI examples (api-specs/v44.yaml).
+
+const ALERTS_JSON: &str = r#"{
+  "alerts": [
+    {
+      "id": 7,
+      "type": "storage_container_break",
+      "status": "unread",
+      "message": "movement stress can break one container link",
+      "phase": "acceleration_end",
+      "scheduledAt": "2026-06-12T12:03:00+00:00",
+      "sector": { "relative": { "x": 0, "y": 0, "z": 0 } },
+      "container": { "id": "cnt_extra_3", "label": "Additional container 3", "objectId": "detached-container-7" },
+      "risk": { "percent": 30, "additionalContainerCount": 7, "ruleStartsAtAdditionalContainers": 5 },
+      "createdAt": "2026-06-12T12:00:00+00:00",
+      "updatedAt": "2026-06-12T12:00:00+00:00",
+      "readAt": null,
+      "resolvedAt": null
+    },
+    {
+      "id": 8,
+      "type": "intelligent_life",
+      "status": "read",
+      "message": "Intelligent life detected on Pale Signal.",
+      "phase": "arrival",
+      "scheduledAt": "2026-06-12T14:42:00+00:00",
+      "sector": { "relative": { "x": 2, "y": 0, "z": 0 } },
+      "planet": { "id": "planet_4", "name": "Pale Signal" },
+      "createdAt": "2026-06-12T14:42:00+00:00",
+      "updatedAt": "2026-06-12T14:42:00+00:00",
+      "readAt": "2026-06-12T14:45:00+00:00",
+      "resolvedAt": null
+    },
+    {
+      "id": 9,
+      "type": "sector_object_detected",
+      "status": "unread",
+      "message": "A new object was detected in the sector.",
+      "phase": "detection",
+      "scheduledAt": "2026-06-12T15:00:00+00:00",
+      "sector": { "relative": { "x": 0, "y": 0, "z": 0 } },
+      "object": { "id": "debug-deuterium-a9f0", "type": "asteroid", "label": "Deuterium asteroid", "resourceTypes": ["deuterium"] },
+      "createdAt": "2026-06-12T15:00:00+00:00",
+      "updatedAt": "2026-06-12T15:00:00+00:00",
+      "readAt": null,
+      "resolvedAt": null
+    }
+  ],
+  "rules": {
+    "storageContainerBreak": {
+      "type": "storage_container_break",
+      "startsAtAdditionalContainers": 5,
+      "riskPerAdditionalContainerAfterFourPercent": 10,
+      "maximumRiskPercent": 100,
+      "message": "rule text"
+    }
+  }
+}"#;
+
+const DAMAGE_WARNINGS_JSON: &str = r#"{
+  "damageWarnings": [
+    {
+      "id": 7,
+      "type": "storage_container_break",
+      "status": "unread",
+      "message": "Risk is 30% for this jump.",
+      "phase": "acceleration_end",
+      "scheduledAt": "2026-06-12T12:03:00+00:00",
+      "sector": { "relative": { "x": 0, "y": 0, "z": 0 } },
+      "container": { "id": "cnt_extra_3", "label": "Additional container 3", "objectId": "detached-container-7" },
+      "risk": { "percent": 30, "additionalContainerCount": 7 },
+      "createdAt": "2026-06-12T12:00:00+00:00",
+      "updatedAt": "2026-06-12T12:00:00+00:00",
+      "readAt": null,
+      "resolvedAt": null
+    }
+  ],
+  "rule": {
+    "type": "storage_container_break",
+    "startsAtAdditionalContainers": 5,
+    "riskPerAdditionalContainerAfterFourPercent": 10,
+    "maximumRiskPercent": 100,
+    "message": "rule text"
+  }
+}"#;
+
+#[test]
+fn alerts_response_deser() {
+    let r: AlertsResponseProbe = deser(ALERTS_JSON);
+    assert_eq!(r.alerts.len(), 3);
+    assert_eq!(r.alerts[0].id, 7);
+    assert_eq!(r.alerts[0].alert_type, AlertType::StorageContainerBreak);
+    assert_eq!(r.alerts[0].status, AlertStatus::Unread);
+    assert!(r.alerts[0].is_unread());
+    assert_eq!(r.alerts[0].risk.as_ref().unwrap().percent, 30);
+    assert_eq!(r.alerts[0].container.as_ref().unwrap().object_id.as_deref(), Some("detached-container-7"));
+    // read alert is no longer unread
+    assert_eq!(r.alerts[1].alert_type, AlertType::IntelligentLife);
+    assert!(!r.alerts[1].is_unread());
+    assert_eq!(r.alerts[1].planet.as_ref().unwrap().name.as_deref(), Some("Pale Signal"));
+    // object-detected carries resource types
+    assert_eq!(r.alerts[2].object.as_ref().unwrap().resource_types, vec!["deuterium"]);
+}
+
+#[test]
+fn damage_warnings_response_deser() {
+    let r: DamageWarningsResponseProbe = deser(DAMAGE_WARNINGS_JSON);
+    assert_eq!(r.damage_warnings.len(), 1);
+    assert_eq!(r.damage_warnings[0].phase, AlertPhase::AccelerationEnd);
+    assert_eq!(r.rule.starts_at_additional_containers, Some(5));
+    assert_eq!(r.rule.maximum_risk_percent, Some(100));
+}
+
+#[test]
+fn alert_unknown_type_fallback() {
+    let json = ALERTS_JSON.replace("storage_container_break\",\n      \"status\": \"unread", "supernova_imminent\",\n      \"status\": \"unread");
+    let r: AlertsResponseProbe = deser(&json);
+    assert_eq!(r.alerts[0].alert_type, AlertType::Unknown);
+}
+
+// Local mirrors of the private response envelopes (client.rs declares them
+// inline), so the test can assert the public types deserialize the real shape.
+#[derive(serde::Deserialize)]
+struct AlertsResponseProbe {
+    alerts: Vec<ProbeAlert>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DamageWarningsResponseProbe {
+    damage_warnings: Vec<ProbeAlert>,
+    rule: DamageWarningRule,
 }

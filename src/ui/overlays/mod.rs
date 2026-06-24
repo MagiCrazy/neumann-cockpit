@@ -1,3 +1,4 @@
+pub(crate) mod alerts;
 pub(crate) mod craft;
 pub(crate) mod help;
 pub(crate) mod inventory_detail;
@@ -10,6 +11,7 @@ pub(crate) mod repair;
 pub(crate) mod travel;
 pub(crate) mod waypoints;
 
+pub(crate) use alerts::render_alerts_overlay;
 pub(crate) use craft::{render_atomic_printer_craft_overlay, render_craft_overlay};
 pub(crate) use help::render_help_overlay;
 pub(crate) use inventory_detail::render_inventory_detail_overlay;
@@ -26,9 +28,9 @@ pub(crate) use travel::render_travel_overlay;
 pub(crate) use waypoints::render_waypoints_overlay;
 
 use crate::app::{
-    AppState, AtomicPrinterCraftInput, CraftInput, DeployInput, DetachInput, InspectInput,
-    JettisonInput, MineInput, ObjectActionInput, RecallInput, RecoverInput, RenameMannyInput,
-    RepairInput, SalvageInput, TravelInput, WaypointsInput,
+    AlertsInput, AppState, AtomicPrinterCraftInput, CraftInput, DeployInput, DetachInput,
+    InspectInput, JettisonInput, MineInput, ObjectActionInput, RecallInput, RecoverInput,
+    RenameMannyInput, RepairInput, SalvageInput, TravelInput, WaypointsInput,
 };
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -41,6 +43,10 @@ use ratatui::{
 /// Render whichever wizard overlays are active, on top of the current
 /// layout. Shared by the classic and retro themes.
 pub(crate) fn render_active_overlays(frame: &mut Frame, area: Rect, state: &AppState) {
+    // Informational overlays first (lowest in the stack); action wizards on top.
+    if !matches!(state.alerts_input, AlertsInput::Inactive) {
+        render_alerts_overlay(frame, area, state);
+    }
     if !matches!(state.travel, TravelInput::Inactive) {
         render_travel_overlay(frame, area, state);
     }

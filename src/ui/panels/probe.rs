@@ -71,11 +71,21 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
 
     // ── Header ──
     let spinner = if state.loading { " ⟳" } else { "" };
+    let unread = state.unread_alert_count();
+    let alert_badge = if unread > 0 {
+        Span::styled(
+            format!(" [!{unread}]"),
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD | Modifier::RAPID_BLINK),
+        )
+    } else {
+        Span::raw("")
+    };
     frame.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled(&probe.name, Style::default().add_modifier(Modifier::BOLD)),
             Span::raw("  "),
             Span::styled(probe_status_label(&probe.status), probe_status_style(&probe.status)),
+            alert_badge,
             Span::styled(spinner, Style::default().fg(Color::DarkGray)),
         ])),
         rows[row],
