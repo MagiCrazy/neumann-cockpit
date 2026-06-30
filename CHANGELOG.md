@@ -1,5 +1,24 @@
 # Changelog
 
+## [63.0.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v23.5.0...neumann-cockpit-v63.0.0) (2026-06-30)
+
+
+* align client major with API version (v63) ([#81](https://github.com/MagiCrazy/neumann-cockpit/issues/81)) ([7cf59be](https://github.com/MagiCrazy/neumann-cockpit/commit/7cf59be8b871694b2567fda8f641700212cb5737))
+
+
+### Features
+
+* **api:** v48-v62 telemetry catch-up (bloc A) ([#69](https://github.com/MagiCrazy/neumann-cockpit/issues/69)) ([0210d33](https://github.com/MagiCrazy/neumann-cockpit/commit/0210d33af03bb58498caf47b167bcdd3c3062a9e))
+* **mannies:** refill deuterium tank at a refuel station ([#71](https://github.com/MagiCrazy/neumann-cockpit/issues/71)) ([f99670a](https://github.com/MagiCrazy/neumann-cockpit/commit/f99670a11a1782ccb91673a8f1e8b59df4c29d97))
+* **messaging:** inter-probe inbox, sent & compose (bloc F) ([#79](https://github.com/MagiCrazy/neumann-cockpit/issues/79)) ([be8bc98](https://github.com/MagiCrazy/neumann-cockpit/commit/be8bc982104fe5b48362c0880dd2a1c2bfc8b0e6))
+* **mining:** optional target container in the local mine wizard ([#78](https://github.com/MagiCrazy/neumann-cockpit/issues/78)) ([6598d9b](https://github.com/MagiCrazy/neumann-cockpit/commit/6598d9b28bf07262cca413e4f4c3256fbaa13141))
+* **missions:** list and abandon probe missions ([#73](https://github.com/MagiCrazy/neumann-cockpit/issues/73)) ([772e8c4](https://github.com/MagiCrazy/neumann-cockpit/commit/772e8c4821b98b0b0368c960665442d258281b37))
+* **probe:** mind-snapshot reassign for a dead or trapped probe ([#72](https://github.com/MagiCrazy/neumann-cockpit/issues/72)) ([ff0ab67](https://github.com/MagiCrazy/neumann-cockpit/commit/ff0ab67f577687c62503e86134c4850302fc87b2))
+* **scut:** inspect networks and show coverage (bloc E2) ([#75](https://github.com/MagiCrazy/neumann-cockpit/issues/75)) ([e3e977d](https://github.com/MagiCrazy/neumann-cockpit/commit/e3e977d6611cd82209a814a0fe75b7a6e37a5a20))
+* **scut:** remote manny visibility and abandon (bloc E3) ([#76](https://github.com/MagiCrazy/neumann-cockpit/issues/76)) ([1de7412](https://github.com/MagiCrazy/neumann-cockpit/commit/1de741284a929e7dc39ab2680818162569e68117))
+* **scut:** remote-mine a forgotten manny via SCUT (bloc E3b) ([#77](https://github.com/MagiCrazy/neumann-cockpit/issues/77)) ([b34d388](https://github.com/MagiCrazy/neumann-cockpit/commit/b34d388e19efb7d5efc2e4a70e342c592dd1ce1e))
+* **scut:** turn on and deploy SCUT relays (bloc E1) ([#74](https://github.com/MagiCrazy/neumann-cockpit/issues/74)) ([0c667a1](https://github.com/MagiCrazy/neumann-cockpit/commit/0c667a16b13a423a13c693e5904ef116b868f3c2))
+
 ## [23.5.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v23.4.1...neumann-cockpit-v23.5.0) (2026-06-24)
 
 
