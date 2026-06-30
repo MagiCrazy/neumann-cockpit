@@ -124,6 +124,7 @@ pub(crate) fn probe_status_label(s: &ProbeStatus) -> &'static str {
         ProbeStatus::Orbiting => "orbiting",
         ProbeStatus::Disabled => "disabled",
         ProbeStatus::Dead => "DEAD",
+        ProbeStatus::TrappedByBlackHole => "TRAPPED",
         ProbeStatus::Unknown => "?",
     }
 }
@@ -137,7 +138,9 @@ pub(crate) fn probe_status_style(s: &ProbeStatus) -> Style {
         }
         ProbeStatus::Cruising => Style::default().fg(Color::Cyan),
         ProbeStatus::Disabled => Style::default().fg(Color::Red),
-        ProbeStatus::Dead => Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+        ProbeStatus::Dead | ProbeStatus::TrappedByBlackHole => {
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+        }
         ProbeStatus::Unknown => Style::default().fg(Color::DarkGray),
     }
 }

@@ -11,9 +11,10 @@ use crate::api::types::MannyTask;
 use crate::app::{
     AlertsInput, ApiMessage, AppState, AtomicPrinterCraftInput, ContainerRulesInput,
     ContainersInput, CraftInput, DeployInput, DetachInput, DropCargoInput,
-    DropStorageContainerInput, InspectInput, JettisonInput, MineInput, ObjectActionInput, Panel,
-    RecallInput, RecoverInput, RefuelInput, RenameContainerInput, RenameMannyInput, RepairInput,
-    SalvageInput, ScanMode, StorageMoveInput, TravelInput, WaypointsInput,
+    DropStorageContainerInput, InspectInput, JettisonInput, MindSnapshotInput, MineInput,
+    ObjectActionInput, Panel, RecallInput, RecoverInput, RefuelInput, RenameContainerInput,
+    RenameMannyInput, RepairInput, SalvageInput, ScanMode, StorageMoveInput, TravelInput,
+    WaypointsInput,
 };
 mod alerts;
 mod containers;
@@ -39,8 +40,9 @@ use map::handle_map_event;
 use mine::handle_mine_event;
 use pickers::{
     handle_deploy_event, handle_detach_event, handle_drop_cargo_event,
-    handle_drop_container_event, handle_inspect_event, handle_recall_event, handle_recover_event,
-    handle_refuel_event, handle_rename_manny_event, handle_salvage_event,
+    handle_drop_container_event, handle_inspect_event, handle_mind_snapshot_event,
+    handle_recall_event, handle_recover_event, handle_refuel_event, handle_rename_manny_event,
+    handle_salvage_event,
 };
 use repair::handle_repair_event;
 use scanner::{handle_object_action_event, handle_waypoints_event};
@@ -67,6 +69,7 @@ pub fn handle_event(
     let in_salvage = !matches!(state.salvage, SalvageInput::Inactive);
     let in_recall = !matches!(state.recall, RecallInput::Inactive);
     let in_refuel = !matches!(state.refuel, RefuelInput::Inactive);
+    let in_mind_snapshot = !matches!(state.mind_snapshot, MindSnapshotInput::Inactive);
     let in_rename_manny = !matches!(state.rename_manny, RenameMannyInput::Inactive);
     let in_deploy = !matches!(state.deploy, DeployInput::Inactive);
     let in_inspect = !matches!(state.inspect, InspectInput::Inactive);
@@ -142,6 +145,11 @@ pub fn handle_event(
 
     if in_refuel {
         handle_refuel_event(k.code, state, client, tx);
+        return;
+    }
+
+    if in_mind_snapshot {
+        handle_mind_snapshot_event(k.code, state, client, tx);
         return;
     }
 
@@ -272,6 +280,9 @@ pub fn handle_event(
 
     match k.code {
         KeyCode::Char('q') => state.set_quit(),
+        KeyCode::Char('r') if ctrl && state.probe_terminal_alert().is_some() => {
+            state.mind_snapshot = MindSnapshotInput::Confirm { error: None };
+        }
         KeyCode::Char('A') => {
             // Open on the tab that actually has entries (warnings if alerts empty).
             let show_warnings = state.alerts.is_empty() && !state.damage_warnings.is_empty();

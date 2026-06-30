@@ -1,9 +1,9 @@
-use crate::app::{AppState, DeployInput, DetachInput, DropCargoInput, InspectInput, RecallInput, RecoverInput, RefuelInput, RenameMannyInput, SalvageInput};
+use crate::app::{AppState, DeployInput, DetachInput, DropCargoInput, InspectInput, MindSnapshotInput, RecallInput, RecoverInput, RefuelInput, RenameMannyInput, SalvageInput};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
 };
 
@@ -188,6 +188,64 @@ pub(crate) fn render_refuel_overlay(frame: &mut Frame, area: Rect, state: &AppSt
         Paragraph::new(Line::from(vec![
             Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
             Span::raw(" REFUEL  "),
+            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::raw(" cancel"),
+        ])),
+        rows[1],
+    );
+}
+
+pub(crate) fn render_mind_snapshot_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let MindSnapshotInput::Confirm { ref error } = state.mind_snapshot else { return };
+    let alert = state.probe_terminal_alert();
+
+    let popup = centered_rect(60, 10, area);
+    frame.render_widget(Clear, popup);
+
+    let title = alert
+        .map(|a| format!(" {} ", a.title))
+        .unwrap_or_else(|| " MIND SNAPSHOT REASSIGN ".to_string());
+    let block = Block::default()
+        .title(title)
+        .title_alignment(Alignment::Center)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD));
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let mut lines: Vec<Line> = Vec::new();
+    if let Some(a) = alert {
+        lines.push(Line::from(Span::styled(
+            a.message.clone(),
+            Style::default().fg(Color::White),
+        )));
+        lines.push(Line::default());
+    }
+    lines.push(Line::from(Span::styled(
+        "Reassign your mind snapshot to a fresh probe?",
+        Style::default().fg(Color::White),
+    )));
+    lines.push(Line::from(Span::styled(
+        "The terminal probe is deleted and the local reference frame resets to 0,0,0.",
+        Style::default().fg(Color::DarkGray),
+    )));
+    if let Some(err) = error {
+        lines.push(Line::default());
+        lines.push(Line::from(Span::styled(
+            format!("✗ {err}"),
+            Style::default().fg(Color::Red),
+        )));
+    }
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), rows[0]);
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("[Enter]", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+            Span::raw(" REASSIGN  "),
             Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
             Span::raw(" cancel"),
         ])),

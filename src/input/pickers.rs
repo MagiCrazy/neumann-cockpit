@@ -4,12 +4,12 @@ use tokio::sync::mpsc;
 use crate::api::client::ApiClient;
 use crate::api::tasks::{
     fetch_deploy, fetch_detach, fetch_drop_manny_cargo, fetch_drop_storage_container,
-    fetch_inspect, fetch_recall, fetch_refill_deuterium,
+    fetch_inspect, fetch_reassign_mind_snapshot, fetch_recall, fetch_refill_deuterium,
     fetch_recover, fetch_rename_manny, fetch_salvage,
 };
 use crate::app::{
     ApiMessage, AppState, DeployInput, DetachInput, DropCargoInput, DropStorageContainerInput,
-    InspectInput, RecallInput, RefuelInput,
+    InspectInput, MindSnapshotInput, RecallInput, RefuelInput,
     RecoverInput, RenameMannyInput, SalvageInput, DETACH_MODES,
 };
 use super::geometry::list_nav;
@@ -95,6 +95,21 @@ pub(super) fn handle_refuel_event(
                 manny_id.clone()
             };
             fetch_refill_deuterium(manny_id, client.clone(), tx.clone());
+        }
+        _ => {}
+    }
+}
+
+pub(super) fn handle_mind_snapshot_event(
+    code: KeyCode,
+    state: &mut AppState,
+    client: &ApiClient,
+    tx: &mpsc::Sender<ApiMessage>,
+) {
+    match code {
+        KeyCode::Esc | KeyCode::Char('n') => state.mind_snapshot = MindSnapshotInput::Inactive,
+        KeyCode::Enter | KeyCode::Char('y') => {
+            fetch_reassign_mind_snapshot(client.clone(), tx.clone());
         }
         _ => {}
     }

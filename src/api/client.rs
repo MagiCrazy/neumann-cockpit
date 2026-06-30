@@ -257,6 +257,19 @@ impl ApiClient {
         Ok(self.post::<Resp, _>(&path, &serde_json::json!({})).await?.manny)
     }
 
+    /// Reassign the player's mind snapshot to a fresh probe chassis
+    /// (`POST /api/probe/mind-snapshot/reassign`). Only valid when the current
+    /// probe is dead or trapped by a black hole; resets the local reference
+    /// frame to 0,0,0 and returns the new probe.
+    pub async fn reassign_mind_snapshot(&self) -> Result<Probe> {
+        #[derive(Deserialize)]
+        struct Resp { probe: Probe }
+        Ok(self
+            .post::<Resp, _>("/api/probe/mind-snapshot/reassign", &serde_json::json!({}))
+            .await?
+            .probe)
+    }
+
     pub async fn rename_manny(&self, manny_id: &str, name: &str) -> Result<Manny> {
         #[derive(Serialize)]
         struct Body<'a> { name: &'a str }

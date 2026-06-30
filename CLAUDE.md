@@ -113,6 +113,7 @@ Scanner specifics: the history column shows symbol + coords + distance, scrolls 
 - Storage containers (`[C]` in Inventory) — container browser with capacity bars; `Enter` content view, `[n]` rename, `[e]` routing-rules editor (cycle each type none → priority → exclusion → strict)
 - Storage move (`[M]` in Inventory) — pick actor manny → kind (resource / item) → source/destination + amount, or multi-select items + destination
 - Drop cargo (`[X]` on a Manny waiting for space) — one-step confirmation (resource cargo is lost)
+- Mind-snapshot reassign (`Ctrl+R`, only when the probe is dead or trapped by a black hole — `probe.alert` present) — confirmation; reassigns the mind snapshot to a fresh probe and resets the local frame to 0,0,0
 - Waypoints (`[w]`) — known destinations from scan history (bookmarks, stars, minable), `Enter` → travel confirmation
 - Inventory detail (`Enter` in inventory) — read-only detail of the selected row
 - Map (`[b]`) — isometric sector overview: pan (`[hjkl/←↓↑→]`), `[u/d]` y±1, `[0]` recenter on probe, `[c]` jump to coords, `[g]` travel to center; info line (distance, ETA, sector summary) + legend; visited-but-unscanned sectors shown as `○`
@@ -126,6 +127,7 @@ Scanner specifics: the history column shows symbol + coords + distance, scrolls 
 | `/api/probe` | GET | ✓ |
 | `/api/probe/mannies` | GET | ✓ |
 | `/api/probe/sector` | GET | ✓ |
+| `/api/probe/mind-snapshot/reassign` | POST | ✓ |
 | `/api/probe/move` | POST | ✓ |
 | `/api/probe/mannies/{id}/repair` | POST | ✓ |
 | `/api/probe/mannies/{id}/mine` | POST | ✓ |

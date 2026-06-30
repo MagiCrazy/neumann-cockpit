@@ -617,3 +617,42 @@ fn new_sector_object_types_deserialize() {
     );
     assert_eq!(deser::<SectorObjectType>(r#""scut_relay""#), SectorObjectType::ScutRelay);
 }
+
+#[test]
+fn trapped_probe_status_deserializes() {
+    assert_eq!(
+        deser::<ProbeStatus>(r#""trapped_by_black_hole""#),
+        ProbeStatus::TrappedByBlackHole
+    );
+}
+
+#[test]
+fn dead_probe_with_terminal_alert_deserializes() {
+    let json = r#"{
+      "id": 7, "name": "Von Neumann #7", "status": "dead",
+      "fuel": { "deuterium": 0.0 }, "sensorMode": "blind",
+      "sector": null, "movement": null, "systems": null,
+      "alert": {
+        "type": "mind_snapshot_reassignment_available",
+        "severity": "critical",
+        "title": "Probe lost",
+        "message": "Your probe is gone. Reassign your mind snapshot.",
+        "action": { "label": "Reassign", "method": "POST", "endpoint": "/api/probe/mind-snapshot/reassign" }
+      },
+      "inventory": {
+        "capacity": 10.0, "usedCapacity": 0.0, "freeCapacity": 10.0,
+        "items": [], "resourceStocks": [], "externalTanks": [], "containers": []
+      }
+    }"#;
+    let probe: Probe = deser(json);
+    assert_eq!(probe.status, ProbeStatus::Dead);
+    let alert = probe.alert.expect("terminal alert present");
+    assert_eq!(alert.severity, "critical");
+    assert_eq!(alert.action.endpoint, "/api/probe/mind-snapshot/reassign");
+}
+
+#[test]
+fn probe_without_alert_defaults_to_none() {
+    let probe: Probe = deser(PROBE_JSON);
+    assert!(probe.alert.is_none());
+}

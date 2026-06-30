@@ -80,16 +80,20 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
     } else {
         Span::raw("")
     };
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled(&probe.name, Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw("  "),
-            Span::styled(probe_status_label(&probe.status), probe_status_style(&probe.status)),
-            alert_badge,
-            Span::styled(spinner, Style::default().fg(Color::DarkGray)),
-        ])),
-        rows[row],
-    );
+    let mut status_spans = vec![
+        Span::styled(&probe.name, Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw("  "),
+        Span::styled(probe_status_label(&probe.status), probe_status_style(&probe.status)),
+        alert_badge,
+        Span::styled(spinner, Style::default().fg(Color::DarkGray)),
+    ];
+    if state.probe_terminal_alert().is_some() {
+        status_spans.push(Span::styled(
+            "  [^R reassign]",
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+        ));
+    }
+    frame.render_widget(Paragraph::new(Line::from(status_spans)), rows[row]);
     row += 1;
 
     // ── Current sector ──

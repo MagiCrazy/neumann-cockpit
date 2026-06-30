@@ -286,6 +286,15 @@ pub enum RefuelInput {
 }
 
 #[derive(Default)]
+pub enum MindSnapshotInput {
+    #[default]
+    Inactive,
+    /// Confirmation for the irreversible mind-snapshot reassignment to a fresh
+    /// probe (only offered when the probe is dead or trapped by a black hole).
+    Confirm { error: Option<String> },
+}
+
+#[derive(Default)]
 pub enum RenameMannyInput {
     #[default]
     Inactive,
