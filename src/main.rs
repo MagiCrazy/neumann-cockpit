@@ -13,9 +13,9 @@ use neumann_cockpit::api::client::ApiClient;
 use neumann_cockpit::api::tasks::{fetch_all, fetch_api_version, fetch_crafting_recipes, fetch_mannies};
 use neumann_cockpit::app::{
     ApiMessage, AppState, AtomicPrinterCraftInput, ContainerRulesInput, CraftInput, DeployInput,
-    DetachInput, DropCargoInput, DropStorageContainerInput, InspectInput, JettisonInput, MineInput,
-    Phosphor, RecallInput, RecoverInput, RefuelInput, RenameContainerInput, RenameMannyInput,
-    RepairInput, SalvageInput, StorageMoveInput, UiTheme,
+    DetachInput, DropCargoInput, DropStorageContainerInput, InspectInput, JettisonInput,
+    MindSnapshotInput, MineInput, Phosphor, RecallInput, RecoverInput, RefuelInput,
+    RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, StorageMoveInput, UiTheme,
 };
 use neumann_cockpit::config;
 use neumann_cockpit::input::handle_event;
@@ -166,6 +166,13 @@ async fn run(
                         fetch_all(client.clone(), tx.clone());
                     }
                     ApiMessage::DeuteriumRefuelError(e) => state.set_refuel_error(e),
+                    ApiMessage::MindSnapshotReassigned(probe) => {
+                        state.mind_snapshot = MindSnapshotInput::Inactive;
+                        state.update_probe(probe);
+                        state.set_toast("mind snapshot reassigned");
+                        fetch_all(client.clone(), tx.clone());
+                    }
+                    ApiMessage::MindSnapshotReassignError(e) => state.set_mind_snapshot_error(e),
                     ApiMessage::DeployStarted => {
                         state.deploy = DeployInput::Inactive;
                         state.set_toast("waypoint deploy order sent");

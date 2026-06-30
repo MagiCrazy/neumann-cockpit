@@ -105,6 +105,17 @@ impl AppState {
         }
     }
 
+    pub fn set_mind_snapshot_error(&mut self, msg: String) {
+        if let MindSnapshotInput::Confirm { ref mut error } = self.mind_snapshot {
+            *error = Some(msg);
+        }
+    }
+
+    /// The probe's terminal recovery alert (dead / black-hole), if any.
+    pub fn probe_terminal_alert(&self) -> Option<&crate::api::types::ProbeTerminalAlert> {
+        self.probe.as_ref().and_then(|p| p.alert.as_ref())
+    }
+
     /// True when the probe's current sector exposes a deuterium refuel station.
     pub fn deuterium_station_in_current_sector(&self) -> bool {
         self.probe_current_sector_scan()

@@ -47,6 +47,7 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect) {
     let left: Vec<Line> = vec![
         help_section("Global"),
         help_key_line("r", "refresh all"),
+        help_key_line("^R", "reassign mind snapshot (dead/trapped probe)"),
         help_key_line("p i m s", "focus probe / inventory / mannies / scanner"),
         help_key_line("Tab", "cycle panel focus (Shift-Tab reverse)"),
         help_key_line("F2", "toggle retro/classic theme"),

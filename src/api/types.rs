@@ -25,6 +25,7 @@ pub enum ProbeStatus {
     Orbiting,
     Disabled,
     Dead,
+    TrappedByBlackHole,
     #[serde(other)]
     Unknown,
 }
@@ -411,6 +412,29 @@ pub struct Probe {
     pub movement: Option<ProbeMovement>,
     pub systems: Option<ProbeSystems>,
     pub inventory: ProbeInventory,
+    /// Critical recovery alert raised when the probe is dead or trapped by a
+    /// black hole, carrying the mind-snapshot reassignment action.
+    #[serde(default)]
+    pub alert: Option<ProbeTerminalAlert>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeTerminalAlert {
+    #[serde(rename = "type")]
+    pub alert_type: String,
+    pub severity: String,
+    pub title: String,
+    pub message: String,
+    pub action: ProbeTerminalAlertAction,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeTerminalAlertAction {
+    pub label: String,
+    pub method: String,
+    pub endpoint: String,
 }
 
 // ── Mannies list ──────────────────────────────────────────────────────────────

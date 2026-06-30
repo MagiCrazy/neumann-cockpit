@@ -90,6 +90,7 @@ pub struct AppState {
     pub salvage: SalvageInput,
     pub recall: RecallInput,
     pub refuel: RefuelInput,
+    pub mind_snapshot: MindSnapshotInput,
     pub deploy: DeployInput,
     pub rename_manny: RenameMannyInput,
     pub inspect: InspectInput,

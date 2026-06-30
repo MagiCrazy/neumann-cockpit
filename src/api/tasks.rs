@@ -362,6 +362,16 @@ pub fn fetch_refill_deuterium(manny_id: String, client: ApiClient, tx: mpsc::Sen
     });
 }
 
+pub fn fetch_reassign_mind_snapshot(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        let msg = match client.reassign_mind_snapshot().await {
+            Ok(probe) => ApiMessage::MindSnapshotReassigned(probe),
+            Err(e) => ApiMessage::MindSnapshotReassignError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
 pub fn fetch_rename_manny(manny_id: String, name: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     tokio::spawn(async move {
         let msg = match client.rename_manny(&manny_id, &name).await {
