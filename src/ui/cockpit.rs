@@ -107,6 +107,11 @@ pub(crate) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
         Span::raw(" alerts  "),
         Span::styled("[O]", Style::default().fg(Color::Cyan)),
         Span::raw(" missions  "),
+        Span::styled(
+            "[N]",
+            Style::default().fg(if state.scut_coverage().is_empty() { Color::Cyan } else { Color::LightBlue }),
+        ),
+        Span::raw(" network  "),
         Span::styled("[?]", Style::default().fg(Color::Cyan)),
         Span::raw(" help  "),
         Span::styled("[q]", Style::default().fg(Color::Cyan)),

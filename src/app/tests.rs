@@ -848,6 +848,20 @@ fn relay_sector(status: &str) -> SectorObservation {
 }
 
 #[test]
+fn scut_coverage_read_from_sector() {
+    let mut state = AppState::default();
+    state.probe = Some(probe_at(0., 0., 0.));
+    let mut sector = make_sector_with_objects(0., 0., 0., "[]");
+    sector.scut_networks = vec![
+        serde_json::from_str(r#"{"id": 7, "name": "Delta SCUT"}"#).unwrap(),
+    ];
+    state.scan_history = vec![sector];
+    let cov = state.scut_coverage();
+    assert_eq!(cov.len(), 1);
+    assert_eq!(cov[0], (7, "Delta SCUT".to_string()));
+}
+
+#[test]
 fn relay_status_read_from_sector_object() {
     let mut state = AppState::default();
     state.probe = Some(probe_at(0., 0., 0.));

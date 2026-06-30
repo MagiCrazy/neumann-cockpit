@@ -5,7 +5,7 @@ use crate::api::client::ApiClient;
 use crate::api::tasks::{
     fetch_all,
     fetch_inspect,
-    fetch_recover, fetch_sector, fetch_storage_containers,
+    fetch_recover, fetch_scut_network, fetch_sector, fetch_storage_containers,
 };
 use crate::api::types::MannyTask;
 use crate::app::{
@@ -13,8 +13,8 @@ use crate::app::{
     ContainersInput, CraftInput, DeployInput, DetachInput, DropCargoInput,
     DropStorageContainerInput, InspectInput, JettisonInput, MindSnapshotInput, MineInput,
     MissionsInput, ObjectActionInput, Panel, RecallInput, RecoverInput, RefuelInput,
-    RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, ScutRelayInput,
-    StorageMoveInput, TravelInput, WaypointsInput,
+    RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, ScutNetworkInput,
+    ScutRelayInput, StorageMoveInput, TravelInput, WaypointsInput,
 };
 mod alerts;
 mod containers;
@@ -47,7 +47,10 @@ use pickers::{
     handle_salvage_event,
 };
 use repair::handle_repair_event;
-use scanner::{handle_object_action_event, handle_scut_relay_event, handle_waypoints_event};
+use scanner::{
+    handle_object_action_event, handle_scut_network_event, handle_scut_relay_event,
+    handle_waypoints_event,
+};
 use storage_move::handle_storage_move_event;
 use travel::handle_travel_event;
 pub fn handle_event(
@@ -73,6 +76,7 @@ pub fn handle_event(
     let in_refuel = !matches!(state.refuel, RefuelInput::Inactive);
     let in_mind_snapshot = !matches!(state.mind_snapshot, MindSnapshotInput::Inactive);
     let in_scut_relay = !matches!(state.scut_relay, ScutRelayInput::Inactive);
+    let in_scut_network = !matches!(state.scut_network, ScutNetworkInput::Inactive);
     let in_missions = !matches!(state.missions_input, MissionsInput::Inactive);
     let in_rename_manny = !matches!(state.rename_manny, RenameMannyInput::Inactive);
     let in_deploy = !matches!(state.deploy, DeployInput::Inactive);
@@ -159,6 +163,11 @@ pub fn handle_event(
 
     if in_scut_relay {
         handle_scut_relay_event(k.code, state, client, tx);
+        return;
+    }
+
+    if in_scut_network {
+        handle_scut_network_event(k.code, state, client, tx);
         return;
     }
 
@@ -305,6 +314,19 @@ pub fn handle_event(
         KeyCode::Char('b') => state.open_map(),
         KeyCode::Char('O') => {
             state.missions_input = MissionsInput::Browsing { selection: 0 };
+        }
+        KeyCode::Char('N') => {
+            let nets = state.scut_coverage();
+            match nets.len() {
+                0 => state.error = Some("no SCUT coverage in this sector".into()),
+                1 => {
+                    let id = nets[0].0;
+                    state.scut_network = ScutNetworkInput::Viewing { error: None };
+                    state.scut_network_view = None;
+                    fetch_scut_network(id, client.clone(), tx.clone());
+                }
+                _ => state.scut_network = ScutNetworkInput::Picking { networks: nets, selection: 0 },
+            }
         }
         KeyCode::Char('?') => state.help_open = true,
         KeyCode::Char('w') => {

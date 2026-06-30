@@ -93,6 +93,12 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
             Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
         ));
     }
+    if !state.scut_coverage().is_empty() {
+        status_spans.push(Span::styled(
+            "  ≣ SCUT",
+            Style::default().fg(Color::LightBlue),
+        ));
+    }
     frame.render_widget(Paragraph::new(Line::from(status_spans)), rows[row]);
     row += 1;
 

@@ -381,6 +381,16 @@ pub fn fetch_refill_deuterium(manny_id: String, client: ApiClient, tx: mpsc::Sen
     });
 }
 
+pub fn fetch_scut_network(network_id: i64, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        let msg = match client.get_scut_network(network_id).await {
+            Ok(n) => ApiMessage::ScutNetworkFetched(n),
+            Err(e) => ApiMessage::ScutNetworkError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
 pub fn fetch_turn_on_relay(
     manny_id: String,
     relay_id: i64,

@@ -677,6 +677,40 @@ pub struct ScutNetworkReference {
     pub name: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScutRelay {
+    pub id: i64,
+    pub name: String,
+    pub status: ScutRelayStatus,
+    pub sector: ProbeSector,
+    pub created_by_probe_name: Option<String>,
+    pub coverage_radius_sectors: i64,
+    pub activated_at: Option<String>,
+    pub network: Option<ScutNetworkReference>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScutNetworkProbe {
+    pub id: i64,
+    pub name: String,
+    pub sector: ProbeSector,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScutNetwork {
+    pub id: i64,
+    pub name: String,
+    pub relay_count: i64,
+    pub covered_sector_count: i64,
+    #[serde(default)]
+    pub relays: Vec<ScutRelay>,
+    #[serde(default)]
+    pub probes: Vec<ScutNetworkProbe>,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MinableTarget {
@@ -705,6 +739,8 @@ pub struct SectorObservation {
     pub message: Option<String>,
     pub sensor_mode: Option<SensorMode>,
     pub data_freshness: Option<DataFreshness>,
+    #[serde(default)]
+    pub scut_networks: Vec<ScutNetworkReference>,
     pub scan: SectorScan,
     /// Local timestamp of when this observation was received (not an API
     /// field — stamped client-side and persisted in scan_history.json).

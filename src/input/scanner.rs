@@ -5,11 +5,12 @@ use crate::api::client::ApiClient;
 use crate::api::tasks::{
     fetch_inspect,
     fetch_recover,
+    fetch_scut_network,
     fetch_turn_on_relay,
 };
 use crate::app::{
     ApiMessage, AppState, DeployInput, MineInput, ObjectAction, ObjectActionInput, SalvageInput,
-    ScutRelayInput, WaypointsInput,
+    ScutNetworkInput, ScutRelayInput, WaypointsInput,
 };
 use super::geometry::list_nav;
 /// Send the chosen object action, reusing the existing wizards/endpoints.
@@ -112,6 +113,43 @@ pub(super) fn handle_scut_relay_event(
             fetch_turn_on_relay(manny_id, relay_id, name, client.clone(), tx.clone());
         }
         _ => {}
+    }
+}
+
+pub(super) fn handle_scut_network_event(
+    code: KeyCode,
+    state: &mut AppState,
+    client: &ApiClient,
+    tx: &mpsc::Sender<ApiMessage>,
+) {
+    match state.scut_network {
+        ScutNetworkInput::Picking { ref networks, selection } => {
+            let count = networks.len();
+            match code {
+                KeyCode::Esc => state.scut_network = ScutNetworkInput::Inactive,
+                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                    if let Some(new_sel) = list_nav(code, selection, count) {
+                        if let ScutNetworkInput::Picking { ref mut selection, .. } = state.scut_network {
+                            *selection = new_sel;
+                        }
+                    }
+                }
+                KeyCode::Enter => {
+                    let id = networks[selection].0;
+                    state.scut_network = ScutNetworkInput::Viewing { error: None };
+                    state.scut_network_view = None;
+                    fetch_scut_network(id, client.clone(), tx.clone());
+                }
+                _ => {}
+            }
+        }
+        ScutNetworkInput::Viewing { .. } => {
+            if code == KeyCode::Esc {
+                state.scut_network = ScutNetworkInput::Inactive;
+                state.scut_network_view = None;
+            }
+        }
+        ScutNetworkInput::Inactive => {}
     }
 }
 

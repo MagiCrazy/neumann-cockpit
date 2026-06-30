@@ -17,8 +17,8 @@ use neumann_cockpit::app::{
     ApiMessage, AppState, AtomicPrinterCraftInput, ContainerRulesInput, CraftInput, DeployInput,
     DetachInput, DropCargoInput, DropStorageContainerInput, InspectInput, JettisonInput,
     MindSnapshotInput, MineInput, MissionsInput, Phosphor, RecallInput, RecoverInput, RefuelInput,
-    RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScutRelayInput,
-    StorageMoveInput, UiTheme,
+    RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScutNetworkInput,
+    ScutRelayInput, StorageMoveInput, UiTheme,
 };
 use neumann_cockpit::config;
 use neumann_cockpit::input::handle_event;
@@ -191,6 +191,16 @@ async fn run(
                         fetch_all(client.clone(), tx.clone());
                     }
                     ApiMessage::ScutRelayTurnOnError(e) => state.set_scut_relay_error(e),
+                    ApiMessage::ScutNetworkFetched(network) => {
+                        if matches!(state.scut_network, ScutNetworkInput::Viewing { .. }) {
+                            state.scut_network_view = Some(network);
+                        }
+                    }
+                    ApiMessage::ScutNetworkError(e) => {
+                        if matches!(state.scut_network, ScutNetworkInput::Viewing { .. }) {
+                            state.scut_network = ScutNetworkInput::Viewing { error: Some(e) };
+                        }
+                    }
                     ApiMessage::DeployStarted => {
                         state.deploy = DeployInput::Inactive;
                         state.set_toast("waypoint deploy order sent");
