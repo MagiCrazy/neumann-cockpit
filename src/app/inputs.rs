@@ -269,6 +269,9 @@ pub enum RecallInput {
     Confirm {
         manny_id: String,
         manny_name: String,
+        /// True when the Manny is in a remote sector reachable via SCUT: the
+        /// recall cancels its task and leaves it forgotten (it does not return).
+        remote: bool,
         error: Option<String>,
     },
 }

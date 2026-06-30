@@ -90,7 +90,7 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect) {
         help_key_line("v", "recover container"),
         help_key_line("n", "rename"),
         help_key_line("F", "refuel deuterium (at station)"),
-        help_key_line("R", "recall (busy manny)"),
+        help_key_line("R", "recall (busy manny) / abandon (SCUT-remote manny)"),
         help_key_line("X", "drop cargo (waiting manny)"),
         help_key_line("P", "drop container on planet"),
         Line::default(),

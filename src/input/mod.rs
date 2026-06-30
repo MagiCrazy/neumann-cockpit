@@ -576,9 +576,14 @@ pub fn handle_event(
             if let Some(mannies) = &state.mannies {
                 if let Some(manny) = mannies.get(state.mannies_selection) {
                     if !manny.can_receive_orders && manny.current_task.is_some() {
+                        let remote = matches!(
+                            manny.task_visibility,
+                            Some(crate::api::types::MannyTaskVisibility::ScutNetwork)
+                        );
                         state.recall = RecallInput::Confirm {
                             manny_id: manny.id.clone(),
                             manny_name: manny.name.clone(),
+                            remote,
                             error: None,
                         };
                     }

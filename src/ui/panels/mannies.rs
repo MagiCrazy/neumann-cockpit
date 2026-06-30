@@ -1,5 +1,5 @@
 use crate::api::types::{
-    Manny, MannyLocationType, MannyTask,
+    Manny, MannyLocationType, MannyTask, MannyTaskVisibility,
 };
 use crate::app::AppState;
 use ratatui::{
@@ -79,10 +79,13 @@ pub(crate) fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppSta
             let is_waiting = selected_manny
                 .map(|m| m.current_task == Some(MannyTask::WaitingForSpace))
                 .unwrap_or(false);
+            let remote = selected_manny
+                .map(|m| matches!(m.task_visibility, Some(MannyTaskVisibility::ScutNetwork)))
+                .unwrap_or(false);
             let mut spans = vec![
-                Span::styled("busy  ", Style::default().fg(Color::DarkGray)),
+                Span::styled(if remote { "via SCUT  " } else { "busy  " }, Style::default().fg(Color::DarkGray)),
                 Span::styled("[R]", Style::default().fg(Color::Yellow)),
-                Span::raw(" recall  "),
+                Span::raw(if remote { " abandon  " } else { " recall  " }),
                 Span::styled("[n]", Style::default().fg(Color::Cyan)),
                 Span::raw(" rename"),
             ];
@@ -175,12 +178,19 @@ pub(crate) fn manny_list_item(m: &Manny) -> ListItem<'_> {
 
     let name = format!("{:<14}", m.name);
 
+    let via_scut = if matches!(m.task_visibility, Some(MannyTaskVisibility::ScutNetwork)) {
+        Span::styled(" ≣ via SCUT", Style::default().fg(Color::LightBlue))
+    } else {
+        Span::raw("")
+    };
+
     ListItem::new(Line::from(vec![
         loc_icon,
         Span::raw(" "),
         Span::raw(name),
         task_text,
         Span::styled(progress, Style::default().fg(Color::DarkGray)),
+        via_scut,
     ]))
 }
 
