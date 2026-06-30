@@ -588,3 +588,32 @@ fn container_detail_deser() {
     assert_eq!(r.inventory.resource_stocks[0].amount, 0.4);
     assert!(r.inventory.items.is_empty());
 }
+
+// ── v48–v62 telemetry catch-up enum variants ───────────────────────────────────
+
+#[test]
+fn new_manny_tasks_deserialize() {
+    assert_eq!(
+        deser::<MannyTask>(r#""refilling_deuterium_tank""#),
+        MannyTask::RefillingDeuteriumTank
+    );
+    assert_eq!(
+        deser::<MannyTask>(r#""turning_on_scut_relay""#),
+        MannyTask::TurningOnScutRelay
+    );
+    assert_eq!(deser::<MannyTask>(r#""unknown_too_far""#), MannyTask::UnknownTooFar);
+}
+
+#[test]
+fn anomaly_alert_type_deserializes() {
+    assert_eq!(deser::<AlertType>(r#""anomaly_detected""#), AlertType::AnomalyDetected);
+}
+
+#[test]
+fn new_sector_object_types_deserialize() {
+    assert_eq!(
+        deser::<SectorObjectType>(r#""deuterium_refuel_station""#),
+        SectorObjectType::DeuteriumRefuelStation
+    );
+    assert_eq!(deser::<SectorObjectType>(r#""scut_relay""#), SectorObjectType::ScutRelay);
+}

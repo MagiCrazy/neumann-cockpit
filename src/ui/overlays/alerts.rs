@@ -15,6 +15,7 @@ fn alert_type_label(t: &AlertType) -> &'static str {
         AlertType::StorageContainerBreak => "container break",
         AlertType::IntelligentLife => "intelligent life",
         AlertType::SectorObjectDetected => "object detected",
+        AlertType::AnomalyDetected => "anomaly detected",
         AlertType::Unknown => "alert",
     }
 }
@@ -25,6 +26,7 @@ fn type_color(t: &AlertType) -> Color {
         AlertType::StorageContainerBreak => Color::Red,
         AlertType::IntelligentLife => Color::Cyan,
         AlertType::SectorObjectDetected => Color::Yellow,
+        AlertType::AnomalyDetected => Color::Magenta,
         AlertType::Unknown => Color::Gray,
     }
 }

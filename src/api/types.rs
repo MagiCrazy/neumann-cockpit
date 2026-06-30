@@ -69,6 +69,9 @@ pub enum MannyTask {
     WaitingForSpace,
     MovingStockage,
     DroppingStorageContainer,
+    RefillingDeuteriumTank,
+    TurningOnScutRelay,
+    UnknownTooFar,
     #[serde(other)]
     Unknown,
 }
@@ -254,6 +257,7 @@ pub enum AlertType {
     StorageContainerBreak,
     IntelligentLife,
     SectorObjectDetected,
+    AnomalyDetected,
     #[serde(other)]
     Unknown,
 }
@@ -492,6 +496,8 @@ pub enum SectorObjectType {
     Manny,
     DriftingItem,
     DetachedContainer,
+    DeuteriumRefuelStation,
+    ScutRelay,
     #[serde(other)]
     Unknown,
 }
