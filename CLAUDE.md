@@ -91,7 +91,7 @@ Animations are driven by a 100 ms render tick in the main `select!`, guarded by 
 │  └─────────────────────────┘  │ [R] recall [X] drop cargo   │ │
 │                               └─────────────────────────────┘ │
 │ [r] refresh [p][i][m][s]/Tab focus [t] travel [b] map         │
-│ [w] waypoints [A] alerts [?] help [q] quit  v23.x  API v44    │
+│ [w] waypoints [A] alerts [?] help [q] quit  v23.x  API v63    │
 └───────────────────────────────────────────────────────────────┘
 ```
 
@@ -125,7 +125,7 @@ Scanner specifics: the history column shows symbol + coords + distance, scrolls 
 - Map (`[b]`) — isometric sector overview: pan (`[hjkl/←↓↑→]`), `[u/d]` y±1, `[0]` recenter on probe, `[c]` jump to coords, `[g]` travel to center; info line (distance, ETA, sector summary) + legend; visited-but-unscanned sectors shown as `○`
 - Help (`[?]`) — all keybindings grouped by context
 
-## Implemented API endpoints (API v44)
+## Implemented API endpoints (API v63)
 
 | Endpoint | Method | Status |
 |---|---|---|
