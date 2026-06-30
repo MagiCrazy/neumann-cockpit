@@ -310,6 +310,20 @@ pub enum ScutRelayInput {
 }
 
 #[derive(Default)]
+pub enum ScutNetworkInput {
+    #[default]
+    Inactive,
+    /// Several networks cover the sector — pick which one to inspect.
+    Picking {
+        networks: Vec<(i64, String)>, // (network id, name)
+        selection: usize,
+    },
+    /// Inspecting a network; details live in `AppState::scut_network_view`
+    /// (None while the fetch is in flight).
+    Viewing { error: Option<String> },
+}
+
+#[derive(Default)]
 pub enum MissionsInput {
     #[default]
     Inactive,

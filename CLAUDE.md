@@ -112,6 +112,7 @@ Scanner specifics: the history column shows symbol + coords + distance, scrolls 
 - Jettison a `scut_relay` inventory item (Inventory `[j]` on the SCUT-relay group) — confirmation; deploys an inactive relay into the current sector
 - Alerts (`[A]`) — tabbed Alerts / Damage-warnings list, `Tab` switches tab, `Enter` marks read; `[!]` badge on the probe panel + status bar when unread
 - Missions (`[O]`) — active-mission list with steps and status; `[a]` abandons the selected active mission (confirmation sub-popup)
+- SCUT network (`[N]`) — inspect a network covering the current sector (`scutNetworks` in the sector scan): relays (status, position, coverage) and probes. When several networks cover the sector, a picker precedes the detail view. A `≣ SCUT` badge on the probe panel + a lit `[N]` in the status bar signal active coverage.
 - Storage containers (`[C]` in Inventory) — container browser with capacity bars; `Enter` content view, `[n]` rename, `[e]` routing-rules editor (cycle each type none → priority → exclusion → strict)
 - Storage move (`[M]` in Inventory) — pick actor manny → kind (resource / item) → source/destination + amount, or multi-select items + destination
 - Drop cargo (`[X]` on a Manny waiting for space) — one-step confirmation (resource cargo is lost)
@@ -159,6 +160,7 @@ Scanner specifics: the history column shows symbol + coords + distance, scrolls 
 | `/api/probe/mannies/{id}/drop-storage-container` | POST | ✓ |
 | `/api/probe/mannies/{id}/refill-deuterium-tank` | POST | ✓ |
 | `/api/probe/mannies/{id}/turn-on-relay` | POST | ✓ |
+| `/api/probe/scut-network/{id}` | GET | ✓ |
 | `/api/probe/missions` | GET | ✓ |
 | `/api/probe/mission` | GET | ✓ (alias) |
 | `/api/probe/missions/{id}/abandon` | POST | ✓ |

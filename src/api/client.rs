@@ -1,6 +1,6 @@
 use super::types::{
     ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, Mission, Probe, ProbeAlert,
-    ProbeInventory, ProbeMovement, SectorObservation, StorageContainer, VisitedSector,
+    ProbeInventory, ProbeMovement, ScutNetwork, SectorObservation, StorageContainer, VisitedSector,
 };
 use anyhow::{Context, Result};
 use reqwest::{Client, StatusCode, Url};
@@ -273,6 +273,15 @@ impl ApiClient {
         struct Resp { mission: Mission }
         let path = format!("/api/probe/missions/{mission_id}/abandon");
         Ok(self.post::<Resp, _>(&path, &serde_json::json!({})).await?.mission)
+    }
+
+    /// Inspect a SCUT relay network covering the current probe
+    /// (`GET /api/probe/scut-network/{id}`).
+    pub async fn get_scut_network(&self, network_id: i64) -> Result<ScutNetwork> {
+        #[derive(Deserialize)]
+        struct Resp { network: ScutNetwork }
+        let path = format!("/api/probe/scut-network/{network_id}");
+        Ok(self.get::<Resp>(&path).await?.network)
     }
 
     /// Send a Manny to turn on an inactive SCUT relay in the current sector

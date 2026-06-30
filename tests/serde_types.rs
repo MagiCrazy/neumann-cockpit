@@ -1,7 +1,7 @@
 use neumann_cockpit::api::types::{
     AlertPhase, AlertStatus, AlertType, ContainerInventory, CraftingRecipe, DamageWarningRule,
     DataFreshness, KnowledgeLevel, Manny, MannyLocationType, MannyTask, Mission, MissionStatus,
-    MissionStepStatus, MovementPhase, Probe, ScutRelayStatus, SectorObject,
+    MissionStepStatus, MovementPhase, Probe, ScutNetwork, ScutRelayStatus, SectorObject,
     ProbeAlert, ProbeInventory, ProbeMovement, ProbeStatus, SectorObjectType, SectorObservation,
     SensorMode, StorageContainer,
 };
@@ -634,6 +634,32 @@ fn scut_relay_sector_object_deserializes() {
     let net = obj.network.expect("network present");
     assert_eq!(net.id, 7);
     assert_eq!(net.name, "Delta SCUT");
+}
+
+#[test]
+fn scut_network_deserializes() {
+    let json = r#"{
+      "id": 7, "name": "Delta SCUT",
+      "createdAt": "2026-06-25T12:00:00+00:00", "updatedAt": "2026-06-25T12:00:00+00:00",
+      "relayCount": 2, "coveredSectorCount": 41,
+      "relays": [
+        {"id": 12, "type": "scut_relay", "name": "Relais SCUT", "status": "on",
+         "sector": {"relative": {"x": 0, "y": 0, "z": 0}}, "coverageRadiusSectors": 10,
+         "createdByProbeName": "Probe X", "createdAt": "2026-06-25T12:00:00+00:00",
+         "activatedAt": null, "network": {"id": 7, "name": "Delta SCUT"}}
+      ],
+      "probes": [
+        {"id": 3, "name": "Probe of nova", "sector": {"relative": {"x": 2, "y": 0, "z": -2}}}
+      ]
+    }"#;
+    let net: ScutNetwork = deser(json);
+    assert_eq!(net.id, 7);
+    assert_eq!(net.relay_count, 2);
+    assert_eq!(net.covered_sector_count, 41);
+    assert_eq!(net.relays.len(), 1);
+    assert_eq!(net.relays[0].status, ScutRelayStatus::On);
+    assert_eq!(net.probes.len(), 1);
+    assert_eq!(net.probes[0].name, "Probe of nova");
 }
 
 #[test]

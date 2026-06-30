@@ -9,6 +9,7 @@ pub(crate) mod map;
 pub(crate) mod mine;
 pub(crate) mod missions;
 pub(crate) mod object_actions;
+pub(crate) mod scut_network;
 pub(crate) mod pickers;
 pub(crate) mod repair;
 pub(crate) mod storage_move;
@@ -28,6 +29,7 @@ pub(crate) use jettison::render_jettison_overlay;
 pub(crate) use map::render_map_overlay;
 pub(crate) use mine::render_mine_overlay;
 pub(crate) use missions::render_missions_overlay;
+pub(crate) use scut_network::render_scut_network_overlay;
 pub(crate) use object_actions::render_object_action_overlay;
 pub(crate) use pickers::{
     render_deploy_overlay, render_detach_overlay, render_drop_cargo_overlay, render_inspect_overlay,
@@ -45,8 +47,8 @@ use crate::app::{
     CraftInput, DeployInput, DetachInput, DropCargoInput, DropStorageContainerInput, InspectInput,
     JettisonInput, MineInput,
     MindSnapshotInput, MissionsInput, ObjectActionInput, RecallInput, RecoverInput, RefuelInput,
-    RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScutRelayInput,
-    StorageMoveInput, TravelInput, WaypointsInput,
+    RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScutNetworkInput,
+    ScutRelayInput, StorageMoveInput, TravelInput, WaypointsInput,
 };
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -104,6 +106,9 @@ pub(crate) fn render_active_overlays(frame: &mut Frame, area: Rect, state: &AppS
     }
     if !matches!(state.scut_relay, ScutRelayInput::Inactive) {
         render_scut_relay_overlay(frame, area, state);
+    }
+    if !matches!(state.scut_network, ScutNetworkInput::Inactive) {
+        render_scut_network_overlay(frame, area, state);
     }
     if !matches!(state.drop_cargo, DropCargoInput::Inactive) {
         render_drop_cargo_overlay(frame, area, state);

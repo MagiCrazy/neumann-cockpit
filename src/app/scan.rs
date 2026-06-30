@@ -218,6 +218,13 @@ impl AppState {
         actions
     }
 
+    /// SCUT networks covering the probe's current sector, as (id, name) pairs.
+    pub fn scut_coverage(&self) -> Vec<(i64, String)> {
+        self.probe_current_sector_scan()
+            .map(|s| s.scut_networks.iter().map(|n| (n.id, n.name.clone())).collect())
+            .unwrap_or_default()
+    }
+
     /// Status of a SCUT relay object in the probe's current sector, by object id.
     pub fn sector_object_relay_status(&self, id: &str) -> Option<ScutRelayStatus> {
         self.probe_current_sector_scan()
