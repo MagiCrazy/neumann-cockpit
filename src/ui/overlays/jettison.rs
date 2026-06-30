@@ -50,6 +50,45 @@ pub(crate) fn render_jettison_overlay(frame: &mut Frame, area: Rect, state: &App
             );
         }
 
+        JettisonInput::ConfirmRelay { error, .. } => {
+            let popup = centered_rect(52, 8, area);
+            frame.render_widget(Clear, popup);
+            let block = Block::default()
+                .title(" DEPLOY SCUT RELAY ")
+                .title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::LightBlue));
+            let inner = block.inner(popup);
+            frame.render_widget(block, popup);
+
+            let rows = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(1), Constraint::Length(1)])
+                .split(inner);
+
+            let mut lines = vec![Line::from(Span::styled(
+                "Deploy an inactive SCUT relay into this sector?",
+                Style::default().fg(Color::White),
+            ))];
+            if let Some(err) = error {
+                lines.push(Line::default());
+                lines.push(Line::from(Span::styled(
+                    format!("✗ {err}"),
+                    Style::default().fg(Color::Red),
+                )));
+            }
+            frame.render_widget(Paragraph::new(lines), rows[0]);
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled("[Enter]", Style::default().fg(Color::LightBlue).add_modifier(Modifier::BOLD)),
+                    Span::raw(" DEPLOY  "),
+                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" cancel"),
+                ])),
+                rows[1],
+            );
+        }
+
         JettisonInput::EnterAmount { item_name, max_amount, buf, error, .. } => {
             let popup = centered_rect(46, 8, area);
             frame.render_widget(Clear, popup);

@@ -17,7 +17,8 @@ use neumann_cockpit::app::{
     ApiMessage, AppState, AtomicPrinterCraftInput, ContainerRulesInput, CraftInput, DeployInput,
     DetachInput, DropCargoInput, DropStorageContainerInput, InspectInput, JettisonInput,
     MindSnapshotInput, MineInput, MissionsInput, Phosphor, RecallInput, RecoverInput, RefuelInput,
-    RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, StorageMoveInput, UiTheme,
+    RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScutRelayInput,
+    StorageMoveInput, UiTheme,
 };
 use neumann_cockpit::config;
 use neumann_cockpit::input::handle_event;
@@ -141,7 +142,9 @@ async fn run(
                         state.update_inventory(inv);
                         state.jettison = JettisonInput::Inactive;
                         state.set_toast("jettisoned");
-                        fetch_mannies(client.clone(), tx.clone());
+                        // Jettison always adds an object to the sector (ejected manny,
+                        // drifting item, or deployed SCUT relay) — refresh everything.
+                        fetch_all(client.clone(), tx.clone());
                     }
                     ApiMessage::JettisonError(e) => state.set_jettison_error(e),
                     ApiMessage::CraftStarted => {
@@ -182,6 +185,12 @@ async fn run(
                         fetch_missions(client.clone(), tx.clone());
                     }
                     ApiMessage::MissionAbandonError(e) => state.set_mission_abandon_error(e),
+                    ApiMessage::ScutRelayTurnedOn => {
+                        state.scut_relay = ScutRelayInput::Inactive;
+                        state.set_toast("relay turn-on order sent");
+                        fetch_all(client.clone(), tx.clone());
+                    }
+                    ApiMessage::ScutRelayTurnOnError(e) => state.set_scut_relay_error(e),
                     ApiMessage::DeployStarted => {
                         state.deploy = DeployInput::Inactive;
                         state.set_toast("waypoint deploy order sent");

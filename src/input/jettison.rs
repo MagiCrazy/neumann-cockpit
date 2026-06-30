@@ -26,6 +26,19 @@ pub(super) fn handle_jettison_event(
                 _ => {}
             }
         }
+        JettisonInput::ConfirmRelay { .. } => {
+            match code {
+                KeyCode::Esc => state.jettison = JettisonInput::Inactive,
+                KeyCode::Enter => {
+                    let item_id = {
+                        let JettisonInput::ConfirmRelay { ref item_id, .. } = state.jettison else { return };
+                        item_id.clone()
+                    };
+                    fetch_jettison(item_id, None, client.clone(), tx.clone());
+                }
+                _ => {}
+            }
+        }
         JettisonInput::EnterAmount { .. } => {
             match code {
                 KeyCode::Esc => state.jettison = JettisonInput::Inactive,

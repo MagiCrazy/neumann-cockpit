@@ -5,10 +5,11 @@ use crate::api::client::ApiClient;
 use crate::api::tasks::{
     fetch_inspect,
     fetch_recover,
+    fetch_turn_on_relay,
 };
 use crate::app::{
     ApiMessage, AppState, DeployInput, MineInput, ObjectAction, ObjectActionInput, SalvageInput,
-    WaypointsInput,
+    ScutRelayInput, WaypointsInput,
 };
 use super::geometry::list_nav;
 /// Send the chosen object action, reusing the existing wizards/endpoints.
@@ -61,6 +62,56 @@ pub(super) fn dispatch_object_action(
                 error: None,
             };
         }
+        ObjectAction::TurnOnRelay => match object_id.parse::<i64>() {
+            Ok(relay_id) => {
+                state.scut_relay = ScutRelayInput::EnterNetworkName {
+                    manny_id,
+                    manny_name,
+                    relay_id,
+                    relay_name: object_name,
+                    buf: String::new(),
+                    error: None,
+                };
+            }
+            Err(_) => {
+                state.error = Some("relay has an unexpected id format".into());
+            }
+        },
+    }
+}
+
+pub(super) fn handle_scut_relay_event(
+    code: KeyCode,
+    state: &mut AppState,
+    client: &ApiClient,
+    tx: &mpsc::Sender<ApiMessage>,
+) {
+    let ScutRelayInput::EnterNetworkName { .. } = state.scut_relay else { return };
+    match code {
+        KeyCode::Esc => state.scut_relay = ScutRelayInput::Inactive,
+        KeyCode::Backspace => {
+            if let ScutRelayInput::EnterNetworkName { ref mut buf, .. } = state.scut_relay {
+                buf.pop();
+            }
+        }
+        KeyCode::Char(c) => {
+            if let ScutRelayInput::EnterNetworkName { ref mut buf, .. } = state.scut_relay {
+                buf.push(c);
+            }
+        }
+        KeyCode::Enter => {
+            let (manny_id, relay_id, name) = {
+                let ScutRelayInput::EnterNetworkName { ref manny_id, relay_id, ref buf, .. } =
+                    state.scut_relay
+                else {
+                    return;
+                };
+                let name = if buf.trim().is_empty() { None } else { Some(buf.trim().to_string()) };
+                (manny_id.clone(), relay_id, name)
+            };
+            fetch_turn_on_relay(manny_id, relay_id, name, client.clone(), tx.clone());
+        }
+        _ => {}
     }
 }
 

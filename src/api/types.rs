@@ -649,10 +649,32 @@ pub struct SectorObject {
     pub capacity: Option<f64>,
     pub capacity_unit: Option<String>,
     pub minable_targets: Option<Vec<MinableTarget>>,
+    // SCUT relay objects (present only when object_type == ScutRelay).
+    pub status: Option<ScutRelayStatus>,
+    pub coverage_radius_sectors: Option<i64>,
+    pub created_by_probe_name: Option<String>,
+    pub activated_at: Option<String>,
+    pub network: Option<ScutNetworkReference>,
     #[serde(default)]
     pub waypoint_bookmarks: Vec<WaypointBookmarkHistory>,
     #[serde(default)]
     pub bookmark_targets: Vec<WaypointBookmarkTarget>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScutRelayStatus {
+    Off,
+    On,
+    #[serde(other)]
+    Unknown,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScutNetworkReference {
+    pub id: i64,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

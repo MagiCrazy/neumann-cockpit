@@ -830,6 +830,59 @@ fn deuterium_station_detected_in_current_sector() {
     assert!(state.deuterium_station_in_current_sector());
 }
 
+fn relay_sector(status: &str) -> SectorObservation {
+    make_sector_with_objects(0., 0., 0., &format!(r#"[
+        {{
+            "id": "42", "type": "scut_relay", "name": "Relais SCUT",
+            "estimated": false, "summary": "relay", "mass": 0.0, "massUnit": null,
+            "radius": 0.0, "radiusUnit": null, "dangerLevel": "low", "salvageable": true,
+            "status": "{status}", "coverageRadiusSectors": 10,
+            "createdByProbeName": "Probe X", "activatedAt": null,
+            "network": null,
+            "mannyState": null, "mannyUid": null, "cargo": null, "itemType": null,
+            "quantity": null, "containerSpace": null, "mode": null, "targetObjectId": null,
+            "capacity": null, "capacityUnit": null,
+            "minableTargets": null, "waypointBookmarks": [], "bookmarkTargets": []
+        }}
+    ]"#))
+}
+
+#[test]
+fn relay_status_read_from_sector_object() {
+    let mut state = AppState::default();
+    state.probe = Some(probe_at(0., 0., 0.));
+    state.scan_history = vec![relay_sector("off")];
+    assert_eq!(
+        state.sector_object_relay_status("42"),
+        Some(crate::api::types::ScutRelayStatus::Off)
+    );
+}
+
+#[test]
+fn inactive_relay_offers_turn_on_and_salvage() {
+    let mut state = AppState::default();
+    state.probe = Some(probe_at(0., 0., 0.));
+    state.scan_history = vec![relay_sector("off")];
+    let entry = state.scanner_objects().into_iter()
+        .find(|e| matches!(e.object_type, crate::api::types::SectorObjectType::ScutRelay))
+        .expect("relay entry present");
+    let actions = state.actions_for_object(&entry);
+    assert!(actions.contains(&ObjectAction::TurnOnRelay));
+    assert!(actions.contains(&ObjectAction::Salvage));
+}
+
+#[test]
+fn active_relay_offers_no_turn_on() {
+    let mut state = AppState::default();
+    state.probe = Some(probe_at(0., 0., 0.));
+    state.scan_history = vec![relay_sector("on")];
+    let entry = state.scanner_objects().into_iter()
+        .find(|e| matches!(e.object_type, crate::api::types::SectorObjectType::ScutRelay))
+        .expect("relay entry present");
+    let actions = state.actions_for_object(&entry);
+    assert!(!actions.contains(&ObjectAction::TurnOnRelay));
+}
+
 #[test]
 fn deuterium_station_absent_in_current_sector() {
     let mut state = AppState::default();

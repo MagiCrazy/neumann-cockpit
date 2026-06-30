@@ -381,6 +381,22 @@ pub fn fetch_refill_deuterium(manny_id: String, client: ApiClient, tx: mpsc::Sen
     });
 }
 
+pub fn fetch_turn_on_relay(
+    manny_id: String,
+    relay_id: i64,
+    network_name: Option<String>,
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+) {
+    tokio::spawn(async move {
+        let msg = match client.turn_on_relay(&manny_id, relay_id, network_name.as_deref()).await {
+            Ok(_) => ApiMessage::ScutRelayTurnedOn,
+            Err(e) => ApiMessage::ScutRelayTurnOnError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
 pub fn fetch_reassign_mind_snapshot(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     tokio::spawn(async move {
         let msg = match client.reassign_mind_snapshot().await {
