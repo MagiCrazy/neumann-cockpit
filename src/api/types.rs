@@ -437,6 +437,51 @@ pub struct ProbeTerminalAlertAction {
     pub endpoint: String,
 }
 
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum MissionStatus {
+    Active,
+    Completed,
+    Failed,
+    Abandoned,
+    #[serde(other)]
+    Unknown,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum MissionStepStatus {
+    Pending,
+    Completed,
+    Failed,
+    Skipped,
+    #[serde(other)]
+    Unknown,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Mission {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub mission_type: String,
+    pub title: String,
+    pub description: Option<String>,
+    pub status: MissionStatus,
+    #[serde(default)]
+    pub steps: Vec<MissionStep>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MissionStep {
+    pub id: String,
+    pub sort_order: i64,
+    pub title: String,
+    pub description: Option<String>,
+    pub status: MissionStepStatus,
+}
+
 // ── Mannies list ──────────────────────────────────────────────────────────────
 
 // ── Crafting recipes ─────────────────────────────────────────────────────────

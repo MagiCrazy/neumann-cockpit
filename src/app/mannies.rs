@@ -111,6 +111,12 @@ impl AppState {
         }
     }
 
+    pub fn set_mission_abandon_error(&mut self, msg: String) {
+        if let MissionsInput::ConfirmAbandon { ref mut error, .. } = self.missions_input {
+            *error = Some(msg);
+        }
+    }
+
     /// The probe's terminal recovery alert (dead / black-hole), if any.
     pub fn probe_terminal_alert(&self) -> Option<&crate::api::types::ProbeTerminalAlert> {
         self.probe.as_ref().and_then(|p| p.alert.as_ref())

@@ -1,5 +1,5 @@
 use crate::api::types::{
-    ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, Probe, ProbeAlert,
+    ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, Mission, Probe, ProbeAlert,
     ProbeInventory, ProbeMovement, SectorObservation, StorageContainer, VisitedSector,
 };
 
@@ -55,6 +55,9 @@ pub enum ApiMessage {
     DeuteriumRefuelError(String),
     MindSnapshotReassigned(Probe),
     MindSnapshotReassignError(String),
+    MissionsFetched(Vec<Mission>),
+    MissionAbandoned(Mission),
+    MissionAbandonError(String),
     DropStorageContainerStarted(Manny),
     DropStorageContainerError(String),
     Error(String),

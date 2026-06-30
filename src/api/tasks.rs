@@ -46,9 +46,28 @@ pub fn fetch_all(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
         }
     });
 
-    // Alerts + damage warnings: non-fatal, same pattern as mannies/sector.
+    // Alerts + damage warnings + missions: non-fatal, same pattern as mannies/sector.
     fetch_alerts(client.clone(), tx.clone());
+    fetch_missions(client.clone(), tx.clone());
     fetch_damage_warnings(client, tx);
+}
+
+pub fn fetch_missions(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        if let Ok(m) = client.get_missions().await {
+            let _ = tx.send(ApiMessage::MissionsFetched(m)).await;
+        }
+    });
+}
+
+pub fn fetch_abandon_mission(mission_id: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        let msg = match client.abandon_mission(&mission_id).await {
+            Ok(m) => ApiMessage::MissionAbandoned(m),
+            Err(e) => ApiMessage::MissionAbandonError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
 }
 
 pub fn fetch_alerts(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {

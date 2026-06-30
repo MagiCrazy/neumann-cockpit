@@ -295,6 +295,21 @@ pub enum MindSnapshotInput {
 }
 
 #[derive(Default)]
+pub enum MissionsInput {
+    #[default]
+    Inactive,
+    /// Browsing the mission list; entries live in `AppState::missions`.
+    Browsing { selection: usize },
+    /// Confirmation for abandoning the selected active mission.
+    ConfirmAbandon {
+        mission_id: String,
+        mission_title: String,
+        selection: usize,
+        error: Option<String>,
+    },
+}
+
+#[derive(Default)]
 pub enum RenameMannyInput {
     #[default]
     Inactive,

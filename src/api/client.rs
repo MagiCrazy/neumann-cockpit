@@ -1,5 +1,5 @@
 use super::types::{
-    ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, Probe, ProbeAlert,
+    ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, Mission, Probe, ProbeAlert,
     ProbeInventory, ProbeMovement, SectorObservation, StorageContainer, VisitedSector,
 };
 use anyhow::{Context, Result};
@@ -255,6 +255,24 @@ impl ApiClient {
         struct Resp { manny: Manny }
         let path = format!("/api/probe/mannies/{manny_id}/refill-deuterium-tank");
         Ok(self.post::<Resp, _>(&path, &serde_json::json!({})).await?.manny)
+    }
+
+    /// List the probe's active missions (`GET /api/probe/missions`).
+    pub async fn get_missions(&self) -> Result<Vec<Mission>> {
+        #[derive(Deserialize)]
+        struct Resp {
+            #[serde(default)]
+            missions: Vec<Mission>,
+        }
+        Ok(self.get::<Resp>("/api/probe/missions").await?.missions)
+    }
+
+    /// Abandon an active mission (`POST /api/probe/missions/{id}/abandon`).
+    pub async fn abandon_mission(&self, mission_id: &str) -> Result<Mission> {
+        #[derive(Deserialize)]
+        struct Resp { mission: Mission }
+        let path = format!("/api/probe/missions/{mission_id}/abandon");
+        Ok(self.post::<Resp, _>(&path, &serde_json::json!({})).await?.mission)
     }
 
     /// Reassign the player's mind snapshot to a fresh probe chassis

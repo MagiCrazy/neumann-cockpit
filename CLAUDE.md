@@ -38,7 +38,7 @@ Single `tokio::select!` loop over three sources:
 
 The timer deadline is set to `movement.arrival_at` (ISO 8601) converted to a `tokio::time::Instant`. When no movement is in progress the deadline is 24 h away — no polling, no tick loop.
 
-`fetch_all()` spawns **six** independent `tokio::spawn` tasks: probe, mannies, sector, visited sectors, alerts, and damage warnings. All but probe are non-fatal.
+`fetch_all()` spawns **seven** independent `tokio::spawn` tasks: probe, mannies, sector, visited sectors, alerts, damage warnings, and missions. All but probe are non-fatal.
 
 All other API calls (move, repair, mine, craft, storage container CRUD, storage moves, etc.) are also spawned tasks that send results back via the `mpsc::Sender<ApiMessage>`. Keyboard handlers live in `src/input/` (`mod.rs` holds `handle_event` — overlay dispatch + global key match; one module per wizard handler — `pickers.rs` groups the manny pick-list/confirm ones, `containers.rs` the storage-container ones, `storage_move.rs`, `alerts.rs`, `geometry.rs` for the scan offset helpers); fetch spawners live in `src/api/tasks.rs`. `main.rs` only contains the select loop and the `ApiMessage` dispatch (which also sets the success toasts).
 
@@ -110,6 +110,7 @@ Scanner specifics: the history column shows symbol + coords + distance, scrolls 
 - Deploy waypoint — 3-step wizard: pick manny → pick object → enter bookmark name
 - Object actions — action picker for the selected scanner object (+ manny picker when several idle)
 - Alerts (`[A]`) — tabbed Alerts / Damage-warnings list, `Tab` switches tab, `Enter` marks read; `[!]` badge on the probe panel + status bar when unread
+- Missions (`[O]`) — active-mission list with steps and status; `[a]` abandons the selected active mission (confirmation sub-popup)
 - Storage containers (`[C]` in Inventory) — container browser with capacity bars; `Enter` content view, `[n]` rename, `[e]` routing-rules editor (cycle each type none → priority → exclusion → strict)
 - Storage move (`[M]` in Inventory) — pick actor manny → kind (resource / item) → source/destination + amount, or multi-select items + destination
 - Drop cargo (`[X]` on a Manny waiting for space) — one-step confirmation (resource cargo is lost)
@@ -156,4 +157,7 @@ Scanner specifics: the history column shows symbol + coords + distance, scrolls 
 | `/api/probe/visited-sectors` | GET | ✓ |
 | `/api/probe/mannies/{id}/drop-storage-container` | POST | ✓ |
 | `/api/probe/mannies/{id}/refill-deuterium-tank` | POST | ✓ |
+| `/api/probe/missions` | GET | ✓ |
+| `/api/probe/mission` | GET | ✓ (alias) |
+| `/api/probe/missions/{id}/abandon` | POST | ✓ |
 | `/api/probe/messages` | GET/POST | ✗ (not implemented) |
