@@ -1,0 +1,111 @@
+use ratatui::{
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, Borders, Clear, Paragraph},
+    Frame,
+};
+
+use crate::app::{AppState, RemoteMineInput, RESOURCE_LABELS};
+use super::{centered_rect, render_pick_list};
+
+pub(crate) fn render_remote_mine_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    match &state.remote_mine {
+        RemoteMineInput::Loading { manny_name, x, y, z, .. } => {
+            let popup = centered_rect(50, 5, area);
+            frame.render_widget(Clear, popup);
+            let block = Block::default()
+                .title(format!(" REMOTE MINE — {manny_name} "))
+                .title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::LightBlue));
+            let inner = block.inner(popup);
+            frame.render_widget(block, popup);
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled(
+                        format!("scanning sector ({x},{y},{z}) via SCUT… "),
+                        Style::default().fg(Color::Gray),
+                    ),
+                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" cancel"),
+                ])),
+                inner,
+            );
+        }
+
+        RemoteMineInput::PickAsteroid { manny_name, candidates, selection, .. } => {
+            let names: Vec<&str> = candidates.iter().map(|(_, n)| n.as_str()).collect();
+            let height = (candidates.len() as u16 + 6).min(16);
+            render_pick_list(
+                frame, area, &format!(" REMOTE MINE — {manny_name} "), 52, height,
+                Some("Asteroid in the Manny's sector:"), &names, *selection, None, "next",
+            );
+        }
+
+        RemoteMineInput::Configure { object_name, resources, amount_buf, amount_mode, error, .. } => {
+            let popup = centered_rect(54, 13, area);
+            frame.render_widget(Clear, popup);
+            let block = Block::default()
+                .title(format!(" REMOTE MINE → {object_name} "))
+                .title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::LightBlue));
+            let inner = block.inner(popup);
+            frame.render_widget(block, popup);
+
+            let rows = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(1), Constraint::Length(1)])
+                .split(inner);
+
+            let mut lines: Vec<Line> = Vec::new();
+            let res_color = if *amount_mode { Color::DarkGray } else { Color::LightBlue };
+            lines.push(Line::from(Span::styled("Resources  [1-4 toggle]", Style::default().fg(res_color))));
+            for (i, &label) in RESOURCE_LABELS.iter().enumerate() {
+                let checked = if resources[i] { "[✓]" } else { "[ ]" };
+                let color = if resources[i] { Color::White } else { Color::DarkGray };
+                lines.push(Line::from(vec![
+                    Span::styled(format!("  {checked} "), Style::default().fg(if resources[i] { Color::Green } else { Color::DarkGray })),
+                    Span::styled(format!("{} {label}", i + 1), Style::default().fg(color)),
+                ]));
+            }
+            lines.push(Line::default());
+            let amt_color = if *amount_mode { Color::LightBlue } else { Color::DarkGray };
+            lines.push(Line::from(vec![
+                Span::styled("Amount: ", Style::default().fg(amt_color)),
+                Span::styled(amount_buf.as_str(), Style::default().fg(if *amount_mode { Color::White } else { Color::DarkGray })),
+                Span::styled(if *amount_mode { "█ ECE" } else { " ECE  [Tab]" }, Style::default().fg(Color::DarkGray)),
+            ]));
+            if let Some(err) = error {
+                lines.push(Line::default());
+                lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(Color::Red))));
+            }
+            frame.render_widget(Paragraph::new(lines), rows[0]);
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled("[1-4]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" res  "),
+                    Span::styled("[Tab]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" amount  "),
+                    Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                    Span::raw(" container →  "),
+                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                    Span::raw(" cancel"),
+                ])),
+                rows[1],
+            );
+        }
+
+        RemoteMineInput::PickContainer { containers, selection, .. } => {
+            let names: Vec<&str> = containers.iter().map(|(_, n)| n.as_str()).collect();
+            let height = (containers.len() as u16 + 6).min(16);
+            render_pick_list(
+                frame, area, " REMOTE MINE — store in ", 52, height,
+                Some("Detached container (required):"), &names, *selection, None, "mine",
+            );
+        }
+
+        RemoteMineInput::Inactive => {}
+    }
+}

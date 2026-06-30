@@ -847,6 +847,56 @@ fn relay_sector(status: &str) -> SectorObservation {
     ]"#))
 }
 
+fn remote_manny(task_visibility: &str, task: &str) -> crate::api::types::Manny {
+    serde_json::from_str(&format!(r#"{{
+        "id": "mny_remote", "name": "manny-r",
+        "location": {{ "type": "sector", "sector": {{ "relative": {{"x": 2, "y": 0, "z": -2}} }} }},
+        "currentTask": {task},
+        "taskProgressPercent": 0,
+        "taskVisibility": "{task_visibility}",
+        "cargo": {{ "capacity": 0.05, "deuterium": 0, "metals": 0, "ice": 0, "organicCompounds": 0, "capacityUnit": "earth_container_equivalent" }},
+        "canReceiveOrders": false,
+        "taskEstimatedEndTime": null
+    }}"#)).unwrap()
+}
+
+#[test]
+fn idle_scut_remote_manny_is_remote_minable() {
+    let state = AppState::default();
+    let manny = remote_manny("scut_network", "null");
+    assert!(state.manny_remote_minable(&manny));
+    assert_eq!(state.manny_sector_coords(&manny), Some((2, 0, -2)));
+}
+
+#[test]
+fn busy_or_too_far_manny_not_remote_minable() {
+    let state = AppState::default();
+    assert!(!state.manny_remote_minable(&remote_manny("scut_network", "\"mining\"")));
+    assert!(!state.manny_remote_minable(&remote_manny("too_far", "null")));
+}
+
+#[test]
+fn remote_mine_advances_to_pick_asteroid_when_sector_loads() {
+    let mut state = AppState::default();
+    state.remote_mine = RemoteMineInput::Loading {
+        manny_id: "mny_remote".into(),
+        manny_name: "manny-r".into(),
+        x: 2, y: 0, z: -2,
+    };
+    state.scan_history = vec![make_sector_with_objects(2., 0., -2., r#"[
+        {
+            "id": "ast-9", "type": "asteroid", "name": "Rock", "summary": null,
+            "estimated": null, "mass": null, "massUnit": null, "radius": null, "radiusUnit": null,
+            "dangerLevel": null, "salvageable": null, "mannyState": null, "mannyUid": null,
+            "cargo": null, "itemType": null, "quantity": null, "containerSpace": null,
+            "mode": null, "targetObjectId": null, "capacity": null, "capacityUnit": null,
+            "minableTargets": null, "waypointBookmarks": [], "bookmarkTargets": []
+        }
+    ]"#)];
+    state.remote_mine_sector_loaded(2, 0, -2);
+    assert!(matches!(state.remote_mine, RemoteMineInput::PickAsteroid { .. }));
+}
+
 #[test]
 fn scut_coverage_read_from_sector() {
     let mut state = AppState::default();

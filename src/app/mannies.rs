@@ -1,4 +1,4 @@
-use crate::api::types::{SectorObject, SectorObjectType};
+use crate::api::types::{Manny, MannyTaskVisibility, SectorObject, SectorObjectType};
 use super::*;
 
 impl AppState {
@@ -154,8 +154,17 @@ impl AppState {
     }
 
     pub fn collect_asteroid_candidates(&self) -> Vec<(String, String)> {
-        let sector = self.probe_current_sector_scan();
-        sector
+        match self.probe_current_sector_scan() {
+            Some(s) => self.collect_asteroid_candidates_in(s),
+            None => Vec::new(),
+        }
+    }
+
+    pub fn collect_asteroid_candidates_in(
+        &self,
+        sector: &crate::api::types::SectorObservation,
+    ) -> Vec<(String, String)> {
+        Some(sector)
             .and_then(|s| s.objects.as_ref())
             .map(|objects| {
                 objects.iter()
@@ -299,7 +308,17 @@ impl AppState {
     }
 
     pub fn collect_detached_containers(&self) -> Vec<(String, String)> {
-        self.probe_current_sector_scan()
+        match self.probe_current_sector_scan() {
+            Some(s) => self.collect_detached_containers_in(s),
+            None => Vec::new(),
+        }
+    }
+
+    pub fn collect_detached_containers_in(
+        &self,
+        sector: &crate::api::types::SectorObservation,
+    ) -> Vec<(String, String)> {
+        Some(sector)
             .and_then(|s| s.objects.as_ref())
             .map(|objects| {
                 objects.iter()
@@ -312,5 +331,66 @@ impl AppState {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    /// When the awaited remote sector arrives, advance the remote-mine wizard
+    /// to asteroid selection (or abort with an error if it has no asteroids).
+    pub fn remote_mine_sector_loaded(&mut self, x: i32, y: i32, z: i32) {
+        let (manny_id, manny_name) = match &self.remote_mine {
+            RemoteMineInput::Loading { manny_id, manny_name, x: lx, y: ly, z: lz }
+                if (*lx, *ly, *lz) == (x, y, z) =>
+            {
+                (manny_id.clone(), manny_name.clone())
+            }
+            _ => return,
+        };
+        let candidates = match self.sector_observation_at(x, y, z) {
+            Some(s) => self.collect_asteroid_candidates_in(s),
+            None => return,
+        };
+        if candidates.is_empty() {
+            self.remote_mine = RemoteMineInput::Inactive;
+            self.error = Some("no mineable asteroid in the Manny's sector".into());
+            return;
+        }
+        self.remote_mine = RemoteMineInput::PickAsteroid {
+            manny_id,
+            manny_name,
+            x,
+            y,
+            z,
+            candidates,
+            selection: 0,
+        };
+    }
+
+    pub fn set_remote_mine_error(&mut self, msg: String) {
+        match self.remote_mine {
+            RemoteMineInput::Configure { ref mut error, .. } => *error = Some(msg),
+            RemoteMineInput::PickContainer { ref mut error, .. } => *error = Some(msg),
+            _ => {}
+        }
+    }
+
+    /// True when a Manny is idle and in a remote sector reachable via a shared
+    /// SCUT network — eligible for remote mining (API v60).
+    pub fn manny_remote_minable(&self, manny: &Manny) -> bool {
+        manny.current_task.is_none()
+            && matches!(manny.task_visibility, Some(MannyTaskVisibility::ScutNetwork))
+            && self.manny_sector_coords(manny).is_some()
+    }
+
+    /// Relative sector coords of a Manny from its location payload.
+    pub fn manny_sector_coords(&self, manny: &Manny) -> Option<(i32, i32, i32)> {
+        let v = manny
+            .location
+            .sector
+            .as_ref()?
+            .get("relative")?;
+        Some((
+            v.get("x")?.as_f64()? as i32,
+            v.get("y")?.as_f64()? as i32,
+            v.get("z")?.as_f64()? as i32,
+        ))
     }
 }

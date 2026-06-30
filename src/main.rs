@@ -17,6 +17,7 @@ use neumann_cockpit::app::{
     ApiMessage, AppState, AtomicPrinterCraftInput, ContainerRulesInput, CraftInput, DeployInput,
     DetachInput, DropCargoInput, DropStorageContainerInput, InspectInput, JettisonInput,
     MindSnapshotInput, MineInput, MissionsInput, Phosphor, RecallInput, RecoverInput, RefuelInput,
+    RemoteMineInput,
     RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScutNetworkInput,
     ScutRelayInput, StorageMoveInput, UiTheme,
 };
@@ -104,7 +105,13 @@ async fn run(
                     ApiMessage::ProbeUpdated(probe) => state.update_probe(probe),
                     ApiMessage::ManniesUpdated(mannies) => state.update_mannies(mannies),
                     ApiMessage::SectorUpdated(sector) => {
+                        let (sx, sy, sz) = (
+                            sector.relative_coordinates.x as i32,
+                            sector.relative_coordinates.y as i32,
+                            sector.relative_coordinates.z as i32,
+                        );
                         state.update_sector(sector);
+                        state.remote_mine_sector_loaded(sx, sy, sz);
                         state.batch_tick();
                         let history = state.scan_history.clone();
                         let path = scan_history_path.clone();
@@ -134,10 +141,14 @@ async fn run(
                     ApiMessage::RepairError(e) => state.set_repair_error(e),
                     ApiMessage::MineStarted => {
                         state.mine = MineInput::Inactive;
+                        state.remote_mine = RemoteMineInput::Inactive;
                         state.set_toast("mining order sent");
                         fetch_mannies(client.clone(), tx.clone());
                     }
-                    ApiMessage::MineError(e) => state.set_mine_error(e),
+                    ApiMessage::MineError(e) => {
+                        state.set_mine_error(e.clone());
+                        state.set_remote_mine_error(e);
+                    }
                     ApiMessage::JettisonDone(inv) => {
                         state.update_inventory(inv);
                         state.jettison = JettisonInput::Inactive;
