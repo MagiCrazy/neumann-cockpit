@@ -12,9 +12,9 @@ use crate::app::{
     AlertsInput, ApiMessage, AppState, AtomicPrinterCraftInput, ContainerRulesInput,
     ContainersInput, CraftInput, DeployInput, DetachInput, DropCargoInput,
     DropStorageContainerInput, InspectInput, JettisonInput, MindSnapshotInput, MineInput,
-    ObjectActionInput, Panel, RecallInput, RecoverInput, RefuelInput, RenameContainerInput,
-    RenameMannyInput, RepairInput, SalvageInput, ScanMode, StorageMoveInput, TravelInput,
-    WaypointsInput,
+    MissionsInput, ObjectActionInput, Panel, RecallInput, RecoverInput, RefuelInput,
+    RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, StorageMoveInput,
+    TravelInput, WaypointsInput,
 };
 mod alerts;
 mod containers;
@@ -23,6 +23,7 @@ mod geometry;
 mod jettison;
 mod map;
 mod mine;
+mod missions;
 mod pickers;
 mod repair;
 mod scanner;
@@ -38,6 +39,7 @@ use geometry::{face_d2, neighbors_d1};
 use jettison::handle_jettison_event;
 use map::handle_map_event;
 use mine::handle_mine_event;
+use missions::handle_missions_event;
 use pickers::{
     handle_deploy_event, handle_detach_event, handle_drop_cargo_event,
     handle_drop_container_event, handle_inspect_event, handle_mind_snapshot_event,
@@ -70,6 +72,7 @@ pub fn handle_event(
     let in_recall = !matches!(state.recall, RecallInput::Inactive);
     let in_refuel = !matches!(state.refuel, RefuelInput::Inactive);
     let in_mind_snapshot = !matches!(state.mind_snapshot, MindSnapshotInput::Inactive);
+    let in_missions = !matches!(state.missions_input, MissionsInput::Inactive);
     let in_rename_manny = !matches!(state.rename_manny, RenameMannyInput::Inactive);
     let in_deploy = !matches!(state.deploy, DeployInput::Inactive);
     let in_inspect = !matches!(state.inspect, InspectInput::Inactive);
@@ -150,6 +153,11 @@ pub fn handle_event(
 
     if in_mind_snapshot {
         handle_mind_snapshot_event(k.code, state, client, tx);
+        return;
+    }
+
+    if in_missions {
+        handle_missions_event(k.code, state, client, tx);
         return;
     }
 
@@ -289,6 +297,9 @@ pub fn handle_event(
             state.alerts_input = AlertsInput::Browsing { selection: 0, show_warnings };
         }
         KeyCode::Char('b') => state.open_map(),
+        KeyCode::Char('O') => {
+            state.missions_input = MissionsInput::Browsing { selection: 0 };
+        }
         KeyCode::Char('?') => state.help_open = true,
         KeyCode::Char('w') => {
             let entries = state.collect_waypoints();

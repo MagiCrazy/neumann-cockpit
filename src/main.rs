@@ -10,11 +10,13 @@ use std::io;
 use tokio::sync::mpsc;
 
 use neumann_cockpit::api::client::ApiClient;
-use neumann_cockpit::api::tasks::{fetch_all, fetch_api_version, fetch_crafting_recipes, fetch_mannies};
+use neumann_cockpit::api::tasks::{
+    fetch_all, fetch_api_version, fetch_crafting_recipes, fetch_mannies, fetch_missions,
+};
 use neumann_cockpit::app::{
     ApiMessage, AppState, AtomicPrinterCraftInput, ContainerRulesInput, CraftInput, DeployInput,
     DetachInput, DropCargoInput, DropStorageContainerInput, InspectInput, JettisonInput,
-    MindSnapshotInput, MineInput, Phosphor, RecallInput, RecoverInput, RefuelInput,
+    MindSnapshotInput, MineInput, MissionsInput, Phosphor, RecallInput, RecoverInput, RefuelInput,
     RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, StorageMoveInput, UiTheme,
 };
 use neumann_cockpit::config;
@@ -173,6 +175,13 @@ async fn run(
                         fetch_all(client.clone(), tx.clone());
                     }
                     ApiMessage::MindSnapshotReassignError(e) => state.set_mind_snapshot_error(e),
+                    ApiMessage::MissionsFetched(missions) => state.missions = missions,
+                    ApiMessage::MissionAbandoned(_) => {
+                        state.missions_input = MissionsInput::Browsing { selection: 0 };
+                        state.set_toast("mission abandoned");
+                        fetch_missions(client.clone(), tx.clone());
+                    }
+                    ApiMessage::MissionAbandonError(e) => state.set_mission_abandon_error(e),
                     ApiMessage::DeployStarted => {
                         state.deploy = DeployInput::Inactive;
                         state.set_toast("waypoint deploy order sent");

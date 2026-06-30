@@ -20,7 +20,7 @@ pub use scan::*;
 pub use waypoints::*;
 
 use crate::api::types::{
-    ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, Probe, ProbeAlert,
+    ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, Mission, Probe, ProbeAlert,
     ProbeInventory, SectorObservation, StorageContainer, VisitedSector,
 };
 use chrono::{DateTime, Local, Utc};
@@ -91,6 +91,8 @@ pub struct AppState {
     pub recall: RecallInput,
     pub refuel: RefuelInput,
     pub mind_snapshot: MindSnapshotInput,
+    pub missions: Vec<Mission>,
+    pub missions_input: MissionsInput,
     pub deploy: DeployInput,
     pub rename_manny: RenameMannyInput,
     pub inspect: InspectInput,

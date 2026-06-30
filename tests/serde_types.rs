@@ -1,6 +1,7 @@
 use neumann_cockpit::api::types::{
     AlertPhase, AlertStatus, AlertType, ContainerInventory, CraftingRecipe, DamageWarningRule,
-    DataFreshness, KnowledgeLevel, Manny, MannyLocationType, MannyTask, MovementPhase, Probe,
+    DataFreshness, KnowledgeLevel, Manny, MannyLocationType, MannyTask, Mission, MissionStatus,
+    MissionStepStatus, MovementPhase, Probe,
     ProbeAlert, ProbeInventory, ProbeMovement, ProbeStatus, SectorObjectType, SectorObservation,
     SensorMode, StorageContainer,
 };
@@ -655,4 +656,30 @@ fn dead_probe_with_terminal_alert_deserializes() {
 fn probe_without_alert_defaults_to_none() {
     let probe: Probe = deser(PROBE_JSON);
     assert!(probe.alert.is_none());
+}
+
+#[test]
+fn mission_with_steps_deserializes() {
+    let json = r#"{
+      "id": "mission-1",
+      "type": "first_contact.return_to_space_program",
+      "title": "First contact",
+      "description": "Deliver materials to the inhabited planet.",
+      "status": "active",
+      "stepOrder": "sequential",
+      "metadata": {},
+      "startedAt": "2026-06-06T12:00:00+00:00",
+      "createdAt": "2026-06-06T12:00:00+00:00",
+      "updatedAt": "2026-06-06T12:00:00+00:00",
+      "steps": [
+        {"id": "s2", "sortOrder": 2, "title": "Deliver carbon", "status": "pending", "metadata": {}, "createdAt": "2026-06-06T12:00:00+00:00", "updatedAt": "2026-06-06T12:00:00+00:00"},
+        {"id": "s1", "sortOrder": 1, "title": "Deliver metals", "status": "completed", "metadata": {}, "createdAt": "2026-06-06T12:00:00+00:00", "updatedAt": "2026-06-06T12:00:00+00:00"}
+      ]
+    }"#;
+    let m: Mission = deser(json);
+    assert_eq!(m.status, MissionStatus::Active);
+    assert_eq!(m.mission_type, "first_contact.return_to_space_program");
+    assert_eq!(m.steps.len(), 2);
+    assert_eq!(m.steps[0].status, MissionStepStatus::Pending);
+    assert_eq!(m.steps[1].status, MissionStepStatus::Completed);
 }

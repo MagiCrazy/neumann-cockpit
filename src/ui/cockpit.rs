@@ -105,6 +105,8 @@ pub(crate) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
             Style::default().fg(if state.unread_alert_count() > 0 { Color::Red } else { Color::Cyan }),
         ),
         Span::raw(" alerts  "),
+        Span::styled("[O]", Style::default().fg(Color::Cyan)),
+        Span::raw(" missions  "),
         Span::styled("[?]", Style::default().fg(Color::Cyan)),
         Span::raw(" help  "),
         Span::styled("[q]", Style::default().fg(Color::Cyan)),
