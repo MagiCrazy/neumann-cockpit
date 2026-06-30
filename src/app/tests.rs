@@ -813,6 +813,42 @@ fn collect_mineable_candidates_returns_asteroid_targets() {
 }
 
 #[test]
+fn deuterium_station_detected_in_current_sector() {
+    let mut state = AppState::default();
+    state.probe = Some(probe_at(2., 0., -2.));
+    state.scan_history = vec![make_sector_with_objects(2., 0., -2., r#"[
+        {
+            "id": "station-1", "type": "deuterium_refuel_station", "name": "Refuel Stop",
+            "estimated": null, "summary": null, "mass": null, "massUnit": null,
+            "radius": null, "radiusUnit": null, "dangerLevel": null, "salvageable": null,
+            "mannyState": null, "mannyUid": null, "cargo": null, "itemType": null,
+            "quantity": null, "containerSpace": null, "mode": null, "targetObjectId": null,
+            "capacity": null, "capacityUnit": null,
+            "minableTargets": null, "waypointBookmarks": [], "bookmarkTargets": []
+        }
+    ]"#)];
+    assert!(state.deuterium_station_in_current_sector());
+}
+
+#[test]
+fn deuterium_station_absent_in_current_sector() {
+    let mut state = AppState::default();
+    state.probe = Some(probe_at(0., 0., 0.));
+    state.scan_history = vec![make_sector_with_objects(0., 0., 0., r#"[
+        {
+            "id": "planet-1", "type": "planet", "name": "P1",
+            "estimated": null, "summary": null, "mass": null, "massUnit": null,
+            "radius": null, "radiusUnit": null, "dangerLevel": null, "salvageable": null,
+            "mannyState": null, "mannyUid": null, "cargo": null, "itemType": null,
+            "quantity": null, "containerSpace": null, "mode": null, "targetObjectId": null,
+            "capacity": null, "capacityUnit": null,
+            "minableTargets": null, "waypointBookmarks": [], "bookmarkTargets": []
+        }
+    ]"#)];
+    assert!(!state.deuterium_station_in_current_sector());
+}
+
+#[test]
 fn collect_mineable_candidates_unnamed_fallback() {
     let mut state = AppState::default();
     state.probe = Some(probe_at(0., 0., 0.));

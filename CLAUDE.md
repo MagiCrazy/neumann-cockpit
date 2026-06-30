@@ -152,5 +152,6 @@ Scanner specifics: the history column shows symbol + coords + distance, scrolls 
 | `/api/crafting-recipes` | GET | ✓ |
 | `/api/sector` | GET | ✓ |
 | `/api/probe/visited-sectors` | GET | ✓ |
-| `/api/probe/mannies/{id}/drop-storage-container` | POST | ✗ (bloc 5b, in review) |
+| `/api/probe/mannies/{id}/drop-storage-container` | POST | ✓ |
+| `/api/probe/mannies/{id}/refill-deuterium-tank` | POST | ✓ |
 | `/api/probe/messages` | GET/POST | ✗ (not implemented) |

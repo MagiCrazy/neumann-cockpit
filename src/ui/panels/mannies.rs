@@ -64,6 +64,11 @@ pub(crate) fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppSta
             spans.push(Span::raw("  "));
             spans.push(Span::styled("[n]", Style::default().fg(Color::Cyan)));
             spans.push(Span::raw(" rename"));
+            if state.deuterium_station_in_current_sector() {
+                spans.push(Span::raw("  "));
+                spans.push(Span::styled("[F]", Style::default().fg(Color::Green)));
+                spans.push(Span::raw(" refuel"));
+            }
             if is_busy {
                 spans.push(Span::raw("  "));
                 spans.push(Span::styled("[R]", Style::default().fg(Color::Yellow)));

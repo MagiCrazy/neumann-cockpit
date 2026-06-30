@@ -51,6 +51,8 @@ pub enum ApiMessage {
     StorageMoveError(String),
     DropMannyCargoStarted(Manny),
     DropMannyCargoError(String),
+    DeuteriumRefuelStarted,
+    DeuteriumRefuelError(String),
     DropStorageContainerStarted(Manny),
     DropStorageContainerError(String),
     Error(String),
