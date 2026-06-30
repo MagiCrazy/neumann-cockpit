@@ -35,8 +35,8 @@ pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppStat
                 Some("Select mining target:"), &names, *selection, None, "confirm");
         }
 
-        MineInput::Configure { manny_name, object_name, resources, amount_buf, amount_mode, error, .. } => {
-            let popup = centered_rect(52, 14, area);
+        MineInput::Configure { manny_name, object_name, resources, amount_buf, amount_mode, target_container, error, .. } => {
+            let popup = centered_rect(52, 15, area);
             frame.render_widget(Clear, popup);
 
             let manny_short = if manny_name.len() > 10 { &manny_name[..10] } else { manny_name };
@@ -118,6 +118,20 @@ pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppStat
                 }
             } else {
                 lines.push(Line::default());
+            }
+
+            // Optional target container (only when the sector has detached ones)
+            let has_containers = !state.collect_detached_containers().is_empty();
+            if has_containers {
+                let target_label = match target_container {
+                    Some((_, name)) => name.as_str(),
+                    None => "probe (none)",
+                };
+                lines.push(Line::from(vec![
+                    Span::styled("Store in: ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(target_label, Style::default().fg(Color::Cyan)),
+                    Span::styled("  [c] cycle", Style::default().fg(Color::DarkGray)),
+                ]));
             }
 
             // Error

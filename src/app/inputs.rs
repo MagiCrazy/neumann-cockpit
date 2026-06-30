@@ -227,6 +227,9 @@ pub enum MineInput {
         resources: [bool; 4], // deuterium, metals, ice, carbon_compounds
         amount_buf: String,
         amount_mode: bool, // false = toggling resources, true = editing amount
+        /// Optional detached container in the current sector to deliver mined
+        /// resources into ([c] cycles None → containers). `None` = probe.
+        target_container: Option<(String, String)>, // (id, name)
         error: Option<String>,
     },
 }

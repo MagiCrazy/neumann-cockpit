@@ -535,6 +535,7 @@ pub fn handle_event(
                                     resources: [false, true, false, false],
                                     amount_buf: "0.30".into(),
                                     amount_mode: false,
+                                    target_container: None,
                                     error: None,
                                 };
                             }

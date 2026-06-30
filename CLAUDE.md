@@ -105,7 +105,7 @@ Scanner specifics: the history column shows symbol + coords + distance, scrolls 
 
 **Overlays** (rendered on top of the 4-panel layout):
 - Travel (`[t]`) — coordinate input (absolute, or relative with a leading `+`) with live parity check, fuel cost preview + confirmation
-- Repair / Mine / Craft / Atomic printer craft — manny/target/recipe pickers
+- Repair / Mine / Craft / Atomic printer craft — manny/target/recipe pickers. The Mine wizard's `[c]` cycles an optional detached target container in the current sector (`targetContainerId`; default = probe).
 - Jettison / Salvage / Recall / Rename / Inspect / Recover / Detach — inventory/sector object pickers
 - Deploy waypoint — 3-step wizard: pick manny → pick object → enter bookmark name
 - Object actions — action picker for the selected scanner object (+ manny picker when several idle). An inactive `scut_relay` object offers **turn on relay** (pick manny → optional network name → `turn-on-relay`; needs a star in the sector + an integrated_circuit) and salvage.
