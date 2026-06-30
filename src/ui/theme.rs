@@ -96,6 +96,8 @@ pub(crate) fn object_icon(t: &SectorObjectType) -> (&'static str, Color) {
         SectorObjectType::Manny => ("♟", Color::Green),
         SectorObjectType::DriftingItem => ("◌", Color::White),
         SectorObjectType::DetachedContainer => ("□", Color::Cyan),
+        SectorObjectType::DeuteriumRefuelStation => ("⛽", Color::Green),
+        SectorObjectType::ScutRelay => ("≣", Color::LightBlue),
         SectorObjectType::Unknown => ("?", Color::DarkGray),
     }
 }
