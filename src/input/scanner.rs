@@ -36,6 +36,7 @@ pub(super) fn dispatch_object_action(
                 resources: [false, true, false, false],
                 amount_buf: "0.30".into(),
                 amount_mode: false,
+                target_container: None,
                 error: None,
             };
         }

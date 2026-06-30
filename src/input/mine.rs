@@ -7,6 +7,56 @@ use crate::app::{
     ApiMessage, AppState, MineInput, RemoteMineInput, RESOURCE_TYPES,
 };
 use super::geometry::list_nav;
+
+/// Cycle the optional mining target container: None → first → … → last → None.
+pub(crate) fn next_target_container(
+    current: Option<&(String, String)>,
+    containers: &[(String, String)],
+) -> Option<(String, String)> {
+    match current {
+        None => containers.first().cloned(),
+        Some((id, _)) => match containers.iter().position(|(cid, _)| cid == id) {
+            Some(i) => containers.get(i + 1).cloned(),
+            None => containers.first().cloned(),
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::next_target_container;
+
+    fn c(id: &str) -> (String, String) {
+        (id.into(), format!("container {id}"))
+    }
+
+    #[test]
+    fn cycles_none_through_containers_back_to_none() {
+        let list = vec![c("a"), c("b")];
+        let s0 = next_target_container(None, &list);
+        assert_eq!(s0.as_ref().map(|(id, _)| id.as_str()), Some("a"));
+        let s1 = next_target_container(s0.as_ref(), &list);
+        assert_eq!(s1.as_ref().map(|(id, _)| id.as_str()), Some("b"));
+        let s2 = next_target_container(s1.as_ref(), &list);
+        assert_eq!(s2, None);
+    }
+
+    #[test]
+    fn no_containers_stays_none() {
+        assert_eq!(next_target_container(None, &[]), None);
+    }
+
+    #[test]
+    fn stale_selection_resets_to_first() {
+        let list = vec![c("a")];
+        let stale = c("gone");
+        assert_eq!(
+            next_target_container(Some(&stale), &list).as_ref().map(|(id, _)| id.as_str()),
+            Some("a")
+        );
+    }
+}
+
 pub(super) fn handle_mine_event(
     code: KeyCode,
     state: &mut AppState,
@@ -37,6 +87,7 @@ pub(super) fn handle_mine_event(
                         resources: [false, true, false, false],
                         amount_buf: "0.30".into(),
                         amount_mode: false,
+                        target_container: None,
                         error: None,
                     };
                 }
@@ -80,9 +131,16 @@ pub(super) fn handle_mine_event(
                         amount_buf.pop();
                     }
                 }
+                KeyCode::Char('c') => {
+                    let containers = state.collect_detached_containers();
+                    if let MineInput::Configure { ref mut target_container, ref mut error, .. } = state.mine {
+                        *target_container = next_target_container(target_container.as_ref(), &containers);
+                        *error = None;
+                    }
+                }
                 KeyCode::Enter => {
-                    let (manny_id, object_id, selected_resources, amount) = {
-                        let MineInput::Configure { ref manny_id, ref object_id, resources, ref amount_buf, .. } = state.mine else { return };
+                    let (manny_id, object_id, selected_resources, amount, container_id) = {
+                        let MineInput::Configure { ref manny_id, ref object_id, resources, ref amount_buf, ref target_container, .. } = state.mine else { return };
                         let selected: Vec<String> = RESOURCE_TYPES.iter().enumerate()
                             .filter(|(i, _)| resources[*i])
                             .map(|(_, &t)| t.to_string())
@@ -90,9 +148,9 @@ pub(super) fn handle_mine_event(
                         if selected.is_empty() { return }
                         let Ok(amount) = amount_buf.parse::<f64>() else { return };
                         if amount <= 0.0 { return }
-                        (manny_id.clone(), object_id.clone(), selected, amount)
+                        (manny_id.clone(), object_id.clone(), selected, amount, target_container.as_ref().map(|(id, _)| id.clone()))
                     };
-                    fetch_mine(manny_id, object_id, selected_resources, amount, None, client.clone(), tx.clone());
+                    fetch_mine(manny_id, object_id, selected_resources, amount, container_id, client.clone(), tx.clone());
                 }
                 _ => {}
             }
