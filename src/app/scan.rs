@@ -254,6 +254,15 @@ impl AppState {
         self.scan_history.get(self.scan_history_idx)
     }
 
+    /// Most recent observation of a sector at the given relative coordinates.
+    pub fn sector_observation_at(&self, x: i32, y: i32, z: i32) -> Option<&SectorObservation> {
+        self.scan_history.iter().rev().find(|s| {
+            s.relative_coordinates.x as i32 == x
+                && s.relative_coordinates.y as i32 == y
+                && s.relative_coordinates.z as i32 == z
+        })
+    }
+
     pub(crate) fn probe_current_sector_scan(&self) -> Option<&SectorObservation> {
         let current_pos = self.probe.as_ref()
             .and_then(|p| p.sector.as_ref())

@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 use crate::api::client::ApiClient;
 use crate::api::tasks::fetch_mine;
 use crate::app::{
-    ApiMessage, AppState, MineInput, RESOURCE_TYPES,
+    ApiMessage, AppState, MineInput, RemoteMineInput, RESOURCE_TYPES,
 };
 use super::geometry::list_nav;
 pub(super) fn handle_mine_event(
@@ -98,5 +98,144 @@ pub(super) fn handle_mine_event(
             }
         }
         MineInput::Inactive => {}
+    }
+}
+
+pub(super) fn handle_remote_mine_event(
+    code: KeyCode,
+    state: &mut AppState,
+    client: &ApiClient,
+    tx: &mpsc::Sender<ApiMessage>,
+) {
+    match &state.remote_mine {
+        RemoteMineInput::Loading { .. } => {
+            if code == KeyCode::Esc {
+                state.remote_mine = RemoteMineInput::Inactive;
+            }
+        }
+        RemoteMineInput::PickAsteroid { selection, candidates, .. } => {
+            let sel = *selection;
+            let count = candidates.len();
+            match code {
+                KeyCode::Esc => state.remote_mine = RemoteMineInput::Inactive,
+                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                    if let Some(new_sel) = list_nav(code, sel, count) {
+                        if let RemoteMineInput::PickAsteroid { ref mut selection, .. } = state.remote_mine {
+                            *selection = new_sel;
+                        }
+                    }
+                }
+                KeyCode::Enter => {
+                    let RemoteMineInput::PickAsteroid {
+                        ref manny_id, ref manny_name, x, y, z, ref candidates, selection,
+                    } = state.remote_mine else { return };
+                    let (object_id, object_name) = candidates[selection].clone();
+                    state.remote_mine = RemoteMineInput::Configure {
+                        manny_id: manny_id.clone(),
+                        manny_name: manny_name.clone(),
+                        x, y, z,
+                        object_id,
+                        object_name,
+                        resources: [false, true, false, false],
+                        amount_buf: "0.30".into(),
+                        amount_mode: false,
+                        error: None,
+                    };
+                }
+                _ => {}
+            }
+        }
+        RemoteMineInput::Configure { amount_mode, .. } => {
+            let am = *amount_mode;
+            match code {
+                KeyCode::Esc => state.remote_mine = RemoteMineInput::Inactive,
+                KeyCode::Tab => {
+                    if let RemoteMineInput::Configure { ref mut amount_mode, ref mut error, .. } = state.remote_mine {
+                        *amount_mode = !am;
+                        *error = None;
+                    }
+                }
+                KeyCode::Char(c @ '1'..='4') if !am => {
+                    let idx = (c as u8 - b'1') as usize;
+                    if let RemoteMineInput::Configure { ref mut resources, ref mut error, .. } = state.remote_mine {
+                        resources[idx] = !resources[idx];
+                        *error = None;
+                    }
+                }
+                KeyCode::Char(c) if am && (c.is_ascii_digit() || c == '.') => {
+                    if let RemoteMineInput::Configure { ref mut amount_buf, ref mut error, .. } = state.remote_mine {
+                        if !(c == '.' && amount_buf.contains('.')) {
+                            amount_buf.push(c);
+                            *error = None;
+                        }
+                    }
+                }
+                KeyCode::Backspace if am => {
+                    if let RemoteMineInput::Configure { ref mut amount_buf, .. } = state.remote_mine {
+                        amount_buf.pop();
+                    }
+                }
+                KeyCode::Enter => {
+                    let (manny_id, object_id, resources, amount, coords) = {
+                        let RemoteMineInput::Configure {
+                            ref manny_id, ref object_id, resources, ref amount_buf, x, y, z, ..
+                        } = state.remote_mine else { return };
+                        if !resources.iter().any(|&r| r) { return }
+                        let Ok(amount) = amount_buf.parse::<f64>() else { return };
+                        if amount <= 0.0 { return }
+                        (manny_id.clone(), object_id.clone(), resources, amount, (x, y, z))
+                    };
+                    let containers = state
+                        .sector_observation_at(coords.0, coords.1, coords.2)
+                        .map(|s| state.collect_detached_containers_in(s))
+                        .unwrap_or_default();
+                    if containers.is_empty() {
+                        state.set_remote_mine_error(
+                            "no detached container in the Manny's sector".into(),
+                        );
+                        return;
+                    }
+                    state.remote_mine = RemoteMineInput::PickContainer {
+                        manny_id,
+                        object_id,
+                        resources,
+                        amount,
+                        containers,
+                        selection: 0,
+                        error: None,
+                    };
+                }
+                _ => {}
+            }
+        }
+        RemoteMineInput::PickContainer { selection, containers, .. } => {
+            let sel = *selection;
+            let count = containers.len();
+            match code {
+                KeyCode::Esc => state.remote_mine = RemoteMineInput::Inactive,
+                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                    if let Some(new_sel) = list_nav(code, sel, count) {
+                        if let RemoteMineInput::PickContainer { ref mut selection, .. } = state.remote_mine {
+                            *selection = new_sel;
+                        }
+                    }
+                }
+                KeyCode::Enter => {
+                    let (manny_id, object_id, selected_resources, amount, container_id) = {
+                        let RemoteMineInput::PickContainer {
+                            ref manny_id, ref object_id, resources, amount, ref containers, selection, ..
+                        } = state.remote_mine else { return };
+                        let selected: Vec<String> = RESOURCE_TYPES.iter().enumerate()
+                            .filter(|(i, _)| resources[*i])
+                            .map(|(_, &t)| t.to_string())
+                            .collect();
+                        (manny_id.clone(), object_id.clone(), selected, amount, containers[selection].0.clone())
+                    };
+                    fetch_mine(manny_id, object_id, selected_resources, amount, Some(container_id), client.clone(), tx.clone());
+                }
+                _ => {}
+            }
+        }
+        RemoteMineInput::Inactive => {}
     }
 }

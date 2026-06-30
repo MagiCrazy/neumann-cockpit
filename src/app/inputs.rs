@@ -231,6 +231,53 @@ pub enum MineInput {
     },
 }
 
+/// Remote mining of an idle Manny in a SCUT-reachable sector (API v60).
+/// Targets the Manny's sector; a detached container there is mandatory.
+#[derive(Default)]
+pub enum RemoteMineInput {
+    #[default]
+    Inactive,
+    /// Waiting for the Manny's sector scan to arrive.
+    Loading {
+        manny_id: String,
+        manny_name: String,
+        x: i32,
+        y: i32,
+        z: i32,
+    },
+    PickAsteroid {
+        manny_id: String,
+        manny_name: String,
+        x: i32,
+        y: i32,
+        z: i32,
+        candidates: Vec<(String, String)>,
+        selection: usize,
+    },
+    Configure {
+        manny_id: String,
+        manny_name: String,
+        x: i32,
+        y: i32,
+        z: i32,
+        object_id: String,
+        object_name: String,
+        resources: [bool; 4],
+        amount_buf: String,
+        amount_mode: bool,
+        error: Option<String>,
+    },
+    PickContainer {
+        manny_id: String,
+        object_id: String,
+        resources: [bool; 4],
+        amount: f64,
+        containers: Vec<(String, String)>,
+        selection: usize,
+        error: Option<String>,
+    },
+}
+
 #[derive(Default)]
 pub enum CraftInput {
     #[default]

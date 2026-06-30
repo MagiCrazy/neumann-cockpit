@@ -84,6 +84,7 @@ pub struct AppState {
     pub travel: TravelInput,
     pub repair: RepairInput,
     pub mine: MineInput,
+    pub remote_mine: RemoteMineInput,
     pub jettison: JettisonInput,
     pub craft: CraftInput,
     pub atomic_printer_craft: AtomicPrinterCraftInput,

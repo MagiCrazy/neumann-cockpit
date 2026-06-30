@@ -13,8 +13,8 @@ use crate::app::{
     ContainersInput, CraftInput, DeployInput, DetachInput, DropCargoInput,
     DropStorageContainerInput, InspectInput, JettisonInput, MindSnapshotInput, MineInput,
     MissionsInput, ObjectActionInput, Panel, RecallInput, RecoverInput, RefuelInput,
-    RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, ScutNetworkInput,
-    ScutRelayInput, StorageMoveInput, TravelInput, WaypointsInput,
+    RemoteMineInput, RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode,
+    ScutNetworkInput, ScutRelayInput, StorageMoveInput, TravelInput, WaypointsInput,
 };
 mod alerts;
 mod containers;
@@ -38,7 +38,7 @@ use craft::{handle_atomic_printer_craft_event, handle_craft_event};
 use geometry::{face_d2, neighbors_d1};
 use jettison::handle_jettison_event;
 use map::handle_map_event;
-use mine::handle_mine_event;
+use mine::{handle_mine_event, handle_remote_mine_event};
 use missions::handle_missions_event;
 use pickers::{
     handle_deploy_event, handle_detach_event, handle_drop_cargo_event,
@@ -75,6 +75,7 @@ pub fn handle_event(
     let in_recall = !matches!(state.recall, RecallInput::Inactive);
     let in_refuel = !matches!(state.refuel, RefuelInput::Inactive);
     let in_mind_snapshot = !matches!(state.mind_snapshot, MindSnapshotInput::Inactive);
+    let in_remote_mine = !matches!(state.remote_mine, RemoteMineInput::Inactive);
     let in_scut_relay = !matches!(state.scut_relay, ScutRelayInput::Inactive);
     let in_scut_network = !matches!(state.scut_network, ScutNetworkInput::Inactive);
     let in_missions = !matches!(state.missions_input, MissionsInput::Inactive);
@@ -259,6 +260,11 @@ pub fn handle_event(
     let in_mine = !matches!(state.mine, MineInput::Inactive);
     if in_mine {
         handle_mine_event(k.code, state, client, tx);
+        return;
+    }
+
+    if in_remote_mine {
+        handle_remote_mine_event(k.code, state, client, tx);
         return;
     }
 
@@ -503,7 +509,20 @@ pub fn handle_event(
         KeyCode::Char('e') if state.focused == Some(Panel::Mannies) => {
             if let Some(mannies) = &state.mannies {
                 if let Some(manny) = mannies.get(state.mannies_selection) {
-                    if manny.can_receive_orders {
+                    if state.manny_remote_minable(manny) {
+                        let coords = state.manny_sector_coords(manny).unwrap_or((0, 0, 0));
+                        let manny_id = manny.id.clone();
+                        let manny_name = manny.name.clone();
+                        state.remote_mine = RemoteMineInput::Loading {
+                            manny_id,
+                            manny_name,
+                            x: coords.0,
+                            y: coords.1,
+                            z: coords.2,
+                        };
+                        state.set_toast("fetching remote sector…");
+                        fetch_sector(Some(coords), client.clone(), tx.clone());
+                    } else if manny.can_receive_orders {
                         let manny_id = manny.id.clone();
                         let manny_name = manny.name.clone();
                         let candidates = state.collect_mineable_candidates();
