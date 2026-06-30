@@ -89,6 +89,7 @@ pub struct AppState {
     pub atomic_printer_craft: AtomicPrinterCraftInput,
     pub salvage: SalvageInput,
     pub recall: RecallInput,
+    pub refuel: RefuelInput,
     pub deploy: DeployInput,
     pub rename_manny: RenameMannyInput,
     pub inspect: InspectInput,

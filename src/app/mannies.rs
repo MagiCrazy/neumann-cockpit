@@ -99,6 +99,23 @@ impl AppState {
         }
     }
 
+    pub fn set_refuel_error(&mut self, msg: String) {
+        if let RefuelInput::Confirm { ref mut error, .. } = self.refuel {
+            *error = Some(msg);
+        }
+    }
+
+    /// True when the probe's current sector exposes a deuterium refuel station.
+    pub fn deuterium_station_in_current_sector(&self) -> bool {
+        self.probe_current_sector_scan()
+            .and_then(|s| s.objects.as_ref())
+            .is_some_and(|objects| {
+                objects.iter().any(|o| {
+                    matches!(o.object_type, SectorObjectType::DeuteriumRefuelStation)
+                })
+            })
+    }
+
     pub fn collect_mineable_candidates(&self) -> Vec<(String, String)> {
         let sector = self.probe_current_sector_scan();
         sector

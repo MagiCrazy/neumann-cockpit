@@ -247,6 +247,16 @@ impl ApiClient {
         Ok(self.post::<Resp, _>(&path, &serde_json::json!({})).await?.manny)
     }
 
+    /// Start a one-minute Manny task that refills the probe deuterium tank
+    /// (`POST /api/probe/mannies/{id}/refill-deuterium-tank`). Requires a
+    /// deuterium refuel station in the current sector.
+    pub async fn refill_deuterium_tank(&self, manny_id: &str) -> Result<Manny> {
+        #[derive(Deserialize)]
+        struct Resp { manny: Manny }
+        let path = format!("/api/probe/mannies/{manny_id}/refill-deuterium-tank");
+        Ok(self.post::<Resp, _>(&path, &serde_json::json!({})).await?.manny)
+    }
+
     pub async fn rename_manny(&self, manny_id: &str, name: &str) -> Result<Manny> {
         #[derive(Serialize)]
         struct Body<'a> { name: &'a str }

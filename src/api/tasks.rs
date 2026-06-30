@@ -352,6 +352,16 @@ pub fn fetch_drop_manny_cargo(manny_id: String, client: ApiClient, tx: mpsc::Sen
     });
 }
 
+pub fn fetch_refill_deuterium(manny_id: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        let msg = match client.refill_deuterium_tank(&manny_id).await {
+            Ok(_) => ApiMessage::DeuteriumRefuelStarted,
+            Err(e) => ApiMessage::DeuteriumRefuelError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
 pub fn fetch_rename_manny(manny_id: String, name: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     tokio::spawn(async move {
         let msg = match client.rename_manny(&manny_id, &name).await {

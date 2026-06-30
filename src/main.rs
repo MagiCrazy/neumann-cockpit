@@ -14,8 +14,8 @@ use neumann_cockpit::api::tasks::{fetch_all, fetch_api_version, fetch_crafting_r
 use neumann_cockpit::app::{
     ApiMessage, AppState, AtomicPrinterCraftInput, ContainerRulesInput, CraftInput, DeployInput,
     DetachInput, DropCargoInput, DropStorageContainerInput, InspectInput, JettisonInput, MineInput,
-    Phosphor, RecallInput, RecoverInput, RenameContainerInput, RenameMannyInput, RepairInput,
-    SalvageInput, StorageMoveInput, UiTheme,
+    Phosphor, RecallInput, RecoverInput, RefuelInput, RenameContainerInput, RenameMannyInput,
+    RepairInput, SalvageInput, StorageMoveInput, UiTheme,
 };
 use neumann_cockpit::config;
 use neumann_cockpit::input::handle_event;
@@ -160,6 +160,12 @@ async fn run(
                         fetch_mannies(client.clone(), tx.clone());
                     }
                     ApiMessage::RecallError(e) => state.set_recall_error(e),
+                    ApiMessage::DeuteriumRefuelStarted => {
+                        state.refuel = RefuelInput::Inactive;
+                        state.set_toast("refuel order sent");
+                        fetch_all(client.clone(), tx.clone());
+                    }
+                    ApiMessage::DeuteriumRefuelError(e) => state.set_refuel_error(e),
                     ApiMessage::DeployStarted => {
                         state.deploy = DeployInput::Inactive;
                         state.set_toast("waypoint deploy order sent");

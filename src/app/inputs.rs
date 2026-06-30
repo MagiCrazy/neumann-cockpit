@@ -274,6 +274,18 @@ pub enum RecallInput {
 }
 
 #[derive(Default)]
+pub enum RefuelInput {
+    #[default]
+    Inactive,
+    /// Confirmation to send a Manny to refill the probe deuterium tank.
+    Confirm {
+        manny_id: String,
+        manny_name: String,
+        error: Option<String>,
+    },
+}
+
+#[derive(Default)]
 pub enum RenameMannyInput {
     #[default]
     Inactive,

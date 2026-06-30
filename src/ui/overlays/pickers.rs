@@ -1,4 +1,4 @@
-use crate::app::{AppState, DeployInput, DetachInput, DropCargoInput, InspectInput, RecallInput, RecoverInput, RenameMannyInput, SalvageInput};
+use crate::app::{AppState, DeployInput, DetachInput, DropCargoInput, InspectInput, RecallInput, RecoverInput, RefuelInput, RenameMannyInput, SalvageInput};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -144,6 +144,50 @@ pub(crate) fn render_recall_overlay(frame: &mut Frame, area: Rect, state: &AppSt
         Paragraph::new(Line::from(vec![
             Span::styled("[Enter]", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
             Span::raw(" RECALL  "),
+            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::raw(" cancel"),
+        ])),
+        rows[1],
+    );
+}
+
+pub(crate) fn render_refuel_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let RefuelInput::Confirm { ref manny_name, ref error, .. } = state.refuel else { return };
+
+    let popup = centered_rect(50, 7, area);
+    frame.render_widget(Clear, popup);
+
+    let title = format!(" REFUEL — {manny_name} ");
+    let block = Block::default()
+        .title(title)
+        .title_alignment(Alignment::Center)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Green));
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let mut lines: Vec<Line> = Vec::new();
+    lines.push(Line::from(Span::styled(
+        "Refill the probe deuterium tank?",
+        Style::default().fg(Color::White),
+    )));
+    if let Some(err) = error {
+        lines.push(Line::default());
+        lines.push(Line::from(Span::styled(
+            format!("✗ {err}"),
+            Style::default().fg(Color::Red),
+        )));
+    }
+    frame.render_widget(Paragraph::new(lines), rows[0]);
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::raw(" REFUEL  "),
             Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
             Span::raw(" cancel"),
         ])),

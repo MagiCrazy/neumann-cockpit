@@ -29,7 +29,7 @@ pub(crate) use mine::render_mine_overlay;
 pub(crate) use object_actions::render_object_action_overlay;
 pub(crate) use pickers::{
     render_deploy_overlay, render_detach_overlay, render_drop_cargo_overlay, render_inspect_overlay,
-    render_recall_overlay, render_recover_overlay, render_rename_manny_overlay,
+    render_recall_overlay, render_recover_overlay, render_refuel_overlay, render_rename_manny_overlay,
     render_salvage_overlay,
 };
 pub(crate) use repair::render_repair_overlay;
@@ -41,8 +41,8 @@ use crate::app::{
     AlertsInput, AppState, AtomicPrinterCraftInput, ContainerRulesInput, ContainersInput,
     CraftInput, DeployInput, DetachInput, DropCargoInput, DropStorageContainerInput, InspectInput,
     JettisonInput, MineInput,
-    ObjectActionInput, RecallInput, RecoverInput, RenameContainerInput, RenameMannyInput,
-    RepairInput, SalvageInput, StorageMoveInput, TravelInput, WaypointsInput,
+    ObjectActionInput, RecallInput, RecoverInput, RefuelInput, RenameContainerInput,
+    RenameMannyInput, RepairInput, SalvageInput, StorageMoveInput, TravelInput, WaypointsInput,
 };
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -88,6 +88,9 @@ pub(crate) fn render_active_overlays(frame: &mut Frame, area: Rect, state: &AppS
     }
     if !matches!(state.recall, RecallInput::Inactive) {
         render_recall_overlay(frame, area, state);
+    }
+    if !matches!(state.refuel, RefuelInput::Inactive) {
+        render_refuel_overlay(frame, area, state);
     }
     if !matches!(state.drop_cargo, DropCargoInput::Inactive) {
         render_drop_cargo_overlay(frame, area, state);
