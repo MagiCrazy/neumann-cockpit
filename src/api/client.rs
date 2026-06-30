@@ -1,6 +1,7 @@
 use super::types::{
-    ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, Mission, Probe, ProbeAlert,
-    ProbeInventory, ProbeMovement, ScutNetwork, SectorObservation, StorageContainer, VisitedSector,
+    ContainerInventory, CraftingRecipe, DamageWarningRule, EndpointId, Manny, Mission, Pagination,
+    Probe, ProbeAlert, ProbeInventory, ProbeMessage, ProbeMovement, ProbeSentMessage, ScutNetwork,
+    SectorObservation, StorageContainer, VisitedSector,
 };
 use anyhow::{Context, Result};
 use reqwest::{Client, StatusCode, Url};
@@ -265,6 +266,46 @@ impl ApiClient {
             missions: Vec<Mission>,
         }
         Ok(self.get::<Resp>("/api/probe/missions").await?.missions)
+    }
+
+    /// List received messages (`GET /api/probe/messages`, newest first).
+    pub async fn get_messages(&self) -> Result<(Vec<ProbeMessage>, Pagination)> {
+        #[derive(Deserialize)]
+        struct Resp { #[serde(default)] messages: Vec<ProbeMessage>, pagination: Pagination }
+        let r = self.get::<Resp>("/api/probe/messages").await?;
+        Ok((r.messages, r.pagination))
+    }
+
+    /// List sent messages (`GET /api/probe/messages/sent`, newest first).
+    pub async fn get_sent_messages(&self) -> Result<(Vec<ProbeSentMessage>, Pagination)> {
+        #[derive(Deserialize)]
+        struct Resp { #[serde(default)] messages: Vec<ProbeSentMessage>, pagination: Pagination }
+        let r = self.get::<Resp>("/api/probe/messages/sent").await?;
+        Ok((r.messages, r.pagination))
+    }
+
+    /// Send a message to a probe or inhabited planet (`POST /api/probe/messages`).
+    pub async fn send_message(
+        &self,
+        recipient_type: &str,
+        recipient_id: &EndpointId,
+        body: &str,
+    ) -> Result<ProbeMessage> {
+        #[derive(Deserialize)]
+        struct Resp { message: ProbeMessage }
+        let payload = serde_json::json!({
+            "recipient": { "type": recipient_type, "id": recipient_id },
+            "body": body,
+        });
+        Ok(self.post::<Resp, _>("/api/probe/messages", &payload).await?.message)
+    }
+
+    /// Mark a received message as read (`PATCH /api/probe/messages/{id}/read`).
+    pub async fn mark_message_read(&self, message_id: i64) -> Result<ProbeMessage> {
+        #[derive(Deserialize)]
+        struct Resp { message: ProbeMessage }
+        let path = format!("/api/probe/messages/{message_id}/read");
+        Ok(self.patch::<Resp, _>(&path, &serde_json::json!({})).await?.message)
     }
 
     /// Abandon an active mission (`POST /api/probe/missions/{id}/abandon`).

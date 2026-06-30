@@ -1,4 +1,5 @@
 use crate::api::client::ApiClient;
+use crate::api::types::EndpointId;
 use crate::app::ApiMessage;
 use tokio::sync::mpsc;
 
@@ -56,6 +57,46 @@ pub fn fetch_missions(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     tokio::spawn(async move {
         if let Ok(m) = client.get_missions().await {
             let _ = tx.send(ApiMessage::MissionsFetched(m)).await;
+        }
+    });
+}
+
+pub fn fetch_messages(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        if let Ok((messages, _pag)) = client.get_messages().await {
+            let _ = tx.send(ApiMessage::MessagesFetched(messages)).await;
+        }
+    });
+}
+
+pub fn fetch_sent_messages(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        if let Ok((messages, _pag)) = client.get_sent_messages().await {
+            let _ = tx.send(ApiMessage::SentMessagesFetched(messages)).await;
+        }
+    });
+}
+
+pub fn fetch_send_message(
+    recipient_type: String,
+    recipient_id: EndpointId,
+    body: String,
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+) {
+    tokio::spawn(async move {
+        let msg = match client.send_message(&recipient_type, &recipient_id, &body).await {
+            Ok(m) => ApiMessage::MessageSent(m),
+            Err(e) => ApiMessage::MessageSendError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
+pub fn fetch_mark_message_read(id: i64, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        if let Ok(m) = client.mark_message_read(id).await {
+            let _ = tx.send(ApiMessage::MessageMarkedRead(m)).await;
         }
     });
 }

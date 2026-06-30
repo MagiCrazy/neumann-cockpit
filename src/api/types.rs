@@ -487,6 +487,63 @@ pub struct Mission {
     pub steps: Vec<MissionStep>,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(untagged)]
+pub enum EndpointId {
+    Probe(i64),
+    Planet(String),
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum MessageStatus {
+    Unread,
+    Read,
+    #[serde(other)]
+    Unknown,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeMessageEndpoint {
+    #[serde(rename = "type")]
+    pub endpoint_type: String,
+    pub id: EndpointId,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeMessage {
+    pub id: i64,
+    pub sender: ProbeMessageEndpoint,
+    pub recipient: ProbeMessageEndpoint,
+    pub body: String,
+    pub status: MessageStatus,
+    pub read_at: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeSentMessage {
+    pub id: i64,
+    pub sender: ProbeMessageEndpoint,
+    pub recipient: ProbeMessageEndpoint,
+    pub body: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Pagination {
+    pub limit: i64,
+    pub offset: i64,
+    pub count: i64,
+    pub total: i64,
+    pub has_more: bool,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MissionStep {

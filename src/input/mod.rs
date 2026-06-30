@@ -5,14 +5,15 @@ use crate::api::client::ApiClient;
 use crate::api::tasks::{
     fetch_all,
     fetch_inspect,
-    fetch_recover, fetch_scut_network, fetch_sector, fetch_storage_containers,
+    fetch_messages, fetch_recover, fetch_scut_network, fetch_sector, fetch_sent_messages,
+    fetch_storage_containers,
 };
 use crate::api::types::MannyTask;
 use crate::app::{
     AlertsInput, ApiMessage, AppState, AtomicPrinterCraftInput, ContainerRulesInput,
     ContainersInput, CraftInput, DeployInput, DetachInput, DropCargoInput,
     DropStorageContainerInput, InspectInput, JettisonInput, MindSnapshotInput, MineInput,
-    MissionsInput, ObjectActionInput, Panel, RecallInput, RecoverInput, RefuelInput,
+    MessagesInput, MissionsInput, ObjectActionInput, Panel, RecallInput, RecoverInput, RefuelInput,
     RemoteMineInput, RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode,
     ScutNetworkInput, ScutRelayInput, StorageMoveInput, TravelInput, WaypointsInput,
 };
@@ -22,6 +23,7 @@ mod craft;
 mod geometry;
 mod jettison;
 mod map;
+mod messages;
 mod mine;
 mod missions;
 mod pickers;
@@ -38,6 +40,7 @@ use craft::{handle_atomic_printer_craft_event, handle_craft_event};
 use geometry::{face_d2, neighbors_d1};
 use jettison::handle_jettison_event;
 use map::handle_map_event;
+use messages::handle_messages_event;
 use mine::{handle_mine_event, handle_remote_mine_event};
 use missions::handle_missions_event;
 use pickers::{
@@ -79,6 +82,7 @@ pub fn handle_event(
     let in_scut_relay = !matches!(state.scut_relay, ScutRelayInput::Inactive);
     let in_scut_network = !matches!(state.scut_network, ScutNetworkInput::Inactive);
     let in_missions = !matches!(state.missions_input, MissionsInput::Inactive);
+    let in_messages = !matches!(state.messages_input, MessagesInput::Inactive);
     let in_rename_manny = !matches!(state.rename_manny, RenameMannyInput::Inactive);
     let in_deploy = !matches!(state.deploy, DeployInput::Inactive);
     let in_inspect = !matches!(state.inspect, InspectInput::Inactive);
@@ -174,6 +178,11 @@ pub fn handle_event(
 
     if in_missions {
         handle_missions_event(k.code, state, client, tx);
+        return;
+    }
+
+    if in_messages {
+        handle_messages_event(k.code, state, client, tx);
         return;
     }
 
@@ -320,6 +329,11 @@ pub fn handle_event(
         KeyCode::Char('b') => state.open_map(),
         KeyCode::Char('O') => {
             state.missions_input = MissionsInput::Browsing { selection: 0 };
+        }
+        KeyCode::Char('Y') => {
+            state.messages_input = MessagesInput::Browsing { sent_tab: false, selection: 0 };
+            fetch_messages(client.clone(), tx.clone());
+            fetch_sent_messages(client.clone(), tx.clone());
         }
         KeyCode::Char('N') => {
             let nets = state.scut_coverage();

@@ -6,6 +6,7 @@ pub(crate) mod help;
 pub(crate) mod inventory_detail;
 pub(crate) mod jettison;
 pub(crate) mod map;
+pub(crate) mod messages;
 pub(crate) mod mine;
 pub(crate) mod missions;
 pub(crate) mod remote_mine;
@@ -28,6 +29,7 @@ pub(crate) use help::render_help_overlay;
 pub(crate) use inventory_detail::render_inventory_detail_overlay;
 pub(crate) use jettison::render_jettison_overlay;
 pub(crate) use map::render_map_overlay;
+pub(crate) use messages::render_messages_overlay;
 pub(crate) use mine::render_mine_overlay;
 pub(crate) use remote_mine::render_remote_mine_overlay;
 pub(crate) use missions::render_missions_overlay;
@@ -48,8 +50,8 @@ use crate::app::{
     AlertsInput, AppState, AtomicPrinterCraftInput, ContainerRulesInput, ContainersInput,
     CraftInput, DeployInput, DetachInput, DropCargoInput, DropStorageContainerInput, InspectInput,
     JettisonInput, MineInput,
-    MindSnapshotInput, MissionsInput, ObjectActionInput, RecallInput, RecoverInput, RefuelInput,
-    RemoteMineInput, RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput,
+    MessagesInput, MindSnapshotInput, MissionsInput, ObjectActionInput, RecallInput, RecoverInput,
+    RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput,
     ScutNetworkInput, ScutRelayInput, StorageMoveInput, TravelInput, WaypointsInput,
 };
 use ratatui::{
@@ -108,6 +110,9 @@ pub(crate) fn render_active_overlays(frame: &mut Frame, area: Rect, state: &AppS
     }
     if !matches!(state.missions_input, MissionsInput::Inactive) {
         render_missions_overlay(frame, area, state);
+    }
+    if !matches!(state.messages_input, MessagesInput::Inactive) {
+        render_messages_overlay(frame, area, state);
     }
     if !matches!(state.scut_relay, ScutRelayInput::Inactive) {
         render_scut_relay_overlay(frame, area, state);

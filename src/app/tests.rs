@@ -898,6 +898,23 @@ fn remote_mine_advances_to_pick_asteroid_when_sector_loads() {
 }
 
 #[test]
+fn unread_message_count_counts_only_unread() {
+    let mut state = AppState::default();
+    let mk = |id: i64, status: &str| -> crate::api::types::ProbeMessage {
+        serde_json::from_str(&format!(r#"{{
+            "id": {id},
+            "sender": {{ "type": "probe", "id": 2, "name": "nova" }},
+            "recipient": {{ "type": "probe", "id": 1, "name": "me" }},
+            "sector": {{ "relative": {{"x":0,"y":0,"z":0}} }},
+            "body": "hi", "status": "{status}", "readAt": null,
+            "createdAt": "2026-06-06T12:00:00+00:00", "updatedAt": "2026-06-06T12:00:00+00:00"
+        }}"#)).unwrap()
+    };
+    state.messages = vec![mk(1, "unread"), mk(2, "read"), mk(3, "unread")];
+    assert_eq!(state.unread_message_count(), 2);
+}
+
+#[test]
 fn scut_coverage_read_from_sector() {
     let mut state = AppState::default();
     state.probe = Some(probe_at(0., 0., 0.));

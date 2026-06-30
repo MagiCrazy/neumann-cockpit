@@ -123,6 +123,42 @@ impl AppState {
         }
     }
 
+    pub fn set_message_send_error(&mut self, msg: String) {
+        if let MessagesInput::Compose { ref mut error, .. } = self.messages_input {
+            *error = Some(msg);
+        }
+    }
+
+    pub fn unread_message_count(&self) -> usize {
+        self.messages.iter()
+            .filter(|m| m.status == crate::api::types::MessageStatus::Unread)
+            .count()
+    }
+
+    /// Message recipients reachable from the current sector: detected probes
+    /// plus inhabited planets. Returns (kind, endpoint id, display name).
+    pub fn collect_message_recipients(&self) -> Vec<(String, crate::api::types::EndpointId, String)> {
+        use crate::api::types::EndpointId;
+        let mut out = Vec::new();
+        let Some(sector) = self.probe_current_sector_scan() else { return out };
+        if let Some(probes) = sector.probes.as_ref() {
+            for p in probes {
+                out.push(("probe".to_string(), EndpointId::Probe(p.id), p.name.clone()));
+            }
+        }
+        if let Some(objects) = sector.objects.as_ref() {
+            for o in objects {
+                if o.habitability_score.unwrap_or(0.0) > 0.0 {
+                    if let Some(id) = o.id.clone() {
+                        let name = o.name.clone().unwrap_or_else(|| "planet".into());
+                        out.push(("planet".to_string(), EndpointId::Planet(id), name));
+                    }
+                }
+            }
+        }
+        out
+    }
+
     /// The probe's terminal recovery alert (dead / black-hole), if any.
     pub fn probe_terminal_alert(&self) -> Option<&crate::api::types::ProbeTerminalAlert> {
         self.probe.as_ref().and_then(|p| p.alert.as_ref())

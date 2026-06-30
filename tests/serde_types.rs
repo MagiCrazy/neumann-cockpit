@@ -1,8 +1,8 @@
 use neumann_cockpit::api::types::{
     AlertPhase, AlertStatus, AlertType, ContainerInventory, CraftingRecipe, DamageWarningRule,
     DataFreshness, KnowledgeLevel, Manny, MannyLocationType, MannyTask, Mission, MissionStatus,
-    MannyTaskVisibility, MissionStepStatus, MovementPhase, Probe, ScutNetwork, ScutRelayStatus,
-    SectorObject,
+    EndpointId, MannyTaskVisibility, MessageStatus, MissionStepStatus, MovementPhase, Probe,
+    ProbeMessage, ScutNetwork, ScutRelayStatus, SectorObject,
     ProbeAlert, ProbeInventory, ProbeMovement, ProbeStatus, SectorObjectType, SectorObservation,
     SensorMode, StorageContainer,
 };
@@ -604,6 +604,27 @@ fn new_manny_tasks_deserialize() {
         MannyTask::TurningOnScutRelay
     );
     assert_eq!(deser::<MannyTask>(r#""unknown_too_far""#), MannyTask::UnknownTooFar);
+}
+
+#[test]
+fn probe_message_deserializes_with_mixed_endpoint_ids() {
+    let json = r#"{
+      "id": 12,
+      "sender": { "type": "probe", "id": 2, "probeId": 2, "name": "Probe of nova" },
+      "recipient": { "type": "planet", "id": "planet-abc", "planetId": "planet-abc", "name": "Pale Signal" },
+      "sector": { "relative": { "x": 0, "y": 0, "z": 0 } },
+      "body": "Signal local reçu.",
+      "status": "unread",
+      "readAt": null,
+      "createdAt": "2026-06-06T12:00:00+00:00",
+      "updatedAt": "2026-06-06T12:00:00+00:00"
+    }"#;
+    let m: ProbeMessage = deser(json);
+    assert_eq!(m.id, 12);
+    assert_eq!(m.status, MessageStatus::Unread);
+    assert_eq!(m.sender.id, EndpointId::Probe(2));
+    assert_eq!(m.recipient.id, EndpointId::Planet("planet-abc".into()));
+    assert_eq!(m.recipient.name, "Pale Signal");
 }
 
 #[test]
