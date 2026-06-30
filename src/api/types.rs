@@ -188,9 +188,24 @@ pub struct Manny {
     pub location: MannyLocation,
     pub current_task: Option<MannyTask>,
     pub task_progress_percent: f64,
+    #[serde(default)]
+    pub task_visibility: Option<MannyTaskVisibility>,
     pub cargo: MannyCargo,
     pub can_receive_orders: bool,
     pub task_estimated_end_time: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum MannyTaskVisibility {
+    /// Current sector or probe rack.
+    Local,
+    /// Different sector reachable via a shared SCUT network.
+    ScutNetwork,
+    /// Out of telemetry range; task details unavailable.
+    TooFar,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Deserialize)]

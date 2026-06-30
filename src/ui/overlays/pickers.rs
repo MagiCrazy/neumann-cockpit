@@ -108,12 +108,16 @@ pub(crate) fn render_drop_cargo_overlay(frame: &mut Frame, area: Rect, state: &A
 }
 
 pub(crate) fn render_recall_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let RecallInput::Confirm { ref manny_name, ref error, .. } = state.recall else { return };
+    let RecallInput::Confirm { ref manny_name, remote, ref error, .. } = state.recall else { return };
 
-    let popup = centered_rect(46, 7, area);
+    let popup = centered_rect(52, 8, area);
     frame.render_widget(Clear, popup);
 
-    let title = format!(" RECALL — {manny_name} ");
+    let title = if remote {
+        format!(" ABANDON — {manny_name} ")
+    } else {
+        format!(" RECALL — {manny_name} ")
+    };
     let block = Block::default()
         .title(title)
         .title_alignment(Alignment::Center)
@@ -129,9 +133,15 @@ pub(crate) fn render_recall_overlay(frame: &mut Frame, area: Rect, state: &AppSt
 
     let mut lines: Vec<Line> = Vec::new();
     lines.push(Line::from(Span::styled(
-        "Send recall order?",
+        if remote { "Abandon this Manny's remote task?" } else { "Send recall order?" },
         Style::default().fg(Color::White),
     )));
+    if remote {
+        lines.push(Line::from(Span::styled(
+            "It will be left forgotten in its sector (no return).",
+            Style::default().fg(Color::DarkGray),
+        )));
+    }
     if let Some(err) = error {
         lines.push(Line::default());
         lines.push(Line::from(Span::styled(
@@ -143,7 +153,7 @@ pub(crate) fn render_recall_overlay(frame: &mut Frame, area: Rect, state: &AppSt
     frame.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled("[Enter]", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-            Span::raw(" RECALL  "),
+            Span::raw(if remote { " ABANDON  " } else { " RECALL  " }),
             Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
             Span::raw(" cancel"),
         ])),

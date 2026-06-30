@@ -1,7 +1,8 @@
 use neumann_cockpit::api::types::{
     AlertPhase, AlertStatus, AlertType, ContainerInventory, CraftingRecipe, DamageWarningRule,
     DataFreshness, KnowledgeLevel, Manny, MannyLocationType, MannyTask, Mission, MissionStatus,
-    MissionStepStatus, MovementPhase, Probe, ScutNetwork, ScutRelayStatus, SectorObject,
+    MannyTaskVisibility, MissionStepStatus, MovementPhase, Probe, ScutNetwork, ScutRelayStatus,
+    SectorObject,
     ProbeAlert, ProbeInventory, ProbeMovement, ProbeStatus, SectorObjectType, SectorObservation,
     SensorMode, StorageContainer,
 };
@@ -603,6 +604,16 @@ fn new_manny_tasks_deserialize() {
         MannyTask::TurningOnScutRelay
     );
     assert_eq!(deser::<MannyTask>(r#""unknown_too_far""#), MannyTask::UnknownTooFar);
+}
+
+#[test]
+fn manny_task_visibility_deserializes() {
+    assert_eq!(
+        deser::<MannyTaskVisibility>(r#""scut_network""#),
+        MannyTaskVisibility::ScutNetwork
+    );
+    assert_eq!(deser::<MannyTaskVisibility>(r#""local""#), MannyTaskVisibility::Local);
+    assert_eq!(deser::<MannyTaskVisibility>(r#""too_far""#), MannyTaskVisibility::TooFar);
 }
 
 #[test]
