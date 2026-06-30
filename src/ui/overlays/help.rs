@@ -57,6 +57,7 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect) {
         help_key_line("A", "alerts & damage warnings"),
         help_key_line("O", "missions"),
         help_key_line("N", "inspect SCUT network (when covered)"),
+        help_key_line("Y", "messages (inbox / sent / compose)"),
         help_key_line("?", "this help"),
         help_key_line("q", "quit"),
         help_key_line("Esc", "unfocus / close"),

@@ -112,6 +112,7 @@ Scanner specifics: the history column shows symbol + coords + distance, scrolls 
 - Jettison a `scut_relay` inventory item (Inventory `[j]` on the SCUT-relay group) — confirmation; deploys an inactive relay into the current sector
 - Alerts (`[A]`) — tabbed Alerts / Damage-warnings list, `Tab` switches tab, `Enter` marks read; `[!]` badge on the probe panel + status bar when unread
 - Missions (`[O]`) — active-mission list with steps and status; `[a]` abandons the selected active mission (confirmation sub-popup)
+- Messaging (`[Y]`) — tabbed inbox / sent list (`Tab` switches), `Enter` marks an inbox message read, `[c]` composes: pick a recipient (probes detected in the sector + inhabited planets) → type the body → send. Inbox/sent are loaded on open (not in `fetch_all`); a `•` on `[Y]` in the status bar signals unread. `EndpointId` is an untagged int|string (probe id | planet object id).
 - SCUT network (`[N]`) — inspect a network covering the current sector (`scutNetworks` in the sector scan): relays (status, position, coverage) and probes. When several networks cover the sector, a picker precedes the detail view. A `≣ SCUT` badge on the probe panel + a lit `[N]` in the status bar signal active coverage.
 - Remote mannies via SCUT — `Manny.taskVisibility` (`local` / `scut_network` / `too_far`) drives display: a Manny in a different sector reachable via a shared SCUT network shows `≣ via SCUT` and its `[R]` action is labelled **abandon** (the recall cancels the task and leaves it forgotten, it does not return); out-of-range tasks render as `too far` (`unknown_too_far`).
 - Remote mine (`[e]` on an idle SCUT-reachable Manny — API v60) — fetches the Manny's sector, then a wizard: pick asteroid → resources/amount → **pick detached container** (mandatory; the dropped mining stays in the Manny's sector). Drives the same `mine` endpoint with `targetContainerId`. `RemoteMineInput` advances to asteroid selection when the awaited sector scan arrives.
@@ -166,4 +167,6 @@ Scanner specifics: the history column shows symbol + coords + distance, scrolls 
 | `/api/probe/missions` | GET | ✓ |
 | `/api/probe/mission` | GET | ✓ (alias) |
 | `/api/probe/missions/{id}/abandon` | POST | ✓ |
-| `/api/probe/messages` | GET/POST | ✗ (not implemented) |
+| `/api/probe/messages` | GET/POST | ✓ |
+| `/api/probe/messages/sent` | GET | ✓ |
+| `/api/probe/messages/{id}/read` | PATCH | ✓ |

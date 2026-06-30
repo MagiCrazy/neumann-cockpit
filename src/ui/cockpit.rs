@@ -108,6 +108,11 @@ pub(crate) fn render_status_bar(frame: &mut Frame, area: Rect, state: &AppState)
         Span::styled("[O]", Style::default().fg(Color::Cyan)),
         Span::raw(" missions  "),
         Span::styled(
+            "[Y]",
+            Style::default().fg(if state.unread_message_count() > 0 { Color::Red } else { Color::Cyan }),
+        ),
+        Span::raw(if state.unread_message_count() > 0 { " msgs•  " } else { " msgs  " }),
+        Span::styled(
             "[N]",
             Style::default().fg(if state.scut_coverage().is_empty() { Color::Cyan } else { Color::LightBlue }),
         ),

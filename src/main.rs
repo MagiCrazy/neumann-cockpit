@@ -11,12 +11,14 @@ use tokio::sync::mpsc;
 
 use neumann_cockpit::api::client::ApiClient;
 use neumann_cockpit::api::tasks::{
-    fetch_all, fetch_api_version, fetch_crafting_recipes, fetch_mannies, fetch_missions,
+    fetch_all, fetch_api_version, fetch_crafting_recipes, fetch_mannies, fetch_messages,
+    fetch_missions, fetch_sent_messages,
 };
 use neumann_cockpit::app::{
     ApiMessage, AppState, AtomicPrinterCraftInput, ContainerRulesInput, CraftInput, DeployInput,
     DetachInput, DropCargoInput, DropStorageContainerInput, InspectInput, JettisonInput,
-    MindSnapshotInput, MineInput, MissionsInput, Phosphor, RecallInput, RecoverInput, RefuelInput,
+    MessagesInput, MindSnapshotInput, MineInput, MissionsInput, Phosphor, RecallInput, RecoverInput,
+    RefuelInput,
     RemoteMineInput,
     RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScutNetworkInput,
     ScutRelayInput, StorageMoveInput, UiTheme,
@@ -205,6 +207,20 @@ async fn run(
                     ApiMessage::ScutNetworkFetched(network) => {
                         if matches!(state.scut_network, ScutNetworkInput::Viewing { .. }) {
                             state.scut_network_view = Some(network);
+                        }
+                    }
+                    ApiMessage::MessagesFetched(m) => state.messages = m,
+                    ApiMessage::SentMessagesFetched(m) => state.sent_messages = m,
+                    ApiMessage::MessageSent(_) => {
+                        state.messages_input = MessagesInput::Browsing { sent_tab: false, selection: 0 };
+                        state.set_toast("message sent");
+                        fetch_messages(client.clone(), tx.clone());
+                        fetch_sent_messages(client.clone(), tx.clone());
+                    }
+                    ApiMessage::MessageSendError(e) => state.set_message_send_error(e),
+                    ApiMessage::MessageMarkedRead(m) => {
+                        if let Some(slot) = state.messages.iter_mut().find(|x| x.id == m.id) {
+                            *slot = m;
                         }
                     }
                     ApiMessage::ScutNetworkError(e) => {

@@ -1,4 +1,5 @@
 use super::*;
+use crate::api::types::EndpointId;
 
 #[derive(Default)]
 pub enum ScanMode {
@@ -358,6 +359,27 @@ pub enum ScutRelayInput {
         relay_id: i64,
         relay_name: String,
         buf: String,
+        error: Option<String>,
+    },
+}
+
+#[derive(Default)]
+pub enum MessagesInput {
+    #[default]
+    Inactive,
+    /// Browsing inbox (sent_tab=false) or sent (true); entries in AppState.
+    Browsing { sent_tab: bool, selection: usize },
+    /// Picking a recipient for a new message (probes + planets in sector).
+    PickRecipient {
+        recipients: Vec<(String, EndpointId, String)>, // (kind, id, name)
+        selection: usize,
+    },
+    /// Typing the message body for the chosen recipient.
+    Compose {
+        recipient_type: String,
+        recipient_id: EndpointId,
+        recipient_name: String,
+        body_buf: String,
         error: Option<String>,
     },
 }

@@ -20,8 +20,9 @@ pub use scan::*;
 pub use waypoints::*;
 
 use crate::api::types::{
-    ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, Mission, Probe, ProbeAlert,
-    ProbeInventory, ScutNetwork, SectorObservation, StorageContainer, VisitedSector,
+    ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, Mission, Probe,
+    ProbeAlert, ProbeInventory, ProbeMessage, ProbeSentMessage, ScutNetwork, SectorObservation,
+    StorageContainer, VisitedSector,
 };
 use chrono::{DateTime, Local, Utc};
 use tokio::time::Instant;
@@ -97,6 +98,9 @@ pub struct AppState {
     pub scut_network_view: Option<ScutNetwork>,
     pub missions: Vec<Mission>,
     pub missions_input: MissionsInput,
+    pub messages: Vec<ProbeMessage>,
+    pub sent_messages: Vec<ProbeSentMessage>,
+    pub messages_input: MessagesInput,
     pub deploy: DeployInput,
     pub rename_manny: RenameMannyInput,
     pub inspect: InspectInput,
