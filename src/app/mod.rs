@@ -91,6 +91,7 @@ pub struct AppState {
     pub recall: RecallInput,
     pub refuel: RefuelInput,
     pub mind_snapshot: MindSnapshotInput,
+    pub scut_relay: ScutRelayInput,
     pub missions: Vec<Mission>,
     pub missions_input: MissionsInput,
     pub deploy: DeployInput,

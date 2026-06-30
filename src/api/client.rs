@@ -275,6 +275,32 @@ impl ApiClient {
         Ok(self.post::<Resp, _>(&path, &serde_json::json!({})).await?.mission)
     }
 
+    /// Send a Manny to turn on an inactive SCUT relay in the current sector
+    /// (`POST /api/probe/mannies/{id}/turn-on-relay`). Requires a star in the
+    /// sector and one integrated_circuit in inventory. `relay_id` is the
+    /// relay's integer id (the sector object id parsed as an integer).
+    pub async fn turn_on_relay(
+        &self,
+        manny_id: &str,
+        relay_id: i64,
+        network_name: Option<&str>,
+    ) -> Result<Manny> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Body<'a> {
+            relay_id: i64,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            network_name: Option<&'a str>,
+        }
+        #[derive(Deserialize)]
+        struct Resp { manny: Manny }
+        let path = format!("/api/probe/mannies/{manny_id}/turn-on-relay");
+        Ok(self
+            .post::<Resp, _>(&path, &Body { relay_id, network_name })
+            .await?
+            .manny)
+    }
+
     /// Reassign the player's mind snapshot to a fresh probe chassis
     /// (`POST /api/probe/mind-snapshot/reassign`). Only valid when the current
     /// probe is dead or trapped by a black hole; resets the local reference

@@ -111,6 +111,12 @@ impl AppState {
         }
     }
 
+    pub fn set_scut_relay_error(&mut self, msg: String) {
+        if let ScutRelayInput::EnterNetworkName { ref mut error, .. } = self.scut_relay {
+            *error = Some(msg);
+        }
+    }
+
     pub fn set_mission_abandon_error(&mut self, msg: String) {
         if let MissionsInput::ConfirmAbandon { ref mut error, .. } = self.missions_input {
             *error = Some(msg);

@@ -33,6 +33,7 @@ pub(crate) use pickers::{
     render_deploy_overlay, render_detach_overlay, render_drop_cargo_overlay, render_inspect_overlay,
     render_mind_snapshot_overlay, render_recall_overlay, render_recover_overlay,
     render_refuel_overlay, render_rename_manny_overlay, render_salvage_overlay,
+    render_scut_relay_overlay,
 };
 pub(crate) use repair::render_repair_overlay;
 pub(crate) use storage_move::render_storage_move_overlay;
@@ -44,8 +45,8 @@ use crate::app::{
     CraftInput, DeployInput, DetachInput, DropCargoInput, DropStorageContainerInput, InspectInput,
     JettisonInput, MineInput,
     MindSnapshotInput, MissionsInput, ObjectActionInput, RecallInput, RecoverInput, RefuelInput,
-    RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, StorageMoveInput,
-    TravelInput, WaypointsInput,
+    RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScutRelayInput,
+    StorageMoveInput, TravelInput, WaypointsInput,
 };
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -100,6 +101,9 @@ pub(crate) fn render_active_overlays(frame: &mut Frame, area: Rect, state: &AppS
     }
     if !matches!(state.missions_input, MissionsInput::Inactive) {
         render_missions_overlay(frame, area, state);
+    }
+    if !matches!(state.scut_relay, ScutRelayInput::Inactive) {
+        render_scut_relay_overlay(frame, area, state);
     }
     if !matches!(state.drop_cargo, DropCargoInput::Inactive) {
         render_drop_cargo_overlay(frame, area, state);

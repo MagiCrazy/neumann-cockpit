@@ -1,0 +1,4739 @@
+openapi: 3.0.3
+info:
+  title: Von Neumann Game API
+  version: '63'
+servers:
+  - url: /
+    description: Current host
+security:
+  - bearerAuth: []
+paths:
+  /api/version:
+    get:
+      security: []
+      summary: Get API version
+      responses:
+        '200':
+          description: Current API version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiVersionResponse'
+              example:
+                apiVersion: 63
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+  /api/session:
+    post:
+      security: []
+      summary: Create a password session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionRequest'
+            example:
+              username: remi
+              password: secret
+      responses:
+        '200':
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+              example:
+                token: eyJlocalExampleToken
+                expiresAt: '2026-05-28T12:00:00+00:00'
+                player:
+                  id: 1
+                  username: remi
+                  displayName: Remi
+                  forumAdmin: false
+                  forumModerator: false
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+  /api/me:
+    get:
+      summary: Get authenticated player
+      responses:
+        '200':
+          description: Current player
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [player]
+                properties:
+                  player:
+                    $ref: '#/components/schemas/Player'
+              example:
+                player:
+                  id: 1
+                  username: remi
+                  displayName: Remi
+                  forumAdmin: false
+                  forumModerator: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/me/api-key:
+    post:
+      summary: Create an API key for the authenticated player
+      description: >
+        Returns a new API key that can be used as a Bearer token on protected
+        API endpoints. The clear token is shown only in this response; only its
+        hash is stored server-side.
+      responses:
+        '201':
+          description: API key created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyResponse'
+              example:
+                apiKey:
+                  id: 1
+                  token: vng_exampleGeneratedSecret
+                  label: default
+                  lastFour: cret
+                  createdAt: '2026-06-01T12:00:00+00:00'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/crafting-recipes:
+    get:
+      summary: List available crafting recipes
+      responses:
+        '200':
+          description: Available crafting recipes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [recipes]
+                properties:
+                  recipes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CraftingRecipe'
+              example:
+                recipes:
+                  - id: waypoint_bookmark
+                    name: Waypoint bookmark
+                    description: A transmitting beacon placed on an object such as an asteroid or planet, or set in orbit around a star or gas giant. Its message can be read by every Neumann probe present in the sector.
+                    craftableBy: [manny]
+                    ingredients:
+                      - type: metals
+                        quantity: 0.01
+                        unit: earth_container_equivalent
+                    durationSeconds: 600
+                    output:
+                      type: waypoint_bookmark
+                      name: Waypoint bookmark
+                      containerSpace: 0.01
+                      containerSpaceUnit: earth_container_equivalent
+                  - id: integrated_circuit
+                    name: Integrated circuit
+                    description: A dense logic component combining conductors, insulators, substrate, and dopants.
+                    craftableBy: [atomic_3d_printer]
+                    ingredients:
+                      - type: micro_conductor
+                        quantity: 2
+                        unit: item
+                      - type: ceramic_insulator
+                        quantity: 2
+                        unit: item
+                      - type: crystal_substrate
+                        quantity: 1
+                        unit: item
+                      - type: dopant_matrix
+                        quantity: 1
+                        unit: item
+                      - type: deuterium
+                        quantity: 0.05
+                        unit: earth_container_equivalent
+                    durationSeconds: 1200
+                    output:
+                      type: integrated_circuit
+                      name: Integrated circuit
+                      containerSpace: 0.001
+                      containerSpaceUnit: earth_container_equivalent
+                  - id: solar_panel
+                    name: Solar panel
+                    description: A foldable photovoltaic panel with printed conductors, crystal substrate, and a reinforced mounting plate.
+                    craftableBy: [manny]
+                    ingredients:
+                      - type: micro_conductor
+                        quantity: 2
+                        unit: item
+                      - type: crystal_substrate
+                        quantity: 1
+                        unit: item
+                      - type: ceramic_insulator
+                        quantity: 1
+                        unit: item
+                      - type: steel_plate
+                        quantity: 1
+                        unit: item
+                      - type: metals
+                        quantity: 0.02
+                        unit: earth_container_equivalent
+                    durationSeconds: 1800
+                    output:
+                      type: solar_panel
+                      name: Solar panel
+                      containerSpace: 0.015
+                      containerSpaceUnit: earth_container_equivalent
+                  - id: scut_relay
+                    name: SCUT relay
+                    description: A long-range SCUT communication relay module with its own solar power array, buffer batteries, control circuits, and deployable structure.
+                    craftableBy: [manny]
+                    ingredients:
+                      - type: steel_plate
+                        quantity: 32
+                        unit: item
+                      - type: steel_bar
+                        quantity: 28
+                        unit: item
+                      - type: battery_pack
+                        quantity: 6
+                        unit: item
+                      - type: solar_panel
+                        quantity: 4
+                        unit: item
+                      - type: integrated_circuit
+                        quantity: 5
+                        unit: item
+                      - type: electric_motor
+                        quantity: 4
+                        unit: item
+                      - type: linear_actuator
+                        quantity: 2
+                        unit: item
+                    durationSeconds: 172800
+                    output:
+                      type: scut_relay
+                      name: SCUT relay
+                      containerSpace: 0.12
+                      containerSpaceUnit: earth_container_equivalent
+                  - id: manny
+                    name: Manny
+                    craftableBy: [manny]
+                    ingredients:
+                      - type: linear_actuator
+                        quantity: 6
+                        unit: item
+                      - type: electric_motor
+                        quantity: 12
+                        unit: item
+                      - type: battery_pack
+                        quantity: 4
+                        unit: item
+                      - type: integrated_circuit
+                        quantity: 6
+                        unit: item
+                    durationSeconds: 3600
+                    output:
+                      type: manny
+                      name: Manny
+                      containerSpace: 0.05
+                      containerSpaceUnit: earth_container_equivalent
+                      cargoCapacity: 0.05
+                      cargoCapacityUnit: earth_container_equivalent
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/forum/categories:
+    get:
+      summary: List forum categories
+      responses:
+        '200':
+          description: Forum categories ordered by sortOrder
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForumCategoriesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      summary: Create a forum category
+      description: Requires forum administrator permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForumCategoryWriteRequest'
+      responses:
+        '201':
+          description: Forum category created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForumCategoryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/forum/categories/{categoryId}:
+    get:
+      summary: Get a forum category
+      parameters:
+        - $ref: '#/components/parameters/ForumCategoryId'
+      responses:
+        '200':
+          description: Forum category
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForumCategoryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Update a forum category
+      description: Requires forum administrator permission. Use sortOrder to reorder categories.
+      parameters:
+        - $ref: '#/components/parameters/ForumCategoryId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForumCategoryPatchRequest'
+      responses:
+        '200':
+          description: Forum category updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForumCategoryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      summary: Delete a forum category
+      description: Requires forum administrator permission. Deletes posts and messages inside the category.
+      parameters:
+        - $ref: '#/components/parameters/ForumCategoryId'
+      responses:
+        '200':
+          description: Forum category deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/forum/posts:
+    get:
+      summary: List forum posts
+      description: Returns pinned posts first, then the most recently active posts. Defaults to 50 posts.
+      parameters:
+        - name: categoryId
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Forum posts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForumPostsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      summary: Create a forum post
+      description: Creates a post and its first forum message.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForumPostCreateRequest'
+      responses:
+        '201':
+          description: Forum post created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForumPostResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/forum/posts/{postId}:
+    get:
+      summary: Get a forum post with its first message and recent replies
+      description: Returns the post, its first message, and the 50 most recent replies by default. Use limit and offset to load older replies.
+      parameters:
+        - $ref: '#/components/parameters/ForumPostId'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Forum post with messages
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForumPostWithMessagesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Moderate a forum post
+      description: Forum moderators and forum admins can edit title/category and pin or unpin the post.
+      parameters:
+        - $ref: '#/components/parameters/ForumPostId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForumPostPatchRequest'
+      responses:
+        '200':
+          description: Forum post updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForumPostResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      summary: Delete a forum post
+      description: Requires forum moderator or forum admin permission.
+      parameters:
+        - $ref: '#/components/parameters/ForumPostId'
+      responses:
+        '200':
+          description: Forum post deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/forum/posts/{postId}/messages:
+    get:
+      summary: List replies for a forum post
+      description: Returns the 50 most recent replies by default. Use limit and offset to load older replies. The initial post message is exposed as firstMessage on the post detail response.
+      parameters:
+        - $ref: '#/components/parameters/ForumPostId'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Forum messages
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForumMessagesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      summary: Reply to a forum post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForumMessageWriteRequest'
+      parameters:
+        - $ref: '#/components/parameters/ForumPostId'
+      responses:
+        '201':
+          description: Forum message created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForumMessageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/forum/messages/{messageId}:
+    patch:
+      summary: Edit a forum message
+      description: The original author can edit their own message. Forum moderators and forum admins can edit any message.
+      parameters:
+        - $ref: '#/components/parameters/ForumMessageId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForumMessageWriteRequest'
+      responses:
+        '200':
+          description: Forum message updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForumMessageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      summary: Delete a forum message
+      description: Requires forum moderator or forum admin permission.
+      parameters:
+        - $ref: '#/components/parameters/ForumMessageId'
+      responses:
+        '200':
+          description: Forum message deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/probe:
+    get:
+      summary: Get current Neumann probe
+      responses:
+        '200':
+          description: Current probe
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [probe]
+                properties:
+                  probe:
+                    $ref: '#/components/schemas/Probe'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/probe/mission:
+    get:
+      summary: List active probe missions
+      description: Alias of /api/probe/missions kept for clients that use a singular mission route.
+      responses:
+        '200':
+          description: Active missions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MissionListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/probe/missions:
+    get:
+      summary: List active probe missions
+      description: Returns missions currently assigned to the authenticated probe. New probes return an empty list.
+      responses:
+        '200':
+          description: Active missions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MissionListResponse'
+              example:
+                missions: []
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/probe/missions/{missionId}/abandon:
+    post:
+      summary: Abandon an active probe mission
+      parameters:
+        - $ref: '#/components/parameters/MissionId'
+      responses:
+        '200':
+          description: Mission abandoned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MissionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Mission is already terminal and cannot be abandoned again
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/probe/mind-snapshot/reassign:
+    post:
+      summary: Reassign a terminal probe mind snapshot
+      description: >
+        Available only when the current probe is dead or trapped by a black hole.
+        Deletes the terminal probe state, assigns the player's last stable mind
+        snapshot to a fresh probe chassis, resets the player's local reference
+        frame, and marks the new origin as 0,0,0.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Mind snapshot reassigned to a fresh probe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbeMindSnapshotReassignResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/probe/storage-containers:
+    get:
+      summary: List probe storage containers
+      description: >
+        Returns the probe core storage and each additional container created
+        from an additional_container inventory item. The deuterium tank is not
+        managed here.
+      responses:
+        '200':
+          description: Storage containers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [containers]
+                properties:
+                  containers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StorageContainer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/probe/storage-containers/{containerId}:
+    get:
+      summary: Get one storage container content
+      parameters:
+        - $ref: '#/components/parameters/StorageContainerId'
+      responses:
+        '200':
+          description: Container inventory
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageContainerInventoryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Rename a storage container
+      parameters:
+        - $ref: '#/components/parameters/StorageContainerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StorageContainerRenameRequest'
+            example:
+              label: Soute metaux
+      responses:
+        '200':
+          description: Storage container renamed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageContainerRenameResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/probe/storage-containers/{containerId}/rules:
+    patch:
+      summary: Update storage routing rules for a container
+      description: >
+        Priority routes matching new items to this container first unless it is
+        full. Exclusion avoids this container unless no other non-strict
+        container can accept the item. Strict exclusion prevents automatic
+        placement into this container.
+      parameters:
+        - $ref: '#/components/parameters/StorageContainerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StorageContainerRules'
+            example:
+              priority: [metals]
+              exclusion: [ice]
+              strictExclusion: [manny]
+      responses:
+        '200':
+          description: Rules updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageContainerRulesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/probe/storage-moves:
+    post:
+      summary: Assign a Manny to move stock between containers
+      description: >
+        Starts a moving_stockage task on an idle onboard Manny. Unit items take
+        10 seconds; resources take 10 seconds per 0.05 ECE.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StorageMoveRequest'
+            examples:
+              resource:
+                value:
+                  actorMannyId: mny_actor
+                  kind: resource
+                  resourceType: metals
+                  amount: 0.1
+                  fromContainerId: probe-core
+                  toContainerId: container-itm_extra
+              item:
+                value:
+                  actorMannyId: mny_actor
+                  kind: item
+                  itemIds: [itm_steel_bar, itm_steel_bar_2]
+                  quantity: 2
+                  toContainerId: container-itm_extra
+      responses:
+        '202':
+          description: Storage move task accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manny, inventory]
+                properties:
+                  manny:
+                    $ref: '#/components/schemas/Manny'
+                  inventory:
+                    $ref: '#/components/schemas/ProbeInventory'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Manny unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Move is impossible because of capacity or item rules
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/probe/messages:
+    get:
+      summary: List messages received by the current probe
+      description: >
+        Returns messages where the authenticated player's probe is the
+        recipient. Messages are sorted newest first, include their read
+        status, and are limited to the 50 latest messages by default.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of messages to return. Defaults to 50.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          description: Number of newest messages to skip before returning the page.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Received probe messages
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbeMessagesResponse'
+              example:
+                messages:
+                  - id: 12
+                    sender:
+                      type: planet
+                      id: planet-abc123
+                      planetId: planet-abc123
+                      name: Pale Signal
+                    recipient:
+                      type: probe
+                      id: 1
+                      probeId: 1
+                      name: Probe of remi
+                    sector:
+                      relative: { x: 0, y: 0, z: 0 }
+                    body: Signal local reçu.
+                    status: unread
+                    readAt: null
+                    createdAt: '2026-06-06T12:00:00+00:00'
+                    updatedAt: '2026-06-06T12:00:00+00:00'
+                  - id: 13
+                    sender:
+                      type: probe
+                      id: 2
+                      probeId: 2
+                      name: Probe of nova
+                    recipient:
+                      type: probe
+                      id: 1
+                      probeId: 1
+                      name: Probe of remi
+                    sector:
+                      relative: { x: 0, y: 0, z: 0 }
+                    body: Signal local reçu.
+                    status: unread
+                    readAt: null
+                    createdAt: '2026-06-06T12:00:00+00:00'
+                    updatedAt: '2026-06-06T12:00:00+00:00'
+                pagination:
+                  limit: 50
+                  offset: 0
+                  count: 2
+                  total: 67
+                  hasMore: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    post:
+      summary: Send a message to a reachable probe or inhabited planet
+      description: >
+        Creates an unread message from the current probe to a recipient.
+        Probe recipients must be in the exact same sector as the sender probe,
+        or both probes must be inside coverage of the same active SCUT relay
+        network. Planet recipients must be inhabited planets in the current
+        sector. If the recipient type is omitted, `probe` is used.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProbeMessageSendRequest'
+            example:
+              recipient:
+                type: planet
+                id: planet-abc123
+              body: Signal local reçu ?
+      responses:
+        '201':
+          description: Probe message sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbeMessageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Recipient is invalid or outside local/SCUT communication range
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/probe/scut-network/{scutNetworkId}:
+    get:
+      summary: Inspect a SCUT relay network covering the current probe
+      parameters:
+        - $ref: '#/components/parameters/ScutNetworkId'
+      responses:
+        '200':
+          description: SCUT network details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScutNetworkResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Probe is outside this network coverage
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/probe/messages/sent:
+    get:
+      summary: List messages sent by the current probe
+      description: >
+        Returns messages where the authenticated player's probe is the sender.
+        Messages are sorted newest first and are limited to the 50 latest
+        messages by default. This endpoint does not expose recipient read
+        state fields.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of messages to return. Defaults to 50.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          description: Number of newest messages to skip before returning the page.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Sent probe messages
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbeSentMessagesResponse'
+              example:
+                messages:
+                  - id: 12
+                    sender:
+                      type: probe
+                      id: 1
+                      probeId: 1
+                      name: Probe of remi
+                    recipient:
+                      type: planet
+                      id: planet-abc123
+                      planetId: planet-abc123
+                      name: Pale Signal
+                    sector:
+                      relative: { x: 0, y: 0, z: 0 }
+                    body: Signal local reçu ?
+                    createdAt: '2026-06-06T12:00:00+00:00'
+                pagination:
+                  limit: 50
+                  offset: 0
+                  count: 1
+                  total: 3
+                  hasMore: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /api/probe/messages/{messageId}/read:
+    patch:
+      summary: Mark a received probe message as read
+      description: >
+        Only the recipient probe can mark a message as read. Repeating the call
+        on an already-read message is safe and returns the message unchanged.
+      parameters:
+        - $ref: '#/components/parameters/ProbeMessageId'
+      responses:
+        '200':
+          description: Probe message marked read
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbeMessageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/probe/alerts:
+    get:
+      summary: List persistent probe alerts
+      description: >
+        Returns persistent alerts produced for the authenticated probe. Alerts
+        currently cover fragile external storage movement warnings,
+        intelligent-life detections when the probe arrives in a sector,
+        debug-injected sector object detections, and anomaly detections.
+      responses:
+        '200':
+          description: Current and past alerts for the authenticated probe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbeAlertsResponse'
+              example:
+                alerts:
+                  - id: 7
+                    type: storage_container_break
+                    status: unread
+                    message: From 5 additional containers onward, movement stress can break one container link. Risk is 30% for this jump.
+                    phase: acceleration_end
+                    scheduledAt: '2026-06-12T12:03:00+00:00'
+                    sector:
+                      relative: { x: 0, y: 0, z: 0 }
+                    container:
+                      id: cnt_extra_3
+                      label: Additional container 3
+                      detachedObjectId: detached-container-7
+                    risk:
+                      percent: 30
+                      additionalContainerCount: 7
+                      ruleStartsAtAdditionalContainers: 5
+                    createdAt: '2026-06-12T12:00:00+00:00'
+                    updatedAt: '2026-06-12T12:00:00+00:00'
+                    readAt: null
+                    resolvedAt: null
+                  - id: 8
+                    type: intelligent_life
+                    status: unread
+                    message: 'Intelligent life detected: technological signatures confirmed on Pale Signal in relative sector 2:0:0.'
+                    phase: arrival
+                    scheduledAt: '2026-06-12T14:42:00+00:00'
+                    sector:
+                      relative: { x: 2, y: 0, z: 0 }
+                    planet:
+                      id: planet_4
+                      name: Pale Signal
+                    createdAt: '2026-06-12T14:42:00+00:00'
+                    updatedAt: '2026-06-12T14:42:00+00:00'
+                    readAt: null
+                    resolvedAt: null
+                  - id: 9
+                    type: sector_object_detected
+                    status: unread
+                    message: "Un nouvel objet vient d'être détecté dans le secteur : astéroïde contenant du deutérium. Il n'avait pas été détecté lors de votre arrivée dans ce secteur."
+                    phase: detection
+                    scheduledAt: '2026-06-12T15:00:00+00:00'
+                    sector:
+                      relative: { x: 0, y: 0, z: 0 }
+                    object:
+                      id: debug-deuterium-a9f0d8e7c6b5a4d3c2b1a0f9
+                      type: asteroid
+                      label: Astéroïde contenant du Deutérium
+                      resourceTypes: [deuterium]
+                    createdAt: '2026-06-12T15:00:00+00:00'
+                    updatedAt: '2026-06-12T15:00:00+00:00'
+                    readAt: null
+                    resolvedAt: null
+                  - id: 10
+                    type: anomaly_detected
+                    status: unread
+                    message: "ANOMALY DETECTED\n\nSensors report a coherent signal propagating through space.\n\nThe signal originates from the approximative direction -50 25 -15 relative to the current position. Distance unknown.\n\nAnalysis in progress."
+                    phase: detection
+                    scheduledAt: '2026-06-12T16:00:00+00:00'
+                    sector:
+                      relative: { x: 20, y: -10, z: 6 }
+                    createdAt: '2026-06-12T16:00:00+00:00'
+                    updatedAt: '2026-06-12T16:00:00+00:00'
+                    readAt: null
+                    resolvedAt: null
+                rules:
+                  storageContainerBreak:
+                    type: storage_container_break
+                    startsAtAdditionalContainers: 5
+                    riskPerAdditionalContainerAfterFourPercent: 10
+                    maximumRiskPercent: 100
+                    message: From 5 additional containers onward, movement stress can break one container link. Risk is 10% at 5 containers, 20% at 6, and continues up to 100%.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/probe/alerts/{alertId}:
+    patch:
+      summary: Mark a persistent probe alert as read
+      parameters:
+        - $ref: '#/components/parameters/AlertId'
+      responses:
+        '200':
+          description: Alert marked read
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbeAlertResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/probe/damage-warnings:
+    get:
+      summary: List probe movement damage warnings
+      description: >
+        Returns persistent warnings produced when a fragile chain of additional
+        storage containers may lose one container during a sector movement.
+        This rule starts at 5 additional containers with a 10% risk, then adds
+        10 percentage points per extra container up to 100%.
+      responses:
+        '200':
+          description: Current and past damage warnings for the authenticated probe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbeDamageWarningsResponse'
+              example:
+                damageWarnings:
+                  - id: 7
+                    type: storage_container_break
+                    status: unread
+                    message: From 5 additional containers onward, movement stress can break one container link. Risk is 30% for this jump.
+                    phase: acceleration_end
+                    scheduledAt: '2026-06-12T12:03:00+00:00'
+                    sector:
+                      relative: { x: 0, y: 0, z: 0 }
+                    container:
+                      id: cnt_extra_3
+                      label: Additional container 3
+                      objectId: detached-container-7
+                    risk:
+                      percent: 30
+                      additionalContainerCount: 7
+                    createdAt: '2026-06-12T12:00:00+00:00'
+                    updatedAt: '2026-06-12T12:00:00+00:00'
+                    readAt: null
+                    resolvedAt: null
+                rule:
+                  type: storage_container_break
+                  startsAtAdditionalContainers: 5
+                  riskPerAdditionalContainerAfterFourPercent: 10
+                  maximumRiskPercent: 100
+                  message: From 5 additional containers onward, movement stress can break one container link. Risk is 10% at 5 containers, 20% at 6, and continues up to 100%.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/probe/damage-warnings/{damageWarningId}:
+    patch:
+      summary: Mark a movement damage warning as read
+      parameters:
+        - $ref: '#/components/parameters/DamageWarningId'
+      responses:
+        '200':
+          description: Damage warning marked read
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbeDamageWarningResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/probe/visited-sectors:
+    get:
+      summary: List sectors already visited by the current probe
+      description: >
+        Returns the authenticated player's visited-sector history for the
+        current probe. Coordinates are relative to the player's home sector and
+        sorted by most recent visit first.
+      responses:
+        '200':
+          description: Visited sectors for the current probe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbeVisitedSectorsResponse'
+              example:
+                visitedSectors:
+                  - relativeCoordinates: { x: 0, y: 0, z: 0 }
+                    firstVisitedAt: '2026-06-01T12:00:00+00:00'
+                    lastVisitedAt: '2026-06-01T12:00:00+00:00'
+                    visitCount: 1
+                  - relativeCoordinates: { x: 1, y: 1, z: 0 }
+                    firstVisitedAt: '2026-06-01T13:15:00+00:00'
+                    lastVisitedAt: '2026-06-01T15:45:00+00:00'
+                    visitCount: 2
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/probe/sector:
+    get:
+      summary: Get observable probe sector and onboard inventory
+      responses:
+        '200':
+          description: Current sector summary and probe inventory
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sector, inventory]
+                properties:
+                  sector:
+                    $ref: '#/components/schemas/SectorObservation'
+                  inventory:
+                    $ref: '#/components/schemas/ProbeInventory'
+              example:
+                sector:
+                  relativeCoordinates: { x: 0, y: 0, z: 0 }
+                  distance: 0
+                  knowledgeLevel: detailed
+                  confidence: 1
+                  objects:
+                    - type: solar_system
+                      name: System abc123
+                      summary: Stellar system with 1 star(s) and 4 orbital body(ies).
+                      radius: 5.4
+                      radiusUnit: astronomical_unit
+                      minableTargets:
+                        - id: asteroid-abc123-0
+                          type: asteroid
+                          name: null
+                          mass: 0.000001
+                          massUnit: earth_mass
+                          resources: [iron, nickel]
+                          resourceTypes: [metals]
+                          resourceComposition:
+                            deuterium: 0
+                            metals: 1
+                            ice: 0
+                            carbon_compounds: 0
+                          resourceAmounts:
+                            deuterium: 0
+                            metals: 1
+                            ice: 0
+                            carbon_compounds: 0
+                    - id: mine-rock
+                      type: asteroid
+                      name: null
+                      estimated: false
+                      summary: Wandering asteroid body.
+                      mass: 0.000001
+                      massUnit: earth_mass
+                      radius: 0.001
+                      radiusUnit: earth_radius
+                      dangerLevel: low
+                      resources: [iron, nickel]
+                      resourceTypes: [metals]
+                      resourceComposition:
+                        deuterium: 0
+                        metals: 1
+                        ice: 0
+                        carbon_compounds: 0
+                      resourceAmounts:
+                        deuterium: 0
+                        metals: 1
+                        ice: 0
+                        carbon_compounds: 0
+                      mannyMineable: true
+                      composition: iron
+                    - id: planet-abc123-0
+                      type: planet
+                      name: null
+                      estimated: false
+                      summary: Planetary body detected.
+                      mass: 1
+                      massUnit: earth_mass
+                      radius: 1
+                      radiusUnit: earth_radius
+                      dangerLevel: low
+                      resources: [silicates]
+                      resourceTypes: [metals]
+                      resourceComposition:
+                        deuterium: 0
+                        metals: 1
+                        ice: 0
+                        carbon_compounds: 0
+                      mannyMineable: false
+                      category: rocky
+                      habitabilityScore: 0.72
+                  probes:
+                    - id: 2
+                      name: Probe of nova
+                      moving: false
+                  scan:
+                    currentSectorResidenceSeconds: 42
+                    requiredResidenceSeconds: 0
+                    scanQuality: 1
+                inventory:
+                  capacity: 1
+                  capacityUnit: earth_container_equivalent
+                  usedCapacity: 0.5
+                  freeCapacity: 0.5
+                  items:
+                    - id: probe-1-atomic-3d-printer
+                      type: atomic_3d_printer
+                      name: Imprimante atomique
+                      containerSpace: 0.3
+                      currentTask: null
+                      taskProgressPercent: 0
+                      container:
+                        id: probe-core
+                        kind: probe
+                        label: Sonde
+                        sortOrder: 0
+                    - id: mny_8d4a2c1f5a91b334
+                      type: manny
+                      name: manny-1
+                      containerSpace: 0.05
+                      currentTask: null
+                      taskProgressPercent: 0
+                      location:
+                        type: probe
+                      cargo:
+                        capacity: 0.05
+                        deuterium: 0
+                        metals: 0
+                        ice: 0
+                        organicCompounds: 0
+                        capacityUnit: earth_container_equivalent
+                      container:
+                        id: probe-core
+                        kind: probe
+                        label: Sonde
+                        sortOrder: 0
+                  resourceStocks:
+                    - id: probe-1-stock-metals
+                      type: metals
+                      name: Métaux
+                      amount: 0
+                      containerSpace: 0
+                      capacityUnit: earth_container_equivalent
+                      containers: []
+                    - id: probe-1-stock-ice
+                      type: ice
+                      name: Glace
+                      amount: 0
+                      containerSpace: 0
+                      capacityUnit: earth_container_equivalent
+                      containers: []
+                    - id: probe-1-stock-organic-compounds
+                      type: carbon_compounds
+                      name: Composés organiques
+                      amount: 0
+                      containerSpace: 0
+                      capacityUnit: earth_container_equivalent
+                      containers: []
+                  containers:
+                    - id: probe-core
+                      kind: probe
+                      label: Sonde
+                      sortOrder: 0
+                      capacity: 1
+                      usedCapacity: 0.5
+                      freeCapacity: 0.5
+                      capacityUnit: earth_container_equivalent
+                      rules:
+                        priority: []
+                        exclusion: []
+                        strictExclusion: []
+                  externalTanks:
+                    - id: probe-1-deuterium-tank
+                      type: deuterium
+                      name: Cuve externe de deutérium
+                      fillPercent: 100
+                      external: true
+                      usesCargoCapacity: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Probe is dead
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '400':
+          description: Sensors unavailable while cruising
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: sensors_unavailable
+                  message: External sensors are unavailable at current relativistic velocity.
+  /api/probe/move:
+    post:
+      summary: Start an asynchronous intersector movement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProbeMoveRequest'
+            example:
+              target: { x: 1, y: 1, z: 0 }
+      responses:
+        '202':
+          description: Movement accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [movement]
+                properties:
+                  movement:
+                    $ref: '#/components/schemas/ProbeMovement'
+              example:
+                movement:
+                  status: preparing
+                  origin: { x: 0, y: 0, z: 0 }
+                  target: { x: 1, y: 1, z: 0 }
+                  distance: 1
+                  fuelCostDeuterium: 2
+                  startedAt: '2026-05-28T12:00:00+00:00'
+                  arrivalAt: '2026-05-28T12:40:00+00:00'
+                  phase: preparing
+                  secondsRemaining: 2400
+                  sensorMode: normal
+                  estimatedVelocityC: 0
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Probe is already moving or dead
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                moving:
+                  value:
+                    error:
+                      code: probe_already_moving
+                      message: The probe is already moving between sectors.
+                dead:
+                  value:
+                    error:
+                      code: probe_dead
+                      message: The probe is no longer operational.
+        '422':
+          description: Insufficient deuterium
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: insufficient_fuel
+                  message: Insufficient deuterium for movement.
+  /api/probe/inventory/{itemId}:
+    get:
+      summary: Get task state for an onboard inventory item
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: mny_8d4a2c1f5a91b334
+      responses:
+        '200':
+          description: Inventory item task state
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [item]
+                properties:
+                  item:
+                    $ref: '#/components/schemas/ProbeInventoryItemTask'
+              example:
+                item:
+                  id: mny_8d4a2c1f5a91b334
+                  type: manny
+                  name: manny-1
+                  currentTask: null
+                  taskProgressPercent: 0
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/probe/inventory/{itemId}/jettison:
+    post:
+      summary: Jettison an inventory entry into space
+      description: >
+        Discards stored metals/non-metal materials by amount, ejects an idle onboard Manny
+        into the current sector, deploys a scut_relay item as an inactive SCUT
+        relay in the current sector, or adds other supported crafted items to an
+        aggregated drifting-item stack in the current sector. Non-persisted core
+        equipment and additional containers cannot be jettisoned. The external
+        deuterium tank is not jettisonable.
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+          examples:
+            metals:
+              value: probe-1-stock-metals
+            manny:
+              value: mny_8d4a2c1f5a91b334
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProbeInventoryJettisonRequest'
+            examples:
+              partialStock:
+                value:
+                  amount: 0.05
+                  containerId: probe-core
+              wholeItem:
+                value: {}
+      responses:
+        '200':
+          description: Inventory entry jettisoned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbeInventoryJettisonResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The requested Manny cannot be ejected now
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Entry cannot be jettisoned or requested amount is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/probe/mannies:
+    get:
+      summary: List persisted Manny robots for the current probe
+      description: >
+        Active Manny task details are exposed when the Manny is in the probe
+        current sector or when the Manny sector and probe sector are covered
+        by the same SCUT network. Active tasks outside that range are reported
+        as currentTask unknown_too_far with an empty task payload.
+      responses:
+        '200':
+          description: Manny robots
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [mannies]
+                properties:
+                  mannies:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Manny'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/probe/mannies/{mannyId}:
+    patch:
+      summary: Rename a Manny robot
+      parameters:
+        - $ref: '#/components/parameters/MannyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MannyRenameRequest'
+            example:
+              name: atelier
+      responses:
+        '200':
+          description: Manny renamed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manny]
+                properties:
+                  manny:
+                    $ref: '#/components/schemas/Manny'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Duplicate Manny name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/probe/mannies/{mannyId}/repair:
+    post:
+      summary: Start restoring probe integrity with a Manny
+      parameters:
+        - $ref: '#/components/parameters/MannyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MannyRepairRequest'
+            example:
+              integrityPercent: 2
+      responses:
+        '202':
+          description: Repair task accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manny]
+                properties:
+                  manny:
+                    $ref: '#/components/schemas/Manny'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Manny unavailable or probe cannot be repaired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Insufficient metals
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/probe/mannies/{mannyId}/mine:
+    post:
+      summary: Start mining a small body with a Manny
+      description: >
+        Pick objectId from a detailed SectorObject.id or from a solar system
+        minableTargets entry. Select resources from resourceTypes. For
+        asteroids, resourceAmounts is the authoritative remaining reserve in
+        equivalent earth containers; resourceComposition/resourceProfile define
+        how a multi-resource targetAmount is split. An idle Manny in another
+        sector covered by the same SCUT network can receive this order for its
+        own sector only when targetContainerId identifies a detached container
+        in that Manny sector.
+      parameters:
+        - $ref: '#/components/parameters/MannyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MannyMineRequest'
+            example:
+              objectId: mine-rock
+              resources: [metals, ice, carbon_compounds]
+              targetAmount: 0.05
+              targetContainerId: detached-container-container-itm_extra
+      responses:
+        '202':
+          description: Mining task accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manny]
+                properties:
+                  manny:
+                    $ref: '#/components/schemas/Manny'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Manny unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid target, unavailable resource, or insufficient cargo capacity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/probe/mannies/{mannyId}/craft:
+    post:
+      summary: Start crafting a Manny-built inventory item
+      description: Atomic-printer recipes must be started through `/api/probe/atomic-printer/craft`; that endpoint reserves an available Manny as printer assistant.
+      parameters:
+        - $ref: '#/components/parameters/MannyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MannyCraftRequest'
+            example:
+              recipe: waypoint_bookmark
+      responses:
+        '202':
+          description: Crafting task accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manny]
+                properties:
+                  manny:
+                    $ref: '#/components/schemas/Manny'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Manny unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Insufficient resources, ingredients, or cargo capacity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/probe/atomic-printer/craft:
+    post:
+      summary: Start crafting an atomic-printer item
+      description: >
+        Starts a recipe whose `craftableBy` includes `atomic_3d_printer`.
+        The atomic printer reserves one available Manny aboard the probe for
+        loading and unloading; that Manny exposes the
+        `assisting_atomic_printer` task until the craft completes or is
+        recalled.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AtomicPrinterCraftRequest'
+            example:
+              recipe: integrated_circuit
+      responses:
+        '202':
+          description: Atomic-printer crafting task accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manny, inventory]
+                properties:
+                  manny:
+                    $ref: '#/components/schemas/Manny'
+                  inventory:
+                    $ref: '#/components/schemas/ProbeInventory'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Atomic printer busy or no Manny available to assist it
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Insufficient resources, ingredients, or cargo capacity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/probe/mannies/{mannyId}/salvage:
+    post:
+      summary: Recover a drifting sector object with a Manny
+      description: >
+        Starts a five-minute recovery task. Recoverable targets include
+        abandoned Mannys, drifting item stacks, detached storage containers, and
+        inactive SCUT relays present in the probe current sector. The target is
+        checked again when the delay ends; if another player has already
+        recovered it or an inactive relay has been switched on, the task
+        completes with a failed result and no object is transferred.
+      parameters:
+        - $ref: '#/components/parameters/MannyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MannySalvageRequest'
+            example:
+              objectId: manny-mny_abandoned
+      responses:
+        '202':
+          description: Recovery task accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manny]
+                properties:
+                  manny:
+                    $ref: '#/components/schemas/Manny'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Manny unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Object is not recoverable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/probe/mannies/{mannyId}/detach-storage-container:
+    post:
+      summary: Detach an additional storage container
+      description: >
+        Starts a detaching_storage_container task on an idle onboard Manny.
+        The target must be an additional storage container, never probe-core.
+        The container, its stored resources/items, and routing rules are
+        removed from the probe inventory when the order is accepted. On
+        completion it becomes either a visible drifting detached container or a
+        hidden container attached to an asteroid. Hidden-asteroid detaches
+        expose artificialObjectDetected in the Manny task/result so clients can
+        immediately reference the hidden detached container id.
+      parameters:
+        - $ref: '#/components/parameters/MannyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MannyDetachStorageContainerRequest'
+            examples:
+              drifting:
+                value:
+                  containerId: container-itm_extra
+                  mode: drifting
+              hidden:
+                value:
+                  containerId: container-itm_extra
+                  mode: hidden_on_asteroid
+                  objectId: asteroid-abc123
+      responses:
+        '202':
+          description: Detach task accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manny]
+                properties:
+                  manny:
+                    $ref: '#/components/schemas/Manny'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Manny unavailable, probe moving, or probe no longer operational
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Container or asteroid target is invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/probe/mannies/{mannyId}/drop-storage-container:
+    post:
+      summary: Drop an additional storage container on a planet
+      description: >
+        Starts a dropping_storage_container task on an idle onboard Manny. The
+        target must be a planet in the current sector and the probe inventory
+        must contain one atmospheric_drop_kit. The container, its stored
+        resources/items, and routing rules are removed from the probe inventory
+        when the order is accepted, and the drop kit is consumed. On completion
+        the detached container is stored in sector JSON as attached to the
+        planet with the origin probe id, but planet-dropped containers are not
+        exposed by sector observation endpoints yet.
+      parameters:
+        - $ref: '#/components/parameters/MannyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MannyDropStorageContainerRequest'
+            example:
+              containerId: container-itm_extra
+              planetId: planet-abc123
+      responses:
+        '202':
+          description: Drop task accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manny]
+                properties:
+                  manny:
+                    $ref: '#/components/schemas/Manny'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Manny unavailable, probe moving, or probe no longer operational
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Container, planet target, or required drop kit is invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/probe/mannies/{mannyId}/inspect-asteroid:
+    post:
+      summary: Inspect an asteroid with a Manny
+      description: >
+        Sends a Manny to an asteroid and back without mining. If the asteroid
+        has a hidden detached storage container, the Manny task includes
+        artificialObjectDetected with the detached object id, but not the
+        container contents.
+      parameters:
+        - $ref: '#/components/parameters/MannyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MannyInspectAsteroidRequest'
+            example:
+              objectId: asteroid-abc123
+      responses:
+        '202':
+          description: Inspection task accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manny]
+                properties:
+                  manny:
+                    $ref: '#/components/schemas/Manny'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Manny unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Target is not an asteroid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/probe/mannies/{mannyId}/recover-storage-container:
+    post:
+      summary: Recover a detached storage container
+      description: >
+        Starts a salvage-duration recovery task for a detached storage
+        container. Drifting containers can also be recovered through the
+        salvage endpoint. Hidden containers are recovered by the object id
+        returned from mining or inspect-asteroid detection.
+      parameters:
+        - $ref: '#/components/parameters/MannyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MannyRecoverStorageContainerRequest'
+            example:
+              objectId: detached-container-container-itm_extra
+              source: asteroid
+      responses:
+        '202':
+          description: Recovery task accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manny]
+                properties:
+                  manny:
+                    $ref: '#/components/schemas/Manny'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Detached container not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Manny unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Detached container cannot be recovered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/probe/mannies/{mannyId}/install-bookmark:
+    post:
+      summary: Start installing a waypoint bookmark with a Manny
+      description: >
+        Assigns an idle onboard Manny to install one stocked waypoint bookmark
+        on a current-sector celestial object. The Manny consumes one bookmark
+        item when the order is accepted, spends 10 seconds giving it the needed
+        impulse, then the normal waypoint bookmark persistence is applied to the
+        target object.
+      parameters:
+        - $ref: '#/components/parameters/MannyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MannyWaypointBookmarkInstallRequest'
+            example:
+              objectId: asteroid-abc123
+              name: North ice marker
+      responses:
+        '202':
+          description: Bookmark installation task accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manny]
+                properties:
+                  manny:
+                    $ref: '#/components/schemas/Manny'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Manny, bookmark item, or target object not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Manny unavailable, probe already moving, or probe no longer operational
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Target is not a celestial object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/probe/mannies/{mannyId}/recall:
+    post:
+      summary: Recall an exterior Manny to the probe
+      description: >
+        Cancels the current exterior task and starts a returning task when the
+        Manny is outside the probe. By default the return lasts one Manny travel
+        time. If the cancelled task has been running for less than that travel
+        time, the Manny turns around and the return duration matches the elapsed
+        task time. When the Manny is in a different sector that shares SCUT
+        network coverage with the probe sector, the order is accepted remotely:
+        the task is cancelled, the Manny stays in that sector, and it is
+        registered there as forgotten instead of returning.
+      parameters:
+        - $ref: '#/components/parameters/MannyId'
+      responses:
+        '202':
+          description: Recall accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manny]
+                properties:
+                  manny:
+                    $ref: '#/components/schemas/Manny'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Manny is outside both the probe current sector and same-SCUT remote command range
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/probe/mannies/{mannyId}/drop-manny-cargo:
+    post:
+      summary: Drop a waiting Manny cargo and retry docking
+      description: >
+        Immediately discards the cargo of a Manny currently waiting outside for
+        storage space, then retries docking without that cargo. Resource cargo is
+        lost. Recoverable cargo objects, such as a salvaged Manny, drifting item,
+        or detached storage container, are restored to the current sector as
+        drifting/recoverable objects.
+      parameters:
+        - $ref: '#/components/parameters/MannyId'
+      responses:
+        '202':
+          description: Cargo dropped and Manny state refreshed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manny]
+                properties:
+                  manny:
+                    $ref: '#/components/schemas/Manny'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Manny is not waiting for storage space or is outside the current sector
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/probe/mannies/{mannyId}/refill-deuterium-tank:
+    post:
+      summary: Start refilling the probe deuterium tank with a Manny
+      description: >
+        Starts a one-minute Manny task that fills the probe deuterium tank to
+        its configured maximum. The current sector must contain a deuterium
+        refuel station.
+      parameters:
+        - $ref: '#/components/parameters/MannyId'
+      responses:
+        '202':
+          description: Deuterium refill task accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manny]
+                properties:
+                  manny:
+                    $ref: '#/components/schemas/Manny'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Manny is busy, unavailable, or the probe tank is already full
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: No deuterium refuel station is available in the current sector
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/probe/mannies/{mannyId}/turn-on-relay:
+    post:
+      summary: Send a Manny to turn on a SCUT relay
+      description: >
+        Starts a five-minute Manny task that turns on an inactive SCUT relay in
+        the probe current sector. The current sector must contain a star because
+        the relay needs solar energy. The task consumes one integrated_circuit
+        from the probe inventory. If the relay joins existing relay coverage,
+        the resulting network keeps the name of the largest existing network,
+        with oldest network as tie-breaker; otherwise networkName or "scut
+        network" is used.
+      parameters:
+        - $ref: '#/components/parameters/MannyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MannyTurnOnRelayRequest'
+            example:
+              relayId: 12
+              networkName: Delta SCUT
+      responses:
+        '202':
+          description: SCUT relay turn-on task accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manny, inventory]
+                properties:
+                  manny:
+                    $ref: '#/components/schemas/Manny'
+                  inventory:
+                    $ref: '#/components/schemas/ProbeInventory'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Manny unavailable, probe moving, or relay already on
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Relay is not in the current sector, the sector has no star, or the probe lacks an integrated circuit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/sector:
+    get:
+      summary: Observe a sector by player-relative coordinates
+      description: >
+        Coordinates are relative to the authenticated player's reference frame.
+        Absolute sector coordinates are never exposed. Detail depends on whether
+        the sector is current, visited, or only passively scanned from the probe
+        current sector. During blind cruise, only already visited sectors can be
+        consulted as historical cartography.
+      parameters:
+        - name: x
+          in: query
+          required: true
+          schema:
+            type: integer
+          example: 1
+        - name: y
+          in: query
+          required: true
+          schema:
+            type: integer
+          example: 1
+        - name: z
+          in: query
+          required: true
+          schema:
+            type: integer
+          example: 0
+      responses:
+        '200':
+          description: Sector observation
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sector]
+                properties:
+                  sector:
+                    $ref: '#/components/schemas/SectorObservation'
+              examples:
+                detailed:
+                  value:
+                    sector:
+                      relativeCoordinates: { x: 0, y: 0, z: 0 }
+                      distance: 0
+                      knowledgeLevel: detailed
+                      confidence: 1
+                      objects:
+                        - type: solar_system
+                          name: System abc123
+                          estimated: false
+                          summary: Stellar system with 1 star(s) and 4 orbital body(ies).
+                          radius: 5.4
+                          radiusUnit: astronomical_unit
+                          dangerLevel: low
+                        - id: mine-rock
+                          type: asteroid
+                          name: null
+                          estimated: false
+                          summary: Wandering asteroid body.
+                          mass: 0.000001
+                          massUnit: earth_mass
+                          radius: 0.001
+                          radiusUnit: earth_radius
+                          dangerLevel: low
+                          resources: [iron, nickel]
+                          resourceTypes: [metals]
+                          resourceComposition:
+                            deuterium: 0
+                            metals: 1
+                            ice: 0
+                            carbon_compounds: 0
+                          resourceAmounts:
+                            deuterium: 0
+                            metals: 1
+                            ice: 0
+                            carbon_compounds: 0
+                          mannyMineable: true
+                          composition: iron
+                        - id: planet-abc123-0
+                          type: planet
+                          name: null
+                          estimated: false
+                          summary: Planetary body detected.
+                          mass: 1
+                          massUnit: earth_mass
+                          radius: 1
+                          radiusUnit: earth_radius
+                          dangerLevel: low
+                          resources: [silicates]
+                          resourceTypes: [metals]
+                          resourceComposition:
+                            deuterium: 0
+                            metals: 1
+                            ice: 0
+                            carbon_compounds: 0
+                          mannyMineable: false
+                          category: rocky
+                          habitabilityScore: 0.72
+                      scan:
+                        currentSectorResidenceSeconds: 42
+                        requiredResidenceSeconds: 0
+                        scanQuality: 1
+                neighborScan:
+                  value:
+                    sector:
+                      relativeCoordinates: { x: 1, y: 1, z: 0 }
+                      distance: 1
+                      knowledgeLevel: neighbor_scan
+                      confidence: 0.82
+                      estimatedObjects:
+                        star: true
+                        planetCountMin: 3
+                        planetCountMax: 7
+                        blackHoleProbability: 0.01
+                        dangerEstimate: low
+                        signalAge: recent
+                      scan:
+                        currentSectorResidenceSeconds: 1832
+                        requiredResidenceSeconds: 300
+                        scanQuality: 1
+                distantScan:
+                  value:
+                    sector:
+                      relativeCoordinates: { x: 2, y: 0, z: 0 }
+                      distance: 2
+                      knowledgeLevel: distant_scan
+                      confidence: 0.41
+                      possibleObjects: [stellar_mass_detected, dust_cloud_possible]
+                      dangerEstimate: moderate
+                      scan:
+                        currentSectorResidenceSeconds: 3600
+                        requiredResidenceSeconds: 1800
+                        scanQuality: 0.5
+                longRange:
+                  value:
+                    sector:
+                      relativeCoordinates: { x: 3, y: 3, z: 0 }
+                      distance: 3
+                      knowledgeLevel: long_range_estimation
+                      confidence: 0.12
+                      navigationalRisk: high
+                      message: Insufficient sensor accuracy.
+                      scan:
+                        currentSectorResidenceSeconds: 28800
+                        requiredResidenceSeconds: 7200
+                        scanQuality: 1
+        '400':
+          description: Bad request or insufficient scan data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidCoordinates:
+                  value:
+                    error:
+                      code: bad_request
+                      message: 'Invalid coordinates (1, 0, 0): sum must be even (got 1)'
+                insufficientScanData:
+                  value:
+                    error:
+                      code: insufficient_scan_data
+                      message: Too little passive scan data available to estimate nearby objects.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Probe is dead
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Use a session token from /api/session or an API key generated from /api/me/api-key.
+  parameters:
+    MannyId:
+      name: mannyId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: mny_8d4a2c1f5a91b334
+    StorageContainerId:
+      name: containerId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: probe-core
+    MissionId:
+      name: missionId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: mis_8d4a2c1f5a91b334
+    ProbeMessageId:
+      name: messageId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+      example: 12
+    ScutNetworkId:
+      name: scutNetworkId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+      example: 4
+    DamageWarningId:
+      name: damageWarningId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+      example: 7
+    ForumCategoryId:
+      name: categoryId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+      example: 1
+    ForumPostId:
+      name: postId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+      example: 42
+    ForumMessageId:
+      name: messageId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+      example: 100
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: unauthorized
+              message: Missing or invalid bearer token
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: forbidden
+              message: Forum moderator permission is required.
+    Conflict:
+      description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    MethodNotAllowed:
+      description: Method not allowed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [bad_request, unauthorized, forbidden, not_found, method_not_allowed, insufficient_scan_data, sensors_unavailable, probe_already_moving, probe_dead, probe_trapped_by_black_hole, probe_reassignment_unavailable, insufficient_fuel, same_destination, mission_not_found, mission_not_abandonable, manny_not_found, duplicate_manny_name, manny_busy, manny_out_of_range, manny_not_on_probe, probe_integrity_full, probe_deuterium_full, insufficient_metals, insufficient_ice, insufficient_carbon_compounds, insufficient_deuterium, insufficient_crafting_ingredients, invalid_recipe, atomic_printer_busy, no_available_manny, invalid_mining_target, invalid_salvage_target, invalid_storage_container, storage_container_not_detachable, invalid_asteroid_target, invalid_planet_target, missing_atmospheric_drop_kit, detached_container_not_found, detached_container_not_recoverable, deuterium_refuel_station_not_found, scut_relay_not_found, scut_relay_not_in_sector, scut_relay_already_on, scut_relay_requires_star, missing_electronic_card, resource_unavailable, insufficient_target_resources, insufficient_cargo_capacity, item_not_jettisonable, item_not_movable, invalid_storage_move, storage_container_not_found, nothing_to_jettison, insufficient_inventory_amount, waypoint_bookmark_not_found, bookmark_target_not_found, invalid_bookmark_target, invalid_message_recipient, probe_not_in_same_sector, internal_error]
+            message:
+              type: string
+    ApiVersionResponse:
+      type: object
+      required: [apiVersion]
+      properties:
+        apiVersion:
+          type: integer
+          minimum: 1
+          description: Monotonic public API version. Increment it when the API contract changes.
+    SessionRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+    SessionResponse:
+      type: object
+      required: [token, expiresAt, player]
+      properties:
+        token:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        player:
+          $ref: '#/components/schemas/Player'
+    Player:
+      type: object
+      required: [id, username, forumAdmin, forumModerator]
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        displayName:
+          type: string
+          nullable: true
+        forumAdmin:
+          type: boolean
+        forumModerator:
+          type: boolean
+    ApiKeyResponse:
+      type: object
+      required: [apiKey]
+      properties:
+        apiKey:
+          $ref: '#/components/schemas/ApiKey'
+    ApiKey:
+      type: object
+      required: [id, token, label, lastFour, createdAt]
+      properties:
+        id:
+          type: integer
+        token:
+          type: string
+          description: Clear API key shown only once. Use it as the Bearer token.
+        label:
+          type: string
+        lastFour:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    CraftingRecipe:
+      type: object
+      required: [id, name, description, craftableBy, ingredients, durationSeconds, output]
+      properties:
+        id:
+          type: string
+          enum: [waypoint_bookmark, steel_bar, steel_plate, additional_container, micro_conductor, ceramic_insulator, crystal_substrate, dopant_matrix, integrated_circuit, electric_motor, battery_pack, linear_actuator, solar_panel, scut_relay, thermal_protection_shell, parachute_pack, descent_guidance_module, atmospheric_drop_kit, manny]
+        name:
+          type: string
+        description:
+          type: string
+          description: Human-readable description of the crafted object.
+        craftableBy:
+          type: array
+          description: Inventory item types that can start this recipe.
+          items:
+            type: string
+            enum: [manny, atomic_3d_printer]
+        ingredients:
+          type: array
+          items:
+            $ref: '#/components/schemas/CraftingRecipeIngredient'
+        durationSeconds:
+          type: integer
+          minimum: 0
+          description: Real seconds needed to complete the crafting task.
+        output:
+          $ref: '#/components/schemas/CraftingRecipeOutput'
+    CraftingRecipeIngredient:
+      type: object
+      required: [type, quantity, unit]
+      properties:
+        type:
+          type: string
+          enum: [deuterium, metals, ice, carbon_compounds, steel_bar, steel_plate, micro_conductor, ceramic_insulator, crystal_substrate, dopant_matrix, integrated_circuit, electric_motor, battery_pack, linear_actuator, solar_panel, thermal_protection_shell, parachute_pack, descent_guidance_module]
+        quantity:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+        unit:
+          type: string
+          enum: [earth_container_equivalent, item]
+        kind:
+          type: string
+          enum: [resource, item]
+    CraftingRecipeOutput:
+      type: object
+      required: [type, name, containerSpace, containerSpaceUnit]
+      properties:
+        type:
+          type: string
+          enum: [waypoint_bookmark, steel_bar, steel_plate, additional_container, micro_conductor, ceramic_insulator, crystal_substrate, dopant_matrix, integrated_circuit, electric_motor, battery_pack, linear_actuator, solar_panel, scut_relay, thermal_protection_shell, parachute_pack, descent_guidance_module, atmospheric_drop_kit, manny]
+        name:
+          type: string
+        containerSpace:
+          type: number
+          minimum: 0
+        containerSpaceUnit:
+          type: string
+          enum: [earth_container_equivalent]
+        cargoCapacity:
+          type: number
+          minimum: 0
+          description: Present only when the recipe output is a Manny.
+        cargoCapacityUnit:
+          type: string
+          enum: [earth_container_equivalent]
+          description: Present only when the recipe output is a Manny.
+        capacityBonus:
+          type: number
+          minimum: 0
+          description: Present on additional_container; each one creates one storage container.
+        capacityBonusUnit:
+          type: string
+          enum: [earth_container_equivalent]
+    Vector:
+      type: object
+      required: [x, y, z]
+      properties:
+        x: { type: number }
+        y: { type: number }
+        z: { type: number }
+    MineableResourceType:
+      type: string
+      enum: [deuterium, metals, ice, carbon_compounds]
+    ResourceHintList:
+      type: array
+      description: >
+        Raw sensor/material hints emitted by the sector generator. Asteroids
+        use strings such as iron, nickel, water_ice or carbon; clients should
+        use resourceTypes/resourceComposition for mining decisions.
+      items:
+        type: string
+    ResourceComposition:
+      type: object
+      required: [deuterium, metals, ice, carbon_compounds]
+      additionalProperties: false
+      description: >
+        Normalized mineable-resource shares. Values are rounded to four
+        decimals and normally sum to 1 when at least one resource is present.
+      properties:
+        deuterium:
+          type: number
+          minimum: 0
+          maximum: 1
+        metals:
+          type: number
+          minimum: 0
+          maximum: 1
+        ice:
+          type: number
+          minimum: 0
+          maximum: 1
+        carbon_compounds:
+          type: number
+          minimum: 0
+          maximum: 1
+    ResourceAmountMap:
+      type: object
+      required: [deuterium, metals, ice, carbon_compounds]
+      additionalProperties: false
+      description: >
+        Remaining material reserves in equivalent earth containers. Asteroids
+        expose this exact four-key object; mining subtracts from these values.
+      properties:
+        deuterium:
+          type: number
+          minimum: 0
+        metals:
+          type: number
+          minimum: 0
+        ice:
+          type: number
+          minimum: 0
+        carbon_compounds:
+          type: number
+          minimum: 0
+    MiningTarget:
+      type: object
+      required: [id, type, name, mass, resources, resourceTypes, resourceComposition]
+      properties:
+        id:
+          type: string
+          description: Object id to pass as objectId when starting a mining order.
+        type:
+          type: string
+          enum: [planet, asteroid]
+        name:
+          type: string
+          nullable: true
+          description: Public target label. For inhabited planets, generated or debug names that would reveal absolute coordinates are replaced by a player-relative label.
+        mass:
+          type: number
+        massUnit:
+          type: string
+          enum: [earth_mass]
+        radius:
+          type: number
+        radiusUnit:
+          type: string
+          enum: [earth_radius]
+        resources:
+          $ref: '#/components/schemas/ResourceHintList'
+        resourceTypes:
+          type: array
+          description: Mineable resource categories present on this target.
+          items:
+            $ref: '#/components/schemas/MineableResourceType'
+        resourceComposition:
+          $ref: '#/components/schemas/ResourceComposition'
+        resourceAmounts:
+          $ref: '#/components/schemas/ResourceAmountMap'
+        composition:
+          type: string
+          description: Asteroid composition class such as iron, silicate, carbonaceous, ice or rare_metals.
+        sizeCategory:
+          type: string
+          enum: [small, medium, large]
+        category:
+          type: string
+          description: Present for planet targets.
+        habitabilityScore:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Present for planet targets; 0 means hostile or unknown, 1 is highly habitable.
+        waypointBookmarks:
+          type: array
+          items:
+            $ref: '#/components/schemas/WaypointBookmarkHistory'
+    ProbeMoveRequest:
+      type: object
+      required: [target]
+      properties:
+        target:
+          $ref: '#/components/schemas/Vector'
+    ProbeVisitedSectorsResponse:
+      type: object
+      required: [visitedSectors]
+      properties:
+        visitedSectors:
+          type: array
+          items:
+            $ref: '#/components/schemas/VisitedSector'
+    VisitedSector:
+      type: object
+      required: [relativeCoordinates, firstVisitedAt, lastVisitedAt, visitCount]
+      properties:
+        relativeCoordinates:
+          $ref: '#/components/schemas/Vector'
+        firstVisitedAt:
+          type: string
+          format: date-time
+        lastVisitedAt:
+          type: string
+          format: date-time
+        visitCount:
+          type: integer
+          minimum: 1
+    MissionListResponse:
+      type: object
+      required: [missions]
+      properties:
+        missions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Mission'
+    MissionResponse:
+      type: object
+      required: [mission]
+      properties:
+        mission:
+          $ref: '#/components/schemas/Mission'
+    Mission:
+      type: object
+      required: [id, type, title, status, stepOrder, metadata, startedAt, createdAt, updatedAt, steps]
+      properties:
+        id:
+          type: string
+          description: Stable public mission id.
+        type:
+          type: string
+          description: Mission family identifier, chosen by the event that creates the mission. First-contact intelligent-life scenarios currently use `first_contact.return_to_space_program`.
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, completed, failed, abandoned]
+        stepOrder:
+          type: string
+          enum: [free, sequential]
+          description: Whether pending steps may be completed in any order or must follow sortOrder.
+        metadata:
+          type: object
+          description: Public mission metadata. Sector coordinates, when present, are exposed as player-relative coordinates under `sector.relative`; inhabited-planet names that would reveal absolute coordinates are replaced by a public label.
+          additionalProperties: true
+        createdByEvent:
+          type: object
+          nullable: true
+          description: Public mission creation context. Sector coordinates, when present, are exposed as player-relative coordinates under `sector.relative`.
+          additionalProperties: true
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          nullable: true
+          format: date-time
+        failedAt:
+          type: string
+          nullable: true
+          format: date-time
+        abandonedAt:
+          type: string
+          nullable: true
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/MissionStep'
+    MissionStep:
+      type: object
+      required: [id, sortOrder, title, status, metadata, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          description: Stable public mission-step id.
+        sortOrder:
+          type: integer
+          minimum: 1
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, completed, failed, skipped]
+        metadata:
+          type: object
+          additionalProperties: true
+        completedAt:
+          type: string
+          nullable: true
+          format: date-time
+        failedAt:
+          type: string
+          nullable: true
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ProbeMovement:
+      type: object
+      required: [status, origin, target, distance, fuelCostDeuterium, startedAt, arrivalAt]
+      properties:
+        status:
+          type: string
+          enum: [preparing, accelerating, cruising, decelerating, arrived, failed, destroyed]
+        origin:
+          $ref: '#/components/schemas/Vector'
+        target:
+          $ref: '#/components/schemas/Vector'
+        distance:
+          type: integer
+        fuelCostDeuterium:
+          type: number
+        startedAt:
+          type: string
+          format: date-time
+        arrivalAt:
+          type: string
+          format: date-time
+        phase:
+          type: string
+          enum: [idle, preparing, accelerating, cruising, decelerating, arrived, failed, destroyed]
+        secondsRemaining:
+          type: integer
+        sensorMode:
+          type: string
+          enum: [normal, degraded, blind]
+        estimatedVelocityC:
+          type: number
+    Probe:
+      type: object
+      required: [id, name, status, fuel, sensorMode]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        status:
+          type: string
+          enum: [idle, preparing, accelerating, cruising, decelerating, orbiting, disabled, dead, trapped_by_black_hole]
+        message:
+          type: string
+          nullable: true
+        alert:
+          nullable: true
+          $ref: '#/components/schemas/ProbeTerminalAlert'
+        fuel:
+          type: object
+          properties:
+            deuterium:
+              type: number
+        sensorMode:
+          type: string
+          enum: [normal, degraded, blind]
+        sector:
+          type: object
+          nullable: true
+          properties:
+            relative:
+              $ref: '#/components/schemas/Vector'
+        movement:
+          nullable: true
+          $ref: '#/components/schemas/ProbeMovement'
+        navigation:
+          type: object
+          properties:
+            velocityC: { type: number }
+            accelerationCPerDay: { type: number }
+            direction:
+              $ref: '#/components/schemas/Vector'
+        systems:
+          type: object
+          properties:
+            integrityPercent:
+              type: number
+              minimum: 0
+              maximum: 100
+            energyStored:
+              type: number
+            internalClockRate:
+              type: number
+            currentTask:
+              type: string
+              nullable: true
+        inventory:
+          $ref: '#/components/schemas/ProbeInventory'
+    ProbeTerminalAlert:
+      type: object
+      required: [type, severity, title, message, action]
+      properties:
+        type:
+          type: string
+          enum: [mind_snapshot_reassignment_available]
+        severity:
+          type: string
+          enum: [critical]
+        title:
+          type: string
+        message:
+          type: string
+          description: Public alert text. Sector coordinates in messages are expressed relative to the player reference frame and must not expose absolute sector coordinates.
+        action:
+          type: object
+          required: [label, method, endpoint]
+          properties:
+            label:
+              type: string
+            method:
+              type: string
+              enum: [POST]
+            endpoint:
+              type: string
+              enum: ['/api/probe/mind-snapshot/reassign']
+    ProbeMindSnapshotReassignResponse:
+      type: object
+      required: [reassigned, previousProbeId, probe, message]
+      properties:
+        reassigned:
+          type: boolean
+          enum: [true]
+        previousProbeId:
+          type: integer
+        probe:
+          $ref: '#/components/schemas/Probe'
+        message:
+          type: string
+    StorageContainer:
+      type: object
+      required: [id, kind, label, sortOrder, capacity, usedCapacity, freeCapacity, capacityUnit, rules]
+      properties:
+        id:
+          type: string
+          description: Stable storage container uid. probe-core is the probe hull.
+          example: probe-core
+        kind:
+          type: string
+          enum: [probe, container]
+        label:
+          type: string
+          example: Sonde
+        sortOrder:
+          type: integer
+        capacity:
+          type: number
+          example: 1
+        usedCapacity:
+          type: number
+        freeCapacity:
+          type: number
+        capacityUnit:
+          type: string
+          enum: [earth_container_equivalent]
+        rules:
+          $ref: '#/components/schemas/StorageContainerRules'
+    StorageContainerSummary:
+      type: object
+      required: [id, kind, label, sortOrder]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [probe, container]
+        label:
+          type: string
+        sortOrder:
+          type: integer
+    StorageContainerRules:
+      type: object
+      properties:
+        priority:
+          type: array
+          items:
+            type: string
+          description: Item/resource types routed here first when new stock arrives.
+        exclusion:
+          type: array
+          items:
+            type: string
+          description: Item/resource types routed here only if no regular destination has room.
+        strictExclusion:
+          type: array
+          items:
+            type: string
+          description: Item/resource types never automatically routed here.
+    StorageContainerRenameRequest:
+      type: object
+      required: [label]
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 80
+          description: New player-facing label for the storage container.
+          example: Soute metaux
+    StorageContainerRenameResponse:
+      type: object
+      required: [container, inventory]
+      properties:
+        container:
+          $ref: '#/components/schemas/StorageContainer'
+        inventory:
+          $ref: '#/components/schemas/ProbeInventory'
+    StorageContainerRulesResponse:
+      type: object
+      required: [container, inventory]
+      properties:
+        container:
+          $ref: '#/components/schemas/StorageContainer'
+        inventory:
+          $ref: '#/components/schemas/ProbeInventory'
+    StorageContainerInventoryResponse:
+      type: object
+      required: [container, inventory]
+      properties:
+        container:
+          $ref: '#/components/schemas/StorageContainer'
+        inventory:
+          type: object
+          required: [capacityUnit, items, resourceStocks]
+          properties:
+            capacityUnit:
+              type: string
+              enum: [earth_container_equivalent]
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/ProbeInventoryItem'
+            resourceStocks:
+              type: array
+              items:
+                $ref: '#/components/schemas/ProbeResourceStock'
+    StorageMoveRequest:
+      type: object
+      required: [actorMannyId, kind, toContainerId]
+      properties:
+        actorMannyId:
+          type: string
+          description: Idle onboard Manny that will perform the move.
+        kind:
+          type: string
+          enum: [resource, item, manny]
+        toContainerId:
+          type: string
+        fromContainerId:
+          type: string
+          description: Required for resource moves.
+        resourceType:
+          type: string
+          enum: [metals, ice, carbon_compounds]
+        amount:
+          type: number
+          description: Required for resource moves, in ECE.
+        itemId:
+          type: string
+          description: Single item id for item moves. Use itemIds for batch moves.
+        itemIds:
+          type: array
+          description: Multiple item ids for batch item moves.
+          items:
+            type: string
+        targetMannyId:
+          type: string
+          description: Single Manny id for Manny moves. Use targetMannyIds for batch moves.
+        targetMannyIds:
+          type: array
+          description: Multiple Manny ids for batch Manny storage moves.
+          items:
+            type: string
+        quantity:
+          type: integer
+          minimum: 1
+          description: Optional cap applied to itemIds or targetMannyIds.
+    ProbeMessageSendRequest:
+      type: object
+      required: [body]
+      description: Provide `recipient`, or alternatively `recipientId` with optional `recipientType`. If no type is provided, `probe` is used.
+      properties:
+        recipient:
+          $ref: '#/components/schemas/ProbeMessageRecipientRequest'
+        recipientId:
+          oneOf:
+            - type: integer
+              minimum: 1
+            - type: string
+          description: Alternative recipient id. Used with `recipientType` or default `probe`.
+        recipientType:
+          type: string
+          enum: [probe, planet]
+          default: probe
+          description: Alternative recipient type for clients that do not send `recipient`.
+        recipientProbeId:
+          type: integer
+          minimum: 1
+          deprecated: true
+          description: 'Legacy shortcut for `recipient: { type: probe, id: ... }`.'
+        recipientPlanetId:
+          type: string
+          deprecated: true
+          description: 'Legacy shortcut for `recipient: { type: planet, id: ... }`.'
+        body:
+          type: string
+          minLength: 1
+          maxLength: 2000
+    ProbeMessageRecipientRequest:
+      type: object
+      required: [id]
+      properties:
+        type:
+          type: string
+          enum: [probe, planet]
+          default: probe
+        id:
+          oneOf:
+            - type: integer
+              minimum: 1
+            - type: string
+          description: Probe id for `probe`, planet object id for `planet`.
+    ProbeMessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          $ref: '#/components/schemas/ProbeMessage'
+    ProbeMessagesResponse:
+      type: object
+      required: [messages, pagination]
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProbeMessage'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    ProbeSentMessagesResponse:
+      type: object
+      required: [messages, pagination]
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProbeSentMessage'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    Pagination:
+      type: object
+      required: [limit, offset, count, total, hasMore]
+      properties:
+        limit:
+          type: integer
+          minimum: 1
+        offset:
+          type: integer
+          minimum: 0
+        count:
+          type: integer
+          minimum: 0
+        total:
+          type: integer
+          minimum: 0
+        hasMore:
+          type: boolean
+    DeleteResponse:
+      type: object
+      required: [deleted]
+      properties:
+        deleted:
+          type: boolean
+    ForumAuthor:
+      type: object
+      required: [playerId, username, displayName]
+      properties:
+        playerId:
+          type: integer
+        username:
+          type: string
+        displayName:
+          type: string
+          nullable: true
+    ForumCategory:
+      type: object
+      required: [id, name, description, sortOrder, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        sortOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ForumCategoryWriteRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        description:
+          type: string
+          nullable: true
+          maxLength: 1000
+        sortOrder:
+          type: integer
+    ForumCategoryPatchRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        description:
+          type: string
+          nullable: true
+          maxLength: 1000
+        sortOrder:
+          type: integer
+    ForumCategoryResponse:
+      type: object
+      required: [category]
+      properties:
+        category:
+          $ref: '#/components/schemas/ForumCategory'
+    ForumCategoriesResponse:
+      type: object
+      required: [categories]
+      properties:
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/ForumCategory'
+    ForumPost:
+      type: object
+      required: [id, categoryId, author, title, pinned, firstMessageId, messageCount, createdAt, updatedAt, lastMessageAt]
+      properties:
+        id:
+          type: integer
+        categoryId:
+          type: integer
+        author:
+          $ref: '#/components/schemas/ForumAuthor'
+        title:
+          type: string
+        pinned:
+          type: boolean
+        firstMessageId:
+          type: integer
+          nullable: true
+        messageCount:
+          type: integer
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        lastMessageAt:
+          type: string
+          format: date-time
+    ForumPostCreateRequest:
+      type: object
+      required: [categoryId, title, body]
+      properties:
+        categoryId:
+          type: integer
+          minimum: 1
+        title:
+          type: string
+          minLength: 1
+          maxLength: 160
+        body:
+          type: string
+          minLength: 1
+          maxLength: 5000
+    ForumPostPatchRequest:
+      type: object
+      properties:
+        categoryId:
+          type: integer
+          minimum: 1
+        title:
+          type: string
+          minLength: 1
+          maxLength: 160
+        pinned:
+          type: boolean
+    ForumPostResponse:
+      type: object
+      required: [post, firstMessage]
+      properties:
+        post:
+          $ref: '#/components/schemas/ForumPost'
+        firstMessage:
+          allOf:
+            - $ref: '#/components/schemas/ForumMessage'
+          nullable: true
+    ForumPostsResponse:
+      type: object
+      required: [posts, pagination]
+      properties:
+        posts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ForumPost'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    ForumMessage:
+      type: object
+      required: [id, postId, author, body, createdAt, updatedAt, editedAt]
+      properties:
+        id:
+          type: integer
+        postId:
+          type: integer
+        author:
+          $ref: '#/components/schemas/ForumAuthor'
+        body:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        editedAt:
+          type: string
+          format: date-time
+          nullable: true
+    ForumMessageWriteRequest:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+          minLength: 1
+          maxLength: 5000
+    ForumMessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          $ref: '#/components/schemas/ForumMessage'
+    ForumMessagesResponse:
+      type: object
+      required: [messages, pagination]
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ForumMessage'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    ForumPostWithMessagesResponse:
+      type: object
+      required: [post, firstMessage, messages, pagination]
+      properties:
+        post:
+          $ref: '#/components/schemas/ForumPost'
+        firstMessage:
+          allOf:
+            - $ref: '#/components/schemas/ForumMessage'
+          nullable: true
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ForumMessage'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    ProbeMessage:
+      type: object
+      required: [id, sender, recipient, sector, body, status, readAt, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        sender:
+          $ref: '#/components/schemas/ProbeMessageEndpoint'
+        recipient:
+          $ref: '#/components/schemas/ProbeMessageEndpoint'
+        sector:
+          type: object
+          required: [relative]
+          properties:
+            relative:
+              $ref: '#/components/schemas/Vector'
+        body:
+          type: string
+        status:
+          type: string
+          enum: [unread, read]
+        readAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ProbeSentMessage:
+      type: object
+      required: [id, sender, recipient, sector, body, createdAt]
+      properties:
+        id:
+          type: integer
+        sender:
+          $ref: '#/components/schemas/ProbeMessageEndpoint'
+        recipient:
+          $ref: '#/components/schemas/ProbeMessageEndpoint'
+        sector:
+          type: object
+          required: [relative]
+          properties:
+            relative:
+              $ref: '#/components/schemas/Vector'
+        body:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    ProbeDamageWarningsResponse:
+      type: object
+      required: [damageWarnings, rule]
+      properties:
+        damageWarnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProbeDamageWarning'
+        rule:
+          $ref: '#/components/schemas/ProbeDamageWarningRule'
+    ProbeDamageWarningResponse:
+      type: object
+      required: [damageWarning]
+      properties:
+        damageWarning:
+          $ref: '#/components/schemas/ProbeDamageWarning'
+    ProbeAlertsResponse:
+      type: object
+      required: [alerts, rules]
+      properties:
+        alerts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProbeDamageWarning'
+        rules:
+          type: object
+          required: [storageContainerBreak]
+          properties:
+            storageContainerBreak:
+              $ref: '#/components/schemas/ProbeDamageWarningRule'
+    ProbeAlertResponse:
+      type: object
+      required: [alert]
+      properties:
+        alert:
+          $ref: '#/components/schemas/ProbeDamageWarning'
+    ProbeDamageWarning:
+      type: object
+      required: [id, type, status, message, phase, scheduledAt, sector, createdAt, updatedAt, readAt, resolvedAt]
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          enum: [storage_container_break, intelligent_life, sector_object_detected, anomaly_detected]
+        status:
+          type: string
+          enum: [unread, read]
+        message:
+          type: string
+          description: Public alert text. Sector coordinates in messages are expressed relative to the player reference frame and must not expose absolute sector coordinates.
+        phase:
+          type: string
+          enum: [acceleration_end, deceleration_start, arrival, detection]
+        scheduledAt:
+          type: string
+          format: date-time
+        sector:
+          type: object
+          required: [relative]
+          properties:
+            relative:
+              $ref: '#/components/schemas/Vector'
+        container:
+          type: object
+          description: Present for `storage_container_break` alerts.
+          required: [id, label, objectId]
+          properties:
+            id:
+              type: string
+            label:
+              type: string
+            objectId:
+              type: string
+        risk:
+          type: object
+          description: Present for `storage_container_break` alerts.
+          required: [percent, additionalContainerCount]
+          properties:
+            percent:
+              type: integer
+              minimum: 0
+              maximum: 100
+            additionalContainerCount:
+              type: integer
+              minimum: 0
+            ruleStartsAtAdditionalContainers:
+              type: integer
+              minimum: 1
+        planet:
+          type: object
+          description: Present for `intelligent_life` alerts.
+          required: [id, name]
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+              nullable: true
+              description: Public planet label; inhabited-planet names that would reveal absolute coordinates are replaced by a public label.
+        object:
+          type: object
+          description: Present for `sector_object_detected` alerts.
+          required: [id, type, label, resourceTypes]
+          properties:
+            id:
+              type: string
+              description: Opaque sector object id. It must not be interpreted as coordinates.
+            type:
+              type: string
+              example: asteroid
+            label:
+              type: string
+              nullable: true
+            resourceTypes:
+              type: array
+              items:
+                type: string
+                enum: [deuterium, metals, ice, carbon_compounds]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        readAt:
+          type: string
+          format: date-time
+          nullable: true
+        resolvedAt:
+          type: string
+          format: date-time
+          nullable: true
+    ProbeDamageWarningRule:
+      type: object
+      required: [type, startsAtAdditionalContainers, riskPerAdditionalContainerAfterFourPercent, maximumRiskPercent, message]
+      properties:
+        type:
+          type: string
+          enum: [storage_container_break]
+        startsAtAdditionalContainers:
+          type: integer
+          example: 5
+        riskPerAdditionalContainerAfterFourPercent:
+          type: integer
+          example: 10
+        maximumRiskPercent:
+          type: integer
+          example: 100
+        message:
+          type: string
+    ProbeMessageEndpoint:
+      type: object
+      required: [type, id, name]
+      properties:
+        type:
+          type: string
+          enum: [probe, planet, unknown]
+        id:
+          oneOf:
+            - type: integer
+            - type: string
+          description: Numeric probe id for probe endpoints, opaque planet object id for planet endpoints, or opaque sender id for unknown endpoints. Planet ids must not be interpreted as coordinates.
+        probeId:
+          type: integer
+          description: Present when `type` is `probe`.
+        planetId:
+          type: string
+          description: Present when `type` is `planet`.
+        name:
+          type: string
+          description: Public endpoint label. Planet endpoint names that would reveal absolute coordinates are replaced by a public label; unknown endpoints may use a generic sender label.
+    ProbeInventory:
+      type: object
+      required: [capacity, capacityUnit, usedCapacity, freeCapacity, items, resourceStocks, containers, externalTanks]
+      properties:
+        capacity:
+          type: number
+          description: Maximum transport capacity in equivalent earth containers.
+          example: 1
+        capacityUnit:
+          type: string
+          enum: [earth_container_equivalent]
+        usedCapacity:
+          type: number
+          example: 0.5
+        freeCapacity:
+          type: number
+          example: 0.5
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProbeInventoryItem'
+        resourceStocks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProbeResourceStock'
+        containers:
+          type: array
+          description: Probe core and additional storage containers, including their routing rules.
+          items:
+            $ref: '#/components/schemas/StorageContainer'
+        externalTanks:
+          type: array
+          description: Special external tanks that do not consume cargo capacity.
+          items:
+            $ref: '#/components/schemas/ProbeExternalTank'
+    ProbeResourceStock:
+      type: object
+      required: [id, type, name, amount, containerSpace, capacityUnit, containers]
+      properties:
+        id:
+          type: string
+          description: Stable inventory id used for jettison orders.
+          example: probe-1-stock-metals
+        type:
+          type: string
+          enum: [metals, ice, carbon_compounds]
+        name:
+          type: string
+        amount:
+          type: number
+          description: Stored amount in equivalent earth containers.
+        containerSpace:
+          type: number
+        capacityUnit:
+          type: string
+          enum: [earth_container_equivalent]
+        containers:
+          type: array
+          description: Per-container placement lines for this resource stock.
+          items:
+            type: object
+            required: [container, amount, containerSpace, capacityUnit]
+            properties:
+              container:
+                $ref: '#/components/schemas/StorageContainerSummary'
+              amount:
+                type: number
+              containerSpace:
+                type: number
+              capacityUnit:
+                type: string
+                enum: [earth_container_equivalent]
+    ProbeExternalTank:
+      type: object
+      required: [id, type, name, fillPercent, external, usesCargoCapacity]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [deuterium]
+        name:
+          type: string
+        fillPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+        external:
+          type: boolean
+          enum: [true]
+        usesCargoCapacity:
+          type: boolean
+          enum: [false]
+    ProbeInventoryJettisonRequest:
+      type: object
+      properties:
+        amount:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          description: >
+            Amount to discard. For stored metals/non-metal materials this uses
+            equivalent earth containers; for the deuterium tank this uses tank
+            percentage points. Omit it to discard the full selected stock.
+        containerId:
+          type: string
+          description: Optional source container id for stored resource jettison.
+    ProbeInventoryJettisonResponse:
+      type: object
+      required: [inventory]
+      properties:
+        inventory:
+          $ref: '#/components/schemas/ProbeInventory'
+        jettisoned:
+          type: object
+          nullable: true
+          properties:
+            type:
+              type: string
+              enum: [deuterium, metals, ice, carbon_compounds, waypoint_bookmark, steel_bar, steel_plate, micro_conductor, ceramic_insulator, crystal_substrate, dopant_matrix, integrated_circuit, electric_motor, battery_pack, linear_actuator, solar_panel, scut_relay, thermal_protection_shell, parachute_pack, descent_guidance_module, atmospheric_drop_kit]
+            amount:
+              type: number
+              description: Present for discarded resources and deuterium.
+            quantity:
+              type: integer
+              description: Present for crafted items added to a drifting sector stack.
+            driftingQuantity:
+              type: integer
+              description: Total quantity of this crafted item type now drifting in the current sector.
+            objectId:
+              type: string
+              description: Current-sector drifting item object id for crafted item jettison, or SCUT relay object id for scut_relay jettison.
+            status:
+              type: string
+              enum: [off]
+              description: Present for scut_relay jettison.
+            containerSpace:
+              type: number
+        manny:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Manny'
+    MannyWaypointBookmarkInstallRequest:
+      type: object
+      required: [objectId, name]
+      properties:
+        objectId:
+          type: string
+          description: Celestial object id in the probe current sector. Solar-system orbital bodies can be targeted by their object id.
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+          description: Player-facing name to assign to the target object.
+    ProbeInventoryItem:
+      type: object
+      required: [id, type, name, containerSpace, currentTask, taskProgressPercent]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [atomic_3d_printer, manny, waypoint_bookmark, steel_bar, steel_plate, additional_container, micro_conductor, ceramic_insulator, crystal_substrate, dopant_matrix, integrated_circuit, electric_motor, battery_pack, linear_actuator, solar_panel, scut_relay, thermal_protection_shell, parachute_pack, descent_guidance_module, atmospheric_drop_kit]
+        name:
+          type: string
+        containerSpace:
+          type: number
+          description: Space occupied in equivalent earth containers.
+        currentTask:
+          type: string
+          nullable: true
+        taskProgressPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+        location:
+          $ref: '#/components/schemas/MannyLocation'
+        cargo:
+          $ref: '#/components/schemas/MannyCargo'
+        container:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/StorageContainerSummary'
+        metadata:
+          type: object
+          additionalProperties: true
+    ProbeInventoryItemTask:
+      type: object
+      required: [id, type, name, currentTask, taskProgressPercent]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [atomic_3d_printer, manny, waypoint_bookmark, steel_bar, steel_plate, additional_container, micro_conductor, ceramic_insulator, crystal_substrate, dopant_matrix, integrated_circuit, electric_motor, battery_pack, linear_actuator, solar_panel, scut_relay, thermal_protection_shell, parachute_pack, descent_guidance_module, atmospheric_drop_kit]
+        name:
+          type: string
+        currentTask:
+          type: string
+          nullable: true
+        taskProgressPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+        location:
+          $ref: '#/components/schemas/MannyLocation'
+        cargo:
+          $ref: '#/components/schemas/MannyCargo'
+        container:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/StorageContainerSummary'
+        metadata:
+          type: object
+          additionalProperties: true
+    MannyRenameRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 40
+    MannyRepairRequest:
+      type: object
+      required: [integrityPercent]
+      properties:
+        integrityPercent:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          maximum: 100
+          description: Integrity percentage to restore. Each percent takes 10 real minutes and consumes 0.01 containers of metals.
+        percent:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          maximum: 100
+          deprecated: true
+          description: Legacy alias for integrityPercent.
+    MannyTurnOnRelayRequest:
+      type: object
+      required: [relayId]
+      properties:
+        relayId:
+          type: integer
+          minimum: 1
+          description: Id of an inactive SCUT relay in the probe current sector.
+        networkName:
+          type: string
+          nullable: true
+          maxLength: 255
+          description: Optional name for a newly isolated network. Ignored when the relay joins existing coverage.
+    MannyMineRequest:
+      type: object
+      required: [objectId, targetAmount]
+      oneOf:
+        - required: [objectId, resources, targetAmount]
+        - required: [objectId, resource, targetAmount]
+      properties:
+        objectId:
+          type: string
+        resources:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/MineableResourceType'
+          description: Resource categories to mine, chosen from the target object's resourceTypes. The extracted amount is split according to resourceComposition, normalized over the selected categories.
+        resource:
+          allOf:
+            - $ref: '#/components/schemas/MineableResourceType'
+          deprecated: true
+          description: Legacy single resource selector. Prefer resources.
+        targetAmount:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          description: Amount to mine in equivalent earth containers. Manny cargo capacity is 0.05 per trip.
+        targetContainerId:
+          type: string
+          description: >
+            Optional detached storage container object id in the task sector.
+            When omitted, mined resources are delivered to the probe, which is
+            allowed only for a Manny operating in the probe sector. Remote
+            same-SCUT mining requires this field and the referenced container
+            must be detached in the Manny sector. When it targets a visible
+            drifting container or a hidden container on
+            another asteroid, normal mining travel time still applies. When it
+            targets a hidden container on the asteroid being mined, travel time
+            is deducted and only extraction time remains. If the container has
+            less free capacity than targetAmount, the task is capped to its
+            free capacity. Detached storage containers cannot receive
+            deuterium, which remains reserved for the probe external tank.
+    MannyCraftRequest:
+      type: object
+      required: [recipe]
+      properties:
+        recipe:
+          type: string
+          enum: [waypoint_bookmark, steel_bar, steel_plate, additional_container, electric_motor, battery_pack, linear_actuator, solar_panel, scut_relay, thermal_protection_shell, parachute_pack, descent_guidance_module, atmospheric_drop_kit, manny]
+          description: >
+            Crafting recipe to start. Manny craftable items can be jettisoned
+            later, except additional containers whose jettison mechanic is
+            reserved for a later rule.
+    AtomicPrinterCraftRequest:
+      type: object
+      required: [recipe]
+      properties:
+        recipe:
+          type: string
+          enum: [micro_conductor, ceramic_insulator, crystal_substrate, dopant_matrix, integrated_circuit]
+          description: Atomic-printer recipe to start. An available Manny aboard the probe is automatically reserved as assistant.
+    MannySalvageRequest:
+      type: object
+      required: [objectId]
+      properties:
+        objectId:
+          type: string
+          description: >
+            Current-sector object id to recover. Abandoned Manny objects and
+            drifting crafted-item stacks are recoverable. Visible detached
+            storage containers are also recoverable and keep their hidden
+            contents out of sector observations. For item stacks, a Manny
+            reserves at most one cargo trip of items.
+    MannyDetachStorageContainerRequest:
+      type: object
+      required: [containerId, mode]
+      properties:
+        containerId:
+          type: string
+          description: Additional storage container id. probe-core is not detachable.
+          example: container-itm_extra
+        mode:
+          type: string
+          enum: [drifting, hidden_on_asteroid]
+        objectId:
+          type: string
+          description: Required when mode is hidden_on_asteroid; must be an asteroid id in the current sector.
+    MannyDropStorageContainerRequest:
+      type: object
+      required: [containerId, planetId]
+      properties:
+        containerId:
+          type: string
+          description: Additional storage container id. probe-core is not droppable.
+          example: container-itm_extra
+        planetId:
+          type: string
+          description: Current-sector planet id receiving the dropped container.
+          example: planet-abc123
+    MannyInspectAsteroidRequest:
+      type: object
+      required: [objectId]
+      properties:
+        objectId:
+          type: string
+          description: Current-sector asteroid id to inspect.
+    MannyRecoverStorageContainerRequest:
+      type: object
+      required: [objectId]
+      properties:
+        objectId:
+          type: string
+          description: Detached container object id returned by observation or hidden-object detection.
+        source:
+          type: string
+          enum: [drifting, asteroid]
+          description: Optional hint for clients; recovery is resolved by objectId.
+    ArtificialObjectDetection:
+      type: object
+      required: [type, detection]
+      properties:
+        type:
+          type: string
+          enum: [detached_storage_container]
+        detection:
+          type: string
+          enum: [hidden_on_asteroid]
+        objectId:
+          type: string
+          description: Recoverable detached container id when detection yields one.
+        targetObjectId:
+          type: string
+          nullable: true
+          description: Asteroid id that holds the hidden detached container when known.
+    MannyMiningTask:
+      type: object
+      required: [objectId, resourceType, resourceTypes, targetAmount, depositedAmount, depositedResources, extractedAmount, extractedResources, availableResources, resourceComposition, resourceProfile, target]
+      properties:
+        objectId:
+          type: string
+          description: Sector object being mined.
+        resourceType:
+          allOf:
+            - $ref: '#/components/schemas/MineableResourceType'
+          description: Legacy first selected resource; prefer resourceTypes.
+        resourceTypes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/MineableResourceType'
+        targetAmount:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          description: Requested total amount in equivalent earth containers.
+        depositedAmount:
+          type: number
+          minimum: 0
+          description: Amount already delivered to the probe.
+        depositedResources:
+          anyOf:
+            - $ref: '#/components/schemas/ResourceAmountMap'
+            - type: array
+              maxItems: 0
+        extractedAmount:
+          type: number
+          minimum: 0
+          description: Amount already extracted from the target.
+        extractedResources:
+          anyOf:
+            - $ref: '#/components/schemas/ResourceAmountMap'
+            - type: array
+              maxItems: 0
+        availableResources:
+          type: array
+          description: Resource categories currently available on the target after existing Manny reservations.
+          items:
+            $ref: '#/components/schemas/MineableResourceType'
+        resourceComposition:
+          $ref: '#/components/schemas/ResourceComposition'
+        resourceProfile:
+          allOf:
+            - $ref: '#/components/schemas/ResourceComposition'
+          description: Normalized split applied to the selected resourceTypes for this order.
+        target:
+          $ref: '#/components/schemas/MiningTarget'
+        requestedTargetAmount:
+          type: number
+          minimum: 0
+          description: Present when targetAmount was capped by the target detached container free capacity.
+        miningTravelSeconds:
+          type: integer
+          minimum: 0
+          description: Travel time applied to each outbound or return leg for this mining task; 0 when mining directly into a hidden container on the mined asteroid.
+        targetContainer:
+          type: object
+          description: Present when mined resources are delivered to a detached storage container instead of the probe.
+          required: [id, type, mode, capacity, capacityUnit, travelDeducted]
+          properties:
+            id:
+              type: string
+            type:
+              type: string
+              enum: [detached_container]
+            name:
+              type: string
+              nullable: true
+            mode:
+              type: string
+              enum: [drifting, hidden_on_asteroid]
+            targetObjectId:
+              type: string
+              nullable: true
+            capacity:
+              type: number
+              minimum: 0
+            capacityUnit:
+              type: string
+              enum: [earth_container_equivalent]
+            travelDeducted:
+              type: boolean
+        targetContainerFull:
+          type: boolean
+          description: Present when the task stopped because the target detached container became full.
+        artificialObjectDetected:
+          $ref: '#/components/schemas/ArtificialObjectDetection'
+    Manny:
+      type: object
+      required: [id, name, location, currentTask, taskProgressPercent, taskEstimatedEndTime, task, taskVisibility, cargo, canReceiveOrders]
+      properties:
+        id:
+          type: string
+          description: Stable generated Manny uid used by API calls.
+          example: mny_8d4a2c1f5a91b334
+        name:
+          type: string
+          example: manny-1
+        location:
+          $ref: '#/components/schemas/MannyLocation'
+        currentTask:
+          type: string
+          nullable: true
+          enum: [repair, mining, crafting, assisting_atomic_printer, salvage, installing_waypoint_bookmark, detaching_storage_container, dropping_storage_container, inspecting_asteroid, refilling_deuterium_tank, turning_on_scut_relay, returning, waiting_for_space, moving_stockage, unknown_too_far]
+        taskProgressPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+        taskEstimatedEndTime:
+          type: string
+          format: date-time
+          nullable: true
+          description: Estimated ISO-8601 completion time for the current task, or null when idle.
+        task:
+          description: >
+            Current task payload. When currentTask is mining, this payload has
+            the MannyMiningTask shape, including target.resourceAmounts for
+            asteroids and resourceProfile for the selected split. Sensitive
+            internal task state such as detached-container reservation objects,
+            detached-container snapshots, and absolute target sectors is omitted
+            from public responses. Idle Mannys and active Mannys outside local
+            or same-SCUT telemetry range may expose an empty payload.
+          anyOf:
+            - $ref: '#/components/schemas/MannyMiningTask'
+            - type: object
+              additionalProperties: true
+            - type: array
+              maxItems: 0
+        taskVisibility:
+          type: string
+          enum: [local, scut_network, too_far]
+          description: >
+            Visibility of the Manny task telemetry from the current probe:
+            local for the current sector or probe rack, scut_network for a
+            different sector covered by the same SCUT network, too_far when
+            task details are not available.
+        cargo:
+          $ref: '#/components/schemas/MannyCargo'
+        canReceiveOrders:
+          type: boolean
+    MannyLocation:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [probe, sector]
+        sector:
+          type: object
+          nullable: true
+          properties:
+            relative:
+              $ref: '#/components/schemas/Vector'
+    MannyCargo:
+      type: object
+      required: [capacity, deuterium, metals, ice, organicCompounds, capacityUnit]
+      properties:
+        capacity:
+          type: number
+          example: 0.05
+        deuterium:
+          type: number
+        metals:
+          type: number
+        ice:
+          type: number
+        organicCompounds:
+          type: number
+        capacityUnit:
+          type: string
+          enum: [earth_container_equivalent]
+    SectorSummary:
+      type: object
+      required: [coordinates, objects]
+      properties:
+        coordinates:
+          type: object
+          properties:
+            relative:
+              $ref: '#/components/schemas/Vector'
+        objects:
+          type: array
+          description: Detailed current or visited sector objects. Abandoned or forgotten Manny objects are included only when the observed sector is the probe current sector.
+          items:
+            $ref: '#/components/schemas/SectorObject'
+    ScutNetworkReference:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        name:
+          type: string
+    ScutRelay:
+      type: object
+      required: [id, type, name, status, sector, coverageRadiusSectors]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        type:
+          type: string
+          enum: [scut_relay]
+        name:
+          type: string
+        status:
+          type: string
+          enum: [off, on]
+        sector:
+          type: object
+          required: [relative]
+          properties:
+            relative:
+              $ref: '#/components/schemas/Vector'
+        createdByProbeId:
+          type: integer
+          nullable: true
+        createdByProbeName:
+          type: string
+          nullable: true
+          description: Probe name when the creator still exists, "death probe" when createdByProbeId points to a deleted probe, null when no creator was recorded.
+        createdAt:
+          type: string
+          format: date-time
+        activatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        coverageRadiusSectors:
+          type: integer
+          minimum: 0
+        network:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ScutNetworkReference'
+    ScutNetwork:
+      type: object
+      required: [id, name, createdAt, updatedAt, relayCount, coveredSectorCount, relays, probes]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        relayCount:
+          type: integer
+          minimum: 0
+        coveredSectorCount:
+          type: integer
+          minimum: 0
+        relays:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScutRelay'
+        probes:
+          type: array
+          items:
+            type: object
+            required: [id, name, sector]
+            properties:
+              id:
+                type: integer
+              name:
+                type: string
+              sector:
+                type: object
+                required: [relative]
+                properties:
+                  relative:
+                    $ref: '#/components/schemas/Vector'
+    ScutNetworkResponse:
+      type: object
+      required: [network]
+      properties:
+        network:
+          $ref: '#/components/schemas/ScutNetwork'
+    SectorObservation:
+      type: object
+      required: [relativeCoordinates, distance, knowledgeLevel, confidence, scan]
+      properties:
+        relativeCoordinates:
+          $ref: '#/components/schemas/Vector'
+        distance:
+          type: integer
+        knowledgeLevel:
+          type: string
+          enum: [detailed, neighbor_scan, distant_scan, long_range_estimation]
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        objects:
+          type: array
+          description: Detailed current or visited sector objects. Abandoned or forgotten Manny objects are included only when the observed sector is the probe current sector.
+          items:
+            $ref: '#/components/schemas/SectorObject'
+        probes:
+          type: array
+          description: Other probes detected in the current sector. Present only on current-sector observations when at least one other probe is detected.
+          items:
+            $ref: '#/components/schemas/SectorProbePresence'
+        scutNetworks:
+          type: array
+          description: SCUT relay networks covering this sector, when known.
+          items:
+            $ref: '#/components/schemas/ScutNetworkReference'
+        estimatedObjects:
+          type: object
+          additionalProperties: true
+        possibleObjects:
+          type: array
+          items:
+            type: string
+        navigationalRisk:
+          type: string
+        message:
+          type: string
+        sensorMode:
+          type: string
+          enum: [normal, degraded, blind]
+        dataFreshness:
+          type: string
+          enum: [live, degraded_live, historical, unavailable]
+        scan:
+          type: object
+          required: [currentSectorResidenceSeconds, requiredResidenceSeconds, scanQuality]
+          properties:
+            currentSectorResidenceSeconds:
+              type: integer
+            requiredResidenceSeconds:
+              type: integer
+            scanQuality:
+              type: number
+              minimum: 0
+              maximum: 1
+    SectorProbePresence:
+      type: object
+      required: [id, name, moving]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        moving:
+          type: boolean
+    SectorObject:
+      type: object
+      required: [type, name, summary]
+      properties:
+        id:
+          type: string
+          description: Opaque object id. Clients must not parse coordinates from it. For scut_relay objects this is the relay integer id serialized as a string; pass it as an integer relayId to turn-on-relay.
+        type:
+          type: string
+          enum: [star, planet, asteroid, dust_cloud, black_hole, solar_system, manny, drifting_item, detached_container, deuterium_refuel_station, scut_relay]
+        name:
+          type: string
+          nullable: true
+          description: Public object label. For inhabited planets, generated or debug names that would reveal absolute coordinates are replaced by a player-relative label.
+        estimated:
+          type: boolean
+        summary:
+          type: string
+        mass:
+          type: number
+        massUnit:
+          type: string
+          enum: [solar_mass, earth_mass]
+          description: Unit used by mass when present. Stars, black holes and dust clouds use solar_mass; planets and asteroids use earth_mass.
+        radius:
+          type: number
+        radiusUnit:
+          type: string
+          enum: [solar_radius, earth_radius, kilometer, astronomical_unit]
+          description: Unit used by radius when present. Stars use solar_radius; planets and asteroids use earth_radius; black holes use kilometer; solar systems and dust clouds use astronomical_unit.
+        dangerLevel:
+          type: string
+          enum: [low, moderate, extreme]
+        starCount:
+          type: integer
+          minimum: 0
+          description: Present on solar systems.
+        planetCount:
+          type: integer
+          minimum: 0
+          description: Present on solar systems.
+        orbitalBodyCount:
+          type: integer
+          minimum: 0
+          description: Present on solar systems.
+        resources:
+          $ref: '#/components/schemas/ResourceHintList'
+        resourceTypes:
+          type: array
+          description: Present on planets, asteroids, and deuterium refuel stations; use mineable object values in MannyMineRequest.resources.
+          items:
+            $ref: '#/components/schemas/MineableResourceType'
+        resourceComposition:
+          $ref: '#/components/schemas/ResourceComposition'
+        resourceAmounts:
+          $ref: '#/components/schemas/ResourceAmountMap'
+        mannyMineable:
+          type: boolean
+          description: Present on planets and asteroids; true when a Manny can mine this object.
+        composition:
+          type: string
+          description: Present on asteroids; generator composition class such as iron, silicate, carbonaceous, ice or rare_metals.
+        category:
+          type: string
+          description: Present on planets.
+        habitabilityScore:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Present on planets in detailed current-sector or already-visited-sector observations.
+        salvageable:
+          type: boolean
+          description: True when the object can be recovered with POST /api/probe/mannies/{mannyId}/salvage. Detached containers expose true only when mode is drifting; hidden_on_asteroid containers must be recovered with POST /api/probe/mannies/{mannyId}/recover-storage-container.
+        waypointBookmarks:
+          type: array
+          items:
+            $ref: '#/components/schemas/WaypointBookmarkHistory'
+        bookmarkTargets:
+          type: array
+          description: Present on solar systems; lists nested stars and orbital bodies that can receive a waypoint bookmark.
+          items:
+            $ref: '#/components/schemas/WaypointBookmarkTarget'
+        minableTargets:
+          type: array
+          description: Present on solar systems; lists nested planets/asteroids that can be mined by a Manny.
+          items:
+            $ref: '#/components/schemas/MiningTarget'
+        mannyState:
+          type: string
+          enum: [abandoned, forgotten]
+          description: Present only for detected Manny objects in the current sector.
+        mannyUid:
+          type: string
+          description: Present only for detected Manny objects.
+        cargo:
+          $ref: '#/components/schemas/MannyCargo'
+        itemType:
+          type: string
+          enum: [waypoint_bookmark, steel_bar, steel_plate, micro_conductor, ceramic_insulator, crystal_substrate, dopant_matrix, integrated_circuit, electric_motor, battery_pack, linear_actuator, solar_panel, scut_relay, thermal_protection_shell, parachute_pack, descent_guidance_module, atmospheric_drop_kit]
+          description: Present only for drifting item stacks.
+        quantity:
+          type: integer
+          description: Present only for drifting item stacks.
+        containerSpace:
+          type: number
+          description: Per-item storage space for drifting item stacks.
+        mode:
+          type: string
+          enum: [drifting, hidden_on_asteroid]
+          description: Present only for detached containers. Hidden containers are included only for players who have discovered them.
+        targetObjectId:
+          type: string
+          nullable: true
+          description: Present for detached containers, null unless the container is attached to another sector object.
+        capacity:
+          type: number
+          description: Storage capacity for detached container objects.
+        capacityUnit:
+          type: string
+          enum: [earth_container_equivalent]
+        planetId:
+          type: string
+          description: Present only for deuterium refuel stations; id of the planet that placed the station in orbit.
+        planetName:
+          type: string
+          nullable: true
+          description: Present only for deuterium refuel stations; public name of the planet that placed the station.
+        status:
+          type: string
+          enum: [off, on]
+          description: Present only for SCUT relay objects.
+        createdByProbeId:
+          type: integer
+          nullable: true
+          description: Present only for SCUT relay objects.
+        createdByProbeName:
+          type: string
+          nullable: true
+          description: Present only for SCUT relay objects; probe name when the creator still exists, "death probe" when createdByProbeId points to a deleted probe, null when no creator was recorded.
+        activatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Present only for SCUT relay objects.
+        coverageRadiusSectors:
+          type: integer
+          minimum: 0
+          description: Present only for SCUT relay objects.
+        network:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ScutNetworkReference'
+          description: Present only for SCUT relay objects.
+    WaypointBookmarkTarget:
+      type: object
+      required: [id, type, name]
+      properties:
+        id:
+          type: string
+          description: Opaque target object id. Clients must not parse coordinates from it.
+        type:
+          type: string
+          enum: [star, planet, asteroid, dust_cloud, black_hole, solar_system]
+        name:
+          type: string
+          nullable: true
+          description: Public target label. For inhabited planets, generated or debug names that would reveal absolute coordinates are replaced by a player-relative label.
+        mass:
+          type: number
+        massUnit:
+          type: string
+          enum: [solar_mass, earth_mass]
+        radius:
+          type: number
+        radiusUnit:
+          type: string
+          enum: [solar_radius, earth_radius, kilometer, astronomical_unit]
+        category:
+          type: string
+          description: Present for planet targets.
+        habitabilityScore:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Present for planet targets; 0 means hostile or unknown, 1 is highly habitable.
+        waypointBookmarks:
+          type: array
+          items:
+            $ref: '#/components/schemas/WaypointBookmarkHistory'
+    WaypointBookmarkHistory:
+      type: object
+      required: [name, playerId, playerName, createdAt]
+      properties:
+        name:
+          type: string
+        playerId:
+          type: integer
+        playerName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time

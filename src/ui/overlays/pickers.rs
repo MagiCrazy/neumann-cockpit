@@ -1,4 +1,4 @@
-use crate::app::{AppState, DeployInput, DetachInput, DropCargoInput, InspectInput, MindSnapshotInput, RecallInput, RecoverInput, RefuelInput, RenameMannyInput, SalvageInput};
+use crate::app::{AppState, DeployInput, DetachInput, DropCargoInput, InspectInput, MindSnapshotInput, RecallInput, RecoverInput, RefuelInput, RenameMannyInput, SalvageInput, ScutRelayInput};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -188,6 +188,57 @@ pub(crate) fn render_refuel_overlay(frame: &mut Frame, area: Rect, state: &AppSt
         Paragraph::new(Line::from(vec![
             Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
             Span::raw(" REFUEL  "),
+            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::raw(" cancel"),
+        ])),
+        rows[1],
+    );
+}
+
+pub(crate) fn render_scut_relay_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let ScutRelayInput::EnterNetworkName { ref manny_name, ref relay_name, ref buf, ref error, .. } =
+        state.scut_relay
+    else {
+        return;
+    };
+
+    let popup = centered_rect(56, 9, area);
+    frame.render_widget(Clear, popup);
+    let title = format!(" TURN ON RELAY — {relay_name} ");
+    let block = Block::default()
+        .title(title)
+        .title_alignment(Alignment::Center)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::LightBlue));
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+
+    let mut lines = vec![
+        Line::from(Span::styled(
+            format!("Manny: {manny_name}"),
+            Style::default().fg(Color::Gray),
+        )),
+        Line::default(),
+        Line::from(vec![
+            Span::styled("Network name (optional): ", Style::default().fg(Color::White)),
+            Span::styled(buf.clone(), Style::default().fg(Color::LightBlue)),
+            Span::styled("▏", Style::default().fg(Color::DarkGray)),
+        ]),
+    ];
+    if let Some(err) = error {
+        lines.push(Line::default());
+        lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(Color::Red))));
+    }
+    frame.render_widget(Paragraph::new(lines), rows[0]);
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("[Enter]", Style::default().fg(Color::LightBlue).add_modifier(Modifier::BOLD)),
+            Span::raw(" turn on  "),
             Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
             Span::raw(" cancel"),
         ])),

@@ -58,6 +58,8 @@ pub enum ApiMessage {
     MissionsFetched(Vec<Mission>),
     MissionAbandoned(Mission),
     MissionAbandonError(String),
+    ScutRelayTurnedOn,
+    ScutRelayTurnOnError(String),
     DropStorageContainerStarted(Manny),
     DropStorageContainerError(String),
     Error(String),

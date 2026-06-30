@@ -1,7 +1,7 @@
 use neumann_cockpit::api::types::{
     AlertPhase, AlertStatus, AlertType, ContainerInventory, CraftingRecipe, DamageWarningRule,
     DataFreshness, KnowledgeLevel, Manny, MannyLocationType, MannyTask, Mission, MissionStatus,
-    MissionStepStatus, MovementPhase, Probe,
+    MissionStepStatus, MovementPhase, Probe, ScutRelayStatus, SectorObject,
     ProbeAlert, ProbeInventory, ProbeMovement, ProbeStatus, SectorObjectType, SectorObservation,
     SensorMode, StorageContainer,
 };
@@ -617,6 +617,23 @@ fn new_sector_object_types_deserialize() {
         SectorObjectType::DeuteriumRefuelStation
     );
     assert_eq!(deser::<SectorObjectType>(r#""scut_relay""#), SectorObjectType::ScutRelay);
+}
+
+#[test]
+fn scut_relay_sector_object_deserializes() {
+    let json = r#"{
+      "id": "42", "type": "scut_relay", "name": "Relais SCUT", "summary": "relay",
+      "status": "on", "coverageRadiusSectors": 10, "createdByProbeName": "Probe X",
+      "activatedAt": "2026-06-25T12:00:00+00:00",
+      "network": { "id": 7, "name": "Delta SCUT" }
+    }"#;
+    let obj: SectorObject = deser(json);
+    assert_eq!(obj.object_type, SectorObjectType::ScutRelay);
+    assert_eq!(obj.status, Some(ScutRelayStatus::On));
+    assert_eq!(obj.coverage_radius_sectors, Some(10));
+    let net = obj.network.expect("network present");
+    assert_eq!(net.id, 7);
+    assert_eq!(net.name, "Delta SCUT");
 }
 
 #[test]

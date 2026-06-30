@@ -13,8 +13,8 @@ use crate::app::{
     ContainersInput, CraftInput, DeployInput, DetachInput, DropCargoInput,
     DropStorageContainerInput, InspectInput, JettisonInput, MindSnapshotInput, MineInput,
     MissionsInput, ObjectActionInput, Panel, RecallInput, RecoverInput, RefuelInput,
-    RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, StorageMoveInput,
-    TravelInput, WaypointsInput,
+    RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode, ScutRelayInput,
+    StorageMoveInput, TravelInput, WaypointsInput,
 };
 mod alerts;
 mod containers;
@@ -47,7 +47,7 @@ use pickers::{
     handle_salvage_event,
 };
 use repair::handle_repair_event;
-use scanner::{handle_object_action_event, handle_waypoints_event};
+use scanner::{handle_object_action_event, handle_scut_relay_event, handle_waypoints_event};
 use storage_move::handle_storage_move_event;
 use travel::handle_travel_event;
 pub fn handle_event(
@@ -72,6 +72,7 @@ pub fn handle_event(
     let in_recall = !matches!(state.recall, RecallInput::Inactive);
     let in_refuel = !matches!(state.refuel, RefuelInput::Inactive);
     let in_mind_snapshot = !matches!(state.mind_snapshot, MindSnapshotInput::Inactive);
+    let in_scut_relay = !matches!(state.scut_relay, ScutRelayInput::Inactive);
     let in_missions = !matches!(state.missions_input, MissionsInput::Inactive);
     let in_rename_manny = !matches!(state.rename_manny, RenameMannyInput::Inactive);
     let in_deploy = !matches!(state.deploy, DeployInput::Inactive);
@@ -153,6 +154,11 @@ pub fn handle_event(
 
     if in_mind_snapshot {
         handle_mind_snapshot_event(k.code, state, client, tx);
+        return;
+    }
+
+    if in_scut_relay {
+        handle_scut_relay_event(k.code, state, client, tx);
         return;
     }
 

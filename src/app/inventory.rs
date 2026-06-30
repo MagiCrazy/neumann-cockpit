@@ -116,8 +116,17 @@ impl AppState {
                     error: None,
                 })
             }
+            Some(InventoryRow::PassiveGroup { item_type }) if item_type == "scut_relay" => {
+                let item = probe.inventory.items.iter()
+                    .find(|i| i.item_type == "scut_relay")
+                    .ok_or_else(|| "no SCUT relay in inventory".to_string())?;
+                Ok(JettisonInput::ConfirmRelay {
+                    item_id: item.id.clone(),
+                    error: None,
+                })
+            }
             Some(InventoryRow::PassiveGroup { .. }) => {
-                Err("only resource stocks and mannies can be jettisoned".into())
+                Err("only resource stocks, mannies and SCUT relays can be jettisoned".into())
             }
             None => Err("inventory is empty".into()),
         }
@@ -160,6 +169,7 @@ impl AppState {
     pub fn set_jettison_error(&mut self, msg: String) {
         match self.jettison {
             JettisonInput::ConfirmManny { ref mut error, .. } => *error = Some(msg),
+            JettisonInput::ConfirmRelay { ref mut error, .. } => *error = Some(msg),
             JettisonInput::EnterAmount { ref mut error, .. } => *error = Some(msg),
             _ => {}
         }

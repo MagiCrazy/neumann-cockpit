@@ -295,6 +295,21 @@ pub enum MindSnapshotInput {
 }
 
 #[derive(Default)]
+pub enum ScutRelayInput {
+    #[default]
+    Inactive,
+    /// Turn-on wizard for an inactive relay: optional network name then confirm.
+    EnterNetworkName {
+        manny_id: String,
+        manny_name: String,
+        relay_id: i64,
+        relay_name: String,
+        buf: String,
+        error: Option<String>,
+    },
+}
+
+#[derive(Default)]
 pub enum MissionsInput {
     #[default]
     Inactive,
@@ -350,6 +365,11 @@ pub enum JettisonInput {
     ConfirmManny {
         item_id: String,
         manny_name: String,
+        error: Option<String>,
+    },
+    /// Confirmation for deploying a scut_relay item as an inactive relay.
+    ConfirmRelay {
+        item_id: String,
         error: Option<String>,
     },
     EnterAmount {

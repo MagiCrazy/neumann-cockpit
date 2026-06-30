@@ -1,4 +1,4 @@
-use crate::api::types::{SectorObjectType, SectorObservation};
+use crate::api::types::{ScutRelayStatus, SectorObjectType, SectorObservation};
 use chrono::Utc;
 use std::path::Path;
 use super::*;
@@ -62,6 +62,7 @@ pub enum ObjectAction {
     Salvage,
     Recover,
     DeployWaypoint,
+    TurnOnRelay,
 }
 
 impl ObjectAction {
@@ -72,6 +73,7 @@ impl ObjectAction {
             ObjectAction::Salvage => "salvage",
             ObjectAction::Recover => "recover",
             ObjectAction::DeployWaypoint => "deploy waypoint",
+            ObjectAction::TurnOnRelay => "turn on relay",
         }
     }
 }
@@ -199,6 +201,13 @@ impl AppState {
             (ObjectProvenance::TopLevel, SectorObjectType::DetachedContainer) => {
                 actions.push(ObjectAction::Recover);
             }
+            // An inactive relay (status != On) can be turned on or salvaged.
+            (ObjectProvenance::TopLevel, SectorObjectType::ScutRelay)
+                if self.sector_object_relay_status(&entry.id) != Some(ScutRelayStatus::On) =>
+            {
+                actions.push(ObjectAction::TurnOnRelay);
+                actions.push(ObjectAction::Salvage);
+            }
             _ => {}
         }
         if entry.provenance == ObjectProvenance::TopLevel
@@ -207,6 +216,17 @@ impl AppState {
             actions.push(ObjectAction::DeployWaypoint);
         }
         actions
+    }
+
+    /// Status of a SCUT relay object in the probe's current sector, by object id.
+    pub fn sector_object_relay_status(&self, id: &str) -> Option<ScutRelayStatus> {
+        self.probe_current_sector_scan()
+            .and_then(|s| s.objects.as_ref())
+            .and_then(|objects| {
+                objects.iter()
+                    .find(|o| o.id.as_deref() == Some(id))
+                    .and_then(|o| o.status.clone())
+            })
     }
 
     pub fn scanner_obj_next(&mut self) {
