@@ -129,6 +129,8 @@ pub struct AppState {
     pub pane_nav: [PaneNav; 9],
     /// Whether the contextual hints line is shown (config `hints`, F1 toggles).
     pub hints_visible: bool,
+    /// Cockpit color mode (config `theme`, F2 cycles).
+    pub color_mode: ColorMode,
 }
 
 impl AppState {

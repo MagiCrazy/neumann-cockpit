@@ -51,6 +51,18 @@ impl Config {
             _ => crate::app::Phosphor::Green,
         }
     }
+
+    /// Cockpit color mode, read from the `theme` key (distinct from the legacy
+    /// classic/retro layout selection, which uses `ui`/`theme` too).
+    pub fn color_mode(&self) -> crate::app::ColorMode {
+        use crate::app::ColorMode;
+        match self.theme.as_deref() {
+            Some("mono-amber") => ColorMode::MonoAmber,
+            Some("phosphor-semantic") => ColorMode::PhosphorSemantic,
+            Some("modern-16") => ColorMode::Modern16,
+            _ => ColorMode::MonoGreen,
+        }
+    }
 }
 
 impl Config {
@@ -109,5 +121,27 @@ mod tests {
         assert_eq!(cfg(None, Some("retro")).ui_theme(), UiTheme::Retro);
         assert_eq!(cfg(None, None).ui_theme(), UiTheme::Classic);
         assert_eq!(cfg(None, Some("bogus")).ui_theme(), UiTheme::Classic);
+    }
+
+    #[test]
+    fn color_mode_parses_from_theme() {
+        use crate::app::ColorMode;
+        assert_eq!(cfg(None, Some("mono-amber")).color_mode(), ColorMode::MonoAmber);
+        assert_eq!(cfg(None, Some("phosphor-semantic")).color_mode(), ColorMode::PhosphorSemantic);
+        assert_eq!(cfg(None, Some("modern-16")).color_mode(), ColorMode::Modern16);
+        // Legacy/unknown/absent → default mono-green.
+        assert_eq!(cfg(None, None).color_mode(), ColorMode::MonoGreen);
+        assert_eq!(cfg(None, Some("retro")).color_mode(), ColorMode::MonoGreen);
+    }
+
+    #[test]
+    fn color_mode_cycles_through_all_four() {
+        use crate::app::ColorMode;
+        let m = ColorMode::MonoGreen;
+        let m = m.cycle();
+        assert_eq!(m, ColorMode::MonoAmber);
+        let m = m.cycle().cycle();
+        assert_eq!(m, ColorMode::Modern16);
+        assert_eq!(m.cycle(), ColorMode::MonoGreen);
     }
 }

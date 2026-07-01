@@ -1,23 +1,21 @@
-//! Contextual action menu popup for the Cockpit v2 interface (bloc U5).
+//! Contextual action menu popup for the Cockpit v2 interface (blocs U5, U7).
 //!
 //! Rendered on top of the grid when `InputMode::Menu` is active. Enabled
 //! items are selectable; disabled ones stay visible with their reason, so
 //! the menu teaches what is (not yet) possible rather than hiding it.
 
+use super::palette::Palette;
 use crate::app::ContextMenu;
 use crate::ui::overlays::centered_rect;
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
 
-const AMBER: Color = Color::Rgb(0xff, 0xb2, 0x4a);
-const DIM: Color = Color::Rgb(0x6f, 0x8c, 0x7d);
-
-pub fn render(frame: &mut Frame, area: Rect, menu: &ContextMenu) {
+pub fn render(frame: &mut Frame, area: Rect, menu: &ContextMenu, p: Palette) {
     let widest = menu
         .items
         .iter()
@@ -36,10 +34,10 @@ pub fn render(frame: &mut Frame, area: Rect, menu: &ContextMenu) {
     let block = Block::default()
         .title(Span::styled(
             format!(" {} ", menu.title),
-            Style::default().fg(AMBER).add_modifier(Modifier::BOLD),
+            Style::default().fg(p.accent).add_modifier(Modifier::BOLD),
         ))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(AMBER));
+        .border_style(Style::default().fg(p.accent));
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
 
@@ -51,14 +49,14 @@ pub fn render(frame: &mut Frame, area: Rect, menu: &ContextMenu) {
             if !item.enabled {
                 let reason = item.disabled_reason.as_deref().unwrap_or("unavailable");
                 return Line::from(vec![
-                    Span::styled(format!(" {}", item.label), Style::default().fg(DIM)),
-                    Span::styled(format!(" ({reason})"), Style::default().fg(DIM)),
+                    Span::styled(format!(" {}", item.label), Style::default().fg(p.dim)),
+                    Span::styled(format!(" ({reason})"), Style::default().fg(p.dim)),
                 ]);
             }
             let style = if i == menu.cursor {
-                Style::default().fg(AMBER).add_modifier(Modifier::REVERSED)
+                Style::default().fg(p.accent).add_modifier(Modifier::REVERSED)
             } else {
-                Style::default()
+                Style::default().fg(p.text)
             };
             Line::from(Span::styled(format!(" {}", item.label), style))
         })

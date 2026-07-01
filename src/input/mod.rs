@@ -110,7 +110,14 @@ pub fn handle_event(
     }
 
     if k.code == KeyCode::F(2) {
-        state.toggle_theme();
+        // In the cockpit, F2 cycles the color mode; otherwise it toggles the
+        // classic/retro theme.
+        if state.ui_theme == crate::app::UiTheme::Cockpit {
+            state.color_mode = state.color_mode.cycle();
+            state.set_toast(format!("color mode: {}", state.color_mode.label()));
+        } else {
+            state.toggle_theme();
+        }
         return;
     }
 
