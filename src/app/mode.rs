@@ -10,8 +10,15 @@
 /// the existing wizards (bloc U5 wires the Mannies pane; more panes follow).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuAction {
-    Repair,
+    Mine,
     Craft,
+    Repair,
+    Salvage,
+    Inspect,
+    Recover,
+    Detach,
+    Refuel,
+    DropCargo,
     Recall,
     Rename,
 }
@@ -81,30 +88,59 @@ impl super::AppState {
     }
 
     fn mannies_context_menu(&self) -> Option<ContextMenu> {
-        use crate::api::types::MannyTaskVisibility;
+        use crate::api::types::{MannyTask, MannyTaskVisibility};
         let manny = self.mannies.as_ref()?.get(self.mannies_selection)?;
-        let busy = (!manny.can_receive_orders).then(|| "busy".to_string());
+        let can = manny.can_receive_orders;
+        let busy = (!can).then(|| "busy".to_string());
         let has_task = manny.current_task.is_some();
         let remote = matches!(manny.task_visibility, Some(MannyTaskVisibility::ScutNetwork));
+        let remote_minable = self.manny_remote_minable(manny);
+        let waiting_space = manny.current_task == Some(MannyTask::WaitingForSpace);
+        let has_station = self.deuterium_station_in_current_sector();
+
+        // `orders`: an action needs the Manny to be idle/orderable, with a
+        // shared "busy" reason when it isn't.
+        let orders = |action, label: &str| MenuItem {
+            action,
+            label: label.into(),
+            enabled: can,
+            disabled_reason: busy.clone(),
+        };
 
         let items = vec![
             MenuItem {
-                action: MenuAction::Repair,
-                label: "Repair".into(),
-                enabled: manny.can_receive_orders,
-                disabled_reason: busy.clone(),
+                action: MenuAction::Mine,
+                label: "Mine…".into(),
+                enabled: can || remote_minable,
+                disabled_reason: (!can && !remote_minable).then(|| "busy".to_string()),
+            },
+            orders(MenuAction::Craft, "Craft…"),
+            orders(MenuAction::Repair, "Repair"),
+            orders(MenuAction::Salvage, "Salvage…"),
+            orders(MenuAction::Inspect, "Inspect…"),
+            orders(MenuAction::Recover, "Recover container…"),
+            orders(MenuAction::Detach, "Detach container…"),
+            MenuItem {
+                action: MenuAction::Refuel,
+                label: "Refill deuterium".into(),
+                enabled: can && has_station,
+                disabled_reason: if !can {
+                    Some("busy".to_string())
+                } else {
+                    (!has_station).then(|| "no station".to_string())
+                },
             },
             MenuItem {
-                action: MenuAction::Craft,
-                label: "Craft…".into(),
-                enabled: manny.can_receive_orders,
-                disabled_reason: busy,
+                action: MenuAction::DropCargo,
+                label: "Drop cargo".into(),
+                enabled: waiting_space,
+                disabled_reason: (!waiting_space).then(|| "not waiting".to_string()),
             },
             MenuItem {
                 action: MenuAction::Recall,
                 label: if remote { "Abandon".into() } else { "Recall".into() },
-                enabled: !manny.can_receive_orders && has_task,
-                disabled_reason: (manny.can_receive_orders || !has_task).then(|| "idle".to_string()),
+                enabled: !can && has_task,
+                disabled_reason: (can || !has_task).then(|| "idle".to_string()),
             },
             MenuItem {
                 action: MenuAction::Rename,
