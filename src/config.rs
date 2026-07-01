@@ -20,6 +20,9 @@ pub struct Config {
     /// Retro idle animations (render tick only, never API polling).
     #[serde(default = "default_true")]
     pub animations: bool,
+    /// Show the contextual hints line in the cockpit interface (F1 toggles).
+    #[serde(default = "default_true")]
+    pub hints: bool,
 }
 
 fn default_true() -> bool {
@@ -90,6 +93,7 @@ mod tests {
             theme: theme.map(String::from),
             phosphor: None,
             animations: true,
+            hints: true,
         }
     }
 

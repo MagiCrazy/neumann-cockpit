@@ -11,3 +11,5 @@ api_key  = "vng_your_api_key_here"
 #phosphor = "green"
 # Retro idle animations (render tick only, never API polling).
 #animations = true
+# Cockpit: show the contextual hints line at the bottom (F1 toggles at runtime).
+#hints = true

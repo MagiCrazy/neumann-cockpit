@@ -2,8 +2,8 @@
 //!
 //! Normal-mode navigation: `ertdfgcvb` activates a pane, `jk`/arrows move the
 //! cursor within it, `l`/`h` drill in/out, `z` zooms, `Tab` cycles panes,
-//! `F5` refreshes. Contextual menus (`Enter`) and command mode (`:`) land in
-//! later blocs; unhandled keys are ignored.
+//! `F1` toggles the hints line, `F5` refreshes. Contextual menus (`Enter`)
+//! and command mode (`:`) land in later blocs; unhandled keys are ignored.
 
 use crossterm::event::KeyCode;
 use tokio::sync::mpsc;
@@ -30,6 +30,7 @@ pub fn handle_cockpit_event(
             state.pane_drill_out();
         }
         KeyCode::Char('z') => state.toggle_zoom(),
+        KeyCode::F(1) => state.hints_visible = !state.hints_visible,
         // Esc backs out one step: leave zoom first, then drill up.
         KeyCode::Esc => {
             if state.zoomed {
