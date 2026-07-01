@@ -66,17 +66,8 @@ cargo build --release
 ./target/release/neumann-cockpit
 ```
 
-## Tests
+## Contributing
 
-```bash
-cargo test                  # standard test runner
-cargo nextest run           # richer output (install: cargo install cargo-nextest)
-```
-
-Coverage report (requires `cargo install cargo-tarpaulin`):
-
-```bash
-cargo tarpaulin --out Html  # generates tarpaulin-report.html
-```
-
-The test suite covers serde deserialization of all major API types, coordinate and parity logic, list navigation helpers, and AppState pure methods (collect candidates, scan history navigation, recipe filtering, etc.). Network I/O and TUI rendering are not covered — they require a live terminal and API endpoint.
+Bug reports, ideas, and pull requests are welcome. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for the dev setup, the checks CI runs
+(`cargo test`, `clippy`, …), and the commit/PR conventions.
