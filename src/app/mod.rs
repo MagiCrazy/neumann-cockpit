@@ -1,10 +1,12 @@
 mod anim;
 mod containers;
+mod grid;
 mod inputs;
 mod inventory;
 mod mannies;
 mod map;
 mod message;
+mod mode;
 mod scan;
 mod travel;
 mod waypoints;
@@ -12,10 +14,12 @@ mod waypoints;
 mod tests;
 
 pub use anim::*;
+pub use grid::*;
 pub use inputs::*;
 pub use inventory::*;
 pub use map::*;
 pub use message::*;
+pub use mode::*;
 pub use scan::*;
 pub use waypoints::*;
 
@@ -114,6 +118,15 @@ pub struct AppState {
     /// Render-tick animations for the retro theme (no I/O involved).
     pub animations_enabled: bool,
     pub anim: AnimState,
+    // ── Cockpit v2 (bloc U1) ────────────────────────────────────────────
+    /// Active pane in the 3×3 grid (defaults to `Probe`, the centre).
+    pub active_pane: Pane,
+    /// Whether the active pane is zoomed to full screen.
+    pub zoomed: bool,
+    /// Top-level interaction mode for the unified interface.
+    pub mode: InputMode,
+    /// Per-pane cursor + drill-in state, indexed by `Pane::index()`.
+    pub pane_nav: [PaneNav; 9],
 }
 
 impl AppState {

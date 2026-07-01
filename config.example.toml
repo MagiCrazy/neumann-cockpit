@@ -1,6 +1,9 @@
 base_url = "https://neumann-probe.net"
 api_key  = "vng_your_api_key_here"
 
+# Layout: "classic" (default), "retro", or "cockpit" — the unified tiling
+# interface (work in progress, U-series). Takes precedence over `theme`.
+#ui = "cockpit"
 # UI theme: "classic" (default) or "retro" — phosphor CRT console with
 # idle animations. Toggle at runtime with F2.
 #theme = "retro"
