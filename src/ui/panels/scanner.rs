@@ -1,7 +1,7 @@
 use crate::api::types::{
     DangerLevel, SectorObject, SectorObjectType, SensorMode,
 };
-use crate::app::{AppState, ScanMode};
+use crate::app::AppState;
 use chrono::Utc;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -11,7 +11,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::ui::theme::{format_age, format_duration, freshness_color, freshness_label, gauge_color, knowledge_color, knowledge_label, make_line_gauge, map_cell_symbol, object_icon, panel_block, sensor_dot, sensor_style};
+use crate::ui::theme::{format_age, format_duration, freshness_color, freshness_label, gauge_color, knowledge_color, knowledge_label, map_cell_symbol, object_icon, panel_block, sensor_dot, sensor_style};
 // ── Scanner panel ─────────────────────────────────────────────────────────────
 
 pub(crate) fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppState, focused: bool) {
@@ -27,126 +27,17 @@ pub(crate) fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppSta
         return;
     };
 
-    // Outer vertical split: content row + hint bar
-    let rows = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(1)])
-        .split(inner);
-    let content_area = rows[0];
-    let hint_area = rows[1];
-
     let is_blind = probe.sensor_mode == SensorMode::Blind;
 
-    // Hint bar
-    match &state.scan_mode {
-        ScanMode::Input(buf) => {
-            frame.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled("coords (x y z): ", Style::default().fg(Color::Cyan)),
-                    Span::raw(buf.as_str()),
-                    Span::styled("█", Style::default().fg(Color::Cyan)),
-                ])),
-                hint_area,
-            );
-        }
-        ScanMode::DirectionPick => {
-            frame.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled("deep scan axis: ", Style::default().fg(Color::Cyan)),
-                    Span::styled("[x]", Style::default().fg(Color::Yellow)),
-                    Span::raw("  "),
-                    Span::styled("[y]", Style::default().fg(Color::Yellow)),
-                    Span::raw("  "),
-                    Span::styled("[z]", Style::default().fg(Color::Yellow)),
-                    Span::raw("  "),
-                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
-                    Span::raw(" cancel"),
-                ])),
-                hint_area,
-            );
-        }
-        ScanMode::Current => {
-            if let Some(remaining) = state.scan_batch {
-                let total = state.scan_batch_total.max(1);
-                let done = total.saturating_sub(remaining);
-                let ratio = (done as f64 / total as f64).clamp(0.0, 1.0);
-                frame.render_widget(
-                    make_line_gauge(
-                        &format!("⟳ scanning {done}/{total}"),
-                        ratio,
-                        Color::Yellow,
-                    ),
-                    hint_area,
-                );
-            } else if focused {
-                let spans = if state.scanner_obj_selection.is_some() {
-                    vec![
-                        Span::styled("[↑↓/jk]", Style::default().fg(Color::Cyan)),
-                        Span::raw(" object  "),
-                        Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-                        Span::raw(" actions  "),
-                        Span::styled("[Esc/o]", Style::default().fg(Color::Cyan)),
-                        Span::raw(" back"),
-                    ]
-                } else if is_blind {
-                    vec![
-                        Span::styled("● SENSORS BLIND", Style::default().fg(Color::Red)),
-                        Span::raw("  "),
-                        Span::styled("[↑↓/jk]", Style::default().fg(Color::Cyan)),
-                        Span::raw(" history  "),
-                        Span::styled("[JK]", Style::default().fg(Color::Cyan)),
-                        Span::raw(" scroll"),
-                    ]
-                } else {
-                    let mut s = vec![
-                        Span::styled("[Enter]", Style::default().fg(Color::Cyan)),
-                        Span::raw(" rescan  "),
-                        Span::styled("[c]", Style::default().fg(Color::Cyan)),
-                        Span::raw(" custom  "),
-                        Span::styled("[n]", Style::default().fg(Color::Cyan)),
-                        Span::raw(" neighbors  "),
-                        Span::styled("[d]", Style::default().fg(Color::Cyan)),
-                        Span::raw(" deep  "),
-                        Span::styled("[↑↓/jk]", Style::default().fg(Color::Cyan)),
-                        Span::raw(" history  "),
-                        Span::styled("[JK]", Style::default().fg(Color::Cyan)),
-                        Span::raw(" scroll"),
-                    ];
-                    if !state.scanner_objects().is_empty() {
-                        s.push(Span::raw("  "));
-                        s.push(Span::styled("[o]", Style::default().fg(Color::Yellow)));
-                        s.push(Span::raw(" objects"));
-                    }
-                    s.push(Span::raw("  "));
-                    s.push(Span::styled("[f]", Style::default().fg(Color::Cyan)));
-                    if state.scan_filter == crate::app::ScanFilter::All {
-                        s.push(Span::raw(" filter"));
-                    } else {
-                        s.push(Span::styled(
-                            format!(" {}", state.scan_filter.label()),
-                            Style::default().fg(Color::Yellow),
-                        ));
-                    }
-                    if state.current_sector().is_some() {
-                        s.push(Span::raw("  "));
-                        s.push(Span::styled("[g]", Style::default().fg(Color::Yellow)));
-                        s.push(Span::raw(" go"));
-                    }
-                    s
-                };
-                frame.render_widget(Paragraph::new(Line::from(spans)), hint_area);
-            }
-        }
-    }
-
-    // Horizontal split: detail on left, history list on right
+    // Action hints come from the cockpit's shared hints line (F1); the pane
+    // uses its whole area for the sector detail + history.
     let filtered = state.filtered_history_indices();
     let history_len = filtered.len();
     let history_width: u16 = if history_len > 0 { 22 } else { 0 };
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Min(1), Constraint::Length(history_width)])
-        .split(content_area);
+        .split(inner);
     let detail_area = cols[0];
     let history_area = cols[1];
 
@@ -204,7 +95,7 @@ pub(crate) fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppSta
         let (msg, color) = if is_blind {
             ("● sensors blind — history available →", Color::Red)
         } else if focused {
-            ("Press [Enter] to scan current sector", Color::DarkGray)
+            ("No scan data — F5 to refresh", Color::DarkGray)
         } else {
             ("No scan data", Color::DarkGray)
         };

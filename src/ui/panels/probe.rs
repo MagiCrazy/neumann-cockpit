@@ -27,7 +27,7 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
 
     let Some(probe) = &state.probe else {
         frame.render_widget(
-            Paragraph::new("No data — press r to refresh")
+            Paragraph::new("No data — press F5 to refresh")
                 .style(Style::default().fg(Color::DarkGray)),
             inner,
         );

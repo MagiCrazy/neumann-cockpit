@@ -60,8 +60,9 @@ pub fn handle_event(
 ) {
     let Event::Key(k) = event else { return };
     if k.kind != KeyEventKind::Press { return };
-    // Toasts are transient: any keypress dismisses the current one.
+    // Toasts and inline errors are transient: any keypress dismisses them.
     state.toast = None;
+    state.error = None;
     let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
     let in_scan_input = matches!(state.scan_mode, ScanMode::Input(_));
     let in_direction_pick = matches!(state.scan_mode, ScanMode::DirectionPick);

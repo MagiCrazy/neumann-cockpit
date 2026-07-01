@@ -3,7 +3,7 @@ use crate::api::types::{
 };
 use crate::app::AppState;
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{List, ListItem, ListState, Paragraph},
@@ -18,99 +18,12 @@ pub(crate) fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppSta
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let rows = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(1)])
-        .split(inner);
-    let list_area = rows[0];
-    let hint_area = rows[1];
-
-    // Hint bar
-    if focused {
-        let selected_manny = state.mannies.as_ref()
-            .and_then(|m| m.get(state.mannies_selection));
-        let can_order = selected_manny.map(|m| m.can_receive_orders).unwrap_or(false);
-        let is_busy = selected_manny.map(|m| !m.can_receive_orders && m.current_task.is_some()).unwrap_or(false);
-        if can_order {
-            let has_detachable = !state.collect_detachable_containers().is_empty();
-            let has_detached = !state.collect_detached_containers().is_empty();
-            let mut spans = vec![
-                Span::styled("[Enter]", Style::default().fg(Color::Cyan)),
-                Span::raw(" repair  "),
-                Span::styled("[e]", Style::default().fg(Color::Cyan)),
-                Span::raw(" mine  "),
-                Span::styled("[c]", Style::default().fg(Color::Cyan)),
-                Span::raw(" craft  "),
-                Span::styled("[s]", Style::default().fg(Color::Cyan)),
-                Span::raw(" salvage  "),
-                Span::styled("[x]", Style::default().fg(Color::Cyan)),
-                Span::raw(" inspect"),
-            ];
-            if has_detachable {
-                spans.push(Span::raw("  "));
-                spans.push(Span::styled("[D]", Style::default().fg(Color::Cyan)));
-                spans.push(Span::raw(" detach"));
-            }
-            if has_detachable && state.has_atmospheric_drop_kit() {
-                spans.push(Span::raw("  "));
-                spans.push(Span::styled("[P]", Style::default().fg(Color::Cyan)));
-                spans.push(Span::raw(" drop on planet"));
-            }
-            if has_detached {
-                spans.push(Span::raw("  "));
-                spans.push(Span::styled("[v]", Style::default().fg(Color::Cyan)));
-                spans.push(Span::raw(" recover"));
-            }
-            spans.push(Span::raw("  "));
-            spans.push(Span::styled("[n]", Style::default().fg(Color::Cyan)));
-            spans.push(Span::raw(" rename"));
-            if state.deuterium_station_in_current_sector() {
-                spans.push(Span::raw("  "));
-                spans.push(Span::styled("[F]", Style::default().fg(Color::Green)));
-                spans.push(Span::raw(" refuel"));
-            }
-            if is_busy {
-                spans.push(Span::raw("  "));
-                spans.push(Span::styled("[R]", Style::default().fg(Color::Yellow)));
-                spans.push(Span::raw(" recall"));
-            }
-            frame.render_widget(Paragraph::new(Line::from(spans)), hint_area);
-        } else if is_busy {
-            let is_waiting = selected_manny
-                .map(|m| m.current_task == Some(MannyTask::WaitingForSpace))
-                .unwrap_or(false);
-            let remote = selected_manny
-                .map(|m| matches!(m.task_visibility, Some(MannyTaskVisibility::ScutNetwork)))
-                .unwrap_or(false);
-            let mut spans = vec![
-                Span::styled(if remote { "via SCUT  " } else { "busy  " }, Style::default().fg(Color::DarkGray)),
-                Span::styled("[R]", Style::default().fg(Color::Yellow)),
-                Span::raw(if remote { " abandon  " } else { " recall  " }),
-                Span::styled("[n]", Style::default().fg(Color::Cyan)),
-                Span::raw(" rename"),
-            ];
-            if is_waiting {
-                spans.push(Span::raw("  "));
-                spans.push(Span::styled("[X]", Style::default().fg(Color::Red)));
-                spans.push(Span::raw(" drop cargo"));
-            }
-            frame.render_widget(Paragraph::new(Line::from(spans)), hint_area);
-        } else {
-            frame.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled("busy — cannot receive orders  ", Style::default().fg(Color::DarkGray)),
-                    Span::styled("[n]", Style::default().fg(Color::Cyan)),
-                    Span::raw(" rename"),
-                ])),
-                hint_area,
-            );
-        }
-    }
-
+    // Action hints come from the cockpit's shared hints line (F1), so the
+    // pane gives its whole area to the list.
     let Some(mannies) = &state.mannies else {
         frame.render_widget(
             Paragraph::new("No data").style(Style::default().fg(Color::DarkGray)),
-            list_area,
+            inner,
         );
         return;
     };
@@ -118,7 +31,7 @@ pub(crate) fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppSta
     if mannies.is_empty() {
         frame.render_widget(
             Paragraph::new("No mannies aboard").style(Style::default().fg(Color::DarkGray)),
-            list_area,
+            inner,
         );
         return;
     }
@@ -140,7 +53,7 @@ pub(crate) fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppSta
         list_state.select(Some(state.mannies_selection));
     }
 
-    frame.render_stateful_widget(list, list_area, &mut list_state);
+    frame.render_stateful_widget(list, inner, &mut list_state);
 }
 
 pub(crate) fn manny_list_item(m: &Manny) -> ListItem<'_> {

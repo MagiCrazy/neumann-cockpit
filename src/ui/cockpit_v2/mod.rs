@@ -97,11 +97,17 @@ fn render_status_line(frame: &mut Frame, area: Rect, state: &AppState, p: Palett
         ),
         Span::styled(format!("  {}", state.breadcrumb().join(" › ")), Style::default().fg(p.accent)),
     ];
-    if let Some(toast) = state.active_toast() {
+    // An error takes over the line until dismissed; otherwise a success toast.
+    if let Some(err) = &state.error {
+        left.push(Span::styled(format!("  ✗ {err}"), Style::default().fg(p.crit)));
+    } else if let Some(toast) = state.active_toast() {
         left.push(Span::styled(format!("  ✓ {toast}"), Style::default().fg(p.good)));
     }
 
     let mut meta = Vec::new();
+    if state.loading {
+        meta.push(("⟳".to_string(), p.accent));
+    }
     if !state.scut_coverage().is_empty() {
         meta.push(("≣ SCUT".to_string(), p.accent));
     }
