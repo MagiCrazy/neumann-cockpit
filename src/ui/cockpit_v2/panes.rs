@@ -292,9 +292,9 @@ fn manny_detail_lines(state: &AppState, m: &Manny, p: Palette) -> Vec<Line<'stat
     let c = &m.cargo;
     let used = c.metals + c.ice + c.deuterium + c.organic_compounds;
     let ratio = if c.capacity > 0.0 { used / c.capacity } else { 0.0 };
-    lines.push(block_gauge_line("CARGO", ratio, &format!("{used:.1}/{:.1}", c.capacity), p.accent, p));
-    lines.push(Line::styled(format!("metals {:.1}  ice {:.1}", c.metals, c.ice), text));
-    lines.push(Line::styled(format!("deut {:.1}  org {:.1}", c.deuterium, c.organic_compounds), text));
+    lines.push(block_gauge_line("CARGO", ratio, &format!("{:.0}%", ratio * 100.0), p.accent, p));
+    lines.push(Line::styled(format!("metals {:.2}  ice {:.2}", c.metals, c.ice), text));
+    lines.push(Line::styled(format!("deut {:.2}  org {:.2}", c.deuterium, c.organic_compounds), text));
     lines
 }
 
@@ -376,10 +376,10 @@ pub fn render_mannies_overview(frame: &mut Frame, area: Rect, state: &AppState, 
         let c = &m.cargo;
         let used = c.metals + c.ice + c.deuterium + c.organic_compounds;
         let ratio = if c.capacity > 0.0 { used / c.capacity } else { 0.0 };
-        lines.push(block_gauge_line("    CARGO", ratio, &format!("{used:.0}/{:.0}", c.capacity), p.accent, p));
+        lines.push(block_gauge_line("    CARGO", ratio, &format!("{:.0}%", ratio * 100.0), p.accent, p));
         lines.push(Line::styled(
             format!(
-                "    metals {:.0} · ice {:.0} · deut {:.0} · org {:.0}",
+                "    metals {:.2} · ice {:.2} · deut {:.2} · org {:.2}",
                 c.metals, c.ice, c.deuterium, c.organic_compounds
             ),
             dim,
