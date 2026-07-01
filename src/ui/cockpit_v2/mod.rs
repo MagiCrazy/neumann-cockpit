@@ -58,67 +58,81 @@ pub fn render(frame: &mut Frame, state: &AppState) {
     crate::ui::overlays::render_active_overlays(frame, area, state);
 }
 
-/// Boot assembly: the grid traces in centre-out; revealed panes render their
-/// real content as it arrives, pending panes show a faint placeholder.
+/// Boot self-check: the probe boots first, then each subsystem pane comes
+/// online centre-out and types out its own themed check lines.
 fn render_boot(frame: &mut Frame, area: Rect, state: &AppState, p: Palette) {
+    use crate::app::{BOOT_CHARS_PER_FRAME, BOOT_LINE_STRIDE};
+
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(area);
 
     for (pane, rect) in grid::visible_panes(rows[0], state.active_pane) {
-        // Border traces in centre-out; the pane arriving this frame glows.
+        // The pane coming online this frame glows (bright accent border).
         let title = format!(" {} ", pane.label());
         let block = pane_block(&title, state.boot_leading(pane), p);
         let inner = block.inner(rect);
         frame.render_widget(block, rect);
-        if state.boot_revealed(pane) {
-            // A loading bar sweeps in each revealed pane (per-pane phase so
-            // the bars are out of sync, like the retro self-check).
-            let phase = state.boot_frame + pane.index() as u64 * 2;
-            frame.render_widget(
-                Paragraph::new(loading_bar(inner.width, phase, p)),
-                center_row(inner),
-            );
-        } else {
+
+        if !state.boot_revealed(pane) {
             frame.render_widget(
                 Paragraph::new(Line::styled("· · ·", Style::default().fg(p.dim)))
                     .alignment(Alignment::Center),
                 inner,
             );
+            continue;
         }
+
+        // Type out the pane's self-check lines, one after another.
+        let elapsed = state.boot_elapsed(pane);
+        let width = inner.width as usize;
+        let mut lines: Vec<Line> = Vec::new();
+        for (i, (label, result)) in state.boot_check_lines(pane).iter().enumerate() {
+            let start = i as u64 * BOOT_LINE_STRIDE;
+            if elapsed < start {
+                break;
+            }
+            let base_len = label.chars().count() + 1;
+            let pad = width
+                .saturating_sub(base_len + result.chars().count() + 1)
+                .max(1);
+            let dotted = format!("{label} {}", "·".repeat(pad));
+            let revealed = (elapsed - start) as usize * BOOT_CHARS_PER_FRAME;
+            if revealed >= dotted.chars().count() {
+                lines.push(Line::from(vec![
+                    Span::styled(dotted, Style::default().fg(p.dim)),
+                    Span::styled(
+                        format!(" {result}"),
+                        Style::default().fg(p.accent).add_modifier(Modifier::BOLD),
+                    ),
+                ]));
+            } else {
+                let partial: String = dotted.chars().take(revealed).collect();
+                lines.push(Line::from(Span::styled(partial, Style::default().fg(p.dim))));
+            }
+        }
+        frame.render_widget(Paragraph::new(lines), inner);
     }
 
-    // Global progress bar along the bottom.
-    let gauge = crate::ui::theme::make_line_gauge(
-        " BOOT  assembling cockpit… · any key to skip ",
-        state.boot_progress(),
-        p.accent,
+    // Bottom banner with a blinking cursor + skip hint.
+    let cur = if (state.boot_frame / 3) % 2 == 0 { "▌" } else { " " };
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Min(0), Constraint::Length(17)])
+        .split(rows[1]);
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            format!(" {cur} NEUMANN PROBE COMPUTER — booting…"),
+            Style::default().fg(p.accent),
+        ))),
+        cols[0],
     );
-    frame.render_widget(gauge, rows[1]);
-}
-
-/// A one-row rect centred vertically inside `area` (for the pane loading bar).
-fn center_row(area: Rect) -> Rect {
-    let y = area.y + area.height / 2;
-    Rect::new(area.x, y, area.width, 1)
-}
-
-/// An indeterminate loading bar: a lit segment sweeping across a dim track.
-fn loading_bar(width: u16, phase: u64, p: Palette) -> Line<'static> {
-    let w = (width as usize).max(4);
-    let seg = (w / 3).max(2);
-    let head = (phase as usize) % w;
-    let mut spans = Vec::with_capacity(w);
-    for i in 0..w {
-        // Lit window [head, head+seg), wrapping around the track.
-        let lit = (i + w - head % w) % w < seg;
-        spans.push(Span::styled(
-            if lit { "█" } else { "░" },
-            Style::default().fg(if lit { p.accent } else { p.dim }),
-        ));
-    }
-    Line::from(spans)
+    frame.render_widget(
+        Paragraph::new(Line::styled("any key to skip ", Style::default().fg(p.dim)))
+            .alignment(Alignment::Right),
+        cols[1],
+    );
 }
 
 fn render_pane(frame: &mut Frame, area: Rect, pane: Pane, state: &AppState, active: bool, p: Palette) {

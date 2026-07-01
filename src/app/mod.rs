@@ -14,6 +14,7 @@ mod waypoints;
 #[cfg(test)]
 mod tests;
 
+pub use boot::{BOOT_CHARS_PER_FRAME, BOOT_LINE_STRIDE};
 pub use color::*;
 pub use grid::*;
 pub use inputs::*;
