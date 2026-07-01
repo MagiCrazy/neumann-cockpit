@@ -98,6 +98,12 @@ pub fn handle_event(
         return;
     }
 
+    // Any key skips the boot assembly and drops into the live cockpit.
+    if state.booting {
+        state.skip_boot();
+        return;
+    }
+
     if k.code == KeyCode::F(2) {
         // F2 cycles the cockpit color mode.
         state.color_mode = state.color_mode.cycle();

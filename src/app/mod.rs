@@ -1,3 +1,4 @@
+mod boot;
 mod color;
 mod containers;
 mod grid;
@@ -13,6 +14,7 @@ mod waypoints;
 #[cfg(test)]
 mod tests;
 
+pub use boot::{BOOT_CHARS_PER_FRAME, BOOT_LINE_STRIDE};
 pub use color::*;
 pub use grid::*;
 pub use inputs::*;
@@ -126,6 +128,10 @@ pub struct AppState {
     pub hints_visible: bool,
     /// Cockpit color mode (config `theme`, F2 cycles).
     pub color_mode: ColorMode,
+    /// Boot sequence: true while the grid assembles on startup (see `boot.rs`).
+    pub booting: bool,
+    /// Frame counter for the boot trace, advanced by the boot tick.
+    pub boot_frame: u64,
 }
 
 impl AppState {
