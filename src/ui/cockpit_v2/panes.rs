@@ -220,21 +220,56 @@ fn render_mission_detail(frame: &mut Frame, area: Rect, state: &AppState, id: &s
 
 pub fn render_storage(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {
     let dim = Style::default().fg(p.dim);
+    let text = Style::default().fg(p.text);
+    let cur = cursor(state, Pane::Storage);
+    let zoomed = state.zoomed;
     let mut lines = Vec::new();
-    if state.storage_containers.is_empty() {
-        lines.push(Line::styled("no containers ([C] loads)", dim));
-    } else {
-        let cur = cursor(state, Pane::Storage);
-        for (i, c) in state.storage_containers.iter().enumerate() {
-            let ratio = if c.capacity > 0.0 { c.used_capacity / c.capacity } else { 0.0 };
-            let label: String = c.label.chars().take(16).collect();
-            lines.push(Line::from(vec![
-                Span::styled(label, row_style(active, i == cur).patch(Style::default().fg(p.text))),
-                Span::styled(
-                    format!(" {:.0}/{:.0}", c.used_capacity, c.capacity),
-                    Style::default().fg(fill_color(p, 1.0 - ratio)),
-                ),
-            ]));
+
+    // Containers come with the probe (probe.inventory.containers), so the pane
+    // fills as soon as the probe loads — Enter opens the full browser.
+    match state.probe.as_ref().map(|pr| &pr.inventory.containers) {
+        None => lines.push(Line::styled("no data", dim)),
+        Some(cs) if cs.is_empty() => lines.push(Line::styled("no storage containers", dim)),
+        Some(cs) => {
+            const W: usize = 8;
+            for (i, c) in cs.iter().enumerate() {
+                let selected = active && i == cur;
+                let ratio = if c.capacity > 0.0 { (c.used_capacity / c.capacity).clamp(0.0, 1.0) } else { 0.0 };
+                let filled = (ratio * W as f64).round() as usize;
+                let name_style = if selected {
+                    Style::default().fg(p.accent).add_modifier(Modifier::BOLD)
+                } else {
+                    text
+                };
+                let sec = if selected { Style::default().fg(p.accent) } else { dim };
+                let label: String = c.label.chars().take(10).collect();
+                let mut spans = vec![
+                    Span::styled(if selected { "▶ " } else { "  " }, Style::default().fg(p.accent)),
+                    Span::styled(format!("{label:<10} "), name_style),
+                    Span::styled("▓".repeat(filled), Style::default().fg(fill_color(p, 1.0 - ratio))),
+                    Span::styled("░".repeat(W - filled), dim),
+                    Span::styled(format!(" {:.0}%", ratio * 100.0), sec),
+                ];
+                let rules = &c.rules;
+                if !rules.priority.is_empty() || !rules.exclusion.is_empty() || !rules.strict_exclusion.is_empty() {
+                    spans.push(Span::styled(" ⚙", Style::default().fg(p.accent)));
+                }
+                lines.push(Line::from(spans));
+
+                // Zoom: routing rules and free capacity per container.
+                if zoomed {
+                    if !rules.priority.is_empty() {
+                        lines.push(Line::styled(format!("    priority: {}", rules.priority.join(", ")), dim));
+                    }
+                    if !rules.exclusion.is_empty() {
+                        lines.push(Line::styled(format!("    exclude:  {}", rules.exclusion.join(", ")), dim));
+                    }
+                    if !rules.strict_exclusion.is_empty() {
+                        lines.push(Line::styled(format!("    strict:   {}", rules.strict_exclusion.join(", ")), dim));
+                    }
+                    lines.push(Line::styled(format!("    free {:.2} of {:.2}", c.free_capacity, c.capacity), dim));
+                }
+            }
         }
     }
     render_body(frame, area, " STORAGE ", active, p, lines);

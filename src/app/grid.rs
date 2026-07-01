@@ -167,7 +167,7 @@ impl super::AppState {
                     .map_or(0, |m| m.steps.len()),
                 _ => self.missions.len(),
             },
-            Pane::Storage => self.storage_containers.len(),
+            Pane::Storage => self.probe.as_ref().map_or(0, |p| p.inventory.containers.len()),
             _ => 0,
         }
     }
