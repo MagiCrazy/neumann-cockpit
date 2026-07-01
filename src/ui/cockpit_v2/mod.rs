@@ -67,14 +67,20 @@ fn render_boot(frame: &mut Frame, area: Rect, state: &AppState, p: Palette) {
         .split(area);
 
     for (pane, rect) in grid::visible_panes(rows[0], state.active_pane) {
+        // Border traces in centre-out; the pane arriving this frame glows.
+        let title = format!(" {} ", pane.label());
+        let block = pane_block(&title, state.boot_leading(pane), p);
+        let inner = block.inner(rect);
+        frame.render_widget(block, rect);
         if state.boot_revealed(pane) {
-            // The pane tracing in this frame glows (leading edge of the sweep).
-            render_pane(frame, rect, pane, state, state.boot_leading(pane), p);
+            // A loading bar sweeps in each revealed pane (per-pane phase so
+            // the bars are out of sync, like the retro self-check).
+            let phase = state.boot_frame + pane.index() as u64 * 2;
+            frame.render_widget(
+                Paragraph::new(loading_bar(inner.width, phase, p)),
+                center_row(inner),
+            );
         } else {
-            let title = format!(" {} ", pane.label());
-            let block = pane_block(&title, false, p);
-            let inner = block.inner(rect);
-            frame.render_widget(block, rect);
             frame.render_widget(
                 Paragraph::new(Line::styled("· · ·", Style::default().fg(p.dim)))
                     .alignment(Alignment::Center),
@@ -83,16 +89,36 @@ fn render_boot(frame: &mut Frame, area: Rect, state: &AppState, p: Palette) {
         }
     }
 
-    let spin = ["◜", "◝", "◞", "◟"][(state.boot_frame % 4) as usize];
-    let line = Line::from(vec![
-        Span::styled(
-            " BOOT ",
-            Style::default().fg(Color::Black).bg(p.accent).add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(format!("  {spin} assembling cockpit…"), Style::default().fg(p.accent)),
-        Span::styled("   · any key to skip", Style::default().fg(p.dim)),
-    ]);
-    frame.render_widget(Paragraph::new(line), rows[1]);
+    // Global progress bar along the bottom.
+    let gauge = crate::ui::theme::make_line_gauge(
+        " BOOT  assembling cockpit… · any key to skip ",
+        state.boot_progress(),
+        p.accent,
+    );
+    frame.render_widget(gauge, rows[1]);
+}
+
+/// A one-row rect centred vertically inside `area` (for the pane loading bar).
+fn center_row(area: Rect) -> Rect {
+    let y = area.y + area.height / 2;
+    Rect::new(area.x, y, area.width, 1)
+}
+
+/// An indeterminate loading bar: a lit segment sweeping across a dim track.
+fn loading_bar(width: u16, phase: u64, p: Palette) -> Line<'static> {
+    let w = (width as usize).max(4);
+    let seg = (w / 3).max(2);
+    let head = (phase as usize) % w;
+    let mut spans = Vec::with_capacity(w);
+    for i in 0..w {
+        // Lit window [head, head+seg), wrapping around the track.
+        let lit = (i + w - head % w) % w < seg;
+        spans.push(Span::styled(
+            if lit { "█" } else { "░" },
+            Style::default().fg(if lit { p.accent } else { p.dim }),
+        ));
+    }
+    Line::from(spans)
 }
 
 fn render_pane(frame: &mut Frame, area: Rect, pane: Pane, state: &AppState, active: bool, p: Palette) {

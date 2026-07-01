@@ -8,10 +8,12 @@ use super::{AppState, Pane};
 
 /// Frames (at the ~90 ms boot tick) between each pane's border tracing in.
 const TRACE_STEP: u64 = 1;
-/// Frame by which all nine panes have traced in (~0.8 s).
-const TRACE_TOTAL: u64 = 9 * TRACE_STEP;
+/// Minimum boot duration — the loading bars run at least this long so the
+/// assembly is enjoyable and doesn't just flash by (~1.6 s). Must exceed the
+/// trace so the trace always completes first.
+const BOOT_MIN_FRAMES: u64 = 18;
 /// Safety cap: end the boot even if the initial probe fetch never returns.
-const BOOT_MAX_FRAMES: u64 = 40; // ~3.6 s
+const BOOT_MAX_FRAMES: u64 = 55; // ~5 s
 
 /// Reveal order, centre-out: Probe (centre), then the axial neighbours, then
 /// the corners.
@@ -37,10 +39,15 @@ impl AppState {
     /// played and the probe has loaded, or after the safety timeout.
     pub fn boot_tick(&mut self) {
         self.boot_frame = self.boot_frame.saturating_add(1);
-        let trace_done = self.boot_frame >= TRACE_TOTAL;
-        if (trace_done && self.probe.is_some()) || self.boot_frame >= BOOT_MAX_FRAMES {
+        let min_played = self.boot_frame >= BOOT_MIN_FRAMES;
+        if (min_played && self.probe.is_some()) || self.boot_frame >= BOOT_MAX_FRAMES {
             self.booting = false;
         }
+    }
+
+    /// Overall boot progress in `0.0..=1.0` (for the global loading bar).
+    pub fn boot_progress(&self) -> f64 {
+        (self.boot_frame as f64 / BOOT_MIN_FRAMES as f64).clamp(0.0, 1.0)
     }
 
     /// Skip the boot screen (any key).
@@ -71,13 +78,15 @@ mod tests {
     }
 
     #[test]
-    fn boot_waits_for_probe_after_trace() {
+    fn boot_progress_fills_over_min_duration() {
         let mut s = AppState { booting: true, ..Default::default() };
-        // Play out the whole trace with no probe → still booting.
-        for _ in 0..=TRACE_TOTAL {
+        assert_eq!(s.boot_progress(), 0.0);
+        for _ in 0..BOOT_MIN_FRAMES {
             s.boot_tick();
         }
-        assert!(s.booting, "trace done but no probe → keep waiting");
+        assert_eq!(s.boot_progress(), 1.0);
+        // No probe yet, so despite the min duration it keeps waiting.
+        assert!(s.booting);
     }
 
     #[test]
