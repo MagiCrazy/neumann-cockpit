@@ -6,12 +6,12 @@
 //! swaps a pane to its detail view (Missions → steps, Comms → message).
 //! Colours come from the active [`Palette`].
 
-use crate::api::types::{Manny, MannyTaskVisibility, MissionStatus, MissionStepStatus};
+use crate::api::types::{Manny, MannyLocationType, MannyTaskVisibility, MissionStatus, MissionStepStatus};
 use crate::app::{AppState, DrillLevel, Pane};
 use crate::ui::panels::mannies::{manny_task_eta, manny_task_label};
 use crate::ui::theme::{block_gauge_line, object_icon, pane_block, Palette};
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::Rect,
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Paragraph, Wrap},
@@ -299,46 +299,77 @@ pub fn render_manny_detail(frame: &mut Frame, area: Rect, state: &AppState, id: 
     frame.render_widget(Paragraph::new(manny_detail_lines(state, m, p)).wrap(Wrap { trim: false }), inner);
 }
 
-/// One manny as a bordered card (used in the zoom overview). The selected
-/// manny's card gets the accent border.
-fn render_manny_card(frame: &mut Frame, area: Rect, state: &AppState, m: &Manny, selected: bool, p: Palette) {
-    let title = format!(" {} ", m.name);
-    let block = pane_block(&title, selected, p);
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-    frame.render_widget(Paragraph::new(manny_detail_lines(state, m, p)), inner);
-}
-
-/// Zoomed Mannies pane: every manny as a detail card, in a grid, so the whole
-/// fleet is visible at a glance.
+/// Zoomed Mannies pane: a vertical list where each manny is a summary line
+/// with its details indented below — the whole fleet at a glance.
 pub fn render_mannies_overview(frame: &mut Frame, area: Rect, state: &AppState, p: Palette) {
     let dim = Style::default().fg(p.dim);
+    let block = pane_block(" MANNIES ", true, p);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
     let Some(mannies) = &state.mannies else {
-        frame.render_widget(Paragraph::new(Line::styled("no data", dim)), area);
+        frame.render_widget(Paragraph::new(Line::styled("no data", dim)), inner);
         return;
     };
     if mannies.is_empty() {
-        frame.render_widget(Paragraph::new(Line::styled("no mannies aboard", dim)), area);
+        frame.render_widget(Paragraph::new(Line::styled("no mannies aboard", dim)), inner);
         return;
     }
 
-    let n = mannies.len();
-    let cols = ((area.width as usize / 26).max(1)).min(n).min(3);
-    let rows_n = n.div_ceil(cols);
-    let row_rects = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints(vec![Constraint::Ratio(1, rows_n as u32); rows_n])
-        .split(area);
-    for (r, row_rect) in row_rects.iter().enumerate() {
-        let col_rects = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints(vec![Constraint::Ratio(1, cols as u32); cols])
-            .split(*row_rect);
-        for (c, cell) in col_rects.iter().enumerate() {
-            let idx = r * cols + c;
-            if let Some(m) = mannies.get(idx) {
-                render_manny_card(frame, *cell, state, m, idx == state.mannies_selection, p);
+    let sel = state.mannies_selection;
+    let mut lines: Vec<Line> = Vec::new();
+    for (i, m) in mannies.iter().enumerate() {
+        let selected = i == sel;
+        let name_style = if selected {
+            Style::default().fg(p.accent).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(p.text)
+        };
+        let sec = if selected { Style::default().fg(p.accent) } else { dim };
+
+        // Summary line: marker · loc · name · task % · ETA.
+        let loc = match m.location.location_type {
+            MannyLocationType::Probe => "●",
+            MannyLocationType::Sector => "◌",
+            MannyLocationType::Unknown => "?",
+        };
+        let task = m.current_task.as_ref();
+        let mut header = vec![
+            Span::styled(if selected { "▶ " } else { "  " }, Style::default().fg(p.accent)),
+            Span::styled(format!("{loc} "), sec),
+            Span::styled(format!("{:<12}", m.name), name_style),
+            Span::styled(manny_task_label(task), if task.is_none() { sec } else { name_style }),
+        ];
+        if m.current_task.is_some() {
+            header.push(Span::styled(format!(" {:.0}%", m.task_progress_percent), sec));
+            if let Some(eta) = manny_task_eta(m) {
+                header.push(Span::styled(format!(" · {eta}"), sec));
             }
         }
+        lines.push(Line::from(header));
+
+        // Indented detail: cargo gauge, cargo breakdown, location.
+        let c = &m.cargo;
+        let used = c.metals + c.ice + c.deuterium + c.organic_compounds;
+        let ratio = if c.capacity > 0.0 { used / c.capacity } else { 0.0 };
+        lines.push(block_gauge_line("    CARGO", ratio, &format!("{used:.0}/{:.0}", c.capacity), p.accent, p));
+        lines.push(Line::styled(
+            format!(
+                "    metals {:.0} · ice {:.0} · deut {:.0} · org {:.0}",
+                c.metals, c.ice, c.deuterium, c.organic_compounds
+            ),
+            dim,
+        ));
+        let mut loc_line = match state.manny_sector_coords(m) {
+            Some((x, y, z)) => format!("    sector ({x}, {y}, {z})"),
+            None => "    on probe".to_string(),
+        };
+        if matches!(m.task_visibility, Some(MannyTaskVisibility::ScutNetwork)) {
+            loc_line.push_str("  ≣ via SCUT");
+        }
+        lines.push(Line::styled(loc_line, dim));
+        lines.push(Line::raw(""));
     }
+
+    frame.render_widget(Paragraph::new(lines), inner);
 }
