@@ -15,9 +15,10 @@ pub const BOOT_CHARS_PER_FRAME: usize = 3;
 /// The probe (centre) boots first and takes its time; only after this lead do
 /// the eight subsystems come online, centre-out, at the fast cadence.
 const PROBE_LEAD: u64 = 12;
-/// Minimum boot duration — long enough for the full self-check to play out
-/// (~3 s at the ~90 ms tick). The boot never ends before this.
-const BOOT_MIN_FRAMES: u64 = 35;
+/// Minimum boot duration. Long enough for the full self-check to play out
+/// (~frame 32) plus a ~1 s hold on the completed screen before the live
+/// content loads in. The boot never ends before this.
+const BOOT_MIN_FRAMES: u64 = 43;
 /// Safety cap: end the boot even if the initial probe fetch never returns.
 const BOOT_MAX_FRAMES: u64 = 70;
 
