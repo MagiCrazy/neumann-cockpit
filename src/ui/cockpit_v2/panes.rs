@@ -1,18 +1,19 @@
 //! Compact read-only renderers for the five panes promoted from overlays
-//! (bloc U2): Map, Comms, Sector, Missions, Storage. The four original panes
-//! (Probe, Inventory, Scanner, Mannies) reuse their existing renderers.
+//! (blocs U2–U3): Map, Comms, Sector, Missions, Storage. The four original
+//! panes (Probe, Inventory, Scanner, Mannies) reuse their existing renderers.
 //!
-//! These show a terse summary sized for a 1/3 grid cell; the rich detail and
-//! actions land in the zoom view (U3) and menus (U5).
+//! Each shows a terse summary sized for a 1/3 grid cell; drilling in (`l`)
+//! swaps a pane to its detail view (Missions → steps, Comms → message). The
+//! remaining detail views and actions land with menus (U5).
 
-use crate::api::types::MissionStatus;
-use crate::app::{AppState, Pane};
+use crate::api::types::{MissionStatus, MissionStepStatus};
+use crate::app::{AppState, DrillLevel, Pane};
 use crate::ui::theme::{gauge_color, object_icon, panel_block};
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::Paragraph,
+    widgets::{Paragraph, Wrap},
     Frame,
 };
 
@@ -59,6 +60,9 @@ pub fn render_map(frame: &mut Frame, area: Rect, state: &AppState, active: bool)
 }
 
 pub fn render_comms(frame: &mut Frame, area: Rect, state: &AppState, active: bool) {
+    if let Some(DrillLevel::MessageThread(id)) = state.pane_nav[Pane::Comms.index()].drill.last() {
+        return render_message_detail(frame, area, state, id, active);
+    }
     let unread_alerts = state.unread_alert_count();
     let unread_msgs = state.unread_message_count();
     let mut lines = vec![
@@ -91,6 +95,24 @@ pub fn render_comms(frame: &mut Frame, area: Rect, state: &AppState, active: boo
     render_body(frame, area, " COMMS ", active, lines);
 }
 
+fn render_message_detail(frame: &mut Frame, area: Rect, state: &AppState, id: &str, active: bool) {
+    let block = panel_block(" MESSAGE ", active);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let Some(m) = state.messages.iter().find(|m| m.id.to_string() == id) else {
+        frame.render_widget(Paragraph::new(Line::styled("message not found", DIM)), inner);
+        return;
+    };
+    let lines = vec![
+        Line::from(vec![Span::styled("from ", DIM), Span::raw(m.sender.name.clone())]),
+        Line::from(vec![Span::styled("to   ", DIM), Span::raw(m.recipient.name.clone())]),
+        Line::styled(m.created_at.clone(), DIM),
+        Line::raw(""),
+        Line::raw(m.body.clone()),
+    ];
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+}
+
 pub fn render_sector(frame: &mut Frame, area: Rect, state: &AppState, active: bool) {
     let mut lines = Vec::new();
     match state.current_sector() {
@@ -118,6 +140,9 @@ pub fn render_sector(frame: &mut Frame, area: Rect, state: &AppState, active: bo
 }
 
 pub fn render_missions(frame: &mut Frame, area: Rect, state: &AppState, active: bool) {
+    if let Some(DrillLevel::Mission(id)) = state.pane_nav[Pane::Missions.index()].drill.last() {
+        return render_mission_detail(frame, area, state, id, active);
+    }
     let mut lines = Vec::new();
     if state.missions.is_empty() {
         lines.push(Line::styled("no active missions", DIM));
@@ -142,6 +167,39 @@ pub fn render_missions(frame: &mut Frame, area: Rect, state: &AppState, active: 
         }
     }
     render_body(frame, area, " MISSIONS ", active, lines);
+}
+
+fn render_mission_detail(frame: &mut Frame, area: Rect, state: &AppState, id: &str, active: bool) {
+    let block = panel_block(" MISSION ", active);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let Some(m) = state.missions.iter().find(|m| m.id == id) else {
+        frame.render_widget(Paragraph::new(Line::styled("mission not found", DIM)), inner);
+        return;
+    };
+    let mut lines = vec![Line::styled(
+        m.title.clone(),
+        Style::default().add_modifier(Modifier::BOLD),
+    )];
+    if let Some(d) = &m.description {
+        lines.push(Line::styled(d.clone(), DIM));
+    }
+    lines.push(Line::raw(""));
+    let cur = cursor(state, Pane::Missions);
+    for (i, step) in m.steps.iter().enumerate() {
+        let (mark, color) = match step.status {
+            MissionStepStatus::Completed => ("✓", Color::Green),
+            MissionStepStatus::Failed => ("✗", Color::Red),
+            MissionStepStatus::Skipped => ("–", Color::DarkGray),
+            MissionStepStatus::Pending => ("·", Color::Cyan),
+            MissionStepStatus::Unknown => ("?", Color::DarkGray),
+        };
+        lines.push(Line::from(vec![
+            Span::styled(format!("{mark} "), Style::default().fg(color)),
+            Span::styled(step.title.clone(), row_style(active, i == cur)),
+        ]));
+    }
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
 }
 
 pub fn render_storage(frame: &mut Frame, area: Rect, state: &AppState, active: bool) {

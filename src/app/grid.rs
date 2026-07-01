@@ -150,10 +150,23 @@ impl super::AppState {
     /// renderers (Inventory/Scanner/Mannies) keep their own cursors, so they
     /// report 0 here; only the promoted panes drive `pane_nav`.
     pub fn pane_item_count(&self, pane: Pane) -> usize {
+        let drill = self.pane_nav[pane.index()].drill.last();
         match pane {
-            Pane::Comms => self.messages.len(),
+            // Inside a message thread there is no list to move through.
+            Pane::Comms => match drill {
+                Some(DrillLevel::MessageThread(_)) => 0,
+                _ => self.messages.len(),
+            },
             Pane::Sector => self.scanner_objects().len(),
-            Pane::Missions => self.missions.len(),
+            // Drilled into a mission, the cursor moves over its steps.
+            Pane::Missions => match drill {
+                Some(DrillLevel::Mission(id)) => self
+                    .missions
+                    .iter()
+                    .find(|m| &m.id == id)
+                    .map_or(0, |m| m.steps.len()),
+                _ => self.missions.len(),
+            },
             Pane::Storage => self.storage_containers.len(),
             _ => 0,
         }
@@ -189,6 +202,72 @@ impl super::AppState {
                 nav.cursor = nav.cursor.saturating_sub(1);
             }
         }
+    }
+
+    /// Toggle full-screen zoom of the active pane.
+    pub fn toggle_zoom(&mut self) {
+        self.zoomed = !self.zoomed;
+    }
+
+    /// Descend into the selected element of the active pane (drill-in).
+    /// U3 supports one level, for panes whose detail is already in state:
+    /// Missions (→ steps) and Comms (→ message thread). Other panes are
+    /// no-ops until their detail views land.
+    pub fn pane_drill_in(&mut self) {
+        let idx = self.active_pane.index();
+        // Only one level deep for now.
+        if !self.pane_nav[idx].drill.is_empty() {
+            return;
+        }
+        let cursor = self.pane_nav[idx].cursor;
+        let level = match self.active_pane {
+            Pane::Missions => self.missions.get(cursor).map(|m| DrillLevel::Mission(m.id.clone())),
+            Pane::Comms => self
+                .messages
+                .get(cursor)
+                .map(|m| DrillLevel::MessageThread(m.id.to_string())),
+            _ => None,
+        };
+        if let Some(level) = level {
+            let nav = &mut self.pane_nav[idx];
+            nav.drill.push(level);
+            nav.cursor = 0;
+        }
+    }
+
+    /// Ascend one drill level in the active pane. Returns true if a level was
+    /// popped (so callers can distinguish "went up" from "already at root").
+    pub fn pane_drill_out(&mut self) -> bool {
+        let idx = self.active_pane.index();
+        let popped = self.pane_nav[idx].drill.pop().is_some();
+        if popped {
+            self.pane_nav[idx].cursor = 0;
+        }
+        popped
+    }
+
+    /// Breadcrumb segments for the active pane: `COCKPIT › PANE [› detail…]`.
+    pub fn breadcrumb(&self) -> Vec<String> {
+        let mut segs = vec!["COCKPIT".to_string(), self.active_pane.label().to_string()];
+        for level in &self.pane_nav[self.active_pane.index()].drill {
+            segs.push(match level {
+                DrillLevel::Mission(id) => self
+                    .missions
+                    .iter()
+                    .find(|m| &m.id == id)
+                    .map_or_else(|| "mission".to_string(), |m| m.title.clone()),
+                DrillLevel::MessageThread(id) => self
+                    .messages
+                    .iter()
+                    .find(|m| m.id.to_string() == *id)
+                    .map_or_else(|| format!("msg {id}"), |m| m.sender.name.clone()),
+                DrillLevel::Container(id) => id.clone(),
+                DrillLevel::ItemGroup(g) => g.clone(),
+                DrillLevel::Manny(m) => m.clone(),
+                DrillLevel::SectorObject(i) => format!("object {i}"),
+            });
+        }
+        segs
     }
 }
 
@@ -232,5 +311,60 @@ mod tests {
             assert!(seen.insert(pane.grid_pos()), "duplicate pos for {pane:?}");
         }
         assert_eq!(seen.len(), 9);
+    }
+
+    #[test]
+    fn cycle_pane_wraps_both_ways() {
+        let mut s = crate::app::AppState::default();
+        s.active_pane = Pane::Mannies; // last in ALL
+        s.cycle_pane(true);
+        assert_eq!(s.active_pane, Pane::Scanner); // wrapped to first
+        s.cycle_pane(false);
+        assert_eq!(s.active_pane, Pane::Mannies); // wrapped back
+    }
+
+    #[test]
+    fn toggle_zoom_flips() {
+        let mut s = crate::app::AppState::default();
+        assert!(!s.zoomed);
+        s.toggle_zoom();
+        assert!(s.zoomed);
+        s.toggle_zoom();
+        assert!(!s.zoomed);
+    }
+
+    #[test]
+    fn drill_out_at_root_is_noop() {
+        let mut s = crate::app::AppState::default();
+        s.active_pane = Pane::Missions;
+        assert!(!s.pane_drill_out());
+        assert_eq!(s.breadcrumb(), vec!["COCKPIT", "MISSIONS"]);
+    }
+
+    #[test]
+    fn mission_drill_in_out_updates_breadcrumb() {
+        use crate::api::types::{Mission, MissionStatus};
+        let mut s = crate::app::AppState::default();
+        s.missions = vec![Mission {
+            id: "m1".into(),
+            mission_type: "survey".into(),
+            title: "Survey the rim".into(),
+            description: None,
+            status: MissionStatus::Active,
+            steps: vec![],
+        }];
+        s.active_pane = Pane::Missions;
+
+        s.pane_drill_in();
+        assert_eq!(
+            s.breadcrumb(),
+            vec!["COCKPIT", "MISSIONS", "Survey the rim"]
+        );
+        // One level deep only: a second drill-in is a no-op.
+        s.pane_drill_in();
+        assert_eq!(s.pane_nav[Pane::Missions.index()].drill.len(), 1);
+
+        assert!(s.pane_drill_out());
+        assert_eq!(s.breadcrumb(), vec!["COCKPIT", "MISSIONS"]);
     }
 }

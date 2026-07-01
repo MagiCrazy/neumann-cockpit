@@ -1,8 +1,8 @@
-//! Unified Cockpit v2 interface — the 3×3 tiling dashboard (bloc U2).
+//! Unified Cockpit v2 interface — the 3×3 tiling dashboard (blocs U2–U3).
 //!
-//! U2 delivers the responsive grid and read-only navigation: `ertdfgcvb`
-//! selects a pane, `jk` moves the cursor within it. Drill-in, zoom,
-//! contextual menus and command mode follow in later blocs. The four
+//! Responsive grid + read-only navigation: `ertdfgcvb` selects a pane, `jk`
+//! moves the cursor, `l`/`h` drill in/out, `z` zooms the active pane full
+//! screen. Contextual menus and command mode follow in later blocs. The four
 //! original panes reuse their existing renderers; the five promoted panes
 //! (Map, Comms, Sector, Missions, Storage) use the compact renderers in
 //! [`panes`].
@@ -33,8 +33,13 @@ pub fn render(frame: &mut Frame, state: &AppState) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(area);
 
-    for (pane, rect) in grid::visible_panes(rows[0], state.active_pane) {
-        render_pane(frame, rect, pane, state, pane == state.active_pane);
+    if state.zoomed {
+        // Zoom: the active pane takes the whole content area.
+        render_pane(frame, rows[0], state.active_pane, state, true);
+    } else {
+        for (pane, rect) in grid::visible_panes(rows[0], state.active_pane) {
+            render_pane(frame, rect, pane, state, pane == state.active_pane);
+        }
     }
     render_status(frame, rows[1], state);
 }
@@ -54,17 +59,20 @@ fn render_pane(frame: &mut Frame, area: Rect, pane: Pane, state: &AppState, acti
 }
 
 fn render_status(frame: &mut Frame, area: Rect, state: &AppState) {
+    let (tag, tag_bg) = if state.zoomed {
+        ("ZOOM", GREEN)
+    } else {
+        (state.mode.tag(), AMBER)
+    };
+    let crumb = state.breadcrumb().join(" › ");
     let line = Line::from(vec![
         Span::styled(
-            format!(" {} ", state.mode.tag()),
-            Style::default().fg(Color::Black).bg(AMBER).add_modifier(Modifier::BOLD),
+            format!(" {tag} "),
+            Style::default().fg(Color::Black).bg(tag_bg).add_modifier(Modifier::BOLD),
         ),
+        Span::styled(format!("  {crumb}  "), Style::default().fg(GREEN)),
         Span::styled(
-            format!("  {} ", state.active_pane.label()),
-            Style::default().fg(GREEN),
-        ),
-        Span::styled(
-            "· ertdfgcvb select · jk move · Tab cycle · F5 refresh · q quit",
+            "· ertdfgcvb select · jk move · hl drill · z zoom · q quit",
             Style::default().fg(DIM),
         ),
     ]);
