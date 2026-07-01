@@ -6,12 +6,12 @@
 //! swaps a pane to its detail view (Missions → steps, Comms → message).
 //! Colours come from the active [`Palette`].
 
-use crate::api::types::{MannyTaskVisibility, MissionStatus, MissionStepStatus};
+use crate::api::types::{Manny, MannyTaskVisibility, MissionStatus, MissionStepStatus};
 use crate::app::{AppState, DrillLevel, Pane};
 use crate::ui::panels::mannies::{manny_task_eta, manny_task_label};
 use crate::ui::theme::{block_gauge_line, object_icon, pane_block, Palette};
 use ratatui::{
-    layout::Rect,
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Paragraph, Wrap},
@@ -242,19 +242,14 @@ pub fn render_storage(frame: &mut Frame, area: Rect, state: &AppState, active: b
 
 /// Detail view for a single manny (drill-in `l` on the Mannies pane): task,
 /// progress, time remaining, cargo breakdown, and location.
-pub fn render_manny_detail(frame: &mut Frame, area: Rect, state: &AppState, id: &str, active: bool, p: Palette) {
-    let block = pane_block(" MANNY ", active, p);
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+/// The detail lines for one manny (task/%, ETA, location, cargo), shared by
+/// the drill-in detail and the zoom overview cards. The name lives in the
+/// block title, not here.
+fn manny_detail_lines(state: &AppState, m: &Manny, p: Palette) -> Vec<Line<'static>> {
     let dim = Style::default().fg(p.dim);
     let text = Style::default().fg(p.text);
+    let mut lines = Vec::new();
 
-    let Some(m) = state.mannies.as_ref().and_then(|v| v.iter().find(|m| m.id == id)) else {
-        frame.render_widget(Paragraph::new(Line::styled("manny gone", dim)), inner);
-        return;
-    };
-
-    let mut lines = vec![Line::styled(m.name.clone(), text.add_modifier(Modifier::BOLD))];
     let task = m.current_task.as_ref();
     if task.is_some() {
         lines.push(Line::from(vec![
@@ -286,6 +281,64 @@ pub fn render_manny_detail(frame: &mut Frame, area: Rect, state: &AppState, id: 
     lines.push(block_gauge_line("CARGO", ratio, &format!("{used:.1}/{:.1}", c.capacity), p.accent, p));
     lines.push(Line::styled(format!("metals {:.1}  ice {:.1}", c.metals, c.ice), text));
     lines.push(Line::styled(format!("deut {:.1}  org {:.1}", c.deuterium, c.organic_compounds), text));
+    lines
+}
 
-    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+pub fn render_manny_detail(frame: &mut Frame, area: Rect, state: &AppState, id: &str, active: bool, p: Palette) {
+    let Some(m) = state.mannies.as_ref().and_then(|v| v.iter().find(|m| m.id == id)) else {
+        let block = pane_block(" MANNY ", active, p);
+        let inner = block.inner(area);
+        frame.render_widget(block, area);
+        frame.render_widget(Paragraph::new(Line::styled("manny gone", Style::default().fg(p.dim))), inner);
+        return;
+    };
+    let title = format!(" {} ", m.name);
+    let block = pane_block(&title, active, p);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    frame.render_widget(Paragraph::new(manny_detail_lines(state, m, p)).wrap(Wrap { trim: false }), inner);
+}
+
+/// One manny as a bordered card (used in the zoom overview). The selected
+/// manny's card gets the accent border.
+fn render_manny_card(frame: &mut Frame, area: Rect, state: &AppState, m: &Manny, selected: bool, p: Palette) {
+    let title = format!(" {} ", m.name);
+    let block = pane_block(&title, selected, p);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    frame.render_widget(Paragraph::new(manny_detail_lines(state, m, p)), inner);
+}
+
+/// Zoomed Mannies pane: every manny as a detail card, in a grid, so the whole
+/// fleet is visible at a glance.
+pub fn render_mannies_overview(frame: &mut Frame, area: Rect, state: &AppState, p: Palette) {
+    let dim = Style::default().fg(p.dim);
+    let Some(mannies) = &state.mannies else {
+        frame.render_widget(Paragraph::new(Line::styled("no data", dim)), area);
+        return;
+    };
+    if mannies.is_empty() {
+        frame.render_widget(Paragraph::new(Line::styled("no mannies aboard", dim)), area);
+        return;
+    }
+
+    let n = mannies.len();
+    let cols = ((area.width as usize / 26).max(1)).min(n).min(3);
+    let rows_n = n.div_ceil(cols);
+    let row_rects = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(vec![Constraint::Ratio(1, rows_n as u32); rows_n])
+        .split(area);
+    for (r, row_rect) in row_rects.iter().enumerate() {
+        let col_rects = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(vec![Constraint::Ratio(1, cols as u32); cols])
+            .split(*row_rect);
+        for (c, cell) in col_rects.iter().enumerate() {
+            let idx = r * cols + c;
+            if let Some(m) = mannies.get(idx) {
+                render_manny_card(frame, *cell, state, m, idx == state.mannies_selection, p);
+            }
+        }
+    }
 }
