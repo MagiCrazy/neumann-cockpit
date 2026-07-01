@@ -178,7 +178,9 @@ impl super::AppState {
         match self.active_pane {
             Pane::Inventory => self.inventory_next(),
             Pane::Scanner => self.scan_hist_next(),
-            Pane::Mannies => self.manny_next(),
+            // Frozen while viewing a single manny's detail (drilled in).
+            Pane::Mannies if self.pane_nav[Pane::Mannies.index()].drill.is_empty() => self.manny_next(),
+            Pane::Mannies => {}
             Pane::Probe | Pane::Map => {}
             pane => {
                 let n = self.pane_item_count(pane);
@@ -195,7 +197,8 @@ impl super::AppState {
         match self.active_pane {
             Pane::Inventory => self.inventory_prev(),
             Pane::Scanner => self.scan_hist_prev(),
-            Pane::Mannies => self.manny_prev(),
+            Pane::Mannies if self.pane_nav[Pane::Mannies.index()].drill.is_empty() => self.manny_prev(),
+            Pane::Mannies => {}
             Pane::Probe | Pane::Map => {}
             pane => {
                 let nav = &mut self.pane_nav[pane.index()];
@@ -226,6 +229,12 @@ impl super::AppState {
                 .messages
                 .get(cursor)
                 .map(|m| DrillLevel::MessageThread(m.id.to_string())),
+            // Mannies uses its own selection cursor, not `pane_nav.cursor`.
+            Pane::Mannies => self
+                .mannies
+                .as_ref()
+                .and_then(|v| v.get(self.mannies_selection))
+                .map(|m| DrillLevel::Manny(m.id.clone())),
             _ => None,
         };
         if let Some(level) = level {
@@ -261,11 +270,15 @@ impl super::AppState {
         if !drilled && matches!(pane, Pane::Missions | Pane::Comms) {
             parts.push("l open");
         }
-        // Panes that expose actions on Enter (menu or reused overlay).
-        if matches!(
-            pane,
-            Pane::Mannies | Pane::Inventory | Pane::Missions | Pane::Comms | Pane::Storage | Pane::Sector
-        ) {
+        // Panes that expose actions on Enter (menu or reused overlay). Probe
+        // only acts when a recovery alert is present.
+        let probe_recovery = pane == Pane::Probe && self.probe_terminal_alert().is_some();
+        if probe_recovery
+            || matches!(
+                pane,
+                Pane::Mannies | Pane::Inventory | Pane::Missions | Pane::Comms | Pane::Storage | Pane::Sector
+            )
+        {
             parts.push("Enter act");
         }
         parts.push("z zoom");
@@ -291,7 +304,11 @@ impl super::AppState {
                     .map_or_else(|| format!("msg {id}"), |m| m.sender.name.clone()),
                 DrillLevel::Container(id) => id.clone(),
                 DrillLevel::ItemGroup(g) => g.clone(),
-                DrillLevel::Manny(m) => m.clone(),
+                DrillLevel::Manny(id) => self
+                    .mannies
+                    .as_ref()
+                    .and_then(|v| v.iter().find(|m| &m.id == id))
+                    .map_or_else(|| "manny".to_string(), |m| m.name.clone()),
                 DrillLevel::SectorObject(i) => format!("object {i}"),
             });
         }

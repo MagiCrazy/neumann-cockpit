@@ -3,32 +3,28 @@ use crate::app::AppState;
 use chrono::Utc;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::Paragraph,
     Frame,
 };
 
-use crate::ui::theme::{format_duration, gauge_color, make_line_gauge, movement_phase_label, palette, pane_block, probe_status_label, probe_status_style};
+use crate::ui::theme::{
+    block_gauge_line, format_duration, movement_phase_label, palette, pane_block, probe_status_label,
+    probe_status_style, ratio_color,
+};
 // ── Probe panel ───────────────────────────────────────────────────────────────
 
 pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState, focused: bool) {
-    let block = pane_block(" PROBE ", focused, palette(state.color_mode));
+    let p = palette(state.color_mode);
+    let block = pane_block(" PROBE ", focused, p);
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    if state.loading && state.probe.is_none() {
-        frame.render_widget(
-            Paragraph::new("Fetching…").style(Style::default().fg(Color::DarkGray)),
-            inner,
-        );
-        return;
-    }
-
     let Some(probe) = &state.probe else {
+        let msg = if state.loading { "fetching…" } else { "no data — F5 to refresh" };
         frame.render_widget(
-            Paragraph::new("No data — press F5 to refresh")
-                .style(Style::default().fg(Color::DarkGray)),
+            Paragraph::new(msg).style(Style::default().fg(p.dim)),
             inner,
         );
         return;
@@ -44,21 +40,16 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
     let show_sector = active_movement.is_none()
         && probe.sector.as_ref().and_then(|s| s.relative.as_ref()).is_some();
 
-    let mut sections: Vec<Constraint> = vec![
-        Constraint::Length(1), // name + status
-    ];
+    let mut sections: Vec<Constraint> = vec![Constraint::Length(1)]; // header
     if show_sector {
-        sections.push(Constraint::Length(1)); // current sector coords
+        sections.push(Constraint::Length(1));
     }
     if active_movement.is_some() {
-        sections.push(Constraint::Length(1)); // coords + distance
-        sections.push(Constraint::Length(1)); // phase + ETA
-        sections.push(Constraint::Length(1)); // progress gauge
-        sections.push(Constraint::Length(1)); // speed gauge
+        sections.extend([Constraint::Length(1); 4]); // route, phase+eta, burn, speed
     }
-    sections.push(Constraint::Length(1)); // fuel gauge
+    sections.push(Constraint::Length(1)); // fuel
     if probe.systems.is_some() {
-        sections.push(Constraint::Length(1)); // integrity gauge
+        sections.push(Constraint::Length(1)); // integrity
     }
     sections.push(Constraint::Min(0)); // padding
 
@@ -66,38 +57,29 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
         .direction(Direction::Vertical)
         .constraints(sections)
         .split(inner);
-
     let mut row = 0;
 
-    // ── Header ──
-    let spinner = if state.loading { " ⟳" } else { "" };
-    let unread = state.unread_alert_count();
-    let alert_badge = if unread > 0 {
-        Span::styled(
-            format!(" [!{unread}]"),
-            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD | Modifier::RAPID_BLINK),
-        )
-    } else {
-        Span::raw("")
-    };
+    // ── Header: name · status · badges ──
     let mut status_spans = vec![
-        Span::styled(&probe.name, Style::default().add_modifier(Modifier::BOLD)),
+        Span::styled(&probe.name, Style::default().fg(p.text).add_modifier(Modifier::BOLD)),
         Span::raw("  "),
         Span::styled(probe_status_label(&probe.status), probe_status_style(&probe.status)),
-        alert_badge,
-        Span::styled(spinner, Style::default().fg(Color::DarkGray)),
     ];
+    let unread = state.unread_alert_count();
+    if unread > 0 {
+        status_spans.push(Span::styled(
+            format!(" [!{unread}]"),
+            Style::default().fg(p.crit).add_modifier(Modifier::BOLD),
+        ));
+    }
     if state.probe_terminal_alert().is_some() {
         status_spans.push(Span::styled(
-            "  [^R reassign]",
-            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            "  ⚠ RECOVER",
+            Style::default().fg(p.crit).add_modifier(Modifier::BOLD),
         ));
     }
     if !state.scut_coverage().is_empty() {
-        status_spans.push(Span::styled(
-            "  ≣ SCUT",
-            Style::default().fg(Color::LightBlue),
-        ));
+        status_spans.push(Span::styled("  ≣ SCUT", Style::default().fg(p.accent)));
     }
     frame.render_widget(Paragraph::new(Line::from(status_spans)), rows[row]);
     row += 1;
@@ -107,10 +89,10 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
         if let Some(rel) = probe.sector.as_ref().and_then(|s| s.relative.as_ref()) {
             frame.render_widget(
                 Paragraph::new(Line::from(vec![
-                    Span::styled("@ ", Style::default().fg(Color::DarkGray)),
+                    Span::styled("@ ", Style::default().fg(p.dim)),
                     Span::styled(
                         format!("({},{},{})", rel.x as i64, rel.y as i64, rel.z as i64),
-                        Style::default().fg(Color::White),
+                        Style::default().fg(p.text),
                     ),
                 ])),
                 rows[row],
@@ -129,13 +111,16 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
 
         frame.render_widget(
             Paragraph::new(Line::from(vec![
-                Span::styled("▶ ", Style::default().fg(Color::Yellow)),
-                Span::raw(format!(
-                    "({},{},{}) → ({},{},{})  d:{}",
-                    mv.origin.x as i64, mv.origin.y as i64, mv.origin.z as i64,
-                    mv.target.x as i64, mv.target.y as i64, mv.target.z as i64,
-                    mv.distance,
-                )),
+                Span::styled("▶ ", Style::default().fg(p.warn)),
+                Span::styled(
+                    format!(
+                        "({},{},{}) → ({},{},{})  d:{}",
+                        mv.origin.x as i64, mv.origin.y as i64, mv.origin.z as i64,
+                        mv.target.x as i64, mv.target.y as i64, mv.target.z as i64,
+                        mv.distance,
+                    ),
+                    Style::default().fg(p.text),
+                ),
             ])),
             rows[row],
         );
@@ -143,42 +128,31 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
 
         frame.render_widget(
             Paragraph::new(Line::from(vec![
-                Span::raw("  "),
-                Span::styled(phase_label, Style::default().fg(Color::Yellow)),
-                Span::raw(format!("  ETA: {}", format_duration(remaining))),
+                Span::styled(format!("  {phase_label}"), Style::default().fg(p.warn)),
+                Span::styled(format!("  ETA {}", format_duration(remaining)), Style::default().fg(p.dim)),
             ])),
             rows[row],
         );
         row += 1;
 
         frame.render_widget(
-            make_line_gauge(&format!("{:<12}{:.0}%", "Travel", progress * 100.0), progress, Color::Yellow),
+            block_gauge_line("BURN", progress, &format!("{:.0}%", progress * 100.0), p.accent, p),
             rows[row],
         );
         row += 1;
 
         let velocity = mv.estimated_velocity_c.unwrap_or(0.0).clamp(0.0, 1.0);
         frame.render_widget(
-            make_line_gauge(
-                &format!("{:<12}{:.2}c", "Speed", velocity),
-                velocity,
-                Color::Yellow,
-            ),
+            block_gauge_line("SPEED", velocity, &format!("{velocity:.2}c"), p.accent, p),
             rows[row],
         );
         row += 1;
     }
 
     // ── Fuel ──
-    let fuel_ratio = probe.fuel.deuterium
-        .map(|d| (d / 100.0).clamp(0.0, 1.0))
-        .unwrap_or(0.0);
+    let fuel = probe.fuel.deuterium.map(|d| (d / 100.0).clamp(0.0, 1.0)).unwrap_or(0.0);
     frame.render_widget(
-        make_line_gauge(
-            &format!("{:<12}{:.1}%", "Fuel", fuel_ratio * 100.0),
-            fuel_ratio,
-            gauge_color(fuel_ratio),
-        ),
+        block_gauge_line("FUEL", fuel, &format!("{:.0}%", fuel * 100.0), ratio_color(fuel, p), p),
         rows[row],
     );
     row += 1;
@@ -187,11 +161,7 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
     if let Some(sys) = &probe.systems {
         let integrity = (sys.integrity_percent.unwrap_or(100.0) / 100.0).clamp(0.0, 1.0);
         frame.render_widget(
-            make_line_gauge(
-                &format!("{:<12}{:.1}%", "Integrity", integrity * 100.0),
-                integrity,
-                gauge_color(integrity),
-            ),
+            block_gauge_line("INTEG", integrity, &format!("{:.0}%", integrity * 100.0), ratio_color(integrity, p), p),
             rows[row],
         );
         row += 1;
@@ -199,4 +169,3 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
 
     let _ = row;
 }
-

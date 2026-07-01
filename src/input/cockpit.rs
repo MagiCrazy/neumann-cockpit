@@ -17,9 +17,9 @@ use crate::api::tasks::{
 use crate::api::types::{MannyTask, MannyTaskVisibility};
 use crate::app::{
     ApiMessage, AppState, AtomicPrinterCraftInput, ContainersInput, CraftInput, DetachInput,
-    DropCargoInput, InputMode, InspectInput, MenuAction, MessagesInput, MineInput, MissionsInput,
-    ObjectActionInput, Pane, RecallInput, RecoverInput, RefuelInput, RemoteMineInput,
-    RenameMannyInput, RepairInput, SalvageInput, StorageMoveInput,
+    DropCargoInput, DropStorageContainerInput, InputMode, InspectInput, MenuAction, MessagesInput,
+    MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput, Pane, RecallInput, RecoverInput,
+    RefuelInput, RemoteMineInput, RenameMannyInput, RepairInput, SalvageInput, StorageMoveInput,
 };
 
 pub fn handle_cockpit_event(
@@ -72,7 +72,7 @@ pub fn handle_cockpit_event(
 /// the contextual menu; panes backed by a rich wizard reuse its overlay.
 fn open_actions(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
     match state.active_pane {
-        Pane::Mannies | Pane::Inventory => match state.build_context_menu() {
+        Pane::Mannies | Pane::Inventory | Pane::Probe => match state.build_context_menu() {
             Some(menu) if !menu.items.is_empty() => state.mode = InputMode::Menu(menu),
             _ => state.set_toast("no actions here"),
         },
@@ -196,6 +196,12 @@ fn fire_menu_action(
             }
             return;
         }
+        MenuAction::MindSnapshot => {
+            if state.probe_terminal_alert().is_some() {
+                state.mind_snapshot = MindSnapshotInput::Confirm { error: None };
+            }
+            return;
+        }
         _ => {}
     }
 
@@ -297,6 +303,37 @@ fn fire_menu_action(
                     state.detach = DetachInput::PickMode { manny_id: id, manny_name: name, container_id, container_name, selection: 0, error: None };
                 }
                 _ => state.detach = DetachInput::PickContainer { manny_id: id, manny_name: name, containers, selection: 0 },
+            }
+        }
+        MenuAction::DropStorageContainer if can => {
+            let containers = state.collect_detachable_containers();
+            if containers.is_empty() {
+                state.error = Some("no detachable containers in inventory".into());
+            } else if !state.has_atmospheric_drop_kit() {
+                state.error = Some("no atmospheric_drop_kit in inventory".into());
+            } else {
+                let planets = state.collect_planet_candidates();
+                if planets.is_empty() {
+                    state.error = Some("no planet in current sector — scan first".into());
+                } else if containers.len() == 1 {
+                    let (container_id, container_name) = containers.into_iter().next().unwrap();
+                    state.drop_container = DropStorageContainerInput::PickPlanet {
+                        manny_id: id,
+                        manny_name: name,
+                        container_id,
+                        container_name,
+                        planets,
+                        selection: 0,
+                        error: None,
+                    };
+                } else {
+                    state.drop_container = DropStorageContainerInput::PickContainer {
+                        manny_id: id,
+                        manny_name: name,
+                        containers,
+                        selection: 0,
+                    };
+                }
             }
         }
         MenuAction::Refuel if can => {

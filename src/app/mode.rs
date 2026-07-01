@@ -25,6 +25,10 @@ pub enum MenuAction {
     Jettison,
     AtomicCraft,
     MoveStock,
+    // Probe pane
+    MindSnapshot,
+    // Mannies pane (extra)
+    DropStorageContainer,
 }
 
 /// A single entry in a contextual action menu.
@@ -88,8 +92,24 @@ impl super::AppState {
         match self.active_pane {
             super::Pane::Mannies => self.mannies_context_menu(),
             super::Pane::Inventory => Some(self.inventory_context_menu()),
+            super::Pane::Probe => self.probe_context_menu(),
             _ => None,
         }
+    }
+
+    fn probe_context_menu(&self) -> Option<ContextMenu> {
+        // The only probe action is recovery, and only for a dead/trapped probe.
+        self.probe_terminal_alert()?;
+        Some(ContextMenu {
+            title: "PROBE".into(),
+            items: vec![MenuItem {
+                action: MenuAction::MindSnapshot,
+                label: "Reassign mind snapshot".into(),
+                enabled: true,
+                disabled_reason: None,
+            }],
+            cursor: 0,
+        })
     }
 
     fn inventory_context_menu(&self) -> ContextMenu {
@@ -153,6 +173,27 @@ impl super::AppState {
             orders(MenuAction::Inspect, "Inspect…"),
             orders(MenuAction::Recover, "Recover container…"),
             orders(MenuAction::Detach, "Detach container…"),
+            {
+                let has_kit = self.has_atmospheric_drop_kit();
+                let has_container = !self.collect_detachable_containers().is_empty();
+                let has_planet = !self.collect_planet_candidates().is_empty();
+                MenuItem {
+                    action: MenuAction::DropStorageContainer,
+                    label: "Drop container on planet…".into(),
+                    enabled: can && has_kit && has_container && has_planet,
+                    disabled_reason: if !can {
+                        Some("busy".to_string())
+                    } else if !has_kit {
+                        Some("no drop-kit".to_string())
+                    } else if !has_container {
+                        Some("no container".to_string())
+                    } else if !has_planet {
+                        Some("no planet".to_string())
+                    } else {
+                        None
+                    },
+                }
+            },
             MenuItem {
                 action: MenuAction::Refuel,
                 label: "Refill deuterium".into(),

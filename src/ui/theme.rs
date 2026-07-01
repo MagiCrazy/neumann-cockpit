@@ -241,6 +241,32 @@ pub(crate) fn movement_phase_label(p: &MovementPhase) -> &'static str {
     }
 }
 
+/// Palette colour for a "how full" ratio: good > 50 %, warn 25–50 %, crit below.
+pub(crate) fn ratio_color(ratio: f64, p: Palette) -> Color {
+    if ratio > 0.5 {
+        p.good
+    } else if ratio > 0.25 {
+        p.warn
+    } else {
+        p.crit
+    }
+}
+
+/// Retro block gauge: `LABEL ▓▓▓▓▓▓░░░░  62%` — filled cells in `fill`, empty
+/// cells dim, value on the right. Static (no animation); the phosphor-CRT
+/// "squares" look.
+pub(crate) fn block_gauge_line(label: &str, ratio: f64, value: &str, fill: Color, p: Palette) -> Line<'static> {
+    const WIDTH: usize = 10;
+    let ratio = ratio.clamp(0.0, 1.0);
+    let filled = (ratio * WIDTH as f64).round() as usize;
+    Line::from(vec![
+        Span::styled(format!("{label:<9} "), Style::default().fg(p.dim)),
+        Span::styled("▓".repeat(filled), Style::default().fg(fill)),
+        Span::styled("░".repeat(WIDTH - filled), Style::default().fg(p.dim)),
+        Span::styled(format!(" {value:>5}"), Style::default().fg(p.text)),
+    ])
+}
+
 pub(crate) fn make_line_gauge(label: &str, ratio: f64, color: Color) -> LineGauge<'_> {
     LineGauge::default()
         .label(Line::raw(label.to_owned()))
