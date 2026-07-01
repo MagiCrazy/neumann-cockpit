@@ -15,12 +15,9 @@ pub const BOOT_CHARS_PER_FRAME: usize = 3;
 /// The probe (centre) boots first and takes its time; only after this lead do
 /// the eight subsystems come online, centre-out, at the fast cadence.
 const PROBE_LEAD: u64 = 12;
-/// Minimum boot duration. Long enough for the full self-check to play out
-/// (~frame 32) plus a ~1 s hold on the completed screen before the live
-/// content loads in. The boot never ends before this.
-const BOOT_MIN_FRAMES: u64 = 43;
-/// Safety cap: end the boot even if the initial probe fetch never returns.
-const BOOT_MAX_FRAMES: u64 = 70;
+/// Frame by which the whole self-check has typed out. Past this the boot is
+/// "complete" and waits on a keypress to continue.
+const BOOT_SEQUENCE_END: u64 = 34;
 
 /// The eight non-probe panes in centre-out order: axial neighbours, then
 /// corners.
@@ -46,24 +43,22 @@ fn boot_reveal_frame(pane: Pane) -> u64 {
 }
 
 impl AppState {
-    /// Advance the boot animation one frame. Ends the boot once the trace has
-    /// played and the probe has loaded, or after the safety timeout.
+    /// Advance the boot animation one frame. The boot never ends on its own —
+    /// it plays the self-check, then waits for a keypress (see `skip_boot`).
     pub fn boot_tick(&mut self) {
         self.boot_frame = self.boot_frame.saturating_add(1);
-        let min_played = self.boot_frame >= BOOT_MIN_FRAMES;
-        if (min_played && self.probe.is_some()) || self.boot_frame >= BOOT_MAX_FRAMES {
-            self.booting = false;
-        }
     }
 
-    /// Overall boot progress in `0.0..=1.0` (for the global loading bar).
-    pub fn boot_progress(&self) -> f64 {
-        (self.boot_frame as f64 / BOOT_MIN_FRAMES as f64).clamp(0.0, 1.0)
-    }
-
-    /// Skip the boot screen (any key).
+    /// Leave the boot screen — either skipping the animation or continuing
+    /// once it has finished. Any key triggers this.
     pub fn skip_boot(&mut self) {
         self.booting = false;
+    }
+
+    /// Whether the self-check has fully typed out (drives the "any key to
+    /// continue" prompt).
+    pub fn boot_complete(&self) -> bool {
+        self.boot_frame >= BOOT_SEQUENCE_END
     }
 
     /// Whether a pane's border has traced in yet this boot frame.
@@ -88,72 +83,72 @@ impl AppState {
         let s = |x: &str| x.to_string();
         match pane {
             Pane::Probe => vec![
-                ("CPU", s("OK")),
-                ("RAM 64K", s("OK")),
+                ("MATRIX", s("OK")),
                 ("REACTOR", s("NOMINAL")),
-                ("MIND CORE", s("LOADED")),
-                ("HULL", s("SYNC")),
-                ("FUEL LINE", s("OK")),
+                ("SURGE DRIVE", s("ONLINE")),
+                ("VR CORE", s("LOADED")),
+                ("DEUTERIUM", s("SYNC")),
+                ("GUPPI", s("READY")),
                 ("CLOCK", s("2337")),
             ],
             Pane::Scanner => vec![
-                ("SENSOR ARRAY", s("6/6")),
-                ("PHASE LOCK", s("OK")),
+                ("SUDDAR ARRAY", s("6/6")),
+                ("SUBSPACE PING", s("OK")),
                 ("RANGE", s("MAX")),
                 ("ARCHIVE", format!("{} SEC", self.scan_history.len())),
-                ("CALIBRATION", s("OK")),
+                ("RESOLUTION", s("OK")),
             ],
             Pane::Map => vec![
-                ("NAV CHART", s("LOCKED")),
-                ("STELLAR IDX", s("OK")),
+                ("STAR CHART", s("LOCKED")),
+                ("SUDDAR MAP", s("OK")),
                 ("WAYPOINTS", s("SYNC")),
-                ("VISITED", format!("{}", self.visited_sectors.len())),
+                ("SYSTEMS", format!("{}", self.visited_sectors.len())),
                 ("GRID", s("ALIGNED")),
             ],
             Pane::Comms => vec![
                 (
-                    "COMMLINK",
+                    "SCUT LINK",
                     self.api_version.map(|v| format!("v{v}")).unwrap_or_else(|| s("SYNC")),
                 ),
+                ("SUBSPACE NET", s("SCAN")),
                 ("INBOX", s("SYNC")),
-                ("RELAY NET", s("SCAN")),
-                ("ANTENNA", s("OK")),
+                ("RELAY", s("OK")),
                 ("CRYPTO", s("OK")),
             ],
             Pane::Sector => vec![
-                ("LOCAL SWEEP", s("OK")),
-                ("GRAV FIELD", s("CLEAR")),
+                ("SUDDAR SWEEP", s("OK")),
+                ("GRAV WELL", s("CLEAR")),
                 ("HAZARDS", s("NONE")),
-                ("OBJECTS", s("SCAN")),
+                ("CONTACTS", s("SCAN")),
                 ("LOCK", s("OK")),
             ],
             Pane::Missions => vec![
                 ("DIRECTIVES", s("SYNCED")),
-                ("ORDERS", s("OK")),
+                ("PROJECTS", s("OK")),
                 ("STEPS", s("OK")),
                 ("PRIORITY", s("SET")),
                 ("LOG", s("OK")),
             ],
             Pane::Inventory => vec![
-                ("MANIFEST", s("SEALED")),
+                ("AUTOFACTORY", s("IDLE")),
+                ("FEEDSTOCK", s("SYNC")),
                 ("CARGO", s("SYNC")),
-                ("PRINTER", s("IDLE")),
-                ("RESOURCES", s("OK")),
-                ("SEALS", s("OK")),
+                ("MATTER PRINTER", s("OK")),
+                ("MANIFEST", s("SEALED")),
             ],
             Pane::Storage => vec![
-                ("REGISTRY", s("INDEXED")),
+                ("HOLDS", s("INDEXED")),
                 ("BINS", s("SYNC")),
                 ("ROUTING", s("OK")),
                 ("CAPACITY", s("OK")),
-                ("LOCKS", s("OK")),
+                ("SEALS", s("OK")),
             ],
             Pane::Mannies => vec![
                 ("MANNY BAY", s("UNLOCKED")),
                 ("ROSTER", s("SYNC")),
+                ("ROAMERS", s("OK")),
                 ("INTERLOCKS", s("OK")),
                 ("POWER", s("OK")),
-                ("DIAGNOSTICS", s("OK")),
             ],
         }
     }
@@ -170,23 +165,24 @@ mod tests {
     }
 
     #[test]
-    fn boot_progress_fills_over_min_duration() {
+    fn boot_completes_after_the_sequence_then_waits() {
         let mut s = AppState { booting: true, ..Default::default() };
-        assert_eq!(s.boot_progress(), 0.0);
-        for _ in 0..BOOT_MIN_FRAMES {
+        assert!(!s.boot_complete());
+        for _ in 0..BOOT_SEQUENCE_END {
             s.boot_tick();
         }
-        assert_eq!(s.boot_progress(), 1.0);
-        // No probe yet, so despite the min duration it keeps waiting.
-        assert!(s.booting);
+        assert!(s.boot_complete());
+        // Ticking never ends the boot on its own — it waits for a key.
+        for _ in 0..50 {
+            s.boot_tick();
+        }
+        assert!(s.booting, "boot waits for a keypress");
     }
 
     #[test]
-    fn boot_times_out_without_a_probe() {
+    fn any_key_leaves_the_boot() {
         let mut s = AppState { booting: true, ..Default::default() };
-        for _ in 0..BOOT_MAX_FRAMES {
-            s.boot_tick();
-        }
-        assert!(!s.booting, "safety timeout ends the boot");
+        s.skip_boot();
+        assert!(!s.booting);
     }
 }

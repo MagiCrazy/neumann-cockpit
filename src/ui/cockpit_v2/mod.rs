@@ -112,26 +112,35 @@ fn render_boot(frame: &mut Frame, area: Rect, state: &AppState, p: Palette) {
                 lines.push(Line::from(Span::styled(partial, Style::default().fg(p.dim))));
             }
         }
+        // Once the self-check is done, invite the pilot to continue — in the
+        // centre probe pane.
+        if pane == Pane::Probe && state.boot_complete() {
+            let cur = if (state.boot_frame / 3).is_multiple_of(2) { "▌" } else { " " };
+            lines.push(Line::raw(""));
+            lines.push(Line::from(Span::styled(
+                "— WE ARE LEGION —",
+                Style::default().fg(p.dim),
+            )));
+            lines.push(Line::from(Span::styled(
+                format!("{cur} ANY KEY TO CONTINUE"),
+                Style::default().fg(p.accent).add_modifier(Modifier::BOLD),
+            )));
+        }
         frame.render_widget(Paragraph::new(lines), inner);
     }
 
-    // Bottom banner with a blinking cursor + skip hint.
-    let cur = if (state.boot_frame / 3).is_multiple_of(2) { "▌" } else { " " };
-    let cols = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(0), Constraint::Length(17)])
-        .split(rows[1]);
+    // Bottom banner — GUPPI reporting.
+    let status = if state.boot_complete() {
+        "all systems online"
+    } else {
+        "self-check…"
+    };
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
-            format!(" {cur} NEUMANN PROBE COMPUTER — booting…"),
+            format!(" GUPPI — {status}"),
             Style::default().fg(p.accent),
         ))),
-        cols[0],
-    );
-    frame.render_widget(
-        Paragraph::new(Line::styled("any key to skip ", Style::default().fg(p.dim)))
-            .alignment(Alignment::Right),
-        cols[1],
+        rows[1],
     );
 }
 
