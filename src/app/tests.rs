@@ -1366,3 +1366,38 @@ fn anim_hash_is_deterministic_and_spreads() {
     assert_eq!(anim_hash(42), anim_hash(42));
     assert_ne!(anim_hash(1), anim_hash(2));
 }
+
+// ── cockpit contextual menu ────────────────────────────────────────────────
+
+fn menu_item(menu: &ContextMenu, action: MenuAction) -> &MenuItem {
+    menu.items.iter().find(|i| i.action == action).expect("menu item")
+}
+
+#[test]
+fn mannies_context_menu_reflects_manny_state() {
+    let mut state = AppState::default();
+    state.active_pane = Pane::Mannies;
+
+    // Idle manny: repair/craft/rename enabled, recall disabled.
+    state.mannies = Some(vec![make_manny("m1", "probe_rack", true, None)]);
+    let menu = state.build_context_menu().expect("mannies menu");
+    assert!(menu_item(&menu, MenuAction::Repair).enabled);
+    assert!(menu_item(&menu, MenuAction::Craft).enabled);
+    assert!(menu_item(&menu, MenuAction::Rename).enabled);
+    assert!(!menu_item(&menu, MenuAction::Recall).enabled);
+    // Cursor lands on the first enabled item.
+    assert!(menu.items[menu.cursor].enabled);
+
+    // Busy manny with a task: repair/craft disabled, recall enabled.
+    state.mannies = Some(vec![make_manny("m2", "sector", false, Some("mining"))]);
+    let menu = state.build_context_menu().expect("mannies menu");
+    assert!(!menu_item(&menu, MenuAction::Repair).enabled);
+    assert!(menu_item(&menu, MenuAction::Recall).enabled);
+}
+
+#[test]
+fn context_menu_none_for_pane_without_actions() {
+    let mut state = AppState::default();
+    state.active_pane = Pane::Probe;
+    assert!(state.build_context_menu().is_none());
+}

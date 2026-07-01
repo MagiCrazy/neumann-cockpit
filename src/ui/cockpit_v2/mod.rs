@@ -8,6 +8,7 @@
 //! [`panes`].
 
 mod grid;
+mod menu;
 mod panes;
 
 use crate::app::{AppState, Pane};
@@ -44,6 +45,12 @@ pub fn render(frame: &mut Frame, state: &AppState) {
         }
     }
     render_status(frame, rows[1], state);
+
+    // Contextual menu popup, then any active wizard overlay on top.
+    if let crate::app::InputMode::Menu(m) = &state.mode {
+        menu::render(frame, area, m);
+    }
+    crate::ui::overlays::render_active_overlays(frame, area, state);
 }
 
 fn render_pane(frame: &mut Frame, area: Rect, pane: Pane, state: &AppState, active: bool) {
