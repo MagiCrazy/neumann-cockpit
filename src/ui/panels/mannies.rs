@@ -99,6 +99,44 @@ fn manny_task_color(task: Option<&MannyTask>) -> Color {
     }
 }
 
+/// Mining task detail, extracted from the Manny's `task` payload: which
+/// asteroid, the resource types, and where the output goes (a named container
+/// or the probe). `None` unless the Manny is mining with a visible payload.
+pub(crate) struct MiningDetail {
+    pub target: String,
+    pub resources: Option<String>,
+    pub destination: String,
+}
+
+pub(crate) fn manny_mining_detail(m: &Manny) -> Option<MiningDetail> {
+    if m.current_task != Some(MannyTask::Mining) {
+        return None;
+    }
+    let task = m.task.as_ref()?;
+    let target = task.get("target");
+    let name = target
+        .and_then(|t| t.get("name"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("asteroid")
+        .to_string();
+    let resources = target
+        .and_then(|t| t.get("resourceTypes"))
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|x| x.as_str()).collect::<Vec<_>>().join("/"))
+        .filter(|s| !s.is_empty());
+    // A targetContainer object means the output is dropped into that detached
+    // container; otherwise it comes back to the probe.
+    let destination = match task.get("targetContainer") {
+        Some(tc) if tc.is_object() => tc
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("container")
+            .to_string(),
+        _ => "probe".to_string(),
+    };
+    Some(MiningDetail { target: name, resources, destination })
+}
+
 /// Time remaining on the current task, as a compact duration (if known).
 pub(crate) fn manny_task_eta(m: &Manny) -> Option<String> {
     m.task_estimated_end_time

@@ -8,7 +8,7 @@
 
 use crate::api::types::{Manny, MannyLocationType, MannyTaskVisibility, MissionStatus, MissionStepStatus};
 use crate::app::{AppState, DrillLevel, Pane};
-use crate::ui::panels::mannies::{manny_task_eta, manny_task_label};
+use crate::ui::panels::mannies::{manny_mining_detail, manny_task_eta, manny_task_label};
 use crate::ui::theme::{block_gauge_line, object_icon, pane_block, Palette};
 use ratatui::{
     layout::Rect,
@@ -262,6 +262,20 @@ fn manny_detail_lines(state: &AppState, m: &Manny, p: Palette) -> Vec<Line<'stat
     } else {
         lines.push(Line::styled("idle", dim));
     }
+    // Mining target: which asteroid, resources, and where the output goes.
+    if let Some(d) = manny_mining_detail(m) {
+        lines.push(Line::from(vec![
+            Span::styled("⛏ ", Style::default().fg(p.accent)),
+            Span::styled(d.target, text),
+        ]));
+        if let Some(r) = d.resources {
+            lines.push(Line::styled(format!("  {r}"), dim));
+        }
+        lines.push(Line::from(vec![
+            Span::styled("→ ", dim),
+            Span::styled(d.destination, text),
+        ]));
+    }
     match state.manny_sector_coords(m) {
         Some((x, y, z)) => lines.push(Line::from(vec![
             Span::styled("sector ", dim),
@@ -347,6 +361,16 @@ pub fn render_mannies_overview(frame: &mut Frame, area: Rect, state: &AppState, 
             }
         }
         lines.push(Line::from(header));
+
+        // Mining target, when visible: asteroid · resources → destination.
+        if let Some(d) = manny_mining_detail(m) {
+            let mut s = format!("    ⛏ {}", d.target);
+            if let Some(r) = &d.resources {
+                s.push_str(&format!(" · {r}"));
+            }
+            s.push_str(&format!(" → {}", d.destination));
+            lines.push(Line::styled(s, dim));
+        }
 
         // Indented detail: cargo gauge, cargo breakdown, location.
         let c = &m.cargo;
