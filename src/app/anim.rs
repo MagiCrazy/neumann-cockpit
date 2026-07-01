@@ -5,6 +5,9 @@ pub enum UiTheme {
     #[default]
     Classic,
     Retro,
+    /// Unified Cockpit v2 interface — opt-in preview during the U-series
+    /// migration (config `ui = "cockpit"`), becomes the default at bloc U8.
+    Cockpit,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
@@ -54,6 +57,9 @@ impl AppState {
         self.ui_theme = match self.ui_theme {
             UiTheme::Classic => UiTheme::Retro,
             UiTheme::Retro => UiTheme::Classic,
+            // Cockpit is a config-gated dev preview; F2 stays put until the
+            // color-mode cycling lands in U7.
+            UiTheme::Cockpit => UiTheme::Cockpit,
         };
     }
 
