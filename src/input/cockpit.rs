@@ -17,9 +17,9 @@ use crate::api::tasks::{
 use crate::api::types::{MannyTask, MannyTaskVisibility};
 use crate::app::{
     ApiMessage, AppState, AtomicPrinterCraftInput, ContainersInput, CraftInput, DetachInput,
-    DropCargoInput, InputMode, InspectInput, MenuAction, MessagesInput, MineInput, MissionsInput,
-    ObjectActionInput, Pane, RecallInput, RecoverInput, RefuelInput, RemoteMineInput,
-    RenameMannyInput, RepairInput, SalvageInput, StorageMoveInput,
+    DropCargoInput, InputMode, InspectInput, MenuAction, MessagesInput, MindSnapshotInput,
+    MineInput, MissionsInput, ObjectActionInput, Pane, RecallInput, RecoverInput, RefuelInput,
+    RemoteMineInput, RenameMannyInput, RepairInput, SalvageInput, StorageMoveInput,
 };
 
 pub fn handle_cockpit_event(
@@ -72,7 +72,7 @@ pub fn handle_cockpit_event(
 /// the contextual menu; panes backed by a rich wizard reuse its overlay.
 fn open_actions(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
     match state.active_pane {
-        Pane::Mannies | Pane::Inventory => match state.build_context_menu() {
+        Pane::Mannies | Pane::Inventory | Pane::Probe => match state.build_context_menu() {
             Some(menu) if !menu.items.is_empty() => state.mode = InputMode::Menu(menu),
             _ => state.set_toast("no actions here"),
         },
@@ -193,6 +193,12 @@ fn fire_menu_action(
                     };
                 }
                 _ => state.storage_move = StorageMoveInput::PickManny { mannies, selection: 0 },
+            }
+            return;
+        }
+        MenuAction::MindSnapshot => {
+            if state.probe_terminal_alert().is_some() {
+                state.mind_snapshot = MindSnapshotInput::Confirm { error: None };
             }
             return;
         }

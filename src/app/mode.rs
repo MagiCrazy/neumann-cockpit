@@ -25,6 +25,8 @@ pub enum MenuAction {
     Jettison,
     AtomicCraft,
     MoveStock,
+    // Probe pane
+    MindSnapshot,
 }
 
 /// A single entry in a contextual action menu.
@@ -88,8 +90,24 @@ impl super::AppState {
         match self.active_pane {
             super::Pane::Mannies => self.mannies_context_menu(),
             super::Pane::Inventory => Some(self.inventory_context_menu()),
+            super::Pane::Probe => self.probe_context_menu(),
             _ => None,
         }
+    }
+
+    fn probe_context_menu(&self) -> Option<ContextMenu> {
+        // The only probe action is recovery, and only for a dead/trapped probe.
+        self.probe_terminal_alert()?;
+        Some(ContextMenu {
+            title: "PROBE".into(),
+            items: vec![MenuItem {
+                action: MenuAction::MindSnapshot,
+                label: "Reassign mind snapshot".into(),
+                enabled: true,
+                disabled_reason: None,
+            }],
+            cursor: 0,
+        })
     }
 
     fn inventory_context_menu(&self) -> ContextMenu {

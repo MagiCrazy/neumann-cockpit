@@ -261,11 +261,15 @@ impl super::AppState {
         if !drilled && matches!(pane, Pane::Missions | Pane::Comms) {
             parts.push("l open");
         }
-        // Panes that expose actions on Enter (menu or reused overlay).
-        if matches!(
-            pane,
-            Pane::Mannies | Pane::Inventory | Pane::Missions | Pane::Comms | Pane::Storage | Pane::Sector
-        ) {
+        // Panes that expose actions on Enter (menu or reused overlay). Probe
+        // only acts when a recovery alert is present.
+        let probe_recovery = pane == Pane::Probe && self.probe_terminal_alert().is_some();
+        if probe_recovery
+            || matches!(
+                pane,
+                Pane::Mannies | Pane::Inventory | Pane::Missions | Pane::Comms | Pane::Storage | Pane::Sector
+            )
+        {
             parts.push("Enter act");
         }
         parts.push("z zoom");
