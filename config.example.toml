@@ -4,9 +4,11 @@ api_key  = "vng_your_api_key_here"
 # Layout: "classic" (default), "retro", or "cockpit" — the unified tiling
 # interface (work in progress, U-series). Takes precedence over `theme`.
 #ui = "cockpit"
-# UI theme: "classic" (default) or "retro" — phosphor CRT console with
-# idle animations. Toggle at runtime with F2.
-#theme = "retro"
+# theme:
+#   - classic/retro layouts: "classic" (default) or "retro" (phosphor CRT).
+#   - cockpit layout: color mode — "mono-green" (default), "mono-amber",
+#     "phosphor-semantic", or "modern-16". F2 cycles it at runtime.
+#theme = "mono-green"
 # Retro phosphor tint: "green" (default) or "amber".
 #phosphor = "green"
 # Retro idle animations (render tick only, never API polling).

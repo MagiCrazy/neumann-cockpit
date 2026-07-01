@@ -1,20 +1,22 @@
-//! Unified Cockpit v2 interface — the 3×3 tiling dashboard (blocs U2–U3).
+//! Unified Cockpit v2 interface — the 3×3 tiling dashboard (blocs U2–U7).
 //!
-//! Responsive grid + read-only navigation: `ertdfgcvb` selects a pane, `jk`
-//! moves the cursor, `l`/`h` drill in/out, `z` zooms the active pane full
-//! screen. Contextual menus and command mode follow in later blocs. The four
-//! original panes reuse their existing renderers; the five promoted panes
-//! (Map, Comms, Sector, Missions, Storage) use the compact renderers in
-//! [`panes`].
+//! Responsive grid + navigation: `ertdfgcvb` selects a pane, `jk` moves the
+//! cursor, `l`/`h` drill in/out, `z` zooms, `Enter` opens the contextual menu.
+//! Colours come from the active [`palette`] (config `theme`, F2 cycles). The
+//! four original panes reuse their existing renderers (still on classic
+//! colours until they get cockpit-native renderers); the five promoted panes
+//! use the compact renderers in [`panes`].
 
 mod grid;
 mod menu;
+mod palette;
 mod panes;
 
 use crate::app::{AppState, Pane};
 use crate::ui::panels::{
     render_inventory_panel, render_mannies_panel, render_probe_panel, render_scanner_panel,
 };
+use palette::{palette, Palette};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -23,13 +25,9 @@ use ratatui::{
     Frame,
 };
 
-const AMBER: Color = Color::Rgb(0xff, 0xb2, 0x4a);
-const GREEN: Color = Color::Rgb(0x5e, 0xf0, 0x8f);
-const DIM: Color = Color::Rgb(0x6f, 0x8c, 0x7d);
-
 pub fn render(frame: &mut Frame, state: &AppState) {
     let area = frame.area();
-    // Status bar is one line, plus a second hints line when enabled.
+    let p = palette(state.color_mode);
     let status_h = if state.hints_visible { 2 } else { 1 };
     let rows = Layout::default()
         .direction(Direction::Vertical)
@@ -37,38 +35,38 @@ pub fn render(frame: &mut Frame, state: &AppState) {
         .split(area);
 
     if state.zoomed {
-        // Zoom: the active pane takes the whole content area.
-        render_pane(frame, rows[0], state.active_pane, state, true);
+        render_pane(frame, rows[0], state.active_pane, state, true, p);
     } else {
         for (pane, rect) in grid::visible_panes(rows[0], state.active_pane) {
-            render_pane(frame, rect, pane, state, pane == state.active_pane);
+            render_pane(frame, rect, pane, state, pane == state.active_pane, p);
         }
     }
-    render_status(frame, rows[1], state);
+    render_status(frame, rows[1], state, p);
 
     // Contextual menu popup, then any active wizard overlay on top.
     if let crate::app::InputMode::Menu(m) = &state.mode {
-        menu::render(frame, area, m);
+        menu::render(frame, area, m, p);
     }
     crate::ui::overlays::render_active_overlays(frame, area, state);
 }
 
-fn render_pane(frame: &mut Frame, area: Rect, pane: Pane, state: &AppState, active: bool) {
+fn render_pane(frame: &mut Frame, area: Rect, pane: Pane, state: &AppState, active: bool, p: Palette) {
     match pane {
+        // Reused classic renderers keep their own colours for now.
         Pane::Probe => render_probe_panel(frame, area, state, active),
         Pane::Inventory => render_inventory_panel(frame, area, state, active),
         Pane::Scanner => render_scanner_panel(frame, area, state, active),
         Pane::Mannies => render_mannies_panel(frame, area, state, active),
-        Pane::Map => panes::render_map(frame, area, state, active),
-        Pane::Comms => panes::render_comms(frame, area, state, active),
-        Pane::Sector => panes::render_sector(frame, area, state, active),
-        Pane::Missions => panes::render_missions(frame, area, state, active),
-        Pane::Storage => panes::render_storage(frame, area, state, active),
+        // Promoted panes are palette-aware.
+        Pane::Map => panes::render_map(frame, area, state, active, p),
+        Pane::Comms => panes::render_comms(frame, area, state, active, p),
+        Pane::Sector => panes::render_sector(frame, area, state, active, p),
+        Pane::Missions => panes::render_missions(frame, area, state, active, p),
+        Pane::Storage => panes::render_storage(frame, area, state, active, p),
     }
 }
 
-fn render_status(frame: &mut Frame, area: Rect, state: &AppState) {
-    // Split off the hints line (bottom) when enabled.
+fn render_status(frame: &mut Frame, area: Rect, state: &AppState, p: Palette) {
     let (bar, hints) = if state.hints_visible && area.height >= 2 {
         let rows = Layout::default()
             .direction(Direction::Vertical)
@@ -79,60 +77,64 @@ fn render_status(frame: &mut Frame, area: Rect, state: &AppState) {
         (area, None)
     };
 
-    render_status_line(frame, bar, state);
+    render_status_line(frame, bar, state, p);
     if let Some(hints_area) = hints {
         let line = Line::from(Span::styled(
             format!(" {}", state.pane_hints()),
-            Style::default().fg(DIM),
+            Style::default().fg(p.dim),
         ));
         frame.render_widget(Paragraph::new(line), hints_area);
     }
 }
 
-fn render_status_line(frame: &mut Frame, area: Rect, state: &AppState) {
-    let (tag, tag_bg) = if state.zoomed {
-        ("ZOOM", GREEN)
-    } else {
-        (state.mode.tag(), AMBER)
-    };
+fn render_status_line(frame: &mut Frame, area: Rect, state: &AppState, p: Palette) {
+    let tag = if state.zoomed { "ZOOM" } else { state.mode.tag() };
 
-    // Left: mode tag · breadcrumb · transient toast.
     let mut left = vec![
         Span::styled(
             format!(" {tag} "),
-            Style::default().fg(Color::Black).bg(tag_bg).add_modifier(Modifier::BOLD),
+            Style::default().fg(Color::Black).bg(p.accent).add_modifier(Modifier::BOLD),
         ),
-        Span::styled(format!("  {}", state.breadcrumb().join(" › ")), Style::default().fg(GREEN)),
+        Span::styled(format!("  {}", state.breadcrumb().join(" › ")), Style::default().fg(p.accent)),
     ];
     if let Some(toast) = state.active_toast() {
-        left.push(Span::styled(format!("  ✓ {toast}"), Style::default().fg(Color::Green)));
+        left.push(Span::styled(format!("  ✓ {toast}"), Style::default().fg(p.good)));
     }
 
-    // Right: SCUT coverage · unread · API version · clock.
     let mut meta = Vec::new();
     if !state.scut_coverage().is_empty() {
-        meta.push("≣ SCUT".to_string());
+        meta.push(("≣ SCUT".to_string(), p.accent));
     }
     let unread = state.unread_alert_count();
     if unread > 0 {
-        meta.push(format!("! {unread}"));
+        meta.push((format!("! {unread}"), p.crit));
     }
     if let Some(v) = state.api_version {
-        meta.push(format!("API v{v}"));
+        meta.push((format!("API v{v}"), p.dim));
     }
     if let Some(t) = state.last_update {
-        meta.push(t.format("%H:%M:%S").to_string());
+        meta.push((t.format("%H:%M:%S").to_string(), p.dim));
     }
-    let meta = meta.join(" · ");
-    let meta_len = meta.chars().count() as u16;
+    let meta_len: usize = meta.iter().map(|(s, _)| s.chars().count() + 3).sum();
+    let meta_spans: Vec<Span> = meta
+        .iter()
+        .enumerate()
+        .flat_map(|(i, (s, c))| {
+            let sep = if i == 0 { "" } else { " · " };
+            [
+                Span::styled(sep, Style::default().fg(p.dim)),
+                Span::styled(s.clone(), Style::default().fg(*c)),
+            ]
+        })
+        .collect();
 
     let cols = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(0), Constraint::Length(meta_len + 1)])
+        .constraints([Constraint::Min(0), Constraint::Length(meta_len as u16 + 1)])
         .split(area);
     frame.render_widget(Paragraph::new(Line::from(left)), cols[0]);
     frame.render_widget(
-        Paragraph::new(meta).alignment(Alignment::Right).style(Style::default().fg(DIM)),
+        Paragraph::new(Line::from(meta_spans)).alignment(Alignment::Right),
         cols[1],
     );
 }

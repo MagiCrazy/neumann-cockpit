@@ -15,7 +15,8 @@ use neumann_cockpit::api::tasks::{
     fetch_missions, fetch_sent_messages,
 };
 use neumann_cockpit::app::{
-    ApiMessage, AppState, AtomicPrinterCraftInput, ContainerRulesInput, CraftInput, DeployInput,
+    ApiMessage, AppState, AtomicPrinterCraftInput, ColorMode, ContainerRulesInput, CraftInput,
+    DeployInput,
     DetachInput, DropCargoInput, DropStorageContainerInput, InspectInput, JettisonInput,
     MessagesInput, MindSnapshotInput, MineInput, MissionsInput, Phosphor, RecallInput, RecoverInput,
     RefuelInput,
@@ -34,6 +35,7 @@ async fn main() -> Result<()> {
     let phosphor = cfg.ui_phosphor();
     let animations = cfg.animations;
     let hints = cfg.hints;
+    let color_mode = cfg.color_mode();
     let client = ApiClient::new(cfg.base_url, cfg.api_key)?;
 
     enable_raw_mode()?;
@@ -42,7 +44,7 @@ async fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let result = run(&client, &mut terminal, ui_theme, phosphor, animations, hints).await;
+    let result = run(&client, &mut terminal, ui_theme, phosphor, animations, hints, color_mode).await;
 
     disable_raw_mode()?;
     execute!(
@@ -62,6 +64,7 @@ async fn run(
     phosphor: Phosphor,
     animations: bool,
     hints: bool,
+    color_mode: ColorMode,
 ) -> Result<()> {
     let (tx, mut rx) = mpsc::channel::<ApiMessage>(32);
     let mut state = AppState {
@@ -69,6 +72,7 @@ async fn run(
         phosphor,
         animations_enabled: animations,
         hints_visible: hints,
+        color_mode,
         ..Default::default()
     };
     if ui_theme == UiTheme::Retro && animations {
