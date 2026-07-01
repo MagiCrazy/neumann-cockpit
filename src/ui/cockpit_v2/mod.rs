@@ -153,6 +153,9 @@ fn render_pane(frame: &mut Frame, area: Rect, pane: Pane, state: &AppState, acti
         Pane::Mannies => {
             if let Some(DrillLevel::Manny(id)) = state.pane_nav[Pane::Mannies.index()].drill.last() {
                 panes::render_manny_detail(frame, area, state, id, active, p);
+            } else if state.zoomed {
+                // Zoom shows the whole fleet at a glance, one detail card each.
+                panes::render_mannies_overview(frame, area, state, p);
             } else {
                 render_mannies_panel(frame, area, state, active);
             }
