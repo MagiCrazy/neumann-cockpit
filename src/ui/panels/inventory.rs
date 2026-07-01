@@ -15,40 +15,9 @@ pub(crate) fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppS
     let full_inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let (inner, hint_area_opt) = if focused {
-        let split = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(1), Constraint::Length(1)])
-            .split(full_inner);
-        (split[0], Some(split[1]))
-    } else {
-        (full_inner, None)
-    };
-
-    if let Some(hint_area) = hint_area_opt {
-        let mut hint_spans = vec![
-            Span::styled("[↑↓]", Style::default().fg(Color::Cyan)),
-            Span::raw(" select  "),
-            Span::styled("[Enter]", Style::default().fg(Color::Cyan)),
-            Span::raw(" detail  "),
-            Span::styled("[j]", Style::default().fg(Color::Cyan)),
-            Span::raw(" jettison"),
-        ];
-        if state.inventory_waypoint_bookmark_id().is_some() {
-            hint_spans.push(Span::raw("  "));
-            hint_spans.push(Span::styled("[d]", Style::default().fg(Color::Cyan)));
-            hint_spans.push(Span::raw(" deploy"));
-        }
-        if state.has_atomic_printer() {
-            hint_spans.push(Span::raw("  "));
-            hint_spans.push(Span::styled("[a]", Style::default().fg(Color::Cyan)));
-            hint_spans.push(Span::raw(" atomic craft"));
-        }
-        frame.render_widget(
-            Paragraph::new(Line::from(hint_spans)),
-            hint_area,
-        );
-    }
+    // Action hints come from the cockpit's shared hints line (F1); the pane
+    // uses its whole area for content.
+    let inner = full_inner;
 
     let Some(probe) = &state.probe else {
         frame.render_widget(
