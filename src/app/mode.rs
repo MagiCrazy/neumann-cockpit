@@ -21,6 +21,10 @@ pub enum MenuAction {
     DropCargo,
     Recall,
     Rename,
+    // Inventory pane
+    Jettison,
+    AtomicCraft,
+    MoveStock,
 }
 
 /// A single entry in a contextual action menu.
@@ -83,8 +87,37 @@ impl super::AppState {
     pub fn build_context_menu(&self) -> Option<ContextMenu> {
         match self.active_pane {
             super::Pane::Mannies => self.mannies_context_menu(),
+            super::Pane::Inventory => Some(self.inventory_context_menu()),
             _ => None,
         }
+    }
+
+    fn inventory_context_menu(&self) -> ContextMenu {
+        let has_row = self.selected_inventory_row().is_some();
+        let has_printer = self.has_atomic_printer();
+        let idle_manny = !self.collect_idle_onboard_mannies().is_empty();
+        let items = vec![
+            MenuItem {
+                action: MenuAction::Jettison,
+                label: "Jettison…".into(),
+                enabled: has_row,
+                disabled_reason: (!has_row).then(|| "no item selected".to_string()),
+            },
+            MenuItem {
+                action: MenuAction::AtomicCraft,
+                label: "Atomic craft…".into(),
+                enabled: has_printer,
+                disabled_reason: (!has_printer).then(|| "no atomic printer".to_string()),
+            },
+            MenuItem {
+                action: MenuAction::MoveStock,
+                label: "Move stock…".into(),
+                enabled: idle_manny,
+                disabled_reason: (!idle_manny).then(|| "no idle manny".to_string()),
+            },
+        ];
+        let cursor = items.iter().position(|i| i.enabled).unwrap_or(0);
+        ContextMenu { title: "INVENTORY".into(), items, cursor }
     }
 
     fn mannies_context_menu(&self) -> Option<ContextMenu> {

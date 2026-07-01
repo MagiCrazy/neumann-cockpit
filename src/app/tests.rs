@@ -1408,3 +1408,13 @@ fn context_menu_none_for_pane_without_actions() {
     state.active_pane = Pane::Probe;
     assert!(state.build_context_menu().is_none());
 }
+
+#[test]
+fn inventory_context_menu_present_but_disabled_when_empty() {
+    let mut state = AppState::default();
+    state.active_pane = Pane::Inventory;
+    let menu = state.build_context_menu().expect("inventory menu");
+    assert_eq!(menu.items.len(), 3);
+    // Nothing loaded → every action disabled with a reason.
+    assert!(menu.items.iter().all(|i| !i.enabled && i.disabled_reason.is_some()));
+}

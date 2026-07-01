@@ -10,12 +10,16 @@ use crossterm::event::KeyCode;
 use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
-use crate::api::tasks::{fetch_all, fetch_inspect, fetch_recover, fetch_sector};
+use crate::api::tasks::{
+    fetch_all, fetch_inspect, fetch_messages, fetch_recover, fetch_sector, fetch_sent_messages,
+    fetch_storage_containers,
+};
 use crate::api::types::{MannyTask, MannyTaskVisibility};
 use crate::app::{
-    ApiMessage, AppState, CraftInput, DetachInput, DropCargoInput, InputMode, InspectInput,
-    MenuAction, MineInput, Pane, RecallInput, RecoverInput, RefuelInput, RemoteMineInput,
-    RenameMannyInput, RepairInput, SalvageInput,
+    ApiMessage, AppState, AtomicPrinterCraftInput, ContainersInput, CraftInput, DetachInput,
+    DropCargoInput, InputMode, InspectInput, MenuAction, MessagesInput, MineInput, MissionsInput,
+    ObjectActionInput, Pane, RecallInput, RecoverInput, RefuelInput, RemoteMineInput,
+    RenameMannyInput, RepairInput, SalvageInput, StorageMoveInput,
 };
 
 pub fn handle_cockpit_event(
@@ -32,7 +36,7 @@ pub fn handle_cockpit_event(
 
     match code {
         KeyCode::Char('q') => state.set_quit(),
-        KeyCode::Enter => open_context_menu(state),
+        KeyCode::Enter => open_actions(state, client, tx),
         KeyCode::Char(c) if Pane::from_key(c).is_some() => {
             state.active_pane = Pane::from_key(c).unwrap();
         }
@@ -63,11 +67,54 @@ pub fn handle_cockpit_event(
     }
 }
 
-fn open_context_menu(state: &mut AppState) {
-    match state.build_context_menu() {
-        Some(menu) if !menu.items.is_empty() => state.mode = InputMode::Menu(menu),
+/// `Enter` action for the active pane: panes with a discrete action set open
+/// the contextual menu; panes backed by a rich wizard reuse its overlay.
+fn open_actions(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
+    match state.active_pane {
+        Pane::Mannies | Pane::Inventory => match state.build_context_menu() {
+            Some(menu) if !menu.items.is_empty() => state.mode = InputMode::Menu(menu),
+            _ => state.set_toast("no actions here"),
+        },
+        Pane::Missions => {
+            if state.missions.is_empty() {
+                state.set_toast("no missions");
+            } else {
+                let selection = state.pane_nav[Pane::Missions.index()].cursor;
+                state.missions_input = MissionsInput::Browsing { selection };
+            }
+        }
+        Pane::Comms => {
+            state.messages_input = MessagesInput::Browsing { sent_tab: false, selection: 0 };
+            fetch_messages(client.clone(), tx.clone());
+            fetch_sent_messages(client.clone(), tx.clone());
+        }
+        Pane::Storage => {
+            fetch_storage_containers(client.clone(), tx.clone());
+            state.containers_input = ContainersInput::Browsing { selection: 0 };
+        }
+        Pane::Sector => open_sector_object_actions(state),
         _ => state.set_toast("no actions here"),
     }
+}
+
+fn open_sector_object_actions(state: &mut AppState) {
+    let entries = state.scanner_objects();
+    let cur = state.pane_nav[Pane::Sector.index()].cursor;
+    let Some(entry) = entries.get(cur) else {
+        state.set_toast("no object selected");
+        return;
+    };
+    let actions = state.actions_for_object(entry);
+    if actions.is_empty() {
+        state.set_toast(format!("no actions for {}", entry.name));
+        return;
+    }
+    state.object_action = ObjectActionInput::PickAction {
+        object_id: entry.id.clone(),
+        object_name: entry.name.clone(),
+        actions,
+        selection: 0,
+    };
 }
 
 fn handle_menu_key(
@@ -113,6 +160,44 @@ fn fire_menu_action(
     client: &ApiClient,
     tx: &mpsc::Sender<ApiMessage>,
 ) {
+    // Inventory-pane actions operate on the selected inventory row, not a Manny.
+    match action {
+        MenuAction::Jettison => {
+            match state.jettison_for_selected() {
+                Ok(input) => state.jettison = input,
+                Err(msg) => state.error = Some(msg),
+            }
+            return;
+        }
+        MenuAction::AtomicCraft => {
+            if !state.has_atomic_printer() {
+                state.error = Some("no atomic printer in inventory".into());
+            } else if state.atomic_printer_recipes().is_empty() {
+                state.error = Some("recipes not loaded yet — F5 to refresh".into());
+            } else {
+                state.atomic_printer_craft = AtomicPrinterCraftInput::PickRecipe { selection: 0, error: None };
+            }
+            return;
+        }
+        MenuAction::MoveStock => {
+            let mannies = state.collect_idle_onboard_mannies();
+            match mannies.len() {
+                0 => state.error = Some("no idle Manny on board".into()),
+                1 => {
+                    let (id, name) = mannies.into_iter().next().unwrap();
+                    state.storage_move = StorageMoveInput::PickKind {
+                        actor_manny_id: id,
+                        actor_manny_name: name,
+                        selection: 0,
+                    };
+                }
+                _ => state.storage_move = StorageMoveInput::PickManny { mannies, selection: 0 },
+            }
+            return;
+        }
+        _ => {}
+    }
+
     let Some(m) = state.mannies.as_ref().and_then(|v| v.get(state.mannies_selection)) else {
         return;
     };

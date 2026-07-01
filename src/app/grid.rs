@@ -261,8 +261,11 @@ impl super::AppState {
         if !drilled && matches!(pane, Pane::Missions | Pane::Comms) {
             parts.push("l open");
         }
-        // Panes with a contextual action menu (bloc U5: Mannies).
-        if matches!(pane, Pane::Mannies) {
+        // Panes that expose actions on Enter (menu or reused overlay).
+        if matches!(
+            pane,
+            Pane::Mannies | Pane::Inventory | Pane::Missions | Pane::Comms | Pane::Storage | Pane::Sector
+        ) {
             parts.push("Enter act");
         }
         parts.push("z zoom");
