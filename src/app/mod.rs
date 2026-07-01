@@ -127,6 +127,8 @@ pub struct AppState {
     pub mode: InputMode,
     /// Per-pane cursor + drill-in state, indexed by `Pane::index()`.
     pub pane_nav: [PaneNav; 9],
+    /// Whether the contextual hints line is shown (config `hints`, F1 toggles).
+    pub hints_visible: bool,
 }
 
 impl AppState {

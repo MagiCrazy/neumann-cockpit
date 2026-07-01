@@ -15,7 +15,7 @@ use crate::ui::panels::{
     render_inventory_panel, render_mannies_panel, render_probe_panel, render_scanner_panel,
 };
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::Paragraph,
@@ -28,9 +28,11 @@ const DIM: Color = Color::Rgb(0x6f, 0x8c, 0x7d);
 
 pub fn render(frame: &mut Frame, state: &AppState) {
     let area = frame.area();
+    // Status bar is one line, plus a second hints line when enabled.
+    let status_h = if state.hints_visible { 2 } else { 1 };
     let rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .constraints([Constraint::Min(1), Constraint::Length(status_h)])
         .split(area);
 
     if state.zoomed {
@@ -59,22 +61,71 @@ fn render_pane(frame: &mut Frame, area: Rect, pane: Pane, state: &AppState, acti
 }
 
 fn render_status(frame: &mut Frame, area: Rect, state: &AppState) {
+    // Split off the hints line (bottom) when enabled.
+    let (bar, hints) = if state.hints_visible && area.height >= 2 {
+        let rows = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(1), Constraint::Length(1)])
+            .split(area);
+        (rows[0], Some(rows[1]))
+    } else {
+        (area, None)
+    };
+
+    render_status_line(frame, bar, state);
+    if let Some(hints_area) = hints {
+        let line = Line::from(Span::styled(
+            format!(" {}", state.pane_hints()),
+            Style::default().fg(DIM),
+        ));
+        frame.render_widget(Paragraph::new(line), hints_area);
+    }
+}
+
+fn render_status_line(frame: &mut Frame, area: Rect, state: &AppState) {
     let (tag, tag_bg) = if state.zoomed {
         ("ZOOM", GREEN)
     } else {
         (state.mode.tag(), AMBER)
     };
-    let crumb = state.breadcrumb().join(" › ");
-    let line = Line::from(vec![
+
+    // Left: mode tag · breadcrumb · transient toast.
+    let mut left = vec![
         Span::styled(
             format!(" {tag} "),
             Style::default().fg(Color::Black).bg(tag_bg).add_modifier(Modifier::BOLD),
         ),
-        Span::styled(format!("  {crumb}  "), Style::default().fg(GREEN)),
-        Span::styled(
-            "· ertdfgcvb select · jk move · hl drill · z zoom · q quit",
-            Style::default().fg(DIM),
-        ),
-    ]);
-    frame.render_widget(Paragraph::new(line), area);
+        Span::styled(format!("  {}", state.breadcrumb().join(" › ")), Style::default().fg(GREEN)),
+    ];
+    if let Some(toast) = state.active_toast() {
+        left.push(Span::styled(format!("  ✓ {toast}"), Style::default().fg(Color::Green)));
+    }
+
+    // Right: SCUT coverage · unread · API version · clock.
+    let mut meta = Vec::new();
+    if !state.scut_coverage().is_empty() {
+        meta.push("≣ SCUT".to_string());
+    }
+    let unread = state.unread_alert_count();
+    if unread > 0 {
+        meta.push(format!("! {unread}"));
+    }
+    if let Some(v) = state.api_version {
+        meta.push(format!("API v{v}"));
+    }
+    if let Some(t) = state.last_update {
+        meta.push(t.format("%H:%M:%S").to_string());
+    }
+    let meta = meta.join(" · ");
+    let meta_len = meta.chars().count() as u16;
+
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Min(0), Constraint::Length(meta_len + 1)])
+        .split(area);
+    frame.render_widget(Paragraph::new(Line::from(left)), cols[0]);
+    frame.render_widget(
+        Paragraph::new(meta).alignment(Alignment::Right).style(Style::default().fg(DIM)),
+        cols[1],
+    );
 }

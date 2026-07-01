@@ -33,6 +33,7 @@ async fn main() -> Result<()> {
     let ui_theme = cfg.ui_theme();
     let phosphor = cfg.ui_phosphor();
     let animations = cfg.animations;
+    let hints = cfg.hints;
     let client = ApiClient::new(cfg.base_url, cfg.api_key)?;
 
     enable_raw_mode()?;
@@ -41,7 +42,7 @@ async fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let result = run(&client, &mut terminal, ui_theme, phosphor, animations).await;
+    let result = run(&client, &mut terminal, ui_theme, phosphor, animations, hints).await;
 
     disable_raw_mode()?;
     execute!(
@@ -60,12 +61,14 @@ async fn run(
     ui_theme: UiTheme,
     phosphor: Phosphor,
     animations: bool,
+    hints: bool,
 ) -> Result<()> {
     let (tx, mut rx) = mpsc::channel::<ApiMessage>(32);
     let mut state = AppState {
         ui_theme,
         phosphor,
         animations_enabled: animations,
+        hints_visible: hints,
         ..Default::default()
     };
     if ui_theme == UiTheme::Retro && animations {

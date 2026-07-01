@@ -246,6 +246,27 @@ impl super::AppState {
         popped
     }
 
+    /// Contextual key hints for the active pane and drill level (bloc U4).
+    /// Reflects only what is actionable now; actions (`Enter`) arrive in U5.
+    pub fn pane_hints(&self) -> String {
+        let pane = self.active_pane;
+        let drilled = !self.pane_nav[pane.index()].drill.is_empty();
+        let mut parts: Vec<&str> = Vec::new();
+        if drilled {
+            parts.push("h back");
+        }
+        if !matches!(pane, Pane::Probe | Pane::Map) {
+            parts.push("jk move");
+        }
+        if !drilled && matches!(pane, Pane::Missions | Pane::Comms) {
+            parts.push("l open");
+        }
+        parts.push("z zoom");
+        parts.push("ertdfgcvb pane");
+        parts.push("F1 hints");
+        parts.join(" · ")
+    }
+
     /// Breadcrumb segments for the active pane: `COCKPIT › PANE [› detail…]`.
     pub fn breadcrumb(&self) -> Vec<String> {
         let mut segs = vec!["COCKPIT".to_string(), self.active_pane.label().to_string()];
@@ -366,5 +387,28 @@ mod tests {
 
         assert!(s.pane_drill_out());
         assert_eq!(s.breadcrumb(), vec!["COCKPIT", "MISSIONS"]);
+    }
+
+    #[test]
+    fn pane_hints_are_contextual() {
+        let mut s = crate::app::AppState::default();
+
+        // Probe has no list → no movement hint.
+        s.active_pane = Pane::Probe;
+        assert!(!s.pane_hints().contains("jk move"));
+
+        // Missions at root offers drill-in, not "back".
+        s.active_pane = Pane::Missions;
+        let h = s.pane_hints();
+        assert!(h.contains("l open"));
+        assert!(!h.contains("h back"));
+
+        // Drilled in, it offers "back" and drops "open".
+        s.pane_nav[Pane::Missions.index()]
+            .drill
+            .push(DrillLevel::Mission("m1".into()));
+        let h = s.pane_hints();
+        assert!(h.contains("h back"));
+        assert!(!h.contains("l open"));
     }
 }
