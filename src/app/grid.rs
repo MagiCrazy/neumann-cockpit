@@ -261,6 +261,10 @@ impl super::AppState {
         if !drilled && matches!(pane, Pane::Missions | Pane::Comms) {
             parts.push("l open");
         }
+        // Panes with a contextual action menu (bloc U5: Mannies).
+        if matches!(pane, Pane::Mannies) {
+            parts.push("Enter act");
+        }
         parts.push("z zoom");
         parts.push("ertdfgcvb pane");
         parts.push("F1 hints");

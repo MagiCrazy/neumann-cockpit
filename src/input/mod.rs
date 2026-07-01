@@ -114,12 +114,6 @@ pub fn handle_event(
         return;
     }
 
-    // Unified Cockpit v2 interface has its own input router (bloc U-series).
-    if state.ui_theme == crate::app::UiTheme::Cockpit {
-        handle_cockpit_event(k.code, state, client, tx);
-        return;
-    }
-
     if state.help_open {
         if matches!(k.code, KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q')) {
             state.help_open = false;
@@ -318,6 +312,14 @@ pub fn handle_event(
             KeyCode::Char(c) => state.scan_type_char(c),
             _ => {}
         }
+        return;
+    }
+
+    // Cockpit v2 owns navigation and the contextual-menu match below; the
+    // shared wizard/overlay handlers above are reused as-is. Placed after
+    // them so an open wizard keeps receiving keys.
+    if state.ui_theme == crate::app::UiTheme::Cockpit {
+        handle_cockpit_event(k.code, state, client, tx);
         return;
     }
 
