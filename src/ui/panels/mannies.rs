@@ -4,56 +4,53 @@ use crate::api::types::{
 use crate::app::AppState;
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{List, ListItem, ListState, Paragraph},
     Frame,
 };
 
-use crate::ui::theme::{format_duration, palette, pane_block};
+use crate::ui::theme::{format_duration, palette, pane_block, Palette};
 use chrono::Utc;
 // ── Mannies panel ─────────────────────────────────────────────────────────────
 
 pub(crate) fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppState, focused: bool) {
-    let block = pane_block(" MANNIES ", focused, palette(state.color_mode));
+    let p = palette(state.color_mode);
+    let block = pane_block(" MANNIES ", focused, p);
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
     // Action hints come from the cockpit's shared hints line (F1), so the
     // pane gives its whole area to the list.
     let Some(mannies) = &state.mannies else {
-        frame.render_widget(
-            Paragraph::new("No data").style(Style::default().fg(Color::DarkGray)),
-            inner,
-        );
+        frame.render_widget(Paragraph::new("No data").style(Style::default().fg(p.dim)), inner);
         return;
     };
 
     if mannies.is_empty() {
         frame.render_widget(
-            Paragraph::new("No mannies aboard").style(Style::default().fg(Color::DarkGray)),
+            Paragraph::new("No mannies aboard").style(Style::default().fg(p.dim)),
             inner,
         );
         return;
     }
 
-    let items: Vec<ListItem> = mannies.iter().map(|m| manny_list_item(m)).collect();
-
-    let highlight_style = if focused {
-        Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD)
-    } else {
-        Style::default()
-    };
+    // Selection is styled per-row (accent) rather than via a background fill,
+    // so the progress/ETA stay legible on the selected line.
+    let sel = state.mannies_selection;
+    let items: Vec<ListItem> = mannies
+        .iter()
+        .enumerate()
+        .map(|(i, m)| manny_list_item(m, focused && i == sel, p))
+        .collect();
 
     let list = List::new(items)
-        .highlight_style(highlight_style)
-        .highlight_symbol("▶ ");
-
+        .highlight_symbol("▶ ")
+        .highlight_style(Style::default().fg(p.accent).add_modifier(Modifier::BOLD));
     let mut list_state = ListState::default();
     if focused {
-        list_state.select(Some(state.mannies_selection));
+        list_state.select(Some(sel));
     }
-
     frame.render_stateful_widget(list, inner, &mut list_state);
 }
 
@@ -77,25 +74,6 @@ pub(crate) fn manny_task_label(task: Option<&MannyTask>) -> &'static str {
         Some(MannyTask::TurningOnScutRelay) => "activating relay",
         Some(MannyTask::UnknownTooFar) => "too far",
         Some(MannyTask::Unknown) => "?",
-    }
-}
-
-fn manny_task_color(task: Option<&MannyTask>) -> Color {
-    match task {
-        None => Color::DarkGray,
-        Some(MannyTask::Repair | MannyTask::Crafting | MannyTask::AssistingAtomicPrinter) => Color::Cyan,
-        Some(
-            MannyTask::Mining
-            | MannyTask::Salvage
-            | MannyTask::InspectingAsteroid
-            | MannyTask::DetachingStorageContainer
-            | MannyTask::DroppingStorageContainer,
-        ) => Color::Yellow,
-        Some(MannyTask::InstallingWaypointBookmark | MannyTask::RefillingDeuteriumTank) => Color::Green,
-        Some(MannyTask::Returning | MannyTask::MovingStockage) => Color::Blue,
-        Some(MannyTask::WaitingForSpace) => Color::Magenta,
-        Some(MannyTask::TurningOnScutRelay) => Color::LightBlue,
-        Some(MannyTask::UnknownTooFar | MannyTask::Unknown) => Color::DarkGray,
     }
 }
 
@@ -143,42 +121,51 @@ pub(crate) fn manny_task_eta(m: &Manny) -> Option<String> {
         .map(|end| format_duration((end - Utc::now()).num_seconds().max(0)))
 }
 
-pub(crate) fn manny_list_item(m: &Manny) -> ListItem<'_> {
-    let loc_icon = match m.location.location_type {
-        MannyLocationType::Probe => Span::styled("●", Style::default().fg(Color::Green)),
-        MannyLocationType::Sector => Span::styled("◌", Style::default().fg(Color::Yellow)),
-        MannyLocationType::Unknown => Span::styled("?", Style::default().fg(Color::DarkGray)),
+pub(crate) fn manny_list_item(m: &Manny, selected: bool, p: Palette) -> ListItem<'_> {
+    // On the selected row everything is accent so the ETA/% stay legible;
+    // otherwise the palette's text for the name/task and dim for the rest.
+    let primary = if selected {
+        Style::default().fg(p.accent).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(p.text)
+    };
+    let secondary = if selected {
+        Style::default().fg(p.accent)
+    } else {
+        Style::default().fg(p.dim)
+    };
+
+    let loc = match m.location.location_type {
+        MannyLocationType::Probe => "●",
+        MannyLocationType::Sector => "◌",
+        MannyLocationType::Unknown => "?",
     };
     let task = m.current_task.as_ref();
-    let task_text = Span::styled(manny_task_label(task), Style::default().fg(manny_task_color(task)));
+    let task_style = if task.is_none() { secondary } else { primary };
 
     let progress = if m.current_task.is_some() {
         format!(" {:3.0}%", m.task_progress_percent)
     } else {
         String::new()
     };
-    // Time remaining next to the progress, when the task has an ETA.
     let eta = manny_task_eta(m)
         .filter(|_| m.current_task.is_some())
         .map(|d| format!(" · {d}"))
         .unwrap_or_default();
 
-    let name = format!("{:<12}", m.name);
-
     let via_scut = if matches!(m.task_visibility, Some(MannyTaskVisibility::ScutNetwork)) {
-        Span::styled(" ≣", Style::default().fg(Color::LightBlue))
+        " ≣"
     } else {
-        Span::raw("")
+        ""
     };
 
     ListItem::new(Line::from(vec![
-        loc_icon,
-        Span::raw(" "),
-        Span::raw(name),
-        task_text,
-        Span::styled(progress, Style::default().fg(Color::DarkGray)),
-        Span::styled(eta, Style::default().fg(Color::DarkGray)),
-        via_scut,
+        Span::styled(format!("{loc} "), secondary),
+        Span::styled(format!("{:<12}", m.name), primary),
+        Span::styled(manny_task_label(task), task_style),
+        Span::styled(progress, secondary),
+        Span::styled(eta, secondary),
+        Span::styled(via_scut, secondary),
     ]))
 }
 
