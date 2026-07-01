@@ -129,6 +129,69 @@ pub struct PaneNav {
     pub drill: Vec<DrillLevel>,
 }
 
+impl super::AppState {
+    /// Switch the active pane to the sequential next/previous one, wrapping
+    /// around (fallback to the grid keys for `Tab`/`Shift+Tab`).
+    pub fn cycle_pane(&mut self, forward: bool) {
+        let n = Pane::ALL.len();
+        let cur = Pane::ALL
+            .iter()
+            .position(|p| *p == self.active_pane)
+            .unwrap_or(0);
+        let next = if forward {
+            (cur + 1) % n
+        } else {
+            (cur + n - 1) % n
+        };
+        self.active_pane = Pane::ALL[next];
+    }
+
+    /// Number of selectable rows in a pane. Panes reusing the classic
+    /// renderers (Inventory/Scanner/Mannies) keep their own cursors, so they
+    /// report 0 here; only the promoted panes drive `pane_nav`.
+    pub fn pane_item_count(&self, pane: Pane) -> usize {
+        match pane {
+            Pane::Comms => self.messages.len(),
+            Pane::Sector => self.scanner_objects().len(),
+            Pane::Missions => self.missions.len(),
+            Pane::Storage => self.storage_containers.len(),
+            _ => 0,
+        }
+    }
+
+    /// Move the cursor down within the active pane, routing to the pane's
+    /// backing cursor (classic panels keep their existing selection state).
+    pub fn pane_cursor_down(&mut self) {
+        match self.active_pane {
+            Pane::Inventory => self.inventory_next(),
+            Pane::Scanner => self.scan_hist_next(),
+            Pane::Mannies => self.manny_next(),
+            Pane::Probe | Pane::Map => {}
+            pane => {
+                let n = self.pane_item_count(pane);
+                if n > 0 {
+                    let nav = &mut self.pane_nav[pane.index()];
+                    nav.cursor = (nav.cursor + 1).min(n - 1);
+                }
+            }
+        }
+    }
+
+    /// Move the cursor up within the active pane.
+    pub fn pane_cursor_up(&mut self) {
+        match self.active_pane {
+            Pane::Inventory => self.inventory_prev(),
+            Pane::Scanner => self.scan_hist_prev(),
+            Pane::Mannies => self.manny_prev(),
+            Pane::Probe | Pane::Map => {}
+            pane => {
+                let nav = &mut self.pane_nav[pane.index()];
+                nav.cursor = nav.cursor.saturating_sub(1);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

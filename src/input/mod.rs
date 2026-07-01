@@ -18,6 +18,7 @@ use crate::app::{
     ScutNetworkInput, ScutRelayInput, StorageMoveInput, TravelInput, WaypointsInput,
 };
 mod alerts;
+mod cockpit;
 mod containers;
 mod craft;
 mod geometry;
@@ -33,6 +34,7 @@ mod storage_move;
 mod travel;
 
 use alerts::handle_alerts_event;
+use cockpit::handle_cockpit_event;
 use containers::{
     handle_container_rules_event, handle_containers_event, handle_rename_container_event,
 };
@@ -109,6 +111,12 @@ pub fn handle_event(
 
     if k.code == KeyCode::F(2) {
         state.toggle_theme();
+        return;
+    }
+
+    // Unified Cockpit v2 interface has its own input router (bloc U-series).
+    if state.ui_theme == crate::app::UiTheme::Cockpit {
+        handle_cockpit_event(k.code, state, client, tx);
         return;
     }
 
