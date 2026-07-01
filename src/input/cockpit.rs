@@ -47,6 +47,7 @@ pub fn handle_cockpit_event(
             state.pane_drill_out();
         }
         KeyCode::Char('z') => state.toggle_zoom(),
+        KeyCode::Char('?') => state.help_open = true,
         KeyCode::F(1) => state.hints_visible = !state.hints_visible,
         // Esc backs out one step: leave zoom first, then drill up.
         KeyCode::Esc => {

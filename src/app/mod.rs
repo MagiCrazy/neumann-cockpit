@@ -1,4 +1,4 @@
-mod anim;
+mod color;
 mod containers;
 mod grid;
 mod inputs;
@@ -13,7 +13,7 @@ mod waypoints;
 #[cfg(test)]
 mod tests;
 
-pub use anim::*;
+pub use color::*;
 pub use grid::*;
 pub use inputs::*;
 pub use inventory::*;
@@ -113,11 +113,6 @@ pub struct AppState {
     pub map: MapView,
     pub api_version: Option<u32>,
     pub recipes: Vec<CraftingRecipe>,
-    pub ui_theme: UiTheme,
-    pub phosphor: Phosphor,
-    /// Render-tick animations for the retro theme (no I/O involved).
-    pub animations_enabled: bool,
-    pub anim: AnimState,
     // ── Cockpit v2 (bloc U1) ────────────────────────────────────────────
     /// Active pane in the 3×3 grid (defaults to `Probe`, the centre).
     pub active_pane: Pane,

@@ -1,4 +1,4 @@
-use crate::app::{is_active_item, AppState, Panel};
+use crate::app::{is_active_item, AppState};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -269,22 +269,6 @@ pub(crate) fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppS
 
     let _ = row;
     let _ = nav_idx;
-}
-
-pub(crate) fn inventory_panel_height(state: &AppState) -> u16 {
-    let probe = match &state.probe {
-        Some(p) => p,
-        None => return 3,
-    };
-    let inv = &probe.inventory;
-    let focused = state.focused == Some(Panel::Inventory);
-    let n_stocks = inv.resource_stocks.len() as u16;
-    let expanded = focused && !inv.items.is_empty();
-    let items_rows = items_row_count(&inv.items, expanded) as u16;
-    let containers_rows = containers_row_count(inv, focused) as u16;
-    let tanks_rows = tanks_row_count(inv, focused) as u16;
-    let hint_row = if focused { 1 } else { 0 };
-    1 + n_stocks + items_rows + containers_rows + tanks_rows + hint_row + 2
 }
 
 pub(crate) fn containers_row_count(inv: &crate::api::types::ProbeInventory, focused: bool) -> usize {

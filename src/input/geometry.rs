@@ -1,5 +1,8 @@
 use crossterm::event::KeyCode;
 
+// Retained for the Scanner pane's upcoming neighbour-scan action in the
+// cockpit interface (its classic single-key trigger was removed with U8).
+#[allow(dead_code)]
 pub(super) fn neighbors_d1() -> Vec<(i32, i32, i32)> {
     let mut out = Vec::new();
     for a in -1i32..=1 {

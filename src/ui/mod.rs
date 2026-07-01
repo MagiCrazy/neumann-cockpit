@@ -1,19 +1,12 @@
-pub mod cockpit;
 pub mod cockpit_v2;
 pub(crate) mod overlays;
 pub(crate) mod panels;
-pub mod retro;
 pub(crate) mod theme;
 
-use crate::app::{AppState, UiTheme};
+use crate::app::AppState;
 use ratatui::Frame;
 
-/// Layout dispatch: classic 4-panel cockpit, retro phosphor console, or the
-/// unified Cockpit v2 interface (opt-in preview during the U-series).
+/// Single render entry point — the unified Cockpit interface.
 pub fn render(frame: &mut Frame, state: &AppState) {
-    match state.ui_theme {
-        UiTheme::Classic => cockpit::render(frame, state),
-        UiTheme::Retro => retro::render(frame, state),
-        UiTheme::Cockpit => cockpit_v2::render(frame, state),
-    }
+    cockpit_v2::render(frame, state);
 }

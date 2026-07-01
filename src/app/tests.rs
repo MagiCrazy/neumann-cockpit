@@ -1325,46 +1325,16 @@ fn scanner_obj_nav_wraps() {
     assert_eq!(state.scanner_obj_selection, Some(0));
 }
 
-// ── anim / theme ──────────────────────────────────────────────────────────
+// ── cockpit color mode ─────────────────────────────────────────────────────
 
 #[test]
-fn tick_anim_advances_and_finishes_boot() {
-    let mut state = AppState::default();
-    state.anim.booting = true;
-    for _ in 0..BOOT_TOTAL_FRAMES {
-        state.tick_anim();
+fn color_mode_cycles_and_defaults_green() {
+    assert_eq!(ColorMode::default(), ColorMode::MonoGreen);
+    let mut m = ColorMode::default();
+    for _ in 0..4 {
+        m = m.cycle();
     }
-    assert!(!state.anim.booting, "boot should complete");
-    assert_eq!(state.anim.frame, BOOT_TOTAL_FRAMES);
-}
-
-#[test]
-fn toggle_theme_flips_between_classic_and_retro() {
-    let mut state = AppState::default();
-    assert_eq!(state.ui_theme, UiTheme::Classic);
-    state.toggle_theme();
-    assert_eq!(state.ui_theme, UiTheme::Retro);
-    state.toggle_theme();
-    assert_eq!(state.ui_theme, UiTheme::Classic);
-}
-
-#[test]
-fn anim_tick_active_only_for_retro_or_boot() {
-    let mut state = AppState::default();
-    state.animations_enabled = true;
-    assert!(!state.anim_tick_active(), "classic theme: no tick");
-    state.ui_theme = UiTheme::Retro;
-    assert!(state.anim_tick_active());
-    state.animations_enabled = false;
-    assert!(!state.anim_tick_active(), "retro without animations: no tick");
-    state.anim.booting = true;
-    assert!(state.anim_tick_active(), "boot still animates");
-}
-
-#[test]
-fn anim_hash_is_deterministic_and_spreads() {
-    assert_eq!(anim_hash(42), anim_hash(42));
-    assert_ne!(anim_hash(1), anim_hash(2));
+    assert_eq!(m, ColorMode::MonoGreen, "cycles back after four steps");
 }
 
 // ── cockpit contextual menu ────────────────────────────────────────────────
