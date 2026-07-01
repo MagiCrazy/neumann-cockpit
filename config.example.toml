@@ -1,17 +1,9 @@
 base_url = "https://neumann-probe.net"
 api_key  = "vng_your_api_key_here"
 
-# Layout: "classic" (default), "retro", or "cockpit" — the unified tiling
-# interface (work in progress, U-series). Takes precedence over `theme`.
-#ui = "cockpit"
-# theme:
-#   - classic/retro layouts: "classic" (default) or "retro" (phosphor CRT).
-#   - cockpit layout: color mode — "mono-green" (default), "mono-amber",
-#     "phosphor-semantic", or "modern-16". F2 cycles it at runtime.
+# Color mode for the cockpit interface: "mono-green" (default), "mono-amber",
+# "phosphor-semantic", or "modern-16" (named ANSI for limited terminals).
+# F2 cycles it at runtime.
 #theme = "mono-green"
-# Retro phosphor tint: "green" (default) or "amber".
-#phosphor = "green"
-# Retro idle animations (render tick only, never API polling).
-#animations = true
-# Cockpit: show the contextual hints line at the bottom (F1 toggles at runtime).
+# Show the contextual hints line at the bottom (F1 toggles at runtime).
 #hints = true

@@ -62,8 +62,7 @@ use ratatui::{
     Frame,
 };
 
-/// Render whichever wizard overlays are active, on top of the current
-/// layout. Shared by the classic and retro themes.
+/// Render whichever wizard overlays are active, on top of the cockpit grid.
 pub(crate) fn render_active_overlays(frame: &mut Frame, area: Rect, state: &AppState) {
     // Informational overlays first (lowest in the stack); action wizards on top.
     if !matches!(state.alerts_input, AlertsInput::Inactive) {

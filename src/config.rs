@@ -7,19 +7,10 @@ use std::path::PathBuf;
 pub struct Config {
     pub base_url: String,
     pub api_key: String,
-    /// Layout: "classic" (default), "retro", or "cockpit" (unified preview,
-    /// bloc U-series). Takes precedence over `theme` when set.
-    #[serde(default)]
-    pub ui: Option<String>,
-    /// UI theme: "classic" (default) or "retro".
+    /// Cockpit color mode: "mono-green" (default), "mono-amber",
+    /// "phosphor-semantic", or "modern-16". F2 cycles it at runtime.
     #[serde(default)]
     pub theme: Option<String>,
-    /// Retro phosphor tint: "green" (default) or "amber".
-    #[serde(default)]
-    pub phosphor: Option<String>,
-    /// Retro idle animations (render tick only, never API polling).
-    #[serde(default = "default_true")]
-    pub animations: bool,
     /// Show the contextual hints line in the cockpit interface (F1 toggles).
     #[serde(default = "default_true")]
     pub hints: bool,
@@ -30,30 +21,7 @@ fn default_true() -> bool {
 }
 
 impl Config {
-    pub fn ui_theme(&self) -> crate::app::UiTheme {
-        use crate::app::UiTheme;
-        // `ui` (layout) wins over the legacy `theme` key when set.
-        match self.ui.as_deref() {
-            Some("cockpit") => return UiTheme::Cockpit,
-            Some("retro") => return UiTheme::Retro,
-            Some("classic") => return UiTheme::Classic,
-            _ => {}
-        }
-        match self.theme.as_deref() {
-            Some("retro") => UiTheme::Retro,
-            _ => UiTheme::Classic,
-        }
-    }
-
-    pub fn ui_phosphor(&self) -> crate::app::Phosphor {
-        match self.phosphor.as_deref() {
-            Some("amber") => crate::app::Phosphor::Amber,
-            _ => crate::app::Phosphor::Green,
-        }
-    }
-
-    /// Cockpit color mode, read from the `theme` key (distinct from the legacy
-    /// classic/retro layout selection, which uses `ui`/`theme` too).
+    /// Cockpit color mode, read from the `theme` key.
     pub fn color_mode(&self) -> crate::app::ColorMode {
         use crate::app::ColorMode;
         match self.theme.as_deref() {
@@ -95,43 +63,25 @@ pub fn history_path() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::UiTheme;
 
-    fn cfg(ui: Option<&str>, theme: Option<&str>) -> Config {
+    fn cfg(theme: Option<&str>) -> Config {
         Config {
             base_url: "x".into(),
             api_key: "x".into(),
-            ui: ui.map(String::from),
             theme: theme.map(String::from),
-            phosphor: None,
-            animations: true,
             hints: true,
         }
     }
 
     #[test]
-    fn ui_key_wins_over_theme() {
-        assert_eq!(cfg(Some("cockpit"), Some("retro")).ui_theme(), UiTheme::Cockpit);
-        assert_eq!(cfg(Some("retro"), None).ui_theme(), UiTheme::Retro);
-        assert_eq!(cfg(Some("classic"), Some("retro")).ui_theme(), UiTheme::Classic);
-    }
-
-    #[test]
-    fn falls_back_to_theme_when_ui_absent() {
-        assert_eq!(cfg(None, Some("retro")).ui_theme(), UiTheme::Retro);
-        assert_eq!(cfg(None, None).ui_theme(), UiTheme::Classic);
-        assert_eq!(cfg(None, Some("bogus")).ui_theme(), UiTheme::Classic);
-    }
-
-    #[test]
     fn color_mode_parses_from_theme() {
         use crate::app::ColorMode;
-        assert_eq!(cfg(None, Some("mono-amber")).color_mode(), ColorMode::MonoAmber);
-        assert_eq!(cfg(None, Some("phosphor-semantic")).color_mode(), ColorMode::PhosphorSemantic);
-        assert_eq!(cfg(None, Some("modern-16")).color_mode(), ColorMode::Modern16);
-        // Legacy/unknown/absent → default mono-green.
-        assert_eq!(cfg(None, None).color_mode(), ColorMode::MonoGreen);
-        assert_eq!(cfg(None, Some("retro")).color_mode(), ColorMode::MonoGreen);
+        assert_eq!(cfg(Some("mono-amber")).color_mode(), ColorMode::MonoAmber);
+        assert_eq!(cfg(Some("phosphor-semantic")).color_mode(), ColorMode::PhosphorSemantic);
+        assert_eq!(cfg(Some("modern-16")).color_mode(), ColorMode::Modern16);
+        // Unknown/absent → default mono-green.
+        assert_eq!(cfg(None).color_mode(), ColorMode::MonoGreen);
+        assert_eq!(cfg(Some("bogus")).color_mode(), ColorMode::MonoGreen);
     }
 
     #[test]

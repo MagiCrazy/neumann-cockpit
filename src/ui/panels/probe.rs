@@ -200,24 +200,3 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
     let _ = row;
 }
 
-pub(crate) fn probe_panel_height(state: &AppState) -> u16 {
-    let probe = match &state.probe {
-        Some(p) => p,
-        None => return 4,
-    };
-    let has_movement = probe.movement.as_ref().filter(|mv| {
-        !matches!(
-            mv.phase.as_ref().unwrap_or(&mv.status),
-            MovementPhase::Arrived | MovementPhase::Failed | MovementPhase::Destroyed | MovementPhase::Idle
-        )
-    }).is_some();
-    let show_sector = !has_movement
-        && probe.sector.as_ref().and_then(|s| s.relative.as_ref()).is_some();
-    let content: u16 = 1  // name + status
-        + if show_sector { 1 } else { 0 }   // current sector coords
-        + if has_movement { 4 } else { 0 }  // coords + phase + travel + speed
-        + 1  // fuel
-        + if probe.systems.is_some() { 1 } else { 0 };  // integrity
-    content + 2  // borders
-}
-
