@@ -11,11 +11,11 @@ use ratatui::{
     Frame,
 };
 
-use crate::ui::theme::{format_age, format_duration, freshness_color, freshness_label, gauge_color, knowledge_color, knowledge_label, map_cell_symbol, object_icon, panel_block, sensor_dot, sensor_style};
+use crate::ui::theme::{format_age, format_duration, freshness_color, freshness_label, gauge_color, knowledge_color, knowledge_label, map_cell_symbol, object_icon, palette, pane_block, sensor_dot, sensor_style};
 // ── Scanner panel ─────────────────────────────────────────────────────────────
 
 pub(crate) fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppState, focused: bool) {
-    let block = panel_block(" SCANNER ", focused);
+    let block = pane_block(" SCANNER ", focused, palette(state.color_mode));
     let inner = block.inner(area);
     frame.render_widget(block, area);
 

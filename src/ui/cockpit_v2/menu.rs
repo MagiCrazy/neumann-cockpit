@@ -4,14 +4,14 @@
 //! items are selectable; disabled ones stay visible with their reason, so
 //! the menu teaches what is (not yet) possible rather than hiding it.
 
-use super::palette::Palette;
 use crate::app::ContextMenu;
 use crate::ui::overlays::centered_rect;
+use crate::ui::theme::Palette;
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph},
+    widgets::{Block, BorderType, Borders, Clear, Paragraph},
     Frame,
 };
 
@@ -37,6 +37,7 @@ pub fn render(frame: &mut Frame, area: Rect, menu: &ContextMenu, p: Palette) {
             Style::default().fg(p.accent).add_modifier(Modifier::BOLD),
         ))
         .borders(Borders::ALL)
+        .border_type(BorderType::Double)
         .border_style(Style::default().fg(p.accent));
     let inner = block.inner(rect);
     frame.render_widget(block, rect);

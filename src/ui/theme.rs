@@ -2,11 +2,89 @@ use crate::api::types::{
     DangerLevel, DataFreshness, KnowledgeLevel,
     MovementPhase, ProbeStatus, SectorObjectType, SectorObservation, SensorMode,
 };
+use crate::app::ColorMode;
 use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, LineGauge},
+    widgets::{Block, BorderType, Borders, LineGauge},
 };
+
+/// Resolved colour palette for the cockpit, one per [`ColorMode`]. Mono modes
+/// are single-hue phosphor; `PhosphorSemantic` adds real status colours;
+/// `Modern16` uses named ANSI colours for terminals without truecolor.
+#[derive(Clone, Copy)]
+pub(crate) struct Palette {
+    /// Active/selected accent (active borders, tags, selection).
+    pub accent: Color,
+    /// Dim accent (inactive borders).
+    pub accent_dim: Color,
+    /// Primary readable text.
+    pub text: Color,
+    /// Secondary/muted text.
+    pub dim: Color,
+    pub good: Color,
+    pub warn: Color,
+    pub crit: Color,
+}
+
+pub(crate) fn palette(mode: ColorMode) -> Palette {
+    match mode {
+        ColorMode::MonoGreen => {
+            let accent = Color::Rgb(0x5e, 0xf0, 0x8f);
+            Palette {
+                accent,
+                accent_dim: Color::Rgb(0x2f, 0x7a, 0x52),
+                text: Color::Rgb(0xb6, 0xd4, 0xc2),
+                dim: Color::Rgb(0x3a, 0x5a, 0x48),
+                good: accent,
+                warn: Color::Rgb(0xc8, 0xff, 0xdd),
+                crit: accent,
+            }
+        }
+        ColorMode::MonoAmber => {
+            let accent = Color::Rgb(0xff, 0xb2, 0x4a);
+            Palette {
+                accent,
+                accent_dim: Color::Rgb(0x8a, 0x5e, 0x22),
+                text: Color::Rgb(0xf0, 0xd8, 0xb0),
+                dim: Color::Rgb(0x6e, 0x4a, 0x16),
+                good: accent,
+                warn: Color::Rgb(0xff, 0xe1, 0xad),
+                crit: accent,
+            }
+        }
+        ColorMode::PhosphorSemantic => Palette {
+            accent: Color::Rgb(0x5e, 0xf0, 0x8f),
+            accent_dim: Color::Rgb(0x2f, 0x7a, 0x52),
+            text: Color::Rgb(0xb6, 0xd4, 0xc2),
+            dim: Color::Rgb(0x3a, 0x5a, 0x48),
+            good: Color::Rgb(0x5e, 0xf0, 0x8f),
+            warn: Color::Rgb(0xff, 0xd2, 0x4a),
+            crit: Color::Rgb(0xff, 0x5d, 0x6b),
+        },
+        ColorMode::Modern16 => Palette {
+            accent: Color::Green,
+            accent_dim: Color::DarkGray,
+            text: Color::Gray,
+            dim: Color::DarkGray,
+            good: Color::Green,
+            warn: Color::Yellow,
+            crit: Color::Red,
+        },
+    }
+}
+
+/// Palette-aware pane frame with retro double-line borders. Active panes get
+/// the accent colour and a bold title; inactive ones the dim accent.
+pub(crate) fn pane_block(title: &str, active: bool, p: Palette) -> Block<'_> {
+    let color = if active { p.accent } else { p.accent_dim };
+    let modifier = if active { Modifier::BOLD } else { Modifier::empty() };
+    Block::default()
+        .title(Span::styled(title, Style::default().fg(color).add_modifier(modifier)))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Double)
+        .border_style(Style::default().fg(color))
+}
 
 pub(crate) fn map_cell_symbol(s: &SectorObservation) -> (&'static str, Style) {
     if let Some(objects) = &s.objects {
@@ -100,18 +178,6 @@ pub(crate) fn object_icon(t: &SectorObjectType) -> (&'static str, Color) {
         SectorObjectType::ScutRelay => ("≣", Color::LightBlue),
         SectorObjectType::Unknown => ("?", Color::DarkGray),
     }
-}
-
-pub(crate) fn panel_block(title: &str, focused: bool) -> Block<'_> {
-    let (border_color, title_modifier) = if focused {
-        (Color::Cyan, Modifier::BOLD)
-    } else {
-        (Color::DarkGray, Modifier::empty())
-    };
-    Block::default()
-        .title(Span::styled(title, Style::default().add_modifier(title_modifier)))
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(border_color))
 }
 
 pub(crate) fn probe_status_label(s: &ProbeStatus) -> &'static str {
