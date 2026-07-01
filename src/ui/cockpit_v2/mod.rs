@@ -33,14 +33,17 @@ pub fn render(frame: &mut Frame, state: &AppState) {
         .constraints([Constraint::Min(1), Constraint::Length(status_h)])
         .split(area);
 
-    if state.zoomed {
+    let visible: Vec<Pane> = if state.zoomed {
         render_pane(frame, rows[0], state.active_pane, state, true, p);
+        vec![state.active_pane]
     } else {
-        for (pane, rect) in grid::visible_panes(rows[0], state.active_pane) {
-            render_pane(frame, rect, pane, state, pane == state.active_pane, p);
+        let panes = grid::visible_panes(rows[0], state.active_pane);
+        for (pane, rect) in &panes {
+            render_pane(frame, *rect, *pane, state, *pane == state.active_pane, p);
         }
-    }
-    render_status(frame, rows[1], state, p);
+        panes.iter().map(|(pane, _)| *pane).collect()
+    };
+    render_status(frame, rows[1], state, p, &visible);
 
     // Contextual menu popup, then any active wizard overlay on top.
     if let crate::app::InputMode::Menu(m) = &state.mode {
@@ -65,7 +68,7 @@ fn render_pane(frame: &mut Frame, area: Rect, pane: Pane, state: &AppState, acti
     }
 }
 
-fn render_status(frame: &mut Frame, area: Rect, state: &AppState, p: Palette) {
+fn render_status(frame: &mut Frame, area: Rect, state: &AppState, p: Palette, visible: &[Pane]) {
     let (bar, hints) = if state.hints_visible && area.height >= 2 {
         let rows = Layout::default()
             .direction(Direction::Vertical)
@@ -76,7 +79,7 @@ fn render_status(frame: &mut Frame, area: Rect, state: &AppState, p: Palette) {
         (area, None)
     };
 
-    render_status_line(frame, bar, state, p);
+    render_status_line(frame, bar, state, p, visible);
     if let Some(hints_area) = hints {
         let line = Line::from(Span::styled(
             format!(" {}", state.pane_hints()),
@@ -86,7 +89,7 @@ fn render_status(frame: &mut Frame, area: Rect, state: &AppState, p: Palette) {
     }
 }
 
-fn render_status_line(frame: &mut Frame, area: Rect, state: &AppState, p: Palette) {
+fn render_status_line(frame: &mut Frame, area: Rect, state: &AppState, p: Palette, visible: &[Pane]) {
     let tag = if state.zoomed { "ZOOM" } else { state.mode.tag() };
 
     let mut left = vec![
@@ -96,6 +99,26 @@ fn render_status_line(frame: &mut Frame, area: Rect, state: &AppState, p: Palett
         ),
         Span::styled(format!("  {}", state.breadcrumb().join(" › ")), Style::default().fg(p.accent)),
     ];
+    // Position mini-map: shown only when the grid is reduced (not all 9 panes
+    // visible), so you know where the active pane sits. Groups of three keys
+    // evoke the 3×3 rows on a single line.
+    if visible.len() < Pane::ALL.len() {
+        left.push(Span::styled("   ", Style::default()));
+        for (i, pane) in Pane::ALL.iter().enumerate() {
+            if i > 0 && i % 3 == 0 {
+                left.push(Span::styled(" ", Style::default().fg(p.dim)));
+            }
+            let key = pane.key_label().to_string();
+            let style = if *pane == state.active_pane {
+                Style::default().fg(Color::Black).bg(p.accent).add_modifier(Modifier::BOLD)
+            } else if visible.contains(pane) {
+                Style::default().fg(p.text)
+            } else {
+                Style::default().fg(p.dim)
+            };
+            left.push(Span::styled(key, style));
+        }
+    }
     // An error takes over the line until dismissed; otherwise a success toast.
     if let Some(err) = &state.error {
         left.push(Span::styled(format!("  ✗ {err}"), Style::default().fg(p.crit)));
