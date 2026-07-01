@@ -10,7 +10,8 @@ use ratatui::{
     Frame,
 };
 
-use crate::ui::theme::{palette, pane_block};
+use crate::ui::theme::{format_duration, palette, pane_block};
+use chrono::Utc;
 // ── Mannies panel ─────────────────────────────────────────────────────────────
 
 pub(crate) fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppState, focused: bool) {
@@ -56,43 +57,78 @@ pub(crate) fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppSta
     frame.render_stateful_widget(list, inner, &mut list_state);
 }
 
+/// Short label for a Manny task (shared by the list and the detail view).
+pub(crate) fn manny_task_label(task: Option<&MannyTask>) -> &'static str {
+    match task {
+        None => "idle",
+        Some(MannyTask::Repair) => "repair",
+        Some(MannyTask::Mining) => "mining",
+        Some(MannyTask::Crafting) => "crafting",
+        Some(MannyTask::AssistingAtomicPrinter) => "assisting printer",
+        Some(MannyTask::Salvage) => "salvage",
+        Some(MannyTask::InstallingWaypointBookmark) => "installing waypoint",
+        Some(MannyTask::DetachingStorageContainer) => "detaching container",
+        Some(MannyTask::InspectingAsteroid) => "inspecting",
+        Some(MannyTask::Returning) => "returning",
+        Some(MannyTask::WaitingForSpace) => "waiting for space",
+        Some(MannyTask::MovingStockage) => "moving cargo",
+        Some(MannyTask::DroppingStorageContainer) => "dropping container",
+        Some(MannyTask::RefillingDeuteriumTank) => "refueling",
+        Some(MannyTask::TurningOnScutRelay) => "activating relay",
+        Some(MannyTask::UnknownTooFar) => "too far",
+        Some(MannyTask::Unknown) => "?",
+    }
+}
+
+fn manny_task_color(task: Option<&MannyTask>) -> Color {
+    match task {
+        None => Color::DarkGray,
+        Some(MannyTask::Repair | MannyTask::Crafting | MannyTask::AssistingAtomicPrinter) => Color::Cyan,
+        Some(
+            MannyTask::Mining
+            | MannyTask::Salvage
+            | MannyTask::InspectingAsteroid
+            | MannyTask::DetachingStorageContainer
+            | MannyTask::DroppingStorageContainer,
+        ) => Color::Yellow,
+        Some(MannyTask::InstallingWaypointBookmark | MannyTask::RefillingDeuteriumTank) => Color::Green,
+        Some(MannyTask::Returning | MannyTask::MovingStockage) => Color::Blue,
+        Some(MannyTask::WaitingForSpace) => Color::Magenta,
+        Some(MannyTask::TurningOnScutRelay) => Color::LightBlue,
+        Some(MannyTask::UnknownTooFar | MannyTask::Unknown) => Color::DarkGray,
+    }
+}
+
+/// Time remaining on the current task, as a compact duration (if known).
+pub(crate) fn manny_task_eta(m: &Manny) -> Option<String> {
+    m.task_estimated_end_time
+        .map(|end| format_duration((end - Utc::now()).num_seconds().max(0)))
+}
+
 pub(crate) fn manny_list_item(m: &Manny) -> ListItem<'_> {
     let loc_icon = match m.location.location_type {
         MannyLocationType::Probe => Span::styled("●", Style::default().fg(Color::Green)),
         MannyLocationType::Sector => Span::styled("◌", Style::default().fg(Color::Yellow)),
         MannyLocationType::Unknown => Span::styled("?", Style::default().fg(Color::DarkGray)),
     };
-
-    let task_text = match &m.current_task {
-        None => Span::styled("idle", Style::default().fg(Color::DarkGray)),
-        Some(MannyTask::Repair) => Span::styled("repair", Style::default().fg(Color::Cyan)),
-        Some(MannyTask::Mining) => Span::styled("mining", Style::default().fg(Color::Yellow)),
-        Some(MannyTask::Crafting) => Span::styled("crafting", Style::default().fg(Color::Cyan)),
-        Some(MannyTask::AssistingAtomicPrinter) => Span::styled("assisting printer", Style::default().fg(Color::Cyan)),
-        Some(MannyTask::Salvage) => Span::styled("salvage", Style::default().fg(Color::Yellow)),
-        Some(MannyTask::InstallingWaypointBookmark) => Span::styled("installing waypoint", Style::default().fg(Color::Green)),
-        Some(MannyTask::DetachingStorageContainer) => Span::styled("detaching container", Style::default().fg(Color::Yellow)),
-        Some(MannyTask::InspectingAsteroid) => Span::styled("inspecting", Style::default().fg(Color::Yellow)),
-        Some(MannyTask::Returning) => Span::styled("returning", Style::default().fg(Color::Blue)),
-        Some(MannyTask::WaitingForSpace) => Span::styled("waiting", Style::default().fg(Color::Magenta)),
-        Some(MannyTask::MovingStockage) => Span::styled("moving cargo", Style::default().fg(Color::Blue)),
-        Some(MannyTask::DroppingStorageContainer) => Span::styled("dropping container", Style::default().fg(Color::Yellow)),
-        Some(MannyTask::RefillingDeuteriumTank) => Span::styled("refueling", Style::default().fg(Color::Green)),
-        Some(MannyTask::TurningOnScutRelay) => Span::styled("activating relay", Style::default().fg(Color::LightBlue)),
-        Some(MannyTask::UnknownTooFar) => Span::styled("too far", Style::default().fg(Color::DarkGray)),
-        Some(MannyTask::Unknown) => Span::styled("?", Style::default().fg(Color::DarkGray)),
-    };
+    let task = m.current_task.as_ref();
+    let task_text = Span::styled(manny_task_label(task), Style::default().fg(manny_task_color(task)));
 
     let progress = if m.current_task.is_some() {
         format!(" {:3.0}%", m.task_progress_percent)
     } else {
         String::new()
     };
+    // Time remaining next to the progress, when the task has an ETA.
+    let eta = manny_task_eta(m)
+        .filter(|_| m.current_task.is_some())
+        .map(|d| format!(" · {d}"))
+        .unwrap_or_default();
 
-    let name = format!("{:<14}", m.name);
+    let name = format!("{:<12}", m.name);
 
     let via_scut = if matches!(m.task_visibility, Some(MannyTaskVisibility::ScutNetwork)) {
-        Span::styled(" ≣ via SCUT", Style::default().fg(Color::LightBlue))
+        Span::styled(" ≣", Style::default().fg(Color::LightBlue))
     } else {
         Span::raw("")
     };
@@ -103,6 +139,7 @@ pub(crate) fn manny_list_item(m: &Manny) -> ListItem<'_> {
         Span::raw(name),
         task_text,
         Span::styled(progress, Style::default().fg(Color::DarkGray)),
+        Span::styled(eta, Style::default().fg(Color::DarkGray)),
         via_scut,
     ]))
 }

@@ -6,9 +6,10 @@
 //! swaps a pane to its detail view (Missions → steps, Comms → message).
 //! Colours come from the active [`Palette`].
 
-use crate::api::types::{MissionStatus, MissionStepStatus};
+use crate::api::types::{MannyTaskVisibility, MissionStatus, MissionStepStatus};
 use crate::app::{AppState, DrillLevel, Pane};
-use crate::ui::theme::{object_icon, pane_block, Palette};
+use crate::ui::panels::mannies::{manny_task_eta, manny_task_label};
+use crate::ui::theme::{block_gauge_line, object_icon, pane_block, Palette};
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
@@ -237,4 +238,54 @@ pub fn render_storage(frame: &mut Frame, area: Rect, state: &AppState, active: b
         }
     }
     render_body(frame, area, " STORAGE ", active, p, lines);
+}
+
+/// Detail view for a single manny (drill-in `l` on the Mannies pane): task,
+/// progress, time remaining, cargo breakdown, and location.
+pub fn render_manny_detail(frame: &mut Frame, area: Rect, state: &AppState, id: &str, active: bool, p: Palette) {
+    let block = pane_block(" MANNY ", active, p);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let dim = Style::default().fg(p.dim);
+    let text = Style::default().fg(p.text);
+
+    let Some(m) = state.mannies.as_ref().and_then(|v| v.iter().find(|m| m.id == id)) else {
+        frame.render_widget(Paragraph::new(Line::styled("manny gone", dim)), inner);
+        return;
+    };
+
+    let mut lines = vec![Line::styled(m.name.clone(), text.add_modifier(Modifier::BOLD))];
+    let task = m.current_task.as_ref();
+    if task.is_some() {
+        lines.push(Line::from(vec![
+            Span::styled(manny_task_label(task), Style::default().fg(p.accent)),
+            Span::styled(format!("  {:.0}%", m.task_progress_percent), text),
+        ]));
+        if let Some(eta) = manny_task_eta(m) {
+            lines.push(Line::from(vec![Span::styled("ETA ", dim), Span::styled(eta, text)]));
+        }
+    } else {
+        lines.push(Line::styled("idle", dim));
+    }
+    match state.manny_sector_coords(m) {
+        Some((x, y, z)) => lines.push(Line::from(vec![
+            Span::styled("sector ", dim),
+            Span::styled(format!("({x}, {y}, {z})"), text),
+        ])),
+        None => lines.push(Line::styled("on probe", dim)),
+    }
+    if matches!(m.task_visibility, Some(MannyTaskVisibility::ScutNetwork)) {
+        lines.push(Line::styled("≣ via SCUT", Style::default().fg(p.accent)));
+    }
+
+    // Cargo — what it is carrying (proxy for what it is mining/hauling).
+    lines.push(Line::raw(""));
+    let c = &m.cargo;
+    let used = c.metals + c.ice + c.deuterium + c.organic_compounds;
+    let ratio = if c.capacity > 0.0 { used / c.capacity } else { 0.0 };
+    lines.push(block_gauge_line("CARGO", ratio, &format!("{used:.1}/{:.1}", c.capacity), p.accent, p));
+    lines.push(Line::styled(format!("metals {:.1}  ice {:.1}", c.metals, c.ice), text));
+    lines.push(Line::styled(format!("deut {:.1}  org {:.1}", c.deuterium, c.organic_compounds), text));
+
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
 }

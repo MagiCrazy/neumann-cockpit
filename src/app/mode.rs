@@ -27,6 +27,8 @@ pub enum MenuAction {
     MoveStock,
     // Probe pane
     MindSnapshot,
+    // Mannies pane (extra)
+    DropStorageContainer,
 }
 
 /// A single entry in a contextual action menu.
@@ -171,6 +173,27 @@ impl super::AppState {
             orders(MenuAction::Inspect, "Inspect…"),
             orders(MenuAction::Recover, "Recover container…"),
             orders(MenuAction::Detach, "Detach container…"),
+            {
+                let has_kit = self.has_atmospheric_drop_kit();
+                let has_container = !self.collect_detachable_containers().is_empty();
+                let has_planet = !self.collect_planet_candidates().is_empty();
+                MenuItem {
+                    action: MenuAction::DropStorageContainer,
+                    label: "Drop container on planet…".into(),
+                    enabled: can && has_kit && has_container && has_planet,
+                    disabled_reason: if !can {
+                        Some("busy".to_string())
+                    } else if !has_kit {
+                        Some("no drop-kit".to_string())
+                    } else if !has_container {
+                        Some("no container".to_string())
+                    } else if !has_planet {
+                        Some("no planet".to_string())
+                    } else {
+                        None
+                    },
+                }
+            },
             MenuItem {
                 action: MenuAction::Refuel,
                 label: "Refill deuterium".into(),

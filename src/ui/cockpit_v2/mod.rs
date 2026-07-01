@@ -11,7 +11,7 @@ mod grid;
 mod menu;
 mod panes;
 
-use crate::app::{AppState, Pane};
+use crate::app::{AppState, DrillLevel, Pane};
 use crate::ui::panels::{
     render_inventory_panel, render_mannies_panel, render_probe_panel, render_scanner_panel,
 };
@@ -150,7 +150,13 @@ fn render_pane(frame: &mut Frame, area: Rect, pane: Pane, state: &AppState, acti
         Pane::Probe => render_probe_panel(frame, area, state, active),
         Pane::Inventory => render_inventory_panel(frame, area, state, active),
         Pane::Scanner => render_scanner_panel(frame, area, state, active),
-        Pane::Mannies => render_mannies_panel(frame, area, state, active),
+        Pane::Mannies => {
+            if let Some(DrillLevel::Manny(id)) = state.pane_nav[Pane::Mannies.index()].drill.last() {
+                panes::render_manny_detail(frame, area, state, id, active, p);
+            } else {
+                render_mannies_panel(frame, area, state, active);
+            }
+        }
         // Promoted panes are palette-aware.
         Pane::Map => panes::render_map(frame, area, state, active, p),
         Pane::Comms => panes::render_comms(frame, area, state, active, p),
