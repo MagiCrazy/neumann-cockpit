@@ -64,11 +64,16 @@ async fn run(
     let mut state = AppState {
         hints_visible: hints,
         color_mode,
+        booting: true,
         ..Default::default()
     };
     let scan_history_path = config::history_path();
     state.load_scan_history(&scan_history_path);
     let mut events = EventStream::new();
+
+    // Short-lived tick that drives the boot assembly; runs only while booting.
+    let mut boot_tick = tokio::time::interval(std::time::Duration::from_millis(90));
+    boot_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     // Initial data fetch
     fetch_all(client.clone(), tx.clone());
@@ -84,6 +89,10 @@ async fn run(
         tokio::select! {
             Some(event) = events.next() => {
                 handle_event(event?, &mut state, client, &tx);
+            }
+
+            _ = boot_tick.tick(), if state.booting => {
+                state.boot_tick();
             }
 
             Some(msg) = rx.recv() => {

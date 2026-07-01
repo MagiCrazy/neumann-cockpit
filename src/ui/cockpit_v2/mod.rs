@@ -15,7 +15,7 @@ use crate::app::{AppState, Pane};
 use crate::ui::panels::{
     render_inventory_panel, render_mannies_panel, render_probe_panel, render_scanner_panel,
 };
-use crate::ui::theme::{palette, Palette};
+use crate::ui::theme::{palette, pane_block, Palette};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -27,6 +27,12 @@ use ratatui::{
 pub fn render(frame: &mut Frame, state: &AppState) {
     let area = frame.area();
     let p = palette(state.color_mode);
+
+    if state.booting {
+        render_boot(frame, area, state, p);
+        return;
+    }
+
     let status_h = if state.hints_visible { 2 } else { 1 };
     let rows = Layout::default()
         .direction(Direction::Vertical)
@@ -50,6 +56,43 @@ pub fn render(frame: &mut Frame, state: &AppState) {
         menu::render(frame, area, m, p);
     }
     crate::ui::overlays::render_active_overlays(frame, area, state);
+}
+
+/// Boot assembly: the grid traces in centre-out; revealed panes render their
+/// real content as it arrives, pending panes show a faint placeholder.
+fn render_boot(frame: &mut Frame, area: Rect, state: &AppState, p: Palette) {
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(area);
+
+    for (pane, rect) in grid::visible_panes(rows[0], state.active_pane) {
+        if state.boot_revealed(pane) {
+            // The pane tracing in this frame glows (leading edge of the sweep).
+            render_pane(frame, rect, pane, state, state.boot_leading(pane), p);
+        } else {
+            let title = format!(" {} ", pane.label());
+            let block = pane_block(&title, false, p);
+            let inner = block.inner(rect);
+            frame.render_widget(block, rect);
+            frame.render_widget(
+                Paragraph::new(Line::styled("· · ·", Style::default().fg(p.dim)))
+                    .alignment(Alignment::Center),
+                inner,
+            );
+        }
+    }
+
+    let spin = ["◜", "◝", "◞", "◟"][(state.boot_frame % 4) as usize];
+    let line = Line::from(vec![
+        Span::styled(
+            " BOOT ",
+            Style::default().fg(Color::Black).bg(p.accent).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(format!("  {spin} assembling cockpit…"), Style::default().fg(p.accent)),
+        Span::styled("   · any key to skip", Style::default().fg(p.dim)),
+    ]);
+    frame.render_widget(Paragraph::new(line), rows[1]);
 }
 
 fn render_pane(frame: &mut Frame, area: Rect, pane: Pane, state: &AppState, active: bool, p: Palette) {
