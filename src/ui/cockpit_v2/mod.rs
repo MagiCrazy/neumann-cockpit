@@ -116,7 +116,7 @@ fn render_boot(frame: &mut Frame, area: Rect, state: &AppState, p: Palette) {
     }
 
     // Bottom banner with a blinking cursor + skip hint.
-    let cur = if (state.boot_frame / 3) % 2 == 0 { "▌" } else { " " };
+    let cur = if (state.boot_frame / 3).is_multiple_of(2) { "▌" } else { " " };
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Min(0), Constraint::Length(17)])
