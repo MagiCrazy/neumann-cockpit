@@ -9,11 +9,11 @@ use ratatui::{
     Frame,
 };
 
-use crate::ui::theme::{format_duration, gauge_color, make_line_gauge, movement_phase_label, panel_block, probe_status_label, probe_status_style};
+use crate::ui::theme::{format_duration, gauge_color, make_line_gauge, movement_phase_label, palette, pane_block, probe_status_label, probe_status_style};
 // ── Probe panel ───────────────────────────────────────────────────────────────
 
 pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState, focused: bool) {
-    let block = panel_block(" PROBE ", focused);
+    let block = pane_block(" PROBE ", focused, palette(state.color_mode));
     let inner = block.inner(area);
     frame.render_widget(block, area);
 

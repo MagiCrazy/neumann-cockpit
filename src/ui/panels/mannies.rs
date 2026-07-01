@@ -10,11 +10,11 @@ use ratatui::{
     Frame,
 };
 
-use crate::ui::theme::panel_block;
+use crate::ui::theme::{palette, pane_block};
 // ── Mannies panel ─────────────────────────────────────────────────────────────
 
 pub(crate) fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppState, focused: bool) {
-    let block = panel_block(" MANNIES ", focused);
+    let block = pane_block(" MANNIES ", focused, palette(state.color_mode));
     let inner = block.inner(area);
     frame.render_widget(block, area);
 

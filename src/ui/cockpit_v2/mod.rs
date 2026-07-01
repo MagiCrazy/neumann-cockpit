@@ -9,14 +9,13 @@
 
 mod grid;
 mod menu;
-mod palette;
 mod panes;
 
 use crate::app::{AppState, Pane};
 use crate::ui::panels::{
     render_inventory_panel, render_mannies_panel, render_probe_panel, render_scanner_panel,
 };
-use palette::{palette, Palette};
+use crate::ui::theme::{palette, Palette};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},

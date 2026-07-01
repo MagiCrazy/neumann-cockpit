@@ -6,27 +6,16 @@
 //! swaps a pane to its detail view (Missions → steps, Comms → message).
 //! Colours come from the active [`Palette`].
 
-use super::palette::Palette;
 use crate::api::types::{MissionStatus, MissionStepStatus};
 use crate::app::{AppState, DrillLevel, Pane};
-use crate::ui::theme::object_icon;
+use crate::ui::theme::{object_icon, pane_block, Palette};
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Paragraph, Wrap},
     Frame,
 };
-
-/// Palette-aware pane border/title, replacing the classic `theme::panel_block`.
-fn pane_block(title: &str, active: bool, p: Palette) -> Block<'_> {
-    let color = if active { p.accent } else { p.accent_dim };
-    let modifier = if active { Modifier::BOLD } else { Modifier::empty() };
-    Block::default()
-        .title(Span::styled(title, Style::default().fg(color).add_modifier(modifier)))
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(color))
-}
 
 /// Style for the selected row: highlighted only while the pane is active.
 fn row_style(active: bool, selected: bool) -> Style {
