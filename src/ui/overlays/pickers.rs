@@ -2,7 +2,7 @@ use crate::ui::theme::palette;
 use crate::app::{AppState, DeployInput, DetachInput, DropCargoInput, InspectInput, MindSnapshotInput, RecallInput, RecoverInput, RefuelInput, RenameMannyInput, SalvageInput, ScutRelayInput};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
@@ -10,11 +10,12 @@ use ratatui::{
 
 use super::{centered_rect, render_pick_list};
 pub(crate) fn render_salvage_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let p = palette(state.color_mode);
     match &state.salvage {
         SalvageInput::PickTarget { manny_name, candidates, selection, .. } => {
             let names: Vec<&str> = candidates.iter().map(|(_, n)| n.as_str()).collect();
             let height = (candidates.len() as u16 + 6).min(16);
-            render_pick_list(frame, area, palette(state.color_mode), &format!(" SALVAGE — {manny_name} "), 50, height,
+            render_pick_list(frame, area, p, &format!(" SALVAGE — {manny_name} "), 50, height,
                 Some("Select salvage target:"), &names, *selection, None, "confirm");
         }
 
@@ -25,7 +26,7 @@ pub(crate) fn render_salvage_overlay(frame: &mut Frame, area: Rect, state: &AppS
                 .title(format!(" SALVAGE — {manny_name} "))
                 .title_alignment(Alignment::Center)
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan));
+                .border_style(Style::default().fg(p.accent));
             let inner = block.inner(popup);
             frame.render_widget(block, popup);
 
@@ -36,22 +37,22 @@ pub(crate) fn render_salvage_overlay(frame: &mut Frame, area: Rect, state: &AppS
 
             let mut lines: Vec<Line> = Vec::new();
             lines.push(Line::from(vec![
-                Span::styled("Target: ", Style::default().fg(Color::DarkGray)),
-                Span::styled(object_name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                Span::styled("Target: ", Style::default().fg(p.dim)),
+                Span::styled(object_name.as_str(), Style::default().fg(p.text).add_modifier(Modifier::BOLD)),
             ]));
             if let Some(err) = error {
                 lines.push(Line::default());
                 lines.push(Line::from(Span::styled(
                     format!("✗ {err}"),
-                    Style::default().fg(Color::Red),
+                    Style::default().fg(p.crit),
                 )));
             }
             frame.render_widget(Paragraph::new(lines), rows[0]);
             frame.render_widget(
                 Paragraph::new(Line::from(vec![
-                    Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                    Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
                     Span::raw(" SALVAGE  "),
-                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                    Span::styled("[Esc]", Style::default().fg(p.accent)),
                     Span::raw(" cancel"),
                 ])),
                 rows[1],
@@ -63,6 +64,7 @@ pub(crate) fn render_salvage_overlay(frame: &mut Frame, area: Rect, state: &AppS
 }
 
 pub(crate) fn render_drop_cargo_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let p = palette(state.color_mode);
     let DropCargoInput::Confirm { ref manny_name, ref error, .. } = state.drop_cargo else { return };
 
     let popup = centered_rect(54, 8, area);
@@ -73,7 +75,7 @@ pub(crate) fn render_drop_cargo_overlay(frame: &mut Frame, area: Rect, state: &A
         .title(title)
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Red));
+        .border_style(Style::default().fg(p.crit));
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
 
@@ -85,23 +87,23 @@ pub(crate) fn render_drop_cargo_overlay(frame: &mut Frame, area: Rect, state: &A
     let mut lines: Vec<Line> = vec![
         Line::from(Span::styled(
             "Drop cargo and retry docking?",
-            Style::default().fg(Color::White),
+            Style::default().fg(p.text),
         )),
         Line::from(Span::styled(
             "Resource cargo is lost (objects return to sector).",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(p.dim),
         )),
     ];
     if let Some(err) = error {
         lines.push(Line::default());
-        lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(Color::Red))));
+        lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(p.crit))));
     }
     frame.render_widget(Paragraph::new(lines), rows[0]);
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("[Enter/y]", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+            Span::styled("[Enter/y]", Style::default().fg(p.crit).add_modifier(Modifier::BOLD)),
             Span::raw(" DROP  "),
-            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::styled("[Esc]", Style::default().fg(p.accent)),
             Span::raw(" cancel"),
         ])),
         rows[1],
@@ -109,6 +111,7 @@ pub(crate) fn render_drop_cargo_overlay(frame: &mut Frame, area: Rect, state: &A
 }
 
 pub(crate) fn render_recall_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let p = palette(state.color_mode);
     let RecallInput::Confirm { ref manny_name, remote, ref error, .. } = state.recall else { return };
 
     let popup = centered_rect(52, 8, area);
@@ -123,7 +126,7 @@ pub(crate) fn render_recall_overlay(frame: &mut Frame, area: Rect, state: &AppSt
         .title(title)
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Yellow));
+        .border_style(Style::default().fg(p.warn));
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
 
@@ -135,27 +138,27 @@ pub(crate) fn render_recall_overlay(frame: &mut Frame, area: Rect, state: &AppSt
     let mut lines: Vec<Line> = Vec::new();
     lines.push(Line::from(Span::styled(
         if remote { "Abandon this Manny's remote task?" } else { "Send recall order?" },
-        Style::default().fg(Color::White),
+        Style::default().fg(p.text),
     )));
     if remote {
         lines.push(Line::from(Span::styled(
             "It will be left forgotten in its sector (no return).",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(p.dim),
         )));
     }
     if let Some(err) = error {
         lines.push(Line::default());
         lines.push(Line::from(Span::styled(
             format!("✗ {err}"),
-            Style::default().fg(Color::Red),
+            Style::default().fg(p.crit),
         )));
     }
     frame.render_widget(Paragraph::new(lines), rows[0]);
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("[Enter]", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+            Span::styled("[Enter]", Style::default().fg(p.warn).add_modifier(Modifier::BOLD)),
             Span::raw(if remote { " ABANDON  " } else { " RECALL  " }),
-            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::styled("[Esc]", Style::default().fg(p.accent)),
             Span::raw(" cancel"),
         ])),
         rows[1],
@@ -163,6 +166,7 @@ pub(crate) fn render_recall_overlay(frame: &mut Frame, area: Rect, state: &AppSt
 }
 
 pub(crate) fn render_refuel_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let p = palette(state.color_mode);
     let RefuelInput::Confirm { ref manny_name, ref error, .. } = state.refuel else { return };
 
     let popup = centered_rect(50, 7, area);
@@ -173,7 +177,7 @@ pub(crate) fn render_refuel_overlay(frame: &mut Frame, area: Rect, state: &AppSt
         .title(title)
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Green));
+        .border_style(Style::default().fg(p.good));
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
 
@@ -185,21 +189,21 @@ pub(crate) fn render_refuel_overlay(frame: &mut Frame, area: Rect, state: &AppSt
     let mut lines: Vec<Line> = Vec::new();
     lines.push(Line::from(Span::styled(
         "Refill the probe deuterium tank?",
-        Style::default().fg(Color::White),
+        Style::default().fg(p.text),
     )));
     if let Some(err) = error {
         lines.push(Line::default());
         lines.push(Line::from(Span::styled(
             format!("✗ {err}"),
-            Style::default().fg(Color::Red),
+            Style::default().fg(p.crit),
         )));
     }
     frame.render_widget(Paragraph::new(lines), rows[0]);
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
             Span::raw(" REFUEL  "),
-            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::styled("[Esc]", Style::default().fg(p.accent)),
             Span::raw(" cancel"),
         ])),
         rows[1],
@@ -207,6 +211,7 @@ pub(crate) fn render_refuel_overlay(frame: &mut Frame, area: Rect, state: &AppSt
 }
 
 pub(crate) fn render_scut_relay_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let p = palette(state.color_mode);
     let ScutRelayInput::EnterNetworkName { ref manny_name, ref relay_name, ref buf, ref error, .. } =
         state.scut_relay
     else {
@@ -220,7 +225,7 @@ pub(crate) fn render_scut_relay_overlay(frame: &mut Frame, area: Rect, state: &A
         .title(title)
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::LightBlue));
+        .border_style(Style::default().fg(p.accent));
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
 
@@ -232,25 +237,25 @@ pub(crate) fn render_scut_relay_overlay(frame: &mut Frame, area: Rect, state: &A
     let mut lines = vec![
         Line::from(Span::styled(
             format!("Manny: {manny_name}"),
-            Style::default().fg(Color::Gray),
+            Style::default().fg(p.text),
         )),
         Line::default(),
         Line::from(vec![
-            Span::styled("Network name (optional): ", Style::default().fg(Color::White)),
-            Span::styled(buf.clone(), Style::default().fg(Color::LightBlue)),
-            Span::styled("▏", Style::default().fg(Color::DarkGray)),
+            Span::styled("Network name (optional): ", Style::default().fg(p.text)),
+            Span::styled(buf.clone(), Style::default().fg(p.accent)),
+            Span::styled("▏", Style::default().fg(p.dim)),
         ]),
     ];
     if let Some(err) = error {
         lines.push(Line::default());
-        lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(Color::Red))));
+        lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(p.crit))));
     }
     frame.render_widget(Paragraph::new(lines), rows[0]);
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("[Enter]", Style::default().fg(Color::LightBlue).add_modifier(Modifier::BOLD)),
+            Span::styled("[Enter]", Style::default().fg(p.accent).add_modifier(Modifier::BOLD)),
             Span::raw(" turn on  "),
-            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::styled("[Esc]", Style::default().fg(p.accent)),
             Span::raw(" cancel"),
         ])),
         rows[1],
@@ -258,6 +263,7 @@ pub(crate) fn render_scut_relay_overlay(frame: &mut Frame, area: Rect, state: &A
 }
 
 pub(crate) fn render_mind_snapshot_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let p = palette(state.color_mode);
     let MindSnapshotInput::Confirm { ref error } = state.mind_snapshot else { return };
     let alert = state.probe_terminal_alert();
 
@@ -271,7 +277,7 @@ pub(crate) fn render_mind_snapshot_overlay(frame: &mut Frame, area: Rect, state:
         .title(title)
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD));
+        .border_style(Style::default().fg(p.crit).add_modifier(Modifier::BOLD));
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
 
@@ -284,31 +290,31 @@ pub(crate) fn render_mind_snapshot_overlay(frame: &mut Frame, area: Rect, state:
     if let Some(a) = alert {
         lines.push(Line::from(Span::styled(
             a.message.clone(),
-            Style::default().fg(Color::White),
+            Style::default().fg(p.text),
         )));
         lines.push(Line::default());
     }
     lines.push(Line::from(Span::styled(
         "Reassign your mind snapshot to a fresh probe?",
-        Style::default().fg(Color::White),
+        Style::default().fg(p.text),
     )));
     lines.push(Line::from(Span::styled(
         "The terminal probe is deleted and the local reference frame resets to 0,0,0.",
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(p.dim),
     )));
     if let Some(err) = error {
         lines.push(Line::default());
         lines.push(Line::from(Span::styled(
             format!("✗ {err}"),
-            Style::default().fg(Color::Red),
+            Style::default().fg(p.crit),
         )));
     }
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), rows[0]);
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("[Enter]", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+            Span::styled("[Enter]", Style::default().fg(p.crit).add_modifier(Modifier::BOLD)),
             Span::raw(" REASSIGN  "),
-            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::styled("[Esc]", Style::default().fg(p.accent)),
             Span::raw(" cancel"),
         ])),
         rows[1],
@@ -316,6 +322,7 @@ pub(crate) fn render_mind_snapshot_overlay(frame: &mut Frame, area: Rect, state:
 }
 
 pub(crate) fn render_rename_manny_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let p = palette(state.color_mode);
     let RenameMannyInput::Typing { ref manny_name, ref buf, ref error, .. } = state.rename_manny else { return };
 
     let popup = centered_rect(46, 7, area);
@@ -326,7 +333,7 @@ pub(crate) fn render_rename_manny_overlay(frame: &mut Frame, area: Rect, state: 
         .title(title)
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan));
+        .border_style(Style::default().fg(p.accent));
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
 
@@ -337,24 +344,24 @@ pub(crate) fn render_rename_manny_overlay(frame: &mut Frame, area: Rect, state: 
 
     let mut lines: Vec<Line> = Vec::new();
     lines.push(Line::from(vec![
-        Span::styled("Name: ", Style::default().fg(Color::Cyan)),
+        Span::styled("Name: ", Style::default().fg(p.accent)),
         Span::raw(buf.as_str()),
-        Span::styled("█", Style::default().fg(Color::Cyan)),
+        Span::styled("█", Style::default().fg(p.accent)),
     ]));
     if let Some(err) = error {
         lines.push(Line::default());
         lines.push(Line::from(Span::styled(
             format!("✗ {err}"),
-            Style::default().fg(Color::Red),
+            Style::default().fg(p.crit),
         )));
     }
 
     frame.render_widget(Paragraph::new(lines), rows[0]);
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
             Span::raw(" rename  "),
-            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::styled("[Esc]", Style::default().fg(p.accent)),
             Span::raw(" cancel"),
         ])),
         rows[1],
@@ -362,18 +369,19 @@ pub(crate) fn render_rename_manny_overlay(frame: &mut Frame, area: Rect, state: 
 }
 
 pub(crate) fn render_deploy_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let p = palette(state.color_mode);
     match &state.deploy {
         DeployInput::PickManny { mannies, selection } => {
             let names: Vec<&str> = mannies.iter().map(|(_, n)| n.as_str()).collect();
             let height = (mannies.len() as u16 + 6).min(18);
-            render_pick_list(frame, area, palette(state.color_mode), " DEPLOY WAYPOINT — SELECT MANNY ", 52, height,
+            render_pick_list(frame, area, p, " DEPLOY WAYPOINT — SELECT MANNY ", 52, height,
                 None, &names, *selection, None, "confirm");
         }
 
         DeployInput::PickObject { candidates, selection, .. } => {
             let names: Vec<&str> = candidates.iter().map(|(_, n)| n.as_str()).collect();
             let height = (candidates.len() as u16 + 6).min(18);
-            render_pick_list(frame, area, palette(state.color_mode), " DEPLOY WAYPOINT ", 52, height,
+            render_pick_list(frame, area, p, " DEPLOY WAYPOINT ", 52, height,
                 None, &names, *selection, None, "confirm");
         }
 
@@ -385,7 +393,7 @@ pub(crate) fn render_deploy_overlay(frame: &mut Frame, area: Rect, state: &AppSt
                 .title(title)
                 .title_alignment(Alignment::Center)
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan));
+                .border_style(Style::default().fg(p.accent));
             let inner = block.inner(popup);
             frame.render_widget(block, popup);
 
@@ -396,23 +404,23 @@ pub(crate) fn render_deploy_overlay(frame: &mut Frame, area: Rect, state: &AppSt
 
             let mut lines: Vec<Line> = Vec::new();
             lines.push(Line::from(vec![
-                Span::styled("Name: ", Style::default().fg(Color::Cyan)),
+                Span::styled("Name: ", Style::default().fg(p.accent)),
                 Span::raw(name_buf.as_str()),
-                Span::styled("█", Style::default().fg(Color::Cyan)),
+                Span::styled("█", Style::default().fg(p.accent)),
             ]));
             if let Some(err) = error {
                 lines.push(Line::default());
                 lines.push(Line::from(Span::styled(
                     format!("✗ {err}"),
-                    Style::default().fg(Color::Red),
+                    Style::default().fg(p.crit),
                 )));
             }
             frame.render_widget(Paragraph::new(lines), rows[0]);
             frame.render_widget(
                 Paragraph::new(Line::from(vec![
-                    Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                    Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
                     Span::raw(" DEPLOY  "),
-                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                    Span::styled("[Esc]", Style::default().fg(p.accent)),
                     Span::raw(" cancel"),
                 ])),
                 rows[1],
@@ -424,36 +432,39 @@ pub(crate) fn render_deploy_overlay(frame: &mut Frame, area: Rect, state: &AppSt
 }
 
 pub(crate) fn render_inspect_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let p = palette(state.color_mode);
     let InspectInput::PickAsteroid { ref manny_name, ref candidates, selection, ref error, .. } = state.inspect else { return };
     let names: Vec<&str> = candidates.iter().map(|(_, n)| n.as_str()).collect();
     let error_lines = if error.is_some() { 2u16 } else { 0 };
     let height = (candidates.len() as u16 + 6 + error_lines).min(18);
-    render_pick_list(frame, area, palette(state.color_mode), &format!(" INSPECT — {manny_name} "), 52, height,
+    render_pick_list(frame, area, p, &format!(" INSPECT — {manny_name} "), 52, height,
         Some("Select asteroid to inspect:"), &names, selection, error.as_deref(), "inspect");
 }
 
 pub(crate) fn render_recover_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let p = palette(state.color_mode);
     let RecoverInput::PickContainer { ref manny_name, ref candidates, selection, ref error, .. } = state.recover else { return };
     let names: Vec<&str> = candidates.iter().map(|(_, n)| n.as_str()).collect();
     let error_lines = if error.is_some() { 2u16 } else { 0 };
     let height = (candidates.len() as u16 + 6 + error_lines).min(18);
-    render_pick_list(frame, area, palette(state.color_mode), &format!(" RECOVER — {manny_name} "), 52, height,
+    render_pick_list(frame, area, p, &format!(" RECOVER — {manny_name} "), 52, height,
         Some("Select container to recover:"), &names, selection, error.as_deref(), "recover");
 }
 
 pub(crate) fn render_detach_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let p = palette(state.color_mode);
     match &state.detach {
         DetachInput::PickContainer { manny_name, containers, selection, .. } => {
             let names: Vec<&str> = containers.iter().map(|(_, n)| n.as_str()).collect();
             let height = (containers.len() as u16 + 6).min(16);
-            render_pick_list(frame, area, palette(state.color_mode), &format!(" DETACH — {manny_name} "), 52, height,
+            render_pick_list(frame, area, p, &format!(" DETACH — {manny_name} "), 52, height,
                 Some("Select container to detach:"), &names, *selection, None, "next");
         }
 
         DetachInput::PickMode { manny_name, container_name, selection, error, .. } => {
             let names: Vec<&str> = crate::app::DETACH_MODES.iter().map(|(_, l)| *l).collect();
             let prompt = format!("Detach mode  (manny: {manny_name})");
-            render_pick_list(frame, area, palette(state.color_mode), &format!(" DETACH — {container_name} "), 52, 10,
+            render_pick_list(frame, area, p, &format!(" DETACH — {container_name} "), 52, 10,
                 Some(&prompt), &names, *selection, error.as_deref(), "confirm");
         }
 
@@ -461,7 +472,7 @@ pub(crate) fn render_detach_overlay(frame: &mut Frame, area: Rect, state: &AppSt
             let names: Vec<&str> = asteroids.iter().map(|(_, n)| n.as_str()).collect();
             let height = (asteroids.len() as u16 + 8).min(18);
             let prompt = format!("Attach to asteroid  (manny: {manny_name})");
-            render_pick_list(frame, area, palette(state.color_mode), &format!(" DETACH — hide {container_name} "), 52, height,
+            render_pick_list(frame, area, p, &format!(" DETACH — hide {container_name} "), 52, height,
                 Some(&prompt), &names, *selection, error.as_deref(), "hide here");
         }
 

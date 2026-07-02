@@ -1,7 +1,8 @@
+use crate::ui::theme::palette;
 use crate::app::{AppState, AtomicPrinterCraftInput, CraftInput};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
@@ -9,6 +10,7 @@ use ratatui::{
 
 use super::centered_rect;
 pub(crate) fn render_craft_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let p = palette(state.color_mode);
     let CraftInput::PickRecipe { ref manny_name, selection, ref error, .. } = state.craft else { return };
 
     let recipes = state.manny_craft_recipes();
@@ -21,7 +23,7 @@ pub(crate) fn render_craft_overlay(frame: &mut Frame, area: Rect, state: &AppSta
         .title(title)
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan));
+        .border_style(Style::default().fg(p.accent));
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
 
@@ -34,7 +36,7 @@ pub(crate) fn render_craft_overlay(frame: &mut Frame, area: Rect, state: &AppSta
     if recipes.is_empty() {
         lines.push(Line::from(Span::styled(
             "loading recipes…",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(p.dim),
         )));
     }
     for (i, recipe) in recipes.iter().enumerate() {
@@ -50,14 +52,14 @@ pub(crate) fn render_craft_overlay(frame: &mut Frame, area: Rect, state: &AppSta
         let detail = format!("  {}m  {}", duration_min, ingredients);
         if selected {
             lines.push(Line::from(vec![
-                Span::styled("▶ ", Style::default().fg(Color::Yellow)),
-                Span::styled(recipe.name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-                Span::styled(detail, Style::default().fg(Color::DarkGray)),
+                Span::styled("▶ ", Style::default().fg(p.warn)),
+                Span::styled(recipe.name.as_str(), Style::default().fg(p.text).add_modifier(Modifier::BOLD)),
+                Span::styled(detail, Style::default().fg(p.dim)),
             ]));
         } else {
             lines.push(Line::from(vec![
                 Span::raw("  "),
-                Span::styled(recipe.name.as_str(), Style::default().fg(Color::DarkGray)),
+                Span::styled(recipe.name.as_str(), Style::default().fg(p.dim)),
             ]));
         }
     }
@@ -65,18 +67,18 @@ pub(crate) fn render_craft_overlay(frame: &mut Frame, area: Rect, state: &AppSta
         lines.push(Line::default());
         lines.push(Line::from(Span::styled(
             format!("✗ {err}"),
-            Style::default().fg(Color::Red),
+            Style::default().fg(p.crit),
         )));
     }
 
     frame.render_widget(Paragraph::new(lines), rows[0]);
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
+            Span::styled("[↑/↓]", Style::default().fg(p.accent)),
             Span::raw(" select  "),
-            Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
             Span::raw(" start  "),
-            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::styled("[Esc]", Style::default().fg(p.accent)),
             Span::raw(" cancel"),
         ])),
         rows[1],
@@ -84,6 +86,7 @@ pub(crate) fn render_craft_overlay(frame: &mut Frame, area: Rect, state: &AppSta
 }
 
 pub(crate) fn render_atomic_printer_craft_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let p = palette(state.color_mode);
     let AtomicPrinterCraftInput::PickRecipe { selection, ref error } = state.atomic_printer_craft else { return };
 
     let recipes = state.atomic_printer_recipes();
@@ -95,7 +98,7 @@ pub(crate) fn render_atomic_printer_craft_overlay(frame: &mut Frame, area: Rect,
         .title(" ATOMIC PRINTER — SELECT RECIPE ")
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Magenta));
+        .border_style(Style::default().fg(p.crit));
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
 
@@ -108,7 +111,7 @@ pub(crate) fn render_atomic_printer_craft_overlay(frame: &mut Frame, area: Rect,
     if recipes.is_empty() {
         lines.push(Line::from(Span::styled(
             "loading recipes…",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(p.dim),
         )));
     }
     for (i, recipe) in recipes.iter().enumerate() {
@@ -124,14 +127,14 @@ pub(crate) fn render_atomic_printer_craft_overlay(frame: &mut Frame, area: Rect,
         let detail = format!("  {}m  {}", duration_min, ingredients);
         if selected {
             lines.push(Line::from(vec![
-                Span::styled("▶ ", Style::default().fg(Color::Yellow)),
-                Span::styled(recipe.name.as_str(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-                Span::styled(detail, Style::default().fg(Color::DarkGray)),
+                Span::styled("▶ ", Style::default().fg(p.warn)),
+                Span::styled(recipe.name.as_str(), Style::default().fg(p.text).add_modifier(Modifier::BOLD)),
+                Span::styled(detail, Style::default().fg(p.dim)),
             ]));
         } else {
             lines.push(Line::from(vec![
                 Span::raw("  "),
-                Span::styled(recipe.name.as_str(), Style::default().fg(Color::DarkGray)),
+                Span::styled(recipe.name.as_str(), Style::default().fg(p.dim)),
             ]));
         }
     }
@@ -139,17 +142,17 @@ pub(crate) fn render_atomic_printer_craft_overlay(frame: &mut Frame, area: Rect,
         lines.push(Line::default());
         lines.push(Line::from(Span::styled(
             format!("✗ {err}"),
-            Style::default().fg(Color::Red),
+            Style::default().fg(p.crit),
         )));
     }
     frame.render_widget(Paragraph::new(lines), rows[0]);
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
+            Span::styled("[↑/↓]", Style::default().fg(p.accent)),
             Span::raw(" select  "),
-            Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
             Span::raw(" start  "),
-            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::styled("[Esc]", Style::default().fg(p.accent)),
             Span::raw(" cancel"),
         ])),
         rows[1],

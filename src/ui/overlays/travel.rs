@@ -1,15 +1,16 @@
 use crate::app::{AppState, TravelInput};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
 
-use crate::ui::theme::format_duration;
+use crate::ui::theme::{format_duration, palette};
 use super::centered_rect;
 pub(crate) fn render_travel_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let p = palette(state.color_mode);
     let popup = centered_rect(46, 11, area);
     frame.render_widget(Clear, popup);
 
@@ -17,7 +18,7 @@ pub(crate) fn render_travel_overlay(frame: &mut Frame, area: Rect, state: &AppSt
         .title(" TRAVEL ")
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Yellow));
+        .border_style(Style::default().fg(p.warn));
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
 
@@ -36,40 +37,40 @@ pub(crate) fn render_travel_overlay(frame: &mut Frame, area: Rect, state: &AppSt
 
             if let Some((px, py, pz)) = state.probe_sector_coords() {
                 lines.push(Line::from(vec![
-                    Span::styled("From: ", Style::default().fg(Color::DarkGray)),
+                    Span::styled("From: ", Style::default().fg(p.dim)),
                     Span::styled(
                         format!("({px},{py},{pz})"),
-                        Style::default().fg(Color::White),
+                        Style::default().fg(p.text),
                     ),
                 ]));
             }
 
             lines.push(Line::from(vec![
-                Span::styled("Destination (x y z): ", Style::default().fg(Color::Cyan)),
+                Span::styled("Destination (x y z): ", Style::default().fg(p.accent)),
                 Span::raw(buf.as_str()),
-                Span::styled("█", Style::default().fg(Color::Cyan)),
+                Span::styled("█", Style::default().fg(p.accent)),
             ]));
             lines.push(Line::from(Span::styled(
                 "prefix with + for relative (e.g. +2 0 -2)",
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(p.dim),
             )));
 
             // Live resolution + parity check
             if let Some((x, y, z)) = state.resolve_travel_target() {
                 let parity_ok = (x + y + z) % 2 == 0;
                 let mut spans = vec![
-                    Span::styled("→ ", Style::default().fg(Color::Yellow)),
+                    Span::styled("→ ", Style::default().fg(p.warn)),
                     Span::styled(
                         format!("({x},{y},{z})"),
-                        Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                        Style::default().fg(p.text).add_modifier(Modifier::BOLD),
                     ),
                 ];
                 if parity_ok {
-                    spans.push(Span::styled("  ✓", Style::default().fg(Color::Green)));
+                    spans.push(Span::styled("  ✓", Style::default().fg(p.good)));
                 } else {
                     spans.push(Span::styled(
                         "  ✗ x+y+z must be even",
-                        Style::default().fg(Color::Red),
+                        Style::default().fg(p.crit),
                     ));
                 }
                 lines.push(Line::default());
@@ -78,16 +79,16 @@ pub(crate) fn render_travel_overlay(frame: &mut Frame, area: Rect, state: &AppSt
                 lines.push(Line::default());
                 lines.push(Line::from(Span::styled(
                     "✗ relative input needs a known probe position",
-                    Style::default().fg(Color::Red),
+                    Style::default().fg(p.crit),
                 )));
             }
 
             frame.render_widget(Paragraph::new(lines), body);
             frame.render_widget(
                 Paragraph::new(Line::from(vec![
-                    Span::styled("[Enter]", Style::default().fg(Color::Cyan)),
+                    Span::styled("[Enter]", Style::default().fg(p.accent)),
                     Span::raw(" preview  "),
-                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                    Span::styled("[Esc]", Style::default().fg(p.accent)),
                     Span::raw(" cancel"),
                 ])),
                 hint_area,
@@ -98,34 +99,34 @@ pub(crate) fn render_travel_overlay(frame: &mut Frame, area: Rect, state: &AppSt
             let mut lines: Vec<Line> = Vec::new();
 
             lines.push(Line::from(vec![
-                Span::styled("→  ", Style::default().fg(Color::Yellow)),
+                Span::styled("→  ", Style::default().fg(p.warn)),
                 Span::styled(
                     format!("({x}, {y}, {z})"),
-                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                    Style::default().fg(p.text).add_modifier(Modifier::BOLD),
                 ),
             ]));
 
             if let Some(dist) = sector_distance {
                 lines.push(Line::from(vec![
-                    Span::styled("   Distance  ", Style::default().fg(Color::DarkGray)),
+                    Span::styled("   Distance  ", Style::default().fg(p.dim)),
                     Span::raw(format!("{dist} sector(s)")),
                 ]));
             }
 
             if let Some(fuel) = fuel_cost {
                 lines.push(Line::from(vec![
-                    Span::styled("   Fuel      ", Style::default().fg(Color::DarkGray)),
-                    Span::styled(format!("{fuel:.4}"), Style::default().fg(Color::Cyan)),
-                    Span::styled(" units", Style::default().fg(Color::DarkGray)),
+                    Span::styled("   Fuel      ", Style::default().fg(p.dim)),
+                    Span::styled(format!("{fuel:.4}"), Style::default().fg(p.accent)),
+                    Span::styled(" units", Style::default().fg(p.dim)),
                 ]));
             }
 
             if let Some(mins) = eta_minutes {
                 lines.push(Line::from(vec![
-                    Span::styled("   ETA       ", Style::default().fg(Color::DarkGray)),
+                    Span::styled("   ETA       ", Style::default().fg(p.dim)),
                     Span::styled(
                         format_duration(mins * 60),
-                        Style::default().fg(Color::Yellow),
+                        Style::default().fg(p.warn),
                     ),
                 ]));
             }
@@ -134,7 +135,7 @@ pub(crate) fn render_travel_overlay(frame: &mut Frame, area: Rect, state: &AppSt
                 lines.push(Line::from(""));
                 lines.push(Line::from(Span::styled(
                     format!("   ✗ {err}"),
-                    Style::default().fg(Color::Red),
+                    Style::default().fg(p.crit),
                 )));
             }
 
@@ -142,14 +143,14 @@ pub(crate) fn render_travel_overlay(frame: &mut Frame, area: Rect, state: &AppSt
 
             let hint = if error.is_some() {
                 Line::from(vec![
-                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                    Span::styled("[Esc]", Style::default().fg(p.accent)),
                     Span::raw(" cancel"),
                 ])
             } else {
                 Line::from(vec![
-                    Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                    Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
                     Span::raw(" GO  "),
-                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                    Span::styled("[Esc]", Style::default().fg(p.accent)),
                     Span::raw(" cancel"),
                 ])
             };

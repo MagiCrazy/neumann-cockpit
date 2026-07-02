@@ -53,7 +53,7 @@ use crate::app::{
     RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput,
     ScanMode, ScutNetworkInput, ScutRelayInput, StorageMoveInput, TravelInput, WaypointsInput,
 };
-use crate::ui::theme::Palette;
+use crate::ui::theme::{palette, Palette};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -160,7 +160,7 @@ pub(crate) fn render_active_overlays(frame: &mut Frame, area: Rect, state: &AppS
         render_scan_input_overlay(frame, area, state);
     }
     if state.help_open {
-        render_help_overlay(frame, area);
+        render_help_overlay(frame, area, palette(state.color_mode));
     }
 }
 

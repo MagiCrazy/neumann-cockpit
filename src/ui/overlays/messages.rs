@@ -1,7 +1,7 @@
 use crate::ui::theme::palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
@@ -21,6 +21,7 @@ fn preview(body: &str) -> String {
 }
 
 pub(crate) fn render_messages_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let p = palette(state.color_mode);
     match &state.messages_input {
         MessagesInput::Browsing { sent_tab, selection } => {
             let popup = centered_rect(76, 80, area);
@@ -29,7 +30,7 @@ pub(crate) fn render_messages_overlay(frame: &mut Frame, area: Rect, state: &App
                 .title(" MESSAGES ")
                 .title_alignment(Alignment::Center)
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::White));
+                .border_style(Style::default().fg(p.text));
             let inner = block.inner(popup);
             frame.render_widget(block, popup);
 
@@ -39,12 +40,12 @@ pub(crate) fn render_messages_overlay(frame: &mut Frame, area: Rect, state: &App
                 .split(inner);
 
             // Tabs
-            let inbox_style = if *sent_tab { Style::default().fg(Color::DarkGray) } else { Style::default().fg(Color::White).add_modifier(Modifier::BOLD) };
-            let sent_style = if *sent_tab { Style::default().fg(Color::White).add_modifier(Modifier::BOLD) } else { Style::default().fg(Color::DarkGray) };
+            let inbox_style = if *sent_tab { Style::default().fg(p.dim) } else { Style::default().fg(p.text).add_modifier(Modifier::BOLD) };
+            let sent_style = if *sent_tab { Style::default().fg(p.text).add_modifier(Modifier::BOLD) } else { Style::default().fg(p.dim) };
             frame.render_widget(
                 Paragraph::new(Line::from(vec![
                     Span::styled("Inbox", inbox_style),
-                    Span::styled("   |   ", Style::default().fg(Color::DarkGray)),
+                    Span::styled("   |   ", Style::default().fg(p.dim)),
                     Span::styled("Sent", sent_style),
                 ])),
                 rows[0],
@@ -53,30 +54,30 @@ pub(crate) fn render_messages_overlay(frame: &mut Frame, area: Rect, state: &App
             let mut lines: Vec<Line> = Vec::new();
             if *sent_tab {
                 if state.sent_messages.is_empty() {
-                    lines.push(Line::from(Span::styled("No sent messages.", Style::default().fg(Color::DarkGray))));
+                    lines.push(Line::from(Span::styled("No sent messages.", Style::default().fg(p.dim))));
                 }
                 for (i, m) in state.sent_messages.iter().enumerate() {
                     let marker = if i == *selection { "▸ " } else { "  " };
                     lines.push(Line::from(vec![
-                        Span::styled(marker, Style::default().fg(Color::Cyan)),
-                        Span::styled(format!("→ {} ", m.recipient.name), Style::default().fg(Color::White)),
-                        Span::styled(preview(&m.body), Style::default().fg(Color::Gray)),
+                        Span::styled(marker, Style::default().fg(p.accent)),
+                        Span::styled(format!("→ {} ", m.recipient.name), Style::default().fg(p.text)),
+                        Span::styled(preview(&m.body), Style::default().fg(p.text)),
                     ]));
                 }
             } else {
                 if state.messages.is_empty() {
-                    lines.push(Line::from(Span::styled("No messages.", Style::default().fg(Color::DarkGray))));
+                    lines.push(Line::from(Span::styled("No messages.", Style::default().fg(p.dim))));
                 }
                 for (i, m) in state.messages.iter().enumerate() {
                     let marker = if i == *selection { "▸ " } else { "  " };
                     let unread = m.status == MessageStatus::Unread;
-                    let dot = if unread { Span::styled("● ", Style::default().fg(Color::Cyan)) } else { Span::raw("  ") };
-                    let name_style = if unread { Style::default().fg(Color::White).add_modifier(Modifier::BOLD) } else { Style::default().fg(Color::Gray) };
+                    let dot = if unread { Span::styled("● ", Style::default().fg(p.accent)) } else { Span::raw("  ") };
+                    let name_style = if unread { Style::default().fg(p.text).add_modifier(Modifier::BOLD) } else { Style::default().fg(p.text) };
                     lines.push(Line::from(vec![
-                        Span::styled(marker, Style::default().fg(Color::Cyan)),
+                        Span::styled(marker, Style::default().fg(p.accent)),
                         dot,
                         Span::styled(format!("{} ", m.sender.name), name_style),
-                        Span::styled(preview(&m.body), Style::default().fg(Color::DarkGray)),
+                        Span::styled(preview(&m.body), Style::default().fg(p.dim)),
                     ]));
                 }
             }
@@ -84,13 +85,13 @@ pub(crate) fn render_messages_overlay(frame: &mut Frame, area: Rect, state: &App
 
             frame.render_widget(
                 Paragraph::new(Line::from(vec![
-                    Span::styled("[Tab]", Style::default().fg(Color::Cyan)),
+                    Span::styled("[Tab]", Style::default().fg(p.accent)),
                     Span::raw(" inbox/sent  "),
-                    Span::styled("[Enter]", Style::default().fg(Color::Cyan)),
+                    Span::styled("[Enter]", Style::default().fg(p.accent)),
                     Span::raw(" read  "),
-                    Span::styled("[c]", Style::default().fg(Color::Cyan)),
+                    Span::styled("[c]", Style::default().fg(p.accent)),
                     Span::raw(" compose  "),
-                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                    Span::styled("[Esc]", Style::default().fg(p.accent)),
                     Span::raw(" close"),
                 ])),
                 rows[2],
@@ -116,7 +117,7 @@ pub(crate) fn render_messages_overlay(frame: &mut Frame, area: Rect, state: &App
                 .title(format!(" MESSAGE → {recipient_name} "))
                 .title_alignment(Alignment::Center)
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan));
+                .border_style(Style::default().fg(p.accent));
             let inner = block.inner(popup);
             frame.render_widget(block, popup);
 
@@ -126,19 +127,19 @@ pub(crate) fn render_messages_overlay(frame: &mut Frame, area: Rect, state: &App
                 .split(inner);
 
             let mut lines = vec![Line::from(vec![
-                Span::styled(body_buf.clone(), Style::default().fg(Color::White)),
-                Span::styled("▏", Style::default().fg(Color::Cyan)),
+                Span::styled(body_buf.clone(), Style::default().fg(p.text)),
+                Span::styled("▏", Style::default().fg(p.accent)),
             ])];
             if let Some(err) = error {
                 lines.push(Line::default());
-                lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(Color::Red))));
+                lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(p.crit))));
             }
             frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), rows[0]);
             frame.render_widget(
                 Paragraph::new(Line::from(vec![
-                    Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                    Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
                     Span::raw(" send  "),
-                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                    Span::styled("[Esc]", Style::default().fg(p.accent)),
                     Span::raw(" cancel"),
                 ])),
                 rows[1],
