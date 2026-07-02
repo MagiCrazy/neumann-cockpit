@@ -1325,44 +1325,131 @@ fn scanner_obj_nav_wraps() {
     assert_eq!(state.scanner_obj_selection, Some(0));
 }
 
-// ── anim / theme ──────────────────────────────────────────────────────────
+// ── cockpit color mode ─────────────────────────────────────────────────────
 
 #[test]
-fn tick_anim_advances_and_finishes_boot() {
-    let mut state = AppState::default();
-    state.anim.booting = true;
-    for _ in 0..BOOT_TOTAL_FRAMES {
-        state.tick_anim();
+fn color_mode_cycles_and_defaults_green() {
+    assert_eq!(ColorMode::default(), ColorMode::MonoGreen);
+    let mut m = ColorMode::default();
+    for _ in 0..4 {
+        m = m.cycle();
     }
-    assert!(!state.anim.booting, "boot should complete");
-    assert_eq!(state.anim.frame, BOOT_TOTAL_FRAMES);
+    assert_eq!(m, ColorMode::MonoGreen, "cycles back after four steps");
+}
+
+// ── cockpit contextual menu ────────────────────────────────────────────────
+
+fn menu_item(menu: &ContextMenu, action: MenuAction) -> &MenuItem {
+    menu.items.iter().find(|i| i.action == action).expect("menu item")
 }
 
 #[test]
-fn toggle_theme_flips_between_classic_and_retro() {
+fn mannies_context_menu_reflects_manny_state() {
     let mut state = AppState::default();
-    assert_eq!(state.ui_theme, UiTheme::Classic);
-    state.toggle_theme();
-    assert_eq!(state.ui_theme, UiTheme::Retro);
-    state.toggle_theme();
-    assert_eq!(state.ui_theme, UiTheme::Classic);
+    state.active_pane = Pane::Mannies;
+
+    // Idle manny: order-requiring actions enabled, recall disabled, and
+    // conditional actions (refuel/drop-cargo) disabled without their context.
+    state.mannies = Some(vec![make_manny("m1", "probe_rack", true, None)]);
+    let menu = state.build_context_menu().expect("mannies menu");
+    assert!(menu_item(&menu, MenuAction::Mine).enabled);
+    assert!(menu_item(&menu, MenuAction::Repair).enabled);
+    assert!(menu_item(&menu, MenuAction::Craft).enabled);
+    assert!(menu_item(&menu, MenuAction::Salvage).enabled);
+    assert!(menu_item(&menu, MenuAction::Inspect).enabled);
+    assert!(menu_item(&menu, MenuAction::Rename).enabled);
+    assert!(!menu_item(&menu, MenuAction::Recall).enabled);
+    assert!(!menu_item(&menu, MenuAction::Refuel).enabled); // no station
+    assert!(!menu_item(&menu, MenuAction::DropCargo).enabled); // not waiting
+    // Cursor lands on the first enabled item.
+    assert!(menu.items[menu.cursor].enabled);
+
+    // Busy manny with a task: order-requiring actions disabled, recall enabled.
+    state.mannies = Some(vec![make_manny("m2", "sector", false, Some("mining"))]);
+    let menu = state.build_context_menu().expect("mannies menu");
+    assert!(!menu_item(&menu, MenuAction::Repair).enabled);
+    assert!(!menu_item(&menu, MenuAction::Salvage).enabled);
+    assert!(menu_item(&menu, MenuAction::Recall).enabled);
 }
 
 #[test]
-fn anim_tick_active_only_for_retro_or_boot() {
+fn context_menu_none_for_pane_without_actions() {
     let mut state = AppState::default();
-    state.animations_enabled = true;
-    assert!(!state.anim_tick_active(), "classic theme: no tick");
-    state.ui_theme = UiTheme::Retro;
-    assert!(state.anim_tick_active());
-    state.animations_enabled = false;
-    assert!(!state.anim_tick_active(), "retro without animations: no tick");
-    state.anim.booting = true;
-    assert!(state.anim_tick_active(), "boot still animates");
+    state.active_pane = Pane::Probe;
+    assert!(state.build_context_menu().is_none());
 }
 
 #[test]
-fn anim_hash_is_deterministic_and_spreads() {
-    assert_eq!(anim_hash(42), anim_hash(42));
-    assert_ne!(anim_hash(1), anim_hash(2));
+fn inventory_context_menu_present_but_disabled_when_empty() {
+    let mut state = AppState::default();
+    state.active_pane = Pane::Inventory;
+    let menu = state.build_context_menu().expect("inventory menu");
+    assert_eq!(menu.items.len(), 3);
+    // Nothing loaded → every action disabled with a reason.
+    assert!(menu.items.iter().all(|i| !i.enabled && i.disabled_reason.is_some()));
+}
+
+// ── periodic auto-refresh gating ──────────────────────────────────────────
+
+#[test]
+fn seconds_since_sync_none_before_first_sync() {
+    let state = AppState::default();
+    assert_eq!(state.seconds_since_sync(), None);
+}
+
+#[test]
+fn periodic_refresh_not_due_without_prior_sync() {
+    // Never synced → not due (avoids spin-retry on a failed initial fetch).
+    let state = AppState::default();
+    assert!(!state.periodic_refresh_due());
+}
+
+#[test]
+fn periodic_refresh_due_after_60s_when_idle() {
+    let mut state = AppState::default();
+    state.last_update = Some(chrono::Local::now() - chrono::Duration::seconds(90));
+    assert!(state.periodic_refresh_due());
+}
+
+#[test]
+fn periodic_refresh_not_due_when_recent_or_loading() {
+    let mut state = AppState::default();
+    state.last_update = Some(chrono::Local::now() - chrono::Duration::seconds(10));
+    assert!(!state.periodic_refresh_due(), "10s is within the 60s window");
+    state.last_update = Some(chrono::Local::now() - chrono::Duration::seconds(90));
+    state.loading = true;
+    assert!(!state.periodic_refresh_due(), "a fetch already in flight");
+}
+
+// ── manny task progress interpolation ─────────────────────────────────────
+
+#[test]
+fn manny_task_progress_falls_back_to_snapshot_without_timestamps() {
+    use crate::ui::panels::mannies::manny_task_progress;
+    let mut m = make_manny("m1", "probe", false, Some("mining"));
+    m.task_progress_percent = 42.0; // no observed_at / end → static
+    assert!((manny_task_progress(&m) - 0.42).abs() < 1e-9);
+}
+
+#[test]
+fn manny_task_progress_interpolates_forward_between_fetches() {
+    use crate::ui::panels::mannies::manny_task_progress;
+    let mut m = make_manny("m1", "sector", false, Some("mining"));
+    // Snapshot: 20% when observed 30 s ago, 30 s left → total 75 s, now ~60%.
+    m.task_progress_percent = 20.0;
+    m.observed_at = Some(chrono::Utc::now() - chrono::Duration::seconds(30));
+    m.task_estimated_end_time = Some(chrono::Utc::now() + chrono::Duration::seconds(30));
+    let prog = manny_task_progress(&m);
+    assert!(prog > 0.20, "progress advanced past the snapshot: {prog}");
+    assert!(prog < 1.0, "not complete yet: {prog}");
+}
+
+#[test]
+fn manny_task_progress_complete_when_past_end() {
+    use crate::ui::panels::mannies::manny_task_progress;
+    let mut m = make_manny("m1", "sector", false, Some("mining"));
+    m.task_progress_percent = 80.0;
+    m.observed_at = Some(chrono::Utc::now() - chrono::Duration::seconds(120));
+    m.task_estimated_end_time = Some(chrono::Utc::now() - chrono::Duration::seconds(10));
+    assert_eq!(manny_task_progress(&m), 1.0);
 }

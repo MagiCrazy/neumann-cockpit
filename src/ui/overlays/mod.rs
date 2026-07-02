@@ -14,15 +14,13 @@ pub(crate) mod object_actions;
 pub(crate) mod scut_network;
 pub(crate) mod pickers;
 pub(crate) mod repair;
+pub(crate) mod scanner;
 pub(crate) mod storage_move;
 pub(crate) mod travel;
 pub(crate) mod waypoints;
 
 pub(crate) use alerts::render_alerts_overlay;
-pub(crate) use containers::{
-    render_container_detail_overlay, render_container_rules_overlay, render_containers_overlay,
-    render_rename_container_overlay,
-};
+pub(crate) use containers::{render_container_rules_overlay, render_rename_container_overlay};
 pub(crate) use craft::{render_atomic_printer_craft_overlay, render_craft_overlay};
 pub(crate) use drop_container::render_drop_container_overlay;
 pub(crate) use help::render_help_overlay;
@@ -42,17 +40,18 @@ pub(crate) use pickers::{
     render_scut_relay_overlay,
 };
 pub(crate) use repair::render_repair_overlay;
+pub(crate) use scanner::render_scan_input_overlay;
 pub(crate) use storage_move::render_storage_move_overlay;
 pub(crate) use travel::render_travel_overlay;
 pub(crate) use waypoints::render_waypoints_overlay;
 
 use crate::app::{
-    AlertsInput, AppState, AtomicPrinterCraftInput, ContainerRulesInput, ContainersInput,
+    AlertsInput, AppState, AtomicPrinterCraftInput, ContainerRulesInput,
     CraftInput, DeployInput, DetachInput, DropCargoInput, DropStorageContainerInput, InspectInput,
     JettisonInput, MineInput,
     MessagesInput, MindSnapshotInput, MissionsInput, ObjectActionInput, RecallInput, RecoverInput,
     RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput,
-    ScutNetworkInput, ScutRelayInput, StorageMoveInput, TravelInput, WaypointsInput,
+    ScanMode, ScutNetworkInput, ScutRelayInput, StorageMoveInput, TravelInput, WaypointsInput,
 };
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -62,15 +61,11 @@ use ratatui::{
     Frame,
 };
 
-/// Render whichever wizard overlays are active, on top of the current
-/// layout. Shared by the classic and retro themes.
+/// Render whichever wizard overlays are active, on top of the cockpit grid.
 pub(crate) fn render_active_overlays(frame: &mut Frame, area: Rect, state: &AppState) {
     // Informational overlays first (lowest in the stack); action wizards on top.
     if !matches!(state.alerts_input, AlertsInput::Inactive) {
         render_alerts_overlay(frame, area, state);
-    }
-    if !matches!(state.containers_input, ContainersInput::Inactive) {
-        render_containers_overlay(frame, area, state);
     }
     if !matches!(state.travel, TravelInput::Inactive) {
         render_travel_overlay(frame, area, state);
@@ -157,11 +152,11 @@ pub(crate) fn render_active_overlays(frame: &mut Frame, area: Rect, state: &AppS
     if !matches!(state.container_rules, ContainerRulesInput::Inactive) {
         render_container_rules_overlay(frame, area, state);
     }
-    if state.storage_container_detail.is_some() {
-        render_container_detail_overlay(frame, area, state);
-    }
     if !matches!(state.storage_move, StorageMoveInput::Inactive) {
         render_storage_move_overlay(frame, area, state);
+    }
+    if !matches!(state.scan_mode, ScanMode::Current) {
+        render_scan_input_overlay(frame, area, state);
     }
     if state.help_open {
         render_help_overlay(frame, area);

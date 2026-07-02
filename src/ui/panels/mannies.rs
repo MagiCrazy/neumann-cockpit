@@ -3,194 +3,189 @@ use crate::api::types::{
 };
 use crate::app::AppState;
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    layout::Rect,
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{List, ListItem, ListState, Paragraph},
     Frame,
 };
 
-use crate::ui::theme::panel_block;
+use crate::ui::theme::{format_duration, palette, pane_block, Palette};
+use chrono::Utc;
 // ── Mannies panel ─────────────────────────────────────────────────────────────
 
 pub(crate) fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppState, focused: bool) {
-    let block = panel_block(" MANNIES ", focused);
+    let p = palette(state.color_mode);
+    let block = pane_block(" MANNIES ", focused, p);
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let rows = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(1)])
-        .split(inner);
-    let list_area = rows[0];
-    let hint_area = rows[1];
-
-    // Hint bar
-    if focused {
-        let selected_manny = state.mannies.as_ref()
-            .and_then(|m| m.get(state.mannies_selection));
-        let can_order = selected_manny.map(|m| m.can_receive_orders).unwrap_or(false);
-        let is_busy = selected_manny.map(|m| !m.can_receive_orders && m.current_task.is_some()).unwrap_or(false);
-        if can_order {
-            let has_detachable = !state.collect_detachable_containers().is_empty();
-            let has_detached = !state.collect_detached_containers().is_empty();
-            let mut spans = vec![
-                Span::styled("[Enter]", Style::default().fg(Color::Cyan)),
-                Span::raw(" repair  "),
-                Span::styled("[e]", Style::default().fg(Color::Cyan)),
-                Span::raw(" mine  "),
-                Span::styled("[c]", Style::default().fg(Color::Cyan)),
-                Span::raw(" craft  "),
-                Span::styled("[s]", Style::default().fg(Color::Cyan)),
-                Span::raw(" salvage  "),
-                Span::styled("[x]", Style::default().fg(Color::Cyan)),
-                Span::raw(" inspect"),
-            ];
-            if has_detachable {
-                spans.push(Span::raw("  "));
-                spans.push(Span::styled("[D]", Style::default().fg(Color::Cyan)));
-                spans.push(Span::raw(" detach"));
-            }
-            if has_detachable && state.has_atmospheric_drop_kit() {
-                spans.push(Span::raw("  "));
-                spans.push(Span::styled("[P]", Style::default().fg(Color::Cyan)));
-                spans.push(Span::raw(" drop on planet"));
-            }
-            if has_detached {
-                spans.push(Span::raw("  "));
-                spans.push(Span::styled("[v]", Style::default().fg(Color::Cyan)));
-                spans.push(Span::raw(" recover"));
-            }
-            spans.push(Span::raw("  "));
-            spans.push(Span::styled("[n]", Style::default().fg(Color::Cyan)));
-            spans.push(Span::raw(" rename"));
-            if state.deuterium_station_in_current_sector() {
-                spans.push(Span::raw("  "));
-                spans.push(Span::styled("[F]", Style::default().fg(Color::Green)));
-                spans.push(Span::raw(" refuel"));
-            }
-            if is_busy {
-                spans.push(Span::raw("  "));
-                spans.push(Span::styled("[R]", Style::default().fg(Color::Yellow)));
-                spans.push(Span::raw(" recall"));
-            }
-            frame.render_widget(Paragraph::new(Line::from(spans)), hint_area);
-        } else if is_busy {
-            let is_waiting = selected_manny
-                .map(|m| m.current_task == Some(MannyTask::WaitingForSpace))
-                .unwrap_or(false);
-            let remote = selected_manny
-                .map(|m| matches!(m.task_visibility, Some(MannyTaskVisibility::ScutNetwork)))
-                .unwrap_or(false);
-            let mut spans = vec![
-                Span::styled(if remote { "via SCUT  " } else { "busy  " }, Style::default().fg(Color::DarkGray)),
-                Span::styled("[R]", Style::default().fg(Color::Yellow)),
-                Span::raw(if remote { " abandon  " } else { " recall  " }),
-                Span::styled("[n]", Style::default().fg(Color::Cyan)),
-                Span::raw(" rename"),
-            ];
-            if is_waiting {
-                spans.push(Span::raw("  "));
-                spans.push(Span::styled("[X]", Style::default().fg(Color::Red)));
-                spans.push(Span::raw(" drop cargo"));
-            }
-            frame.render_widget(Paragraph::new(Line::from(spans)), hint_area);
-        } else {
-            frame.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled("busy — cannot receive orders  ", Style::default().fg(Color::DarkGray)),
-                    Span::styled("[n]", Style::default().fg(Color::Cyan)),
-                    Span::raw(" rename"),
-                ])),
-                hint_area,
-            );
-        }
-    }
-
+    // Action hints come from the cockpit's shared hints line (F1), so the
+    // pane gives its whole area to the list.
     let Some(mannies) = &state.mannies else {
-        frame.render_widget(
-            Paragraph::new("No data").style(Style::default().fg(Color::DarkGray)),
-            list_area,
-        );
+        frame.render_widget(Paragraph::new("No data").style(Style::default().fg(p.dim)), inner);
         return;
     };
 
     if mannies.is_empty() {
         frame.render_widget(
-            Paragraph::new("No mannies aboard").style(Style::default().fg(Color::DarkGray)),
-            list_area,
+            Paragraph::new("No mannies aboard").style(Style::default().fg(p.dim)),
+            inner,
         );
         return;
     }
 
-    let items: Vec<ListItem> = mannies.iter().map(|m| manny_list_item(m)).collect();
-
-    let highlight_style = if focused {
-        Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD)
-    } else {
-        Style::default()
-    };
+    // Selection is styled per-row (accent) rather than via a background fill,
+    // so the progress/ETA stay legible on the selected line.
+    let sel = state.mannies_selection;
+    let items: Vec<ListItem> = mannies
+        .iter()
+        .enumerate()
+        .map(|(i, m)| manny_list_item(m, focused && i == sel, p))
+        .collect();
 
     let list = List::new(items)
-        .highlight_style(highlight_style)
-        .highlight_symbol("▶ ");
-
+        .highlight_symbol("▶ ")
+        .highlight_style(Style::default().fg(p.accent).add_modifier(Modifier::BOLD));
     let mut list_state = ListState::default();
     if focused {
-        list_state.select(Some(state.mannies_selection));
+        list_state.select(Some(sel));
     }
-
-    frame.render_stateful_widget(list, list_area, &mut list_state);
+    frame.render_stateful_widget(list, inner, &mut list_state);
 }
 
-pub(crate) fn manny_list_item(m: &Manny) -> ListItem<'_> {
-    let loc_icon = match m.location.location_type {
-        MannyLocationType::Probe => Span::styled("●", Style::default().fg(Color::Green)),
-        MannyLocationType::Sector => Span::styled("◌", Style::default().fg(Color::Yellow)),
-        MannyLocationType::Unknown => Span::styled("?", Style::default().fg(Color::DarkGray)),
+/// Short label for a Manny task (shared by the list and the detail view).
+pub(crate) fn manny_task_label(task: Option<&MannyTask>) -> &'static str {
+    match task {
+        None => "idle",
+        Some(MannyTask::Repair) => "repair",
+        Some(MannyTask::Mining) => "mining",
+        Some(MannyTask::Crafting) => "crafting",
+        Some(MannyTask::AssistingAtomicPrinter) => "assisting printer",
+        Some(MannyTask::Salvage) => "salvage",
+        Some(MannyTask::InstallingWaypointBookmark) => "installing waypoint",
+        Some(MannyTask::DetachingStorageContainer) => "detaching container",
+        Some(MannyTask::InspectingAsteroid) => "inspecting",
+        Some(MannyTask::Returning) => "returning",
+        Some(MannyTask::WaitingForSpace) => "waiting for space",
+        Some(MannyTask::MovingStockage) => "moving cargo",
+        Some(MannyTask::DroppingStorageContainer) => "dropping container",
+        Some(MannyTask::RefillingDeuteriumTank) => "refueling",
+        Some(MannyTask::TurningOnScutRelay) => "activating relay",
+        Some(MannyTask::UnknownTooFar) => "too far",
+        Some(MannyTask::Unknown) => "?",
+    }
+}
+
+/// Mining task detail, extracted from the Manny's `task` payload: which
+/// asteroid, the resource types, and where the output goes (a named container
+/// or the probe). `None` unless the Manny is mining with a visible payload.
+pub(crate) struct MiningDetail {
+    pub target: String,
+    pub resources: Option<String>,
+    pub destination: String,
+}
+
+pub(crate) fn manny_mining_detail(m: &Manny) -> Option<MiningDetail> {
+    if m.current_task != Some(MannyTask::Mining) {
+        return None;
+    }
+    let task = m.task.as_ref()?;
+    let target = task.get("target");
+    let name = target
+        .and_then(|t| t.get("name"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("asteroid")
+        .to_string();
+    let resources = target
+        .and_then(|t| t.get("resourceTypes"))
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|x| x.as_str()).collect::<Vec<_>>().join("/"))
+        .filter(|s| !s.is_empty());
+    // A targetContainer object means the output is dropped into that detached
+    // container; otherwise it comes back to the probe.
+    let destination = match task.get("targetContainer") {
+        Some(tc) if tc.is_object() => tc
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("container")
+            .to_string(),
+        _ => "probe".to_string(),
+    };
+    Some(MiningDetail { target: name, resources, destination })
+}
+
+/// Time remaining on the current task, as a compact duration (if known).
+pub(crate) fn manny_task_eta(m: &Manny) -> Option<String> {
+    m.task_estimated_end_time
+        .map(|end| format_duration((end - Utc::now()).num_seconds().max(0)))
+}
+
+/// Task progress in 0..=1, interpolated client-side so it ticks between
+/// fetches. The server sends a snapshot `task_progress_percent` at
+/// `observed_at` plus an estimated end time; assuming a linear task we rebuild
+/// the timeline and advance progress with the wall clock. Falls back to the
+/// raw snapshot when timestamps are missing, and never runs backward from it.
+pub(crate) fn manny_task_progress(m: &Manny) -> f64 {
+    let p0 = (m.task_progress_percent / 100.0).clamp(0.0, 1.0);
+    let (Some(obs), Some(end)) = (m.observed_at, m.task_estimated_end_time) else {
+        return p0;
+    };
+    let remaining_at_obs = (end - obs).num_seconds() as f64;
+    if remaining_at_obs <= 0.0 || p0 >= 1.0 {
+        // Overdue or already complete at the snapshot.
+        return if end <= Utc::now() { 1.0 } else { p0 };
+    }
+    let total = remaining_at_obs / (1.0 - p0);
+    let remaining_now = (end - Utc::now()).num_seconds() as f64;
+    (1.0 - remaining_now / total).clamp(p0, 1.0)
+}
+
+pub(crate) fn manny_list_item(m: &Manny, selected: bool, p: Palette) -> ListItem<'_> {
+    // On the selected row everything is accent so the ETA/% stay legible;
+    // otherwise the palette's text for the name/task and dim for the rest.
+    let primary = if selected {
+        Style::default().fg(p.accent).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(p.text)
+    };
+    let secondary = if selected {
+        Style::default().fg(p.accent)
+    } else {
+        Style::default().fg(p.dim)
     };
 
-    let task_text = match &m.current_task {
-        None => Span::styled("idle", Style::default().fg(Color::DarkGray)),
-        Some(MannyTask::Repair) => Span::styled("repair", Style::default().fg(Color::Cyan)),
-        Some(MannyTask::Mining) => Span::styled("mining", Style::default().fg(Color::Yellow)),
-        Some(MannyTask::Crafting) => Span::styled("crafting", Style::default().fg(Color::Cyan)),
-        Some(MannyTask::AssistingAtomicPrinter) => Span::styled("assisting printer", Style::default().fg(Color::Cyan)),
-        Some(MannyTask::Salvage) => Span::styled("salvage", Style::default().fg(Color::Yellow)),
-        Some(MannyTask::InstallingWaypointBookmark) => Span::styled("installing waypoint", Style::default().fg(Color::Green)),
-        Some(MannyTask::DetachingStorageContainer) => Span::styled("detaching container", Style::default().fg(Color::Yellow)),
-        Some(MannyTask::InspectingAsteroid) => Span::styled("inspecting", Style::default().fg(Color::Yellow)),
-        Some(MannyTask::Returning) => Span::styled("returning", Style::default().fg(Color::Blue)),
-        Some(MannyTask::WaitingForSpace) => Span::styled("waiting", Style::default().fg(Color::Magenta)),
-        Some(MannyTask::MovingStockage) => Span::styled("moving cargo", Style::default().fg(Color::Blue)),
-        Some(MannyTask::DroppingStorageContainer) => Span::styled("dropping container", Style::default().fg(Color::Yellow)),
-        Some(MannyTask::RefillingDeuteriumTank) => Span::styled("refueling", Style::default().fg(Color::Green)),
-        Some(MannyTask::TurningOnScutRelay) => Span::styled("activating relay", Style::default().fg(Color::LightBlue)),
-        Some(MannyTask::UnknownTooFar) => Span::styled("too far", Style::default().fg(Color::DarkGray)),
-        Some(MannyTask::Unknown) => Span::styled("?", Style::default().fg(Color::DarkGray)),
+    let loc = match m.location.location_type {
+        MannyLocationType::Probe => "●",
+        MannyLocationType::Sector => "◌",
+        MannyLocationType::Unknown => "?",
     };
+    let task = m.current_task.as_ref();
+    let task_style = if task.is_none() { secondary } else { primary };
 
     let progress = if m.current_task.is_some() {
-        format!(" {:3.0}%", m.task_progress_percent)
+        format!(" {:3.0}%", manny_task_progress(m) * 100.0)
     } else {
         String::new()
     };
-
-    let name = format!("{:<14}", m.name);
+    let eta = manny_task_eta(m)
+        .filter(|_| m.current_task.is_some())
+        .map(|d| format!(" · {d}"))
+        .unwrap_or_default();
 
     let via_scut = if matches!(m.task_visibility, Some(MannyTaskVisibility::ScutNetwork)) {
-        Span::styled(" ≣ via SCUT", Style::default().fg(Color::LightBlue))
+        " ≣"
     } else {
-        Span::raw("")
+        ""
     };
 
     ListItem::new(Line::from(vec![
-        loc_icon,
-        Span::raw(" "),
-        Span::raw(name),
-        task_text,
-        Span::styled(progress, Style::default().fg(Color::DarkGray)),
-        via_scut,
+        Span::styled(format!("{loc} "), secondary),
+        Span::styled(format!("{:<12}", m.name), primary),
+        Span::styled(manny_task_label(task), task_style),
+        Span::styled(progress, secondary),
+        Span::styled(eta, secondary),
+        Span::styled(via_scut, secondary),
     ]))
 }
 

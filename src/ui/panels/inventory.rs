@@ -1,4 +1,4 @@
-use crate::app::{is_active_item, AppState, Panel};
+use crate::app::{is_active_item, AppState};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -7,48 +7,17 @@ use ratatui::{
     Frame,
 };
 
-use crate::ui::theme::{gauge_color, item_icon, make_line_gauge, panel_block};
+use crate::ui::theme::{gauge_color, item_icon, make_line_gauge, palette, pane_block};
 // ── Inventory panel ───────────────────────────────────────────────────────────
 
 pub(crate) fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focused: bool) {
-    let block = panel_block(" INVENTORY ", focused);
+    let block = pane_block(" INVENTORY ", focused, palette(state.color_mode));
     let full_inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let (inner, hint_area_opt) = if focused {
-        let split = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(1), Constraint::Length(1)])
-            .split(full_inner);
-        (split[0], Some(split[1]))
-    } else {
-        (full_inner, None)
-    };
-
-    if let Some(hint_area) = hint_area_opt {
-        let mut hint_spans = vec![
-            Span::styled("[↑↓]", Style::default().fg(Color::Cyan)),
-            Span::raw(" select  "),
-            Span::styled("[Enter]", Style::default().fg(Color::Cyan)),
-            Span::raw(" detail  "),
-            Span::styled("[j]", Style::default().fg(Color::Cyan)),
-            Span::raw(" jettison"),
-        ];
-        if state.inventory_waypoint_bookmark_id().is_some() {
-            hint_spans.push(Span::raw("  "));
-            hint_spans.push(Span::styled("[d]", Style::default().fg(Color::Cyan)));
-            hint_spans.push(Span::raw(" deploy"));
-        }
-        if state.has_atomic_printer() {
-            hint_spans.push(Span::raw("  "));
-            hint_spans.push(Span::styled("[a]", Style::default().fg(Color::Cyan)));
-            hint_spans.push(Span::raw(" atomic craft"));
-        }
-        frame.render_widget(
-            Paragraph::new(Line::from(hint_spans)),
-            hint_area,
-        );
-    }
+    // Action hints come from the cockpit's shared hints line (F1); the pane
+    // uses its whole area for content.
+    let inner = full_inner;
 
     let Some(probe) = &state.probe else {
         frame.render_widget(
@@ -269,22 +238,6 @@ pub(crate) fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppS
 
     let _ = row;
     let _ = nav_idx;
-}
-
-pub(crate) fn inventory_panel_height(state: &AppState) -> u16 {
-    let probe = match &state.probe {
-        Some(p) => p,
-        None => return 3,
-    };
-    let inv = &probe.inventory;
-    let focused = state.focused == Some(Panel::Inventory);
-    let n_stocks = inv.resource_stocks.len() as u16;
-    let expanded = focused && !inv.items.is_empty();
-    let items_rows = items_row_count(&inv.items, expanded) as u16;
-    let containers_rows = containers_row_count(inv, focused) as u16;
-    let tanks_rows = tanks_row_count(inv, focused) as u16;
-    let hint_row = if focused { 1 } else { 0 };
-    1 + n_stocks + items_rows + containers_rows + tanks_rows + hint_row + 2
 }
 
 pub(crate) fn containers_row_count(inv: &crate::api::types::ProbeInventory, focused: bool) -> usize {

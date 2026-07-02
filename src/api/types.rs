@@ -193,6 +193,17 @@ pub struct Manny {
     pub cargo: MannyCargo,
     pub can_receive_orders: bool,
     pub task_estimated_end_time: Option<DateTime<Utc>>,
+    /// Current-task payload. For a mining task it carries the target asteroid,
+    /// resource types, and destination container (else the probe). Kept as a
+    /// raw value: the API's `anyOf` may also be an empty object/array, and
+    /// remote/too-far mannies expose an empty payload.
+    #[serde(default)]
+    pub task: Option<serde_json::Value>,
+    /// Client-side receipt timestamp (not an API field), stamped on
+    /// `update_mannies`. Lets the UI interpolate `task_progress_percent`
+    /// against `task_estimated_end_time` so progress ticks between fetches.
+    #[serde(default)]
+    pub observed_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
