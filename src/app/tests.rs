@@ -1388,3 +1388,68 @@ fn inventory_context_menu_present_but_disabled_when_empty() {
     // Nothing loaded → every action disabled with a reason.
     assert!(menu.items.iter().all(|i| !i.enabled && i.disabled_reason.is_some()));
 }
+
+// ── periodic auto-refresh gating ──────────────────────────────────────────
+
+#[test]
+fn seconds_since_sync_none_before_first_sync() {
+    let state = AppState::default();
+    assert_eq!(state.seconds_since_sync(), None);
+}
+
+#[test]
+fn periodic_refresh_not_due_without_prior_sync() {
+    // Never synced → not due (avoids spin-retry on a failed initial fetch).
+    let state = AppState::default();
+    assert!(!state.periodic_refresh_due());
+}
+
+#[test]
+fn periodic_refresh_due_after_60s_when_idle() {
+    let mut state = AppState::default();
+    state.last_update = Some(chrono::Local::now() - chrono::Duration::seconds(90));
+    assert!(state.periodic_refresh_due());
+}
+
+#[test]
+fn periodic_refresh_not_due_when_recent_or_loading() {
+    let mut state = AppState::default();
+    state.last_update = Some(chrono::Local::now() - chrono::Duration::seconds(10));
+    assert!(!state.periodic_refresh_due(), "10s is within the 60s window");
+    state.last_update = Some(chrono::Local::now() - chrono::Duration::seconds(90));
+    state.loading = true;
+    assert!(!state.periodic_refresh_due(), "a fetch already in flight");
+}
+
+// ── manny task progress interpolation ─────────────────────────────────────
+
+#[test]
+fn manny_task_progress_falls_back_to_snapshot_without_timestamps() {
+    use crate::ui::panels::mannies::manny_task_progress;
+    let mut m = make_manny("m1", "probe", false, Some("mining"));
+    m.task_progress_percent = 42.0; // no observed_at / end → static
+    assert!((manny_task_progress(&m) - 0.42).abs() < 1e-9);
+}
+
+#[test]
+fn manny_task_progress_interpolates_forward_between_fetches() {
+    use crate::ui::panels::mannies::manny_task_progress;
+    let mut m = make_manny("m1", "sector", false, Some("mining"));
+    // Snapshot: 20% when observed 30 s ago, 30 s left → total 75 s, now ~60%.
+    m.task_progress_percent = 20.0;
+    m.observed_at = Some(chrono::Utc::now() - chrono::Duration::seconds(30));
+    m.task_estimated_end_time = Some(chrono::Utc::now() + chrono::Duration::seconds(30));
+    let prog = manny_task_progress(&m);
+    assert!(prog > 0.20, "progress advanced past the snapshot: {prog}");
+    assert!(prog < 1.0, "not complete yet: {prog}");
+}
+
+#[test]
+fn manny_task_progress_complete_when_past_end() {
+    use crate::ui::panels::mannies::manny_task_progress;
+    let mut m = make_manny("m1", "sector", false, Some("mining"));
+    m.task_progress_percent = 80.0;
+    m.observed_at = Some(chrono::Utc::now() - chrono::Duration::seconds(120));
+    m.task_estimated_end_time = Some(chrono::Utc::now() - chrono::Duration::seconds(10));
+    assert_eq!(manny_task_progress(&m), 1.0);
+}

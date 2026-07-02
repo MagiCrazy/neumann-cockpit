@@ -146,7 +146,13 @@ impl AppState {
         self.clamp_inventory_selection();
     }
 
-    pub fn update_mannies(&mut self, mannies: Vec<Manny>) {
+    pub fn update_mannies(&mut self, mut mannies: Vec<Manny>) {
+        // Stamp receipt time so the UI can interpolate task progress between
+        // fetches (server sends a snapshot % + an estimated end time).
+        let now = Utc::now();
+        for m in &mut mannies {
+            m.observed_at = Some(now);
+        }
         // Clamp selection in case list shrank.
         if !mannies.is_empty() {
             self.mannies_selection = self.mannies_selection.min(mannies.len() - 1);
@@ -279,6 +285,20 @@ impl AppState {
     pub fn probe_sector_coords(&self) -> Option<(i32, i32, i32)> {
         let rel = self.probe.as_ref()?.sector.as_ref()?.relative.as_ref()?;
         Some((rel.x.round() as i32, rel.y.round() as i32, rel.z.round() as i32))
+    }
+
+    /// Seconds since the last successful full sync (probe update), if any.
+    /// `last_update` is reset on every `update_probe`, so any refresh — manual,
+    /// event-driven, or periodic — restarts the clock.
+    pub fn seconds_since_sync(&self) -> Option<i64> {
+        self.last_update.map(|t| (Local::now() - t).num_seconds().max(0))
+    }
+
+    /// Whether a periodic auto-refresh is due: idle and ≥60 s since the last
+    /// sync. Requires a prior successful sync, so a failed initial fetch does
+    /// not spin-retry every tick.
+    pub fn periodic_refresh_due(&self) -> bool {
+        !self.loading && matches!(self.seconds_since_sync(), Some(s) if s >= 60)
     }
 
     pub fn next_refresh_instant(&self) -> Instant {

@@ -199,6 +199,11 @@ pub struct Manny {
     /// remote/too-far mannies expose an empty payload.
     #[serde(default)]
     pub task: Option<serde_json::Value>,
+    /// Client-side receipt timestamp (not an API field), stamped on
+    /// `update_mannies`. Lets the UI interpolate `task_progress_percent`
+    /// against `task_estimated_end_time` so progress ticks between fetches.
+    #[serde(default)]
+    pub observed_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
