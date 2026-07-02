@@ -7,15 +7,13 @@ use std::path::PathBuf;
 pub struct Config {
     pub base_url: String,
     pub api_key: String,
-    /// UI theme: "classic" (default) or "retro".
+    /// Cockpit color mode: "mono-green" (default), "mono-amber",
+    /// "phosphor-semantic", or "modern-16". F2 cycles it at runtime.
     #[serde(default)]
     pub theme: Option<String>,
-    /// Retro phosphor tint: "green" (default) or "amber".
-    #[serde(default)]
-    pub phosphor: Option<String>,
-    /// Retro idle animations (render tick only, never API polling).
+    /// Show the contextual hints line in the cockpit interface (F1 toggles).
     #[serde(default = "default_true")]
-    pub animations: bool,
+    pub hints: bool,
 }
 
 fn default_true() -> bool {
@@ -23,17 +21,14 @@ fn default_true() -> bool {
 }
 
 impl Config {
-    pub fn ui_theme(&self) -> crate::app::UiTheme {
+    /// Cockpit color mode, read from the `theme` key.
+    pub fn color_mode(&self) -> crate::app::ColorMode {
+        use crate::app::ColorMode;
         match self.theme.as_deref() {
-            Some("retro") => crate::app::UiTheme::Retro,
-            _ => crate::app::UiTheme::Classic,
-        }
-    }
-
-    pub fn ui_phosphor(&self) -> crate::app::Phosphor {
-        match self.phosphor.as_deref() {
-            Some("amber") => crate::app::Phosphor::Amber,
-            _ => crate::app::Phosphor::Green,
+            Some("mono-amber") => ColorMode::MonoAmber,
+            Some("phosphor-semantic") => ColorMode::PhosphorSemantic,
+            Some("modern-16") => ColorMode::Modern16,
+            _ => ColorMode::MonoGreen,
         }
     }
 }
@@ -63,4 +58,40 @@ pub fn history_path() -> PathBuf {
     ProjectDirs::from("net", "neumann", "neumann-cockpit")
         .map(|d| d.config_dir().join("scan_history.json"))
         .unwrap_or_else(|| PathBuf::from("scan_history.json"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cfg(theme: Option<&str>) -> Config {
+        Config {
+            base_url: "x".into(),
+            api_key: "x".into(),
+            theme: theme.map(String::from),
+            hints: true,
+        }
+    }
+
+    #[test]
+    fn color_mode_parses_from_theme() {
+        use crate::app::ColorMode;
+        assert_eq!(cfg(Some("mono-amber")).color_mode(), ColorMode::MonoAmber);
+        assert_eq!(cfg(Some("phosphor-semantic")).color_mode(), ColorMode::PhosphorSemantic);
+        assert_eq!(cfg(Some("modern-16")).color_mode(), ColorMode::Modern16);
+        // Unknown/absent → default mono-green.
+        assert_eq!(cfg(None).color_mode(), ColorMode::MonoGreen);
+        assert_eq!(cfg(Some("bogus")).color_mode(), ColorMode::MonoGreen);
+    }
+
+    #[test]
+    fn color_mode_cycles_through_all_four() {
+        use crate::app::ColorMode;
+        let m = ColorMode::MonoGreen;
+        let m = m.cycle();
+        assert_eq!(m, ColorMode::MonoAmber);
+        let m = m.cycle().cycle();
+        assert_eq!(m, ColorMode::Modern16);
+        assert_eq!(m.cycle(), ColorMode::MonoGreen);
+    }
 }

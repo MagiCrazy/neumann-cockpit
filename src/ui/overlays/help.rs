@@ -1,6 +1,7 @@
+use crate::ui::theme::Palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
@@ -9,28 +10,28 @@ use ratatui::{
 use super::centered_rect;
 // ── Help overlay ──────────────────────────────────────────────────────────────
 
-pub(crate) fn help_key_line(key: &'static str, desc: &'static str) -> Line<'static> {
+pub(crate) fn help_key_line(key: &'static str, desc: &'static str, p: Palette) -> Line<'static> {
     Line::from(vec![
-        Span::styled(format!("  {key:<10}"), Style::default().fg(Color::Cyan)),
+        Span::styled(format!("  {key:<10}"), Style::default().fg(p.accent)),
         Span::raw(desc),
     ])
 }
 
-pub(crate) fn help_section(title: &'static str) -> Line<'static> {
+pub(crate) fn help_section(title: &'static str, p: Palette) -> Line<'static> {
     Line::from(Span::styled(
         title,
-        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+        Style::default().fg(p.warn).add_modifier(Modifier::BOLD),
     ))
 }
 
-pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect) {
+pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, p: Palette) {
     let popup = centered_rect(76, 28, area);
     frame.render_widget(Clear, popup);
     let block = Block::default()
         .title(" HELP — KEYBINDINGS ")
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan));
+        .border_style(Style::default().fg(p.accent));
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
 
@@ -45,72 +46,54 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect) {
         .split(rows[0]);
 
     let left: Vec<Line> = vec![
-        help_section("Global"),
-        help_key_line("r", "refresh all"),
-        help_key_line("^R", "reassign mind snapshot (dead/trapped probe)"),
-        help_key_line("p i m s", "focus probe / inventory / mannies / scanner"),
-        help_key_line("Tab", "cycle panel focus (Shift-Tab reverse)"),
-        help_key_line("F2", "toggle retro/classic theme"),
-        help_key_line("t", "travel to coordinates"),
-        help_key_line("b", "map"),
-        help_key_line("w", "waypoints"),
-        help_key_line("A", "alerts & damage warnings"),
-        help_key_line("O", "missions"),
-        help_key_line("N", "inspect SCUT network (when covered)"),
-        help_key_line("Y", "messages (inbox / sent / compose)"),
-        help_key_line("?", "this help"),
-        help_key_line("q", "quit"),
-        help_key_line("Esc", "unfocus / close"),
+        help_section("Navigate", p),
+        help_key_line("e r t", "Scanner · Map · Comms", p),
+        help_key_line("d f g", "Sector · Probe · Missions", p),
+        help_key_line("c v b", "Inventory · Storage · Mannies", p),
+        help_key_line("j k / ↑↓", "move cursor in pane", p),
+        help_key_line("l / h", "drill in / out (→ ←)", p),
+        help_key_line("Tab", "cycle panes (Shift-Tab reverse)", p),
+        help_key_line("z", "zoom active pane full screen", p),
+        help_key_line("Esc", "close / leave zoom / drill up", p),
         Line::default(),
-        help_section("Inventory (focused)"),
-        help_key_line("↑↓", "select row"),
-        help_key_line("Enter", "row detail"),
-        help_key_line("j", "jettison selection"),
-        help_key_line("d", "deploy waypoint"),
-        help_key_line("a", "atomic printer craft"),
-        help_key_line("C", "storage containers"),
-        help_key_line("M", "move stock between containers"),
+        help_section("Act & global", p),
+        help_key_line("Enter", "contextual action menu", p),
+        help_key_line(":", "command line (travel, goto, focus…)", p),
+        help_key_line("F1", "toggle hints line", p),
+        help_key_line("F2", "cycle color mode", p),
+        help_key_line("F5", "refresh", p),
+        help_key_line("?", "this help", p),
+        help_key_line("q", "quit", p),
         Line::default(),
-        help_section("Map"),
-        help_key_line("hjkl/←↓↑→", "pan"),
-        help_key_line("u / d", "layer y ± 1"),
-        help_key_line("0", "center on probe"),
-        help_key_line("c", "jump to coordinates"),
-        help_key_line("g", "travel to center"),
+        help_section("In a menu", p),
+        help_key_line("j k", "move", p),
+        help_key_line("Enter", "fire selected", p),
+        help_key_line("Esc", "close", p),
     ];
 
     let right: Vec<Line> = vec![
-        help_section("Mannies (focused)"),
-        help_key_line("↑↓/jk", "select manny"),
-        help_key_line("Enter", "repair"),
-        help_key_line("e", "mine"),
-        help_key_line("c", "craft"),
-        help_key_line("s", "salvage"),
-        help_key_line("x", "inspect asteroid"),
-        help_key_line("D", "detach container"),
-        help_key_line("v", "recover container"),
-        help_key_line("n", "rename"),
-        help_key_line("F", "refuel deuterium (at station)"),
-        help_key_line("R", "recall (busy manny) / abandon (SCUT-remote manny)"),
-        help_key_line("X", "drop cargo (waiting manny)"),
-        help_key_line("P", "drop container on planet"),
+        help_section("Actions per pane (Enter)", p),
+        help_key_line("Mannies", "mine, craft, repair, salvage,", p),
+        help_key_line("", "inspect, recover, detach, refuel,", p),
+        help_key_line("", "drop cargo, recall/abandon, rename", p),
+        help_key_line("Inventory", "jettison, atomic craft, move stock", p),
+        help_key_line("Missions", "browse steps, abandon", p),
+        help_key_line("Comms", "messages inbox/sent/compose, alerts", p),
+        help_key_line("Storage", "rename, rules, recover, detach, move", p),
+        help_key_line("Sector", "object actions: mine, inspect,", p),
+        help_key_line("", "salvage, recover, deploy, relay", p),
         Line::default(),
-        help_section("Scanner (focused)"),
-        help_key_line("Enter", "rescan current sector"),
-        help_key_line("c", "scan custom coordinates"),
-        help_key_line("n", "scan neighbors (d=1)"),
-        help_key_line("d", "deep scan (axis faces, d=2)"),
-        help_key_line("↑↓/jk", "browse history"),
-        help_key_line("J / K", "scroll detail"),
-        help_key_line("o", "object mode (probe sector)"),
-        help_key_line("g", "travel to displayed sector"),
+        help_section("Config", p),
+        help_key_line("theme", "color mode (mono-green/amber,", p),
+        help_key_line("", "phosphor-semantic, modern-16, p)", p),
+        help_key_line("hints", "show the hints line (F1)", p),
     ];
 
     frame.render_widget(Paragraph::new(left), cols[0]);
     frame.render_widget(Paragraph::new(right), cols[1]);
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("[Esc/?]", Style::default().fg(Color::Cyan)),
+            Span::styled("[Esc/?]", Style::default().fg(p.accent)),
             Span::raw(" close"),
         ])),
         rows[1],

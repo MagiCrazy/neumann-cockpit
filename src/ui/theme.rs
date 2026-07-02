@@ -1,12 +1,89 @@
 use crate::api::types::{
-    DangerLevel, DataFreshness, KnowledgeLevel,
-    MovementPhase, ProbeStatus, SectorObjectType, SectorObservation, SensorMode,
+    DangerLevel, KnowledgeLevel, MovementPhase, ProbeStatus, SectorObjectType, SectorObservation,
 };
+use crate::app::ColorMode;
 use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, LineGauge},
+    widgets::{Block, BorderType, Borders},
 };
+
+/// Resolved colour palette for the cockpit, one per [`ColorMode`]. Mono modes
+/// are single-hue phosphor; `PhosphorSemantic` adds real status colours;
+/// `Modern16` uses named ANSI colours for terminals without truecolor.
+#[derive(Clone, Copy)]
+pub(crate) struct Palette {
+    /// Active/selected accent (active borders, tags, selection).
+    pub accent: Color,
+    /// Dim accent (inactive borders).
+    pub accent_dim: Color,
+    /// Primary readable text.
+    pub text: Color,
+    /// Secondary/muted text.
+    pub dim: Color,
+    pub good: Color,
+    pub warn: Color,
+    pub crit: Color,
+}
+
+pub(crate) fn palette(mode: ColorMode) -> Palette {
+    match mode {
+        ColorMode::MonoGreen => {
+            let accent = Color::Rgb(0x5e, 0xf0, 0x8f);
+            Palette {
+                accent,
+                accent_dim: Color::Rgb(0x2f, 0x7a, 0x52),
+                text: Color::Rgb(0xb6, 0xd4, 0xc2),
+                dim: Color::Rgb(0x3a, 0x5a, 0x48),
+                good: accent,
+                warn: Color::Rgb(0xc8, 0xff, 0xdd),
+                crit: accent,
+            }
+        }
+        ColorMode::MonoAmber => {
+            let accent = Color::Rgb(0xff, 0xb2, 0x4a);
+            Palette {
+                accent,
+                accent_dim: Color::Rgb(0x8a, 0x5e, 0x22),
+                text: Color::Rgb(0xf0, 0xd8, 0xb0),
+                dim: Color::Rgb(0x6e, 0x4a, 0x16),
+                good: accent,
+                warn: Color::Rgb(0xff, 0xe1, 0xad),
+                crit: accent,
+            }
+        }
+        ColorMode::PhosphorSemantic => Palette {
+            accent: Color::Rgb(0x5e, 0xf0, 0x8f),
+            accent_dim: Color::Rgb(0x2f, 0x7a, 0x52),
+            text: Color::Rgb(0xb6, 0xd4, 0xc2),
+            dim: Color::Rgb(0x3a, 0x5a, 0x48),
+            good: Color::Rgb(0x5e, 0xf0, 0x8f),
+            warn: Color::Rgb(0xff, 0xd2, 0x4a),
+            crit: Color::Rgb(0xff, 0x5d, 0x6b),
+        },
+        ColorMode::Modern16 => Palette {
+            accent: Color::Green,
+            accent_dim: Color::DarkGray,
+            text: Color::Gray,
+            dim: Color::DarkGray,
+            good: Color::Green,
+            warn: Color::Yellow,
+            crit: Color::Red,
+        },
+    }
+}
+
+/// Palette-aware pane frame with retro double-line borders. Active panes get
+/// the accent colour and a bold title; inactive ones the dim accent.
+pub(crate) fn pane_block(title: &str, active: bool, p: Palette) -> Block<'_> {
+    let color = if active { p.accent } else { p.accent_dim };
+    let modifier = if active { Modifier::BOLD } else { Modifier::empty() };
+    Block::default()
+        .title(Span::styled(title, Style::default().fg(color).add_modifier(modifier)))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Double)
+        .border_style(Style::default().fg(color))
+}
 
 pub(crate) fn map_cell_symbol(s: &SectorObservation) -> (&'static str, Style) {
     if let Some(objects) = &s.objects {
@@ -32,6 +109,27 @@ pub(crate) fn map_cell_symbol(s: &SectorObservation) -> (&'static str, Style) {
     ("·", Style::default().fg(Color::White))
 }
 
+/// Palette-aware version of [`map_cell_symbol`] for the phosphor cockpit.
+pub(crate) fn map_cell_style(s: &SectorObservation, p: Palette) -> (&'static str, Style) {
+    if let Some(objects) = &s.objects {
+        for obj in objects {
+            if matches!(obj.object_type, SectorObjectType::BlackHole) {
+                return ("◉", Style::default().fg(p.crit));
+            }
+            if matches!(obj.danger_level, Some(DangerLevel::Extreme)) {
+                return ("!", Style::default().fg(p.crit));
+            }
+            if matches!(obj.object_type, SectorObjectType::Star | SectorObjectType::SolarSystem) {
+                let has_minable = obj.minable_targets.as_ref().is_some_and(|t| !t.is_empty());
+                let style = Style::default().fg(p.warn);
+                return ("★", if has_minable { style.add_modifier(Modifier::BOLD) } else { style });
+            }
+        }
+        return ("●", Style::default().fg(p.good));
+    }
+    ("·", Style::default().fg(p.dim))
+}
+
 /// Short content summary of a scanned sector for the map info line.
 pub(crate) fn item_icon(item_type: &str) -> (&'static str, Color) {
     match item_type {
@@ -55,33 +153,48 @@ pub(crate) fn knowledge_label(k: &KnowledgeLevel) -> &'static str {
     }
 }
 
-pub(crate) fn knowledge_color(k: &KnowledgeLevel) -> Color {
+pub(crate) fn knowledge_color(k: &KnowledgeLevel, p: Palette) -> Color {
     match k {
-        KnowledgeLevel::Detailed => Color::Green,
-        KnowledgeLevel::NeighborScan => Color::Cyan,
-        KnowledgeLevel::DistantScan => Color::Yellow,
-        KnowledgeLevel::LongRangeEstimation => Color::Red,
-        KnowledgeLevel::Unknown => Color::DarkGray,
+        KnowledgeLevel::Detailed => p.good,
+        KnowledgeLevel::NeighborScan => p.accent,
+        KnowledgeLevel::DistantScan => p.warn,
+        KnowledgeLevel::LongRangeEstimation => p.crit,
+        KnowledgeLevel::Unknown => p.dim,
     }
 }
 
-pub(crate) fn freshness_label(f: &DataFreshness) -> &'static str {
-    match f {
-        DataFreshness::Live => "live",
-        DataFreshness::DegradedLive => "degraded live",
-        DataFreshness::Historical => "historical",
-        DataFreshness::Unavailable => "unavailable",
-        DataFreshness::Unknown => "?",
+/// Palette-aware colour for a scanned object's type. The glyph still comes from
+/// [`object_icon`]; this maps the *meaning* onto the active palette so mono
+/// modes stay single-hue and semantic modes get green/yellow/red.
+pub(crate) fn object_color(t: &SectorObjectType, p: Palette) -> Color {
+    match t {
+        SectorObjectType::Star | SectorObjectType::SolarSystem => p.warn,
+        SectorObjectType::Planet => p.accent,
+        SectorObjectType::Asteroid | SectorObjectType::DriftingItem => p.text,
+        SectorObjectType::DustCloud => p.dim,
+        SectorObjectType::BlackHole => p.crit,
+        SectorObjectType::Manny | SectorObjectType::DeuteriumRefuelStation => p.good,
+        SectorObjectType::DetachedContainer | SectorObjectType::ScutRelay => p.accent,
+        SectorObjectType::Unknown => p.dim,
     }
 }
 
-pub(crate) fn freshness_color(f: &DataFreshness) -> Color {
-    match f {
-        DataFreshness::Live => Color::Green,
-        DataFreshness::DegradedLive => Color::Yellow,
-        DataFreshness::Historical => Color::DarkGray,
-        DataFreshness::Unavailable => Color::Red,
-        DataFreshness::Unknown => Color::DarkGray,
+/// Human label for an object type, used to synthesize a name (`asteroid #2`)
+/// when the API returns none.
+pub(crate) fn object_type_label(t: &SectorObjectType) -> &'static str {
+    match t {
+        SectorObjectType::Star => "star",
+        SectorObjectType::Planet => "planet",
+        SectorObjectType::Asteroid => "asteroid",
+        SectorObjectType::DustCloud => "dust cloud",
+        SectorObjectType::BlackHole => "black hole",
+        SectorObjectType::SolarSystem => "solar system",
+        SectorObjectType::Manny => "manny",
+        SectorObjectType::DriftingItem => "drifting item",
+        SectorObjectType::DetachedContainer => "container",
+        SectorObjectType::DeuteriumRefuelStation => "fuel station",
+        SectorObjectType::ScutRelay => "SCUT relay",
+        SectorObjectType::Unknown => "object",
     }
 }
 
@@ -100,18 +213,6 @@ pub(crate) fn object_icon(t: &SectorObjectType) -> (&'static str, Color) {
         SectorObjectType::ScutRelay => ("≣", Color::LightBlue),
         SectorObjectType::Unknown => ("?", Color::DarkGray),
     }
-}
-
-pub(crate) fn panel_block(title: &str, focused: bool) -> Block<'_> {
-    let (border_color, title_modifier) = if focused {
-        (Color::Cyan, Modifier::BOLD)
-    } else {
-        (Color::DarkGray, Modifier::empty())
-    };
-    Block::default()
-        .title(Span::styled(title, Style::default().add_modifier(title_modifier)))
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(border_color))
 }
 
 pub(crate) fn probe_status_label(s: &ProbeStatus) -> &'static str {
@@ -145,22 +246,6 @@ pub(crate) fn probe_status_style(s: &ProbeStatus) -> Style {
     }
 }
 
-pub(crate) fn sensor_dot(m: &SensorMode) -> &'static str {
-    match m {
-        SensorMode::Normal | SensorMode::Degraded | SensorMode::Blind | SensorMode::Unknown => "●",
-    }
-}
-
-
-pub(crate) fn sensor_style(m: &SensorMode) -> Style {
-    match m {
-        SensorMode::Normal => Style::default().fg(Color::Green),
-        SensorMode::Degraded => Style::default().fg(Color::Yellow),
-        SensorMode::Blind => Style::default().fg(Color::Red),
-        SensorMode::Unknown => Style::default().fg(Color::DarkGray),
-    }
-}
-
 pub(crate) fn movement_phase_label(p: &MovementPhase) -> &'static str {
     match p {
         MovementPhase::Idle => "idle",
@@ -175,36 +260,32 @@ pub(crate) fn movement_phase_label(p: &MovementPhase) -> &'static str {
     }
 }
 
-pub(crate) fn make_line_gauge(label: &str, ratio: f64, color: Color) -> LineGauge<'_> {
-    LineGauge::default()
-        .label(Line::raw(label.to_owned()))
-        .filled_style(Style::default().fg(color))
-        .unfilled_style(Style::default().fg(Color::DarkGray))
-        .ratio(ratio)
-}
-
-pub(crate) fn gauge_color(ratio: f64) -> Color {
+/// Palette colour for a "how full" ratio: good > 50 %, warn 25–50 %, crit below.
+pub(crate) fn ratio_color(ratio: f64, p: Palette) -> Color {
     if ratio > 0.5 {
-        Color::Green
+        p.good
     } else if ratio > 0.25 {
-        Color::Yellow
+        p.warn
     } else {
-        Color::Red
+        p.crit
     }
 }
 
-/// Compact human age: "just now", "5m ago", "3h ago", "2d ago".
-pub fn format_age(secs: i64) -> String {
-    if secs < 60 {
-        "just now".to_string()
-    } else if secs < 3600 {
-        format!("{}m ago", secs / 60)
-    } else if secs < 86400 {
-        format!("{}h ago", secs / 3600)
-    } else {
-        format!("{}d ago", secs / 86400)
-    }
+/// Retro block gauge: `LABEL ▓▓▓▓▓▓░░░░  62%` — filled cells in `fill`, empty
+/// cells dim, value on the right. Static (no animation); the phosphor-CRT
+/// "squares" look.
+pub(crate) fn block_gauge_line(label: &str, ratio: f64, value: &str, fill: Color, p: Palette) -> Line<'static> {
+    const WIDTH: usize = 10;
+    let ratio = ratio.clamp(0.0, 1.0);
+    let filled = (ratio * WIDTH as f64).round() as usize;
+    Line::from(vec![
+        Span::styled(format!("{label:<9} "), Style::default().fg(p.dim)),
+        Span::styled("▓".repeat(filled), Style::default().fg(fill)),
+        Span::styled("░".repeat(WIDTH - filled), Style::default().fg(p.dim)),
+        Span::styled(format!(" {value:>5}"), Style::default().fg(p.text)),
+    ])
 }
+
 
 pub fn format_duration(secs: i64) -> String {
     if secs <= 0 {

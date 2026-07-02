@@ -34,6 +34,8 @@ cp config.example.toml ~/.config/neumann-cockpit/config.toml
 ```toml
 base_url = "https://neumann-probe.net"
 api_key  = "vng_your_api_key_here"
+# theme = "mono-green"   # color mode: mono-green | mono-amber | phosphor-semantic | modern-16
+# hints = true           # show the contextual hints line
 ```
 
 **3. Run**
@@ -42,14 +44,27 @@ api_key  = "vng_your_api_key_here"
 neumann-cockpit
 ```
 
+## Interface
+
+A single **phosphor cockpit**: a 3×3 tiling dashboard of nine panes, keyboard-first, *navigate then act*.
+
+- **Navigate** — `e r t / d f g / c v b` (a square on the keyboard) jump to a pane; `j`/`k` (or `↑`/`↓`) move the cursor; `l`/`h` drill in/out.
+- **Act** — `Enter` opens the pane's contextual action menu.
+- **Zoom** — `z` blows the active pane up to full screen.
+- **Adapts** — the grid shrinks to 2×2 or a single pane on smaller terminals, following the active pane; a mini-map shows where you are.
+- **`F1`** toggle hints · **`F2`** cycle color mode · **`F5`** refresh · **`?`** help · **`q`** quit.
+
+Startup plays a GUPPI self-check that assembles the cockpit centre-out; any key continues.
+
 ## Features
 
 - **Probe** — status, fuel, integrity, movement ETA and speed gauges
 - **Inventory** — cargo stocks, onboard items; jettison resources or eject mannies; deploy waypoint bookmarks
 - **Mannies** — per-manny status and progress; repair, mine, craft, salvage, recall, rename
-- **Scanner** — scan current sector or arbitrary coordinates, neighbor sweep, deep scan; browsable history
-- **Sector map** — isometric overview of scanned sectors, pan and travel from the map
-- **Auto-travel** — fuel and ETA preview before committing a jump
+- **Scanner / Sector** — scan the current sector or arbitrary coordinates, neighbor sweep, deep scan; browsable history
+- **Comms** — inter-probe messaging (inbox / sent / compose), alerts and damage warnings
+- **Missions & Storage** — track directives; browse storage containers with capacity and routing rules
+- **Colour modes** — mono-green, mono-amber, phosphor-semantic, or a 16-colour fallback
 
 ## Auto-refresh
 

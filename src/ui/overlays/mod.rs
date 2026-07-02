@@ -14,21 +14,19 @@ pub(crate) mod object_actions;
 pub(crate) mod scut_network;
 pub(crate) mod pickers;
 pub(crate) mod repair;
+pub(crate) mod scanner;
 pub(crate) mod storage_move;
 pub(crate) mod travel;
 pub(crate) mod waypoints;
 
 pub(crate) use alerts::render_alerts_overlay;
-pub(crate) use containers::{
-    render_container_detail_overlay, render_container_rules_overlay, render_containers_overlay,
-    render_rename_container_overlay,
-};
+pub(crate) use containers::{render_container_rules_overlay, render_rename_container_overlay};
 pub(crate) use craft::{render_atomic_printer_craft_overlay, render_craft_overlay};
 pub(crate) use drop_container::render_drop_container_overlay;
 pub(crate) use help::render_help_overlay;
 pub(crate) use inventory_detail::render_inventory_detail_overlay;
 pub(crate) use jettison::render_jettison_overlay;
-pub(crate) use map::render_map_overlay;
+pub(crate) use map::{render_goto_visited_overlay, render_map_overlay};
 pub(crate) use messages::render_messages_overlay;
 pub(crate) use mine::render_mine_overlay;
 pub(crate) use remote_mine::render_remote_mine_overlay;
@@ -42,35 +40,33 @@ pub(crate) use pickers::{
     render_scut_relay_overlay,
 };
 pub(crate) use repair::render_repair_overlay;
+pub(crate) use scanner::render_scan_input_overlay;
 pub(crate) use storage_move::render_storage_move_overlay;
 pub(crate) use travel::render_travel_overlay;
 pub(crate) use waypoints::render_waypoints_overlay;
 
 use crate::app::{
-    AlertsInput, AppState, AtomicPrinterCraftInput, ContainerRulesInput, ContainersInput,
-    CraftInput, DeployInput, DetachInput, DropCargoInput, DropStorageContainerInput, InspectInput,
-    JettisonInput, MineInput,
+    AlertsInput, AppState, AtomicPrinterCraftInput, ContainerRulesInput,
+    CraftInput, DeployInput, DetachInput, DropCargoInput, DropStorageContainerInput,
+    GotoVisitedInput, InspectInput, JettisonInput, MineInput,
     MessagesInput, MindSnapshotInput, MissionsInput, ObjectActionInput, RecallInput, RecoverInput,
     RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput,
-    ScutNetworkInput, ScutRelayInput, StorageMoveInput, TravelInput, WaypointsInput,
+    ScanMode, ScutNetworkInput, ScutRelayInput, StorageMoveInput, TravelInput, WaypointsInput,
 };
+use crate::ui::theme::{palette, Palette};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
 
-/// Render whichever wizard overlays are active, on top of the current
-/// layout. Shared by the classic and retro themes.
+/// Render whichever wizard overlays are active, on top of the cockpit grid.
 pub(crate) fn render_active_overlays(frame: &mut Frame, area: Rect, state: &AppState) {
     // Informational overlays first (lowest in the stack); action wizards on top.
     if !matches!(state.alerts_input, AlertsInput::Inactive) {
         render_alerts_overlay(frame, area, state);
-    }
-    if !matches!(state.containers_input, ContainersInput::Inactive) {
-        render_containers_overlay(frame, area, state);
     }
     if !matches!(state.travel, TravelInput::Inactive) {
         render_travel_overlay(frame, area, state);
@@ -86,6 +82,9 @@ pub(crate) fn render_active_overlays(frame: &mut Frame, area: Rect, state: &AppS
     }
     if state.map.open {
         render_map_overlay(frame, area, state);
+    }
+    if matches!(state.goto_visited, GotoVisitedInput::Picking { .. }) {
+        render_goto_visited_overlay(frame, area, state);
     }
     if !matches!(state.jettison, JettisonInput::Inactive) {
         render_jettison_overlay(frame, area, state);
@@ -157,14 +156,14 @@ pub(crate) fn render_active_overlays(frame: &mut Frame, area: Rect, state: &AppS
     if !matches!(state.container_rules, ContainerRulesInput::Inactive) {
         render_container_rules_overlay(frame, area, state);
     }
-    if state.storage_container_detail.is_some() {
-        render_container_detail_overlay(frame, area, state);
-    }
     if !matches!(state.storage_move, StorageMoveInput::Inactive) {
         render_storage_move_overlay(frame, area, state);
     }
+    if !matches!(state.scan_mode, ScanMode::Current) {
+        render_scan_input_overlay(frame, area, state);
+    }
     if state.help_open {
-        render_help_overlay(frame, area);
+        render_help_overlay(frame, area, palette(state.color_mode));
     }
 }
 
@@ -178,6 +177,7 @@ pub(crate) fn centered_rect(width: u16, height: u16, r: Rect) -> Rect {
 pub(crate) fn render_pick_list(
     frame: &mut Frame,
     area: Rect,
+    p: Palette,
     title: &str,
     width: u16,
     height: u16,
@@ -193,7 +193,7 @@ pub(crate) fn render_pick_list(
         .title(title.to_owned())
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan));
+        .border_style(Style::default().fg(p.accent));
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
 
@@ -203,38 +203,35 @@ pub(crate) fn render_pick_list(
         .split(inner);
 
     let mut lines: Vec<Line> = Vec::new();
-    if let Some(p) = prompt {
-        lines.push(Line::from(Span::styled(p.to_owned(), Style::default().fg(Color::Cyan))));
+    if let Some(prompt) = prompt {
+        lines.push(Line::from(Span::styled(prompt.to_owned(), Style::default().fg(p.accent))));
         lines.push(Line::default());
     }
     for (i, name) in items.iter().enumerate() {
         if i == selection {
             lines.push(Line::from(vec![
-                Span::styled("▶ ", Style::default().fg(Color::Yellow)),
-                Span::styled(name.to_string(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                Span::styled("▶ ", Style::default().fg(p.accent)),
+                Span::styled(name.to_string(), Style::default().fg(p.text).add_modifier(Modifier::BOLD)),
             ]));
         } else {
             lines.push(Line::from(vec![
                 Span::raw("  "),
-                Span::styled(name.to_string(), Style::default().fg(Color::DarkGray)),
+                Span::styled(name.to_string(), Style::default().fg(p.dim)),
             ]));
         }
     }
     if let Some(err) = error {
         lines.push(Line::default());
-        lines.push(Line::from(Span::styled(
-            format!("✗ {err}"),
-            Style::default().fg(Color::Red),
-        )));
+        lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(p.crit))));
     }
     frame.render_widget(Paragraph::new(lines), rows[0]);
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
+            Span::styled("[↑/↓]", Style::default().fg(p.accent)),
             Span::raw(" select  "),
-            Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
             Span::raw(format!(" {action}  ")),
-            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::styled("[Esc]", Style::default().fg(p.accent)),
             Span::raw(" cancel"),
         ])),
         rows[1],

@@ -15,13 +15,14 @@ use neumann_cockpit::api::tasks::{
     fetch_missions, fetch_sent_messages,
 };
 use neumann_cockpit::app::{
-    ApiMessage, AppState, AtomicPrinterCraftInput, ContainerRulesInput, CraftInput, DeployInput,
+    ApiMessage, AppState, AtomicPrinterCraftInput, ColorMode, ContainerRulesInput, CraftInput,
+    DeployInput,
     DetachInput, DropCargoInput, DropStorageContainerInput, InspectInput, JettisonInput,
-    MessagesInput, MindSnapshotInput, MineInput, MissionsInput, Phosphor, RecallInput, RecoverInput,
+    MessagesInput, MindSnapshotInput, MineInput, MissionsInput, RecallInput, RecoverInput,
     RefuelInput,
     RemoteMineInput,
     RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScutNetworkInput,
-    ScutRelayInput, StorageMoveInput, UiTheme,
+    ScutRelayInput, StorageMoveInput,
 };
 use neumann_cockpit::config;
 use neumann_cockpit::input::handle_event;
@@ -30,9 +31,8 @@ use neumann_cockpit::ui;
 #[tokio::main]
 async fn main() -> Result<()> {
     let cfg = config::Config::load()?;
-    let ui_theme = cfg.ui_theme();
-    let phosphor = cfg.ui_phosphor();
-    let animations = cfg.animations;
+    let hints = cfg.hints;
+    let color_mode = cfg.color_mode();
     let client = ApiClient::new(cfg.base_url, cfg.api_key)?;
 
     enable_raw_mode()?;
@@ -41,7 +41,7 @@ async fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let result = run(&client, &mut terminal, ui_theme, phosphor, animations).await;
+    let result = run(&client, &mut terminal, hints, color_mode).await;
 
     disable_raw_mode()?;
     execute!(
@@ -57,29 +57,29 @@ async fn main() -> Result<()> {
 async fn run(
     client: &ApiClient,
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
-    ui_theme: UiTheme,
-    phosphor: Phosphor,
-    animations: bool,
+    hints: bool,
+    color_mode: ColorMode,
 ) -> Result<()> {
     let (tx, mut rx) = mpsc::channel::<ApiMessage>(32);
     let mut state = AppState {
-        ui_theme,
-        phosphor,
-        animations_enabled: animations,
+        hints_visible: hints,
+        color_mode,
+        booting: true,
         ..Default::default()
     };
-    if ui_theme == UiTheme::Retro && animations {
-        state.anim.booting = true;
-    }
     let scan_history_path = config::history_path();
     state.load_scan_history(&scan_history_path);
     let mut events = EventStream::new();
 
-    // Render tick for retro-theme animations: pure redraw, never API calls.
-    // Disabled (guarded branch below) in classic theme or animations=false,
-    // preserving the fully event-driven behaviour.
-    let mut anim_tick = tokio::time::interval(std::time::Duration::from_millis(100));
-    anim_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    // Short-lived tick that drives the boot assembly; runs only while booting.
+    let mut boot_tick = tokio::time::interval(std::time::Duration::from_millis(90));
+    boot_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    // Steady-state 1 s tick: redraws so time-derived values (progress bars,
+    // percentages, ETAs, sync age) advance live, and triggers the periodic
+    // ≤60 s auto-refresh when one is due.
+    let mut ui_tick = tokio::time::interval(std::time::Duration::from_secs(1));
+    ui_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     // Initial data fetch
     fetch_all(client.clone(), tx.clone());
@@ -97,8 +97,17 @@ async fn run(
                 handle_event(event?, &mut state, client, &tx);
             }
 
-            _ = anim_tick.tick(), if state.anim_tick_active() => {
-                state.tick_anim();
+            _ = boot_tick.tick(), if state.booting => {
+                state.boot_tick();
+            }
+
+            _ = ui_tick.tick() => {
+                // The redraw at the loop top makes live values tick; here we
+                // only fire the periodic refresh when it is due.
+                if !state.booting && state.periodic_refresh_due() {
+                    fetch_all(client.clone(), tx.clone());
+                    state.loading = true;
+                }
             }
 
             Some(msg) = rx.recv() => {

@@ -1,4 +1,4 @@
-use crate::api::types::{CraftingRecipe, ProbeInventory};
+use crate::api::types::{CraftingRecipe, CraftingRecipeIngredient, ProbeInventory};
 use super::*;
 
 /// Active items (manny, atomic printer) are listed individually in the
@@ -185,6 +185,27 @@ impl AppState {
         self.recipes.iter()
             .filter(|r| r.craftable_by.iter().any(|c| c == "manny"))
             .collect()
+    }
+
+    /// How much of a recipe ingredient the probe inventory holds: a unit count
+    /// for `item` ingredients, or the resource stock amount (ECE) otherwise.
+    pub fn recipe_ingredient_have(&self, ing: &CraftingRecipeIngredient) -> f64 {
+        let Some(probe) = &self.probe else { return 0.0 };
+        if ing.unit == "item" {
+            probe.inventory.items.iter().filter(|it| it.item_type == ing.ingredient_type).count() as f64
+        } else {
+            probe
+                .inventory
+                .resource_stocks
+                .iter()
+                .find(|s| s.stock_type == ing.ingredient_type)
+                .map_or(0.0, |s| s.amount)
+        }
+    }
+
+    /// Whether every ingredient of a recipe is currently on hand.
+    pub fn recipe_affordable(&self, recipe: &CraftingRecipe) -> bool {
+        recipe.ingredients.iter().all(|ing| self.recipe_ingredient_have(ing) >= ing.quantity)
     }
 
     pub fn inventory_waypoint_bookmark_id(&self) -> Option<String> {

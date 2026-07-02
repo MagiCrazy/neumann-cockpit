@@ -1325,44 +1325,334 @@ fn scanner_obj_nav_wraps() {
     assert_eq!(state.scanner_obj_selection, Some(0));
 }
 
-// ── anim / theme ──────────────────────────────────────────────────────────
+// ── cockpit color mode ─────────────────────────────────────────────────────
 
 #[test]
-fn tick_anim_advances_and_finishes_boot() {
-    let mut state = AppState::default();
-    state.anim.booting = true;
-    for _ in 0..BOOT_TOTAL_FRAMES {
-        state.tick_anim();
+fn color_mode_cycles_and_defaults_green() {
+    assert_eq!(ColorMode::default(), ColorMode::MonoGreen);
+    let mut m = ColorMode::default();
+    for _ in 0..4 {
+        m = m.cycle();
     }
-    assert!(!state.anim.booting, "boot should complete");
-    assert_eq!(state.anim.frame, BOOT_TOTAL_FRAMES);
+    assert_eq!(m, ColorMode::MonoGreen, "cycles back after four steps");
+}
+
+// ── cockpit contextual menu ────────────────────────────────────────────────
+
+fn menu_item(menu: &ContextMenu, action: MenuAction) -> &MenuItem {
+    menu.items.iter().find(|i| i.action == action).expect("menu item")
 }
 
 #[test]
-fn toggle_theme_flips_between_classic_and_retro() {
+fn mannies_context_menu_reflects_manny_state() {
     let mut state = AppState::default();
-    assert_eq!(state.ui_theme, UiTheme::Classic);
-    state.toggle_theme();
-    assert_eq!(state.ui_theme, UiTheme::Retro);
-    state.toggle_theme();
-    assert_eq!(state.ui_theme, UiTheme::Classic);
+    state.active_pane = Pane::Mannies;
+
+    // Idle manny: order-requiring actions enabled, recall disabled, and
+    // conditional actions (refuel/drop-cargo) disabled without their context.
+    state.mannies = Some(vec![make_manny("m1", "probe_rack", true, None)]);
+    let menu = state.build_context_menu().expect("mannies menu");
+    assert!(menu_item(&menu, MenuAction::Mine).enabled);
+    assert!(menu_item(&menu, MenuAction::Repair).enabled);
+    assert!(menu_item(&menu, MenuAction::Craft).enabled);
+    assert!(menu_item(&menu, MenuAction::Salvage).enabled);
+    assert!(menu_item(&menu, MenuAction::Inspect).enabled);
+    assert!(menu_item(&menu, MenuAction::Rename).enabled);
+    assert!(!menu_item(&menu, MenuAction::Recall).enabled);
+    assert!(!menu_item(&menu, MenuAction::Refuel).enabled); // no station
+    assert!(!menu_item(&menu, MenuAction::DropCargo).enabled); // not waiting
+    // Cursor lands on the first enabled item.
+    assert!(menu.items[menu.cursor].enabled);
+
+    // Busy manny with a task: order-requiring actions disabled, recall enabled.
+    state.mannies = Some(vec![make_manny("m2", "sector", false, Some("mining"))]);
+    let menu = state.build_context_menu().expect("mannies menu");
+    assert!(!menu_item(&menu, MenuAction::Repair).enabled);
+    assert!(!menu_item(&menu, MenuAction::Salvage).enabled);
+    assert!(menu_item(&menu, MenuAction::Recall).enabled);
 }
 
 #[test]
-fn anim_tick_active_only_for_retro_or_boot() {
+fn context_menu_none_for_pane_without_actions() {
     let mut state = AppState::default();
-    state.animations_enabled = true;
-    assert!(!state.anim_tick_active(), "classic theme: no tick");
-    state.ui_theme = UiTheme::Retro;
-    assert!(state.anim_tick_active());
-    state.animations_enabled = false;
-    assert!(!state.anim_tick_active(), "retro without animations: no tick");
-    state.anim.booting = true;
-    assert!(state.anim_tick_active(), "boot still animates");
+    state.active_pane = Pane::Probe;
+    assert!(state.build_context_menu().is_none());
 }
 
 #[test]
-fn anim_hash_is_deterministic_and_spreads() {
-    assert_eq!(anim_hash(42), anim_hash(42));
-    assert_ne!(anim_hash(1), anim_hash(2));
+fn inventory_context_menu_present_but_disabled_when_empty() {
+    let mut state = AppState::default();
+    state.active_pane = Pane::Inventory;
+    let menu = state.build_context_menu().expect("inventory menu");
+    assert_eq!(menu.items.len(), 3);
+    // Nothing loaded → every action disabled with a reason.
+    assert!(menu.items.iter().all(|i| !i.enabled && i.disabled_reason.is_some()));
+}
+
+// ── periodic auto-refresh gating ──────────────────────────────────────────
+
+#[test]
+fn seconds_since_sync_none_before_first_sync() {
+    let state = AppState::default();
+    assert_eq!(state.seconds_since_sync(), None);
+}
+
+#[test]
+fn periodic_refresh_not_due_without_prior_sync() {
+    // Never synced → not due (avoids spin-retry on a failed initial fetch).
+    let state = AppState::default();
+    assert!(!state.periodic_refresh_due());
+}
+
+#[test]
+fn periodic_refresh_due_after_60s_when_idle() {
+    let mut state = AppState::default();
+    state.last_update = Some(chrono::Local::now() - chrono::Duration::seconds(90));
+    assert!(state.periodic_refresh_due());
+}
+
+#[test]
+fn periodic_refresh_not_due_when_recent_or_loading() {
+    let mut state = AppState::default();
+    state.last_update = Some(chrono::Local::now() - chrono::Duration::seconds(10));
+    assert!(!state.periodic_refresh_due(), "10s is within the 60s window");
+    state.last_update = Some(chrono::Local::now() - chrono::Duration::seconds(90));
+    state.loading = true;
+    assert!(!state.periodic_refresh_due(), "a fetch already in flight");
+}
+
+// ── manny task progress interpolation ─────────────────────────────────────
+
+#[test]
+fn manny_task_progress_falls_back_to_snapshot_without_timestamps() {
+    use crate::ui::panels::mannies::manny_task_progress;
+    let mut m = make_manny("m1", "probe", false, Some("mining"));
+    m.task_progress_percent = 42.0; // no observed_at / end → static
+    assert!((manny_task_progress(&m) - 0.42).abs() < 1e-9);
+}
+
+#[test]
+fn manny_task_progress_interpolates_forward_between_fetches() {
+    use crate::ui::panels::mannies::manny_task_progress;
+    let mut m = make_manny("m1", "sector", false, Some("mining"));
+    // Snapshot: 20% when observed 30 s ago, 30 s left → total 75 s, now ~60%.
+    m.task_progress_percent = 20.0;
+    m.observed_at = Some(chrono::Utc::now() - chrono::Duration::seconds(30));
+    m.task_estimated_end_time = Some(chrono::Utc::now() + chrono::Duration::seconds(30));
+    let prog = manny_task_progress(&m);
+    assert!(prog > 0.20, "progress advanced past the snapshot: {prog}");
+    assert!(prog < 1.0, "not complete yet: {prog}");
+}
+
+#[test]
+fn manny_task_progress_complete_when_past_end() {
+    use crate::ui::panels::mannies::manny_task_progress;
+    let mut m = make_manny("m1", "sector", false, Some("mining"));
+    m.task_progress_percent = 80.0;
+    m.observed_at = Some(chrono::Utc::now() - chrono::Duration::seconds(120));
+    m.task_estimated_end_time = Some(chrono::Utc::now() - chrono::Duration::seconds(10));
+    assert_eq!(manny_task_progress(&m), 1.0);
+}
+
+// ── new v63 planet/asteroid fields ────────────────────────────────────────
+
+#[test]
+fn sector_object_planet_science_fields_deserialize() {
+    use crate::api::types::SectorObject;
+    let planet: SectorObject = serde_json::from_str(r#"{
+        "type": "planet",
+        "name": "Kepler-relative-1",
+        "summary": "temperate ocean world",
+        "category": "ocean",
+        "habitabilityScore": 0.82,
+        "mannyMineable": true,
+        "resourceTypes": ["metals", "ice"],
+        "resourceComposition": {"deuterium": 0.0, "metals": 0.6, "ice": 0.4, "carbon_compounds": 0.0}
+    }"#).unwrap();
+    assert_eq!(planet.category.as_deref(), Some("ocean"));
+    assert_eq!(planet.habitability_score, Some(0.82));
+    assert_eq!(planet.manny_mineable, Some(true));
+    assert_eq!(planet.resource_types, vec!["metals", "ice"]);
+    let comp = planet.resource_composition.expect("composition");
+    assert!((comp.metals - 0.6).abs() < 1e-9 && (comp.ice - 0.4).abs() < 1e-9);
+}
+
+#[test]
+fn sector_object_asteroid_reserves_deserialize() {
+    use crate::api::types::SectorObject;
+    let ast: SectorObject = serde_json::from_str(r#"{
+        "type": "asteroid",
+        "name": "AX-12",
+        "summary": "carbonaceous",
+        "composition": "carbonaceous",
+        "resourceAmounts": {"deuterium": 0.0, "metals": 1.25, "ice": 0.0, "carbon_compounds": 3.5}
+    }"#).unwrap();
+    assert_eq!(ast.composition.as_deref(), Some("carbonaceous"));
+    let amt = ast.resource_amounts.expect("amounts");
+    assert!((amt.carbon_compounds - 3.5).abs() < 1e-9);
+    // Absent fields stay None / empty.
+    assert!(ast.category.is_none() && ast.resource_types.is_empty());
+}
+
+#[test]
+fn scanner_objects_number_unnamed_by_type() {
+    let mut state = AppState::default();
+    state.probe = Some(probe_at(0., 0., 0.));
+    // Two unnamed top-level asteroids + one named planet.
+    state.scan_history = vec![make_sector_with_objects(0., 0., 0., r#"[
+        {"type": "asteroid", "id": "a1", "name": null, "summary": ""},
+        {"type": "planet", "id": "p1", "name": "Vulcan", "summary": ""},
+        {"type": "asteroid", "id": "a2", "name": null, "summary": ""}
+    ]"#)];
+    let entries = state.scanner_objects();
+    let by_id = |id: &str| entries.iter().find(|e| e.id == id).unwrap().name.clone();
+    assert_eq!(by_id("a1"), "asteroid #1");
+    assert_eq!(by_id("a2"), "asteroid #2");
+    assert_eq!(by_id("p1"), "Vulcan"); // real names kept
+}
+
+// ── mining target reserves ────────────────────────────────────────────────
+
+#[test]
+fn minable_target_reserves_reads_types_and_amounts() {
+    let mut state = AppState::default();
+    state.scan_history = vec![make_sector_with_objects(0., 0., 0., r#"[
+        {"type": "asteroid", "id": "ast-1", "name": "AX", "summary": "",
+         "resourceTypes": ["metals", "ice"],
+         "resourceAmounts": {"deuterium": 0.0, "metals": 2.0, "ice": 1.0, "carbon_compounds": 0.0}}
+    ]"#)];
+    let (flags, res) = state.minable_target_reserves("ast-1").expect("reserves");
+    assert_eq!(flags, [false, true, true, false]);
+    assert_eq!(res, [0.0, 2.0, 1.0, 0.0]);
+    // Sum of selected present reserves (metals+ice).
+    assert_eq!(state.mine_reserve_max("ast-1", [false, true, true, false]), 3.0);
+    // Unknown object → None.
+    assert!(state.minable_target_reserves("nope").is_none());
+}
+
+#[test]
+fn mine_reserve_max_falls_back_to_free_capacity_without_reserves() {
+    let mut state = AppState::default();
+    state.probe = Some(make_probe(0.5, 0., 0., 0.));
+    state.scan_history = vec![make_sector_with_objects(0., 0., 0., r#"[
+        {"type": "asteroid", "id": "ast-1", "name": "AX", "summary": "", "resourceTypes": ["metals"]}
+    ]"#)];
+    // No resourceAmounts → reserves are 0 → fall back to free capacity (0.5).
+    assert_eq!(state.mine_reserve_max("ast-1", [false, true, false, false]), 0.5);
+}
+
+// ── map & travel context menus ────────────────────────────────────────────
+
+#[test]
+fn map_context_menu_goto_disabled_without_visited() {
+    let mut state = AppState::default();
+    state.active_pane = Pane::Map;
+    let menu = state.build_context_menu().expect("map menu");
+    assert_eq!(menu.items.len(), 4);
+    let goto = menu.items.iter().find(|i| i.action == MenuAction::GotoVisited).unwrap();
+    assert!(!goto.enabled, "no visited sectors → jump disabled");
+    // Open map / travel are always available.
+    assert!(menu.items.iter().find(|i| i.action == MenuAction::Travel).unwrap().enabled);
+}
+
+#[test]
+fn scanner_travel_here_enabled_for_remote_selection_only() {
+    let mut state = AppState::default();
+    state.active_pane = Pane::Scanner;
+    state.probe = Some(probe_at(0., 0., 0.));
+    // Remote observation selected → Travel here enabled.
+    state.scan_history = vec![make_sector(2., 0., 0.)];
+    let travel = state.build_context_menu().unwrap().items.into_iter()
+        .find(|i| i.action == MenuAction::ScanTravel).unwrap();
+    assert!(travel.enabled);
+    // Current sector selected → disabled ("already here").
+    state.scan_history = vec![make_sector(0., 0., 0.)];
+    let travel = state.build_context_menu().unwrap().items.into_iter()
+        .find(|i| i.action == MenuAction::ScanTravel).unwrap();
+    assert!(!travel.enabled);
+}
+
+#[test]
+fn map_menu_has_waypoints_disabled_when_empty() {
+    let mut state = AppState::default();
+    state.active_pane = Pane::Map;
+    let menu = state.build_context_menu().expect("map menu");
+    assert_eq!(menu.items.len(), 4);
+    let wp = menu.items.iter().find(|i| i.action == MenuAction::Waypoints).unwrap();
+    assert!(!wp.enabled, "no waypoints → disabled");
+}
+
+// ── recipe affordability ──────────────────────────────────────────────────
+
+#[test]
+fn recipe_affordable_checks_stocks_and_items() {
+    use crate::api::types::CraftingRecipe;
+    let mut state = AppState::default();
+    state.probe = Some(probe_with_inventory(
+        r#"[{"id":"i1","type":"integrated_circuit","name":"IC","containerSpace":0.0,"taskProgressPercent":0.0}]"#,
+        r#"[{"id":"s1","type":"metals","name":"Metals","amount":5.0,"containerSpace":0.0}]"#,
+    ));
+    let recipe: CraftingRecipe = serde_json::from_str(r#"{
+        "id":"r","name":"Steel plate","craftableBy":["manny"],
+        "ingredients":[{"type":"metals","quantity":2.0,"unit":"ece","kind":null}],
+        "durationSeconds":600,
+        "output":{"type":"steel_plate","name":"Steel plate","containerSpace":0.1,"containerSpaceUnit":"ece","capacityBonus":null}
+    }"#).unwrap();
+    assert!(state.recipe_affordable(&recipe), "have 5.0 metals ≥ 2.0");
+
+    // Needs 2 integrated circuits but only 1 on hand.
+    let hungry: CraftingRecipe = serde_json::from_str(r#"{
+        "id":"r2","name":"Board","craftableBy":["manny"],
+        "ingredients":[{"type":"integrated_circuit","quantity":2.0,"unit":"item","kind":null}],
+        "durationSeconds":600,
+        "output":{"type":"board","name":"Board","containerSpace":0.1,"containerSpaceUnit":"ece","capacityBonus":null}
+    }"#).unwrap();
+    assert!(!state.recipe_affordable(&hungry));
+    assert_eq!(state.recipe_ingredient_have(&hungry.ingredients[0]), 1.0);
+}
+
+// ── command mode (:) ──────────────────────────────────────────────────────
+
+#[test]
+fn run_command_focus_zoom_theme_filter() {
+    let mut state = AppState::default();
+    assert!(!state.run_command("focus mannies"));
+    assert_eq!(state.active_pane, Pane::Mannies);
+    assert!(state.zoomed);
+
+    state.run_command("zoom"); // toggles off
+    assert!(!state.zoomed);
+
+    state.run_command("theme mono-amber");
+    assert_eq!(state.color_mode, ColorMode::MonoAmber);
+
+    state.run_command("filter minable");
+    assert_eq!(state.scan_filter, ScanFilter::Minable);
+}
+
+#[test]
+fn run_command_refresh_signals_fetch() {
+    let mut state = AppState::default();
+    assert!(state.run_command("refresh"), "refresh asks the caller to fetch_all");
+    assert!(!state.run_command("zoom"), "other commands do not");
+}
+
+#[test]
+fn run_command_travel_and_goto() {
+    let mut state = AppState::default();
+    state.probe = Some(probe_at(0., 0., 0.));
+    // even-sum target → travel confirm
+    state.run_command("travel 2 0 -2");
+    assert!(matches!(state.travel, TravelInput::Confirming { x: 2, y: 0, z: -2, .. }));
+
+    state.run_command("goto 1 1 0");
+    assert!(state.map.open);
+    assert_eq!((state.map.center_x, state.map.y_layer, state.map.center_z), (1, 1, 0));
+}
+
+#[test]
+fn run_command_unknown_sets_toast() {
+    let mut state = AppState::default();
+    assert!(!state.run_command("frobnicate"));
+    assert!(state.active_toast().is_some());
 }

@@ -1,15 +1,16 @@
 use crate::app::{AppState, RepairInput};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
 
-use crate::ui::theme::format_duration;
+use crate::ui::theme::{format_duration, palette};
 use super::centered_rect;
 pub(crate) fn render_repair_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let p = palette(state.color_mode);
     let RepairInput::Typing { ref manny_name, ref buf, ref error, .. } = state.repair else { return };
 
     let max_pct = state.repair_max_percent();
@@ -29,7 +30,7 @@ pub(crate) fn render_repair_overlay(frame: &mut Frame, area: Rect, state: &AppSt
         .title(title)
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan));
+        .border_style(Style::default().fg(p.accent));
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
 
@@ -44,51 +45,51 @@ pub(crate) fn render_repair_overlay(frame: &mut Frame, area: Rect, state: &AppSt
 
     // Input line
     lines.push(Line::from(vec![
-        Span::styled("Restore: ", Style::default().fg(Color::Cyan)),
+        Span::styled("Restore: ", Style::default().fg(p.accent)),
         Span::raw(buf.as_str()),
-        Span::styled("█", Style::default().fg(Color::Cyan)),
-        Span::styled("%", Style::default().fg(Color::DarkGray)),
+        Span::styled("█", Style::default().fg(p.accent)),
+        Span::styled("%", Style::default().fg(p.dim)),
     ]));
 
     lines.push(Line::default());
 
     // MAX hint
     lines.push(Line::from(vec![
-        Span::styled("MAX  ", Style::default().fg(Color::DarkGray)),
-        Span::styled(format!("{max_pct:.2}%"), Style::default().fg(Color::White)),
+        Span::styled("MAX  ", Style::default().fg(p.dim)),
+        Span::styled(format!("{max_pct:.2}%"), Style::default().fg(p.text)),
         Span::raw("   "),
-        Span::styled("[M]", Style::default().fg(Color::Yellow)),
-        Span::styled(" fill", Style::default().fg(Color::DarkGray)),
+        Span::styled("[M]", Style::default().fg(p.warn)),
+        Span::styled(" fill", Style::default().fg(p.dim)),
     ]));
 
     lines.push(Line::default());
 
     // Cost preview (only when input is parseable)
     if let (Some(metals), Some(secs)) = (metals_cost, duration_secs) {
-        let metals_color = if insufficient { Color::Red } else { Color::White };
+        let metals_color = if insufficient { p.crit } else { p.text };
         lines.push(Line::from(vec![
-            Span::styled("Metals  ", Style::default().fg(Color::DarkGray)),
+            Span::styled("Metals  ", Style::default().fg(p.dim)),
             Span::styled(format!("{metals:.4}"), Style::default().fg(metals_color)),
-            Span::styled(" ECE", Style::default().fg(Color::DarkGray)),
+            Span::styled(" ECE", Style::default().fg(p.dim)),
             if insufficient {
                 Span::styled(
                     format!("  (have {metals_stock:.4})"),
-                    Style::default().fg(Color::Red),
+                    Style::default().fg(p.crit),
                 )
             } else {
                 Span::raw("")
             },
         ]));
         lines.push(Line::from(vec![
-            Span::styled("Time    ", Style::default().fg(Color::DarkGray)),
-            Span::styled(format_duration(secs), Style::default().fg(Color::Yellow)),
+            Span::styled("Time    ", Style::default().fg(p.dim)),
+            Span::styled(format_duration(secs), Style::default().fg(p.warn)),
         ]));
         if let Some(eff) = effective {
             if parsed.is_some_and(|v| v > max_pct + 0.001) {
                 lines.push(Line::from(vec![
                     Span::styled(
                         format!("  → capped at {eff:.2}% (probe already at max above)"),
-                        Style::default().fg(Color::DarkGray),
+                        Style::default().fg(p.dim),
                     ),
                 ]));
             }
@@ -96,7 +97,7 @@ pub(crate) fn render_repair_overlay(frame: &mut Frame, area: Rect, state: &AppSt
     } else {
         lines.push(Line::from(Span::styled(
             "type a value to see cost",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(p.dim),
         )));
     }
 
@@ -105,7 +106,7 @@ pub(crate) fn render_repair_overlay(frame: &mut Frame, area: Rect, state: &AppSt
         lines.push(Line::default());
         lines.push(Line::from(Span::styled(
             format!("✗ {err}"),
-            Style::default().fg(Color::Red),
+            Style::default().fg(p.crit),
         )));
     }
 
@@ -115,16 +116,16 @@ pub(crate) fn render_repair_overlay(frame: &mut Frame, area: Rect, state: &AppSt
     let can_send = parsed.is_some() && !insufficient;
     let hint = if can_send {
         Line::from(vec![
-            Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
             Span::raw(" send  "),
-            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::styled("[Esc]", Style::default().fg(p.accent)),
             Span::raw(" cancel"),
         ])
     } else {
         Line::from(vec![
-            Span::styled("[Enter]", Style::default().fg(Color::DarkGray)),
+            Span::styled("[Enter]", Style::default().fg(p.dim)),
             Span::raw(" send  "),
-            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::styled("[Esc]", Style::default().fg(p.accent)),
             Span::raw(" cancel"),
         ])
     };

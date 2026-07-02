@@ -1,3 +1,4 @@
+use crate::ui::theme::{palette, Palette};
 use crate::api::types::{AlertType, ProbeAlert};
 use crate::app::{AlertsInput, AppState};
 use ratatui::{
@@ -21,29 +22,29 @@ fn alert_type_label(t: &AlertType) -> &'static str {
 }
 
 /// Colour-code the row by alert type severity (dimmed once read).
-fn type_color(t: &AlertType) -> Color {
+fn type_color(t: &AlertType, p: Palette) -> Color {
     match t {
-        AlertType::StorageContainerBreak => Color::Red,
-        AlertType::IntelligentLife => Color::Cyan,
-        AlertType::SectorObjectDetected => Color::Yellow,
-        AlertType::AnomalyDetected => Color::Magenta,
-        AlertType::Unknown => Color::Gray,
+        AlertType::StorageContainerBreak => p.crit,
+        AlertType::IntelligentLife => p.accent,
+        AlertType::SectorObjectDetected => p.warn,
+        AlertType::AnomalyDetected => p.crit,
+        AlertType::Unknown => p.text,
     }
 }
 
-fn alert_row(alert: &ProbeAlert) -> ListItem<'static> {
+fn alert_row(alert: &ProbeAlert, p: Palette) -> ListItem<'static> {
     let unread = alert.is_unread();
     let (marker, marker_color) = if unread {
-        ("● ", type_color(&alert.alert_type))
+        ("● ", type_color(&alert.alert_type, p))
     } else {
-        ("○ ", Color::DarkGray)
+        ("○ ", p.dim)
     };
     let text_style = if unread {
-        Style::default().fg(Color::White)
+        Style::default().fg(p.text)
     } else {
-        Style::default().fg(Color::DarkGray)
+        Style::default().fg(p.dim)
     };
-    let label_color = if unread { type_color(&alert.alert_type) } else { Color::DarkGray };
+    let label_color = if unread { type_color(&alert.alert_type, p) } else { p.dim };
     ListItem::new(Line::from(vec![
         Span::styled(marker, Style::default().fg(marker_color)),
         Span::styled(
@@ -55,6 +56,7 @@ fn alert_row(alert: &ProbeAlert) -> ListItem<'static> {
 }
 
 pub(crate) fn render_alerts_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let p = palette(state.color_mode);
     let AlertsInput::Browsing { selection, show_warnings } = state.alerts_input else {
         return;
     };
@@ -72,7 +74,7 @@ pub(crate) fn render_alerts_overlay(frame: &mut Frame, area: Rect, state: &AppSt
         .title(" ALERTS ")
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan));
+        .border_style(Style::default().fg(p.accent));
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
 
@@ -90,9 +92,9 @@ pub(crate) fn render_alerts_overlay(frame: &mut Frame, area: Rect, state: &AppSt
     let warns_unread = state.damage_warnings.iter().filter(|w| w.is_unread()).count();
     let tab_style = |active: bool| {
         if active {
-            Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD)
+            Style::default().fg(Color::Black).bg(p.accent).add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(Color::DarkGray)
+            Style::default().fg(p.dim)
         }
     };
     frame.render_widget(
@@ -108,11 +110,11 @@ pub(crate) fn render_alerts_overlay(frame: &mut Frame, area: Rect, state: &AppSt
     if entries.is_empty() {
         let label = if show_warnings { "no damage warnings" } else { "no active alerts" };
         frame.render_widget(
-            Paragraph::new(Line::from(Span::styled(label, Style::default().fg(Color::DarkGray)))),
+            Paragraph::new(Line::from(Span::styled(label, Style::default().fg(p.dim)))),
             rows[1],
         );
     } else {
-        let items: Vec<ListItem> = entries.iter().map(alert_row).collect();
+        let items: Vec<ListItem> = entries.iter().map(|a| alert_row(a, p)).collect();
         let list = List::new(items)
             .highlight_style(Style::default().add_modifier(Modifier::BOLD))
             .highlight_symbol("▶ ");
@@ -124,13 +126,13 @@ pub(crate) fn render_alerts_overlay(frame: &mut Frame, area: Rect, state: &AppSt
     // ── Footer ──
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
+            Span::styled("[↑/↓]", Style::default().fg(p.accent)),
             Span::raw(" select  "),
-            Span::styled("[Tab]", Style::default().fg(Color::Cyan)),
+            Span::styled("[Tab]", Style::default().fg(p.accent)),
             Span::raw(" switch  "),
-            Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
             Span::raw(" ack  "),
-            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::styled("[Esc]", Style::default().fg(p.accent)),
             Span::raw(" close"),
         ])),
         rows[2],

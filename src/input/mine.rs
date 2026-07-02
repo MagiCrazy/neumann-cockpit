@@ -82,9 +82,16 @@ pub(super) fn handle_mine_event(
                         let (id, name) = candidates[selection].clone();
                         (manny_id.clone(), manny_name.clone(), id, name)
                     };
+                    // Preselect the resources the target actually holds; fall
+                    // back to metals when the reserves are unknown.
+                    let resources = state
+                        .minable_target_reserves(&object_id)
+                        .map(|(flags, _)| flags)
+                        .filter(|f| f.iter().any(|&x| x))
+                        .unwrap_or([false, true, false, false]);
                     state.mine = MineInput::Configure {
                         manny_id, manny_name, object_id, object_name,
-                        resources: [false, true, false, false],
+                        resources,
                         amount_buf: "0.30".into(),
                         amount_mode: false,
                         target_container: None,
@@ -94,8 +101,10 @@ pub(super) fn handle_mine_event(
                 _ => {}
             }
         }
-        MineInput::Configure { amount_mode, .. } => {
+        MineInput::Configure { amount_mode, object_id, resources, .. } => {
             let am = *amount_mode;
+            let obj_id = object_id.clone();
+            let res = *resources;
             match code {
                 KeyCode::Esc => state.mine = MineInput::Inactive,
                 KeyCode::Tab => {
@@ -106,13 +115,20 @@ pub(super) fn handle_mine_event(
                 }
                 KeyCode::Char(c @ '1'..='4') if !am => {
                     let idx = (c as u8 - b'1') as usize;
-                    if let MineInput::Configure { ref mut resources, ref mut error, .. } = state.mine {
-                        resources[idx] = !resources[idx];
-                        *error = None;
+                    // Only toggle resources the target actually holds.
+                    let present = state
+                        .minable_target_reserves(&obj_id)
+                        .map(|(flags, _)| flags[idx])
+                        .unwrap_or(true);
+                    if present {
+                        if let MineInput::Configure { ref mut resources, ref mut error, .. } = state.mine {
+                            resources[idx] = !resources[idx];
+                            *error = None;
+                        }
                     }
                 }
                 KeyCode::Char('m') | KeyCode::Char('M') if am => {
-                    let max = state.mine_max_amount();
+                    let max = state.mine_reserve_max(&obj_id, res);
                     if let MineInput::Configure { ref mut amount_buf, ref mut error, .. } = state.mine {
                         *amount_buf = format!("{:.4}", max);
                         *error = None;

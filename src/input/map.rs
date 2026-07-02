@@ -1,6 +1,33 @@
 use crossterm::event::KeyCode;
 
-use crate::app::AppState;
+use crate::app::{AppState, GotoVisitedInput};
+
+use super::geometry::list_nav;
+
+/// Picker over visited sectors: navigate the list, `Enter` launches the travel
+/// confirm for the chosen sector, `Esc` cancels.
+pub(super) fn handle_goto_visited_event(code: KeyCode, state: &mut AppState) {
+    let GotoVisitedInput::Picking { selection } = state.goto_visited else { return };
+    let count = state.visited_sectors.len();
+    match code {
+        KeyCode::Esc => state.goto_visited = GotoVisitedInput::Inactive,
+        KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+            if let Some(ns) = list_nav(code, selection, count) {
+                state.goto_visited = GotoVisitedInput::Picking { selection: ns };
+            }
+        }
+        KeyCode::Enter => {
+            if let Some(v) = state.visited_sectors.get(selection) {
+                let c = &v.relative_coordinates;
+                let (x, y, z) = (c.x.round() as i32, c.y.round() as i32, c.z.round() as i32);
+                state.goto_visited = GotoVisitedInput::Inactive;
+                state.travel_go_sector(x, y, z);
+            }
+        }
+        _ => {}
+    }
+}
+
 pub(super) fn handle_map_event(code: KeyCode, state: &mut AppState) {
     // Coordinate-input mode ([c]) captures keys first.
     if let Some(buf) = state.map.coord_input.as_mut() {

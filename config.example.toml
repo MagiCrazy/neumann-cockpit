@@ -1,10 +1,9 @@
 base_url = "https://neumann-probe.net"
 api_key  = "vng_your_api_key_here"
 
-# UI theme: "classic" (default) or "retro" — phosphor CRT console with
-# idle animations. Toggle at runtime with F2.
-#theme = "retro"
-# Retro phosphor tint: "green" (default) or "amber".
-#phosphor = "green"
-# Retro idle animations (render tick only, never API polling).
-#animations = true
+# Color mode for the cockpit interface: "mono-green" (default), "mono-amber",
+# "phosphor-semantic", or "modern-16" (named ANSI for limited terminals).
+# F2 cycles it at runtime.
+#theme = "mono-green"
+# Show the contextual hints line at the bottom (F1 toggles at runtime).
+#hints = true
