@@ -1548,7 +1548,7 @@ fn map_context_menu_goto_disabled_without_visited() {
     let mut state = AppState::default();
     state.active_pane = Pane::Map;
     let menu = state.build_context_menu().expect("map menu");
-    assert_eq!(menu.items.len(), 3);
+    assert_eq!(menu.items.len(), 4);
     let goto = menu.items.iter().find(|i| i.action == MenuAction::GotoVisited).unwrap();
     assert!(!goto.enabled, "no visited sectors → jump disabled");
     // Open map / travel are always available.
@@ -1570,4 +1570,14 @@ fn scanner_travel_here_enabled_for_remote_selection_only() {
     let travel = state.build_context_menu().unwrap().items.into_iter()
         .find(|i| i.action == MenuAction::ScanTravel).unwrap();
     assert!(!travel.enabled);
+}
+
+#[test]
+fn map_menu_has_waypoints_disabled_when_empty() {
+    let mut state = AppState::default();
+    state.active_pane = Pane::Map;
+    let menu = state.build_context_menu().expect("map menu");
+    assert_eq!(menu.items.len(), 4);
+    let wp = menu.items.iter().find(|i| i.action == MenuAction::Waypoints).unwrap();
+    assert!(!wp.enabled, "no waypoints → disabled");
 }

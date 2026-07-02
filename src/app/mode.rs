@@ -42,6 +42,7 @@ pub enum MenuAction {
     OpenMap,
     Travel,
     GotoVisited,
+    Waypoints,
 }
 
 /// A single entry in a contextual action menu.
@@ -133,6 +134,15 @@ impl super::AppState {
                 label: "Jump to visited sector…".into(),
                 enabled: has_visited,
                 disabled_reason: (!has_visited).then(|| "none visited".to_string()),
+            },
+            {
+                let has_wp = !self.collect_waypoints().is_empty();
+                MenuItem {
+                    action: MenuAction::Waypoints,
+                    label: "Waypoints…".into(),
+                    enabled: has_wp,
+                    disabled_reason: (!has_wp).then(|| "no waypoints".to_string()),
+                }
             },
         ];
         ContextMenu { title: "MAP".into(), items, cursor: 0 }
