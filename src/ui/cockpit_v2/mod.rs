@@ -234,8 +234,13 @@ fn render_status_line(frame: &mut Frame, area: Rect, state: &AppState, p: Palett
     }
 
     let mut meta = Vec::new();
+    // Sync status: spinner while a refresh is in flight, else the age since the
+    // last successful sync (ticks live via the 1 s UI tick).
     if state.loading {
-        meta.push(("⟳".to_string(), p.accent));
+        meta.push(("⟳ sync".to_string(), p.accent));
+    } else if let Some(age) = state.seconds_since_sync() {
+        let label = if age < 60 { format!("⟳ {age}s") } else { format!("⟳ {}m", age / 60) };
+        meta.push((label, p.dim));
     }
     if !state.scut_coverage().is_empty() {
         meta.push(("≣ SCUT".to_string(), p.accent));

@@ -1388,3 +1388,35 @@ fn inventory_context_menu_present_but_disabled_when_empty() {
     // Nothing loaded → every action disabled with a reason.
     assert!(menu.items.iter().all(|i| !i.enabled && i.disabled_reason.is_some()));
 }
+
+// ── periodic auto-refresh gating ──────────────────────────────────────────
+
+#[test]
+fn seconds_since_sync_none_before_first_sync() {
+    let state = AppState::default();
+    assert_eq!(state.seconds_since_sync(), None);
+}
+
+#[test]
+fn periodic_refresh_not_due_without_prior_sync() {
+    // Never synced → not due (avoids spin-retry on a failed initial fetch).
+    let state = AppState::default();
+    assert!(!state.periodic_refresh_due());
+}
+
+#[test]
+fn periodic_refresh_due_after_60s_when_idle() {
+    let mut state = AppState::default();
+    state.last_update = Some(chrono::Local::now() - chrono::Duration::seconds(90));
+    assert!(state.periodic_refresh_due());
+}
+
+#[test]
+fn periodic_refresh_not_due_when_recent_or_loading() {
+    let mut state = AppState::default();
+    state.last_update = Some(chrono::Local::now() - chrono::Duration::seconds(10));
+    assert!(!state.periodic_refresh_due(), "10s is within the 60s window");
+    state.last_update = Some(chrono::Local::now() - chrono::Duration::seconds(90));
+    state.loading = true;
+    assert!(!state.periodic_refresh_due(), "a fetch already in flight");
+}

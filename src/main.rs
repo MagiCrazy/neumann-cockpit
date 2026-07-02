@@ -75,6 +75,12 @@ async fn run(
     let mut boot_tick = tokio::time::interval(std::time::Duration::from_millis(90));
     boot_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
+    // Steady-state 1 s tick: redraws so time-derived values (progress bars,
+    // percentages, ETAs, sync age) advance live, and triggers the periodic
+    // ≤60 s auto-refresh when one is due.
+    let mut ui_tick = tokio::time::interval(std::time::Duration::from_secs(1));
+    ui_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
     // Initial data fetch
     fetch_all(client.clone(), tx.clone());
     fetch_api_version(client.clone(), tx.clone());
@@ -93,6 +99,15 @@ async fn run(
 
             _ = boot_tick.tick(), if state.booting => {
                 state.boot_tick();
+            }
+
+            _ = ui_tick.tick() => {
+                // The redraw at the loop top makes live values tick; here we
+                // only fire the periodic refresh when it is due.
+                if !state.booting && state.periodic_refresh_due() {
+                    fetch_all(client.clone(), tx.clone());
+                    state.loading = true;
+                }
             }
 
             Some(msg) = rx.recv() => {
