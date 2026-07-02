@@ -149,7 +149,13 @@ fn render_pane(frame: &mut Frame, area: Rect, pane: Pane, state: &AppState, acti
         // Reused classic renderers keep their own colours for now.
         Pane::Probe => render_probe_panel(frame, area, state, active),
         Pane::Inventory => render_inventory_panel(frame, area, state, active),
-        Pane::Scanner => render_scanner_panel(frame, area, state, active),
+        Pane::Scanner => {
+            if state.zoomed {
+                panes::render_scanner_neighbors(frame, area, state, active);
+            } else {
+                render_scanner_panel(frame, area, state, active);
+            }
+        }
         Pane::Mannies => {
             if let Some(DrillLevel::Manny(id)) = state.pane_nav[Pane::Mannies.index()].drill.last() {
                 panes::render_manny_detail(frame, area, state, id, active, p);

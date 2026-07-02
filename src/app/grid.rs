@@ -286,7 +286,13 @@ impl super::AppState {
         if probe_recovery
             || matches!(
                 pane,
-                Pane::Mannies | Pane::Inventory | Pane::Missions | Pane::Comms | Pane::Storage | Pane::Sector
+                Pane::Mannies
+                    | Pane::Inventory
+                    | Pane::Missions
+                    | Pane::Comms
+                    | Pane::Storage
+                    | Pane::Sector
+                    | Pane::Scanner
             )
         {
             parts.push("Enter act");

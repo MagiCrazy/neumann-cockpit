@@ -505,3 +505,99 @@ pub fn render_mannies_overview(frame: &mut Frame, area: Rect, state: &AppState, 
 
     frame.render_widget(Paragraph::new(lines), inner);
 }
+
+/// Zoom view for the Scanner pane: a spatial mini-map of the six sectors
+/// adjacent to the probe, coloured by interest, with a legend. Focuses the
+/// Scanner on its real job — knowing what lies *around* the current sector.
+pub fn render_scanner_neighbors(frame: &mut Frame, area: Rect, state: &AppState, active: bool) {
+    use crate::ui::panels::scanner::sector_interest_color;
+    use crate::ui::theme::{knowledge_label, map_cell_style};
+
+    let p = crate::ui::theme::palette(state.color_mode);
+    let block = pane_block(" SCANNER · NEIGHBORS ", active, p);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let dim = Style::default().fg(p.dim);
+
+    let Some((px, py, pz)) = state.probe_sector_coords() else {
+        frame.render_widget(Paragraph::new(Line::styled("unknown probe position", dim)), inner);
+        return;
+    };
+
+    // Look up a scanned observation at exact relative coordinates.
+    let at = |x: i32, y: i32, z: i32| {
+        state.scan_history.iter().find(|s| {
+            let c = &s.relative_coordinates;
+            c.x.round() as i32 == x && c.y.round() as i32 == y && c.z.round() as i32 == z
+        })
+    };
+    // (symbol, color) for a neighbor cell — dim dot when never scanned.
+    let cell = |x: i32, y: i32, z: i32| match at(x, y, z) {
+        Some(s) => {
+            let (sym, st) = map_cell_style(s, p);
+            (sym.to_string(), st)
+        }
+        None => ("·".to_string(), dim),
+    };
+
+    let mut lines: Vec<Line> = Vec::new();
+    lines.push(Line::from(vec![
+        Span::styled("from ", dim),
+        Span::styled(format!("({px},{py},{pz})"), Style::default().fg(p.text)),
+    ]));
+    lines.push(Line::raw(""));
+
+    // XY plane cross around the probe (P), with the +X/-X row centred.
+    let (uy, us) = cell(px, py + 1, pz);
+    let (dy, ds) = cell(px, py - 1, pz);
+    let (lx, ls) = cell(px - 1, py, pz);
+    let (rx, rs) = cell(px + 1, py, pz);
+    lines.push(Line::from(vec![Span::raw("      "), Span::styled(uy, us), Span::styled("  +Y", dim)]));
+    lines.push(Line::from(vec![
+        Span::styled(lx, ls),
+        Span::styled(" -X   ", dim),
+        Span::styled("P", Style::default().fg(p.text).add_modifier(Modifier::BOLD)),
+        Span::styled("   +X ", dim),
+        Span::styled(rx, rs),
+    ]));
+    lines.push(Line::from(vec![Span::raw("      "), Span::styled(dy, ds), Span::styled("  -Y", dim)]));
+    lines.push(Line::raw(""));
+
+    // Z axis on its own row (out-of-plane).
+    let (zu, zus) = cell(px, py, pz + 1);
+    let (zd, zds) = cell(px, py, pz - 1);
+    lines.push(Line::from(vec![
+        Span::styled("+Z ", dim),
+        Span::styled(zu, zus),
+        Span::styled("    -Z ", dim),
+        Span::styled(zd, zds),
+    ]));
+    lines.push(Line::raw(""));
+
+    // Legend: one row per direction with coords, symbol, and what's known.
+    let dirs = [
+        ("+X", px + 1, py, pz),
+        ("-X", px - 1, py, pz),
+        ("+Y", px, py + 1, pz),
+        ("-Y", px, py - 1, pz),
+        ("+Z", px, py, pz + 1),
+        ("-Z", px, py, pz - 1),
+    ];
+    for (tag, x, y, z) in dirs {
+        let (sym, st, label, coord_color) = match at(x, y, z) {
+            Some(s) => {
+                let (sym, st) = map_cell_style(s, p);
+                (sym.to_string(), st, knowledge_label(&s.knowledge_level), sector_interest_color(s, p))
+            }
+            None => ("·".to_string(), dim, "unscanned", p.dim),
+        };
+        lines.push(Line::from(vec![
+            Span::styled(format!("{tag} "), dim),
+            Span::styled(sym, st),
+            Span::styled(format!(" ({x},{y},{z}) "), Style::default().fg(coord_color)),
+            Span::styled(label, dim),
+        ]));
+    }
+
+    frame.render_widget(Paragraph::new(lines), inner);
+}

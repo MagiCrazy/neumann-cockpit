@@ -32,6 +32,11 @@ pub enum MenuAction {
     // Storage pane
     RenameContainer,
     EditContainerRules,
+    // Scanner pane
+    ScanAround,
+    ScanDirection,
+    ScanObserve,
+    ScanFilter,
 }
 
 /// A single entry in a contextual action menu.
@@ -97,8 +102,42 @@ impl super::AppState {
             super::Pane::Inventory => Some(self.inventory_context_menu()),
             super::Pane::Probe => self.probe_context_menu(),
             super::Pane::Storage => self.storage_context_menu(),
+            super::Pane::Scanner => Some(self.scanner_context_menu()),
             _ => None,
         }
+    }
+
+    fn scanner_context_menu(&self) -> ContextMenu {
+        // Batch scans need a known probe position to offset from.
+        let has_pos = self.probe_sector_coords().is_some();
+        let pos_reason = (!has_pos).then(|| "unknown position".to_string());
+        let items = vec![
+            MenuItem {
+                action: MenuAction::ScanAround,
+                label: "Scan around (neighbors)".into(),
+                enabled: has_pos,
+                disabled_reason: pos_reason.clone(),
+            },
+            MenuItem {
+                action: MenuAction::ScanDirection,
+                label: "Scan a direction (×2)…".into(),
+                enabled: has_pos,
+                disabled_reason: pos_reason,
+            },
+            MenuItem {
+                action: MenuAction::ScanObserve,
+                label: "Observe coordinates…".into(),
+                enabled: true,
+                disabled_reason: None,
+            },
+            MenuItem {
+                action: MenuAction::ScanFilter,
+                label: format!("Cycle filter (now: {})", self.scan_filter.label()),
+                enabled: !self.scan_history.is_empty(),
+                disabled_reason: self.scan_history.is_empty().then(|| "no history".to_string()),
+            },
+        ];
+        ContextMenu { title: "SCANNER".into(), items, cursor: 0 }
     }
 
     fn storage_context_menu(&self) -> Option<ContextMenu> {

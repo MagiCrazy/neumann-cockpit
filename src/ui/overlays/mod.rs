@@ -14,6 +14,7 @@ pub(crate) mod object_actions;
 pub(crate) mod scut_network;
 pub(crate) mod pickers;
 pub(crate) mod repair;
+pub(crate) mod scanner;
 pub(crate) mod storage_move;
 pub(crate) mod travel;
 pub(crate) mod waypoints;
@@ -39,6 +40,7 @@ pub(crate) use pickers::{
     render_scut_relay_overlay,
 };
 pub(crate) use repair::render_repair_overlay;
+pub(crate) use scanner::render_scan_input_overlay;
 pub(crate) use storage_move::render_storage_move_overlay;
 pub(crate) use travel::render_travel_overlay;
 pub(crate) use waypoints::render_waypoints_overlay;
@@ -49,7 +51,7 @@ use crate::app::{
     JettisonInput, MineInput,
     MessagesInput, MindSnapshotInput, MissionsInput, ObjectActionInput, RecallInput, RecoverInput,
     RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput,
-    ScutNetworkInput, ScutRelayInput, StorageMoveInput, TravelInput, WaypointsInput,
+    ScanMode, ScutNetworkInput, ScutRelayInput, StorageMoveInput, TravelInput, WaypointsInput,
 };
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -152,6 +154,9 @@ pub(crate) fn render_active_overlays(frame: &mut Frame, area: Rect, state: &AppS
     }
     if !matches!(state.storage_move, StorageMoveInput::Inactive) {
         render_storage_move_overlay(frame, area, state);
+    }
+    if !matches!(state.scan_mode, ScanMode::Current) {
+        render_scan_input_overlay(frame, area, state);
     }
     if state.help_open {
         render_help_overlay(frame, area);

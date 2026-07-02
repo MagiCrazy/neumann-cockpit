@@ -1,6 +1,5 @@
 use crate::api::types::{
-    DangerLevel, DataFreshness, KnowledgeLevel,
-    MovementPhase, ProbeStatus, SectorObjectType, SectorObservation, SensorMode,
+    DangerLevel, KnowledgeLevel, MovementPhase, ProbeStatus, SectorObjectType, SectorObservation,
 };
 use crate::app::ColorMode;
 use ratatui::{
@@ -110,6 +109,27 @@ pub(crate) fn map_cell_symbol(s: &SectorObservation) -> (&'static str, Style) {
     ("·", Style::default().fg(Color::White))
 }
 
+/// Palette-aware version of [`map_cell_symbol`] for the phosphor cockpit.
+pub(crate) fn map_cell_style(s: &SectorObservation, p: Palette) -> (&'static str, Style) {
+    if let Some(objects) = &s.objects {
+        for obj in objects {
+            if matches!(obj.object_type, SectorObjectType::BlackHole) {
+                return ("◉", Style::default().fg(p.crit));
+            }
+            if matches!(obj.danger_level, Some(DangerLevel::Extreme)) {
+                return ("!", Style::default().fg(p.crit));
+            }
+            if matches!(obj.object_type, SectorObjectType::Star | SectorObjectType::SolarSystem) {
+                let has_minable = obj.minable_targets.as_ref().is_some_and(|t| !t.is_empty());
+                let style = Style::default().fg(p.warn);
+                return ("★", if has_minable { style.add_modifier(Modifier::BOLD) } else { style });
+            }
+        }
+        return ("●", Style::default().fg(p.good));
+    }
+    ("·", Style::default().fg(p.dim))
+}
+
 /// Short content summary of a scanned sector for the map info line.
 pub(crate) fn item_icon(item_type: &str) -> (&'static str, Color) {
     match item_type {
@@ -133,33 +153,29 @@ pub(crate) fn knowledge_label(k: &KnowledgeLevel) -> &'static str {
     }
 }
 
-pub(crate) fn knowledge_color(k: &KnowledgeLevel) -> Color {
+pub(crate) fn knowledge_color(k: &KnowledgeLevel, p: Palette) -> Color {
     match k {
-        KnowledgeLevel::Detailed => Color::Green,
-        KnowledgeLevel::NeighborScan => Color::Cyan,
-        KnowledgeLevel::DistantScan => Color::Yellow,
-        KnowledgeLevel::LongRangeEstimation => Color::Red,
-        KnowledgeLevel::Unknown => Color::DarkGray,
+        KnowledgeLevel::Detailed => p.good,
+        KnowledgeLevel::NeighborScan => p.accent,
+        KnowledgeLevel::DistantScan => p.warn,
+        KnowledgeLevel::LongRangeEstimation => p.crit,
+        KnowledgeLevel::Unknown => p.dim,
     }
 }
 
-pub(crate) fn freshness_label(f: &DataFreshness) -> &'static str {
-    match f {
-        DataFreshness::Live => "live",
-        DataFreshness::DegradedLive => "degraded live",
-        DataFreshness::Historical => "historical",
-        DataFreshness::Unavailable => "unavailable",
-        DataFreshness::Unknown => "?",
-    }
-}
-
-pub(crate) fn freshness_color(f: &DataFreshness) -> Color {
-    match f {
-        DataFreshness::Live => Color::Green,
-        DataFreshness::DegradedLive => Color::Yellow,
-        DataFreshness::Historical => Color::DarkGray,
-        DataFreshness::Unavailable => Color::Red,
-        DataFreshness::Unknown => Color::DarkGray,
+/// Palette-aware colour for a scanned object's type. The glyph still comes from
+/// [`object_icon`]; this maps the *meaning* onto the active palette so mono
+/// modes stay single-hue and semantic modes get green/yellow/red.
+pub(crate) fn object_color(t: &SectorObjectType, p: Palette) -> Color {
+    match t {
+        SectorObjectType::Star | SectorObjectType::SolarSystem => p.warn,
+        SectorObjectType::Planet => p.accent,
+        SectorObjectType::Asteroid | SectorObjectType::DriftingItem => p.text,
+        SectorObjectType::DustCloud => p.dim,
+        SectorObjectType::BlackHole => p.crit,
+        SectorObjectType::Manny | SectorObjectType::DeuteriumRefuelStation => p.good,
+        SectorObjectType::DetachedContainer | SectorObjectType::ScutRelay => p.accent,
+        SectorObjectType::Unknown => p.dim,
     }
 }
 
@@ -208,22 +224,6 @@ pub(crate) fn probe_status_style(s: &ProbeStatus) -> Style {
             Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
         }
         ProbeStatus::Unknown => Style::default().fg(Color::DarkGray),
-    }
-}
-
-pub(crate) fn sensor_dot(m: &SensorMode) -> &'static str {
-    match m {
-        SensorMode::Normal | SensorMode::Degraded | SensorMode::Blind | SensorMode::Unknown => "●",
-    }
-}
-
-
-pub(crate) fn sensor_style(m: &SensorMode) -> Style {
-    match m {
-        SensorMode::Normal => Style::default().fg(Color::Green),
-        SensorMode::Degraded => Style::default().fg(Color::Yellow),
-        SensorMode::Blind => Style::default().fg(Color::Red),
-        SensorMode::Unknown => Style::default().fg(Color::DarkGray),
     }
 }
 
@@ -282,19 +282,6 @@ pub(crate) fn gauge_color(ratio: f64) -> Color {
         Color::Yellow
     } else {
         Color::Red
-    }
-}
-
-/// Compact human age: "just now", "5m ago", "3h ago", "2d ago".
-pub fn format_age(secs: i64) -> String {
-    if secs < 60 {
-        "just now".to_string()
-    } else if secs < 3600 {
-        format!("{}m ago", secs / 60)
-    } else if secs < 86400 {
-        format!("{}h ago", secs / 3600)
-    } else {
-        format!("{}d ago", secs / 86400)
     }
 }
 
