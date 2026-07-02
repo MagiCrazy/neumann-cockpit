@@ -98,7 +98,7 @@ One unified phosphor theme (there is no classic/retro split any more). `theme.rs
  ↑↓ move · hl drill · z zoom · Enter act · ertdfgcvb pane · F1 hints
 ```
 
-**Keys** — `e r t d f g c v b` activate a pane · `j`/`k` (`↑`/`↓`) move the cursor · `l`/`→` drill in, `h`/`←` drill out (Missions → steps, Comms → message) · `Enter` opens the contextual action menu · `z` zooms the active pane full-screen · `Tab`/`Shift+Tab` cycle panes · `:` command mode (planned) · `F1` toggle hints · `F2` cycle color mode · `F5` refresh · `?` help · `q` quit · `Esc` closes menu / leaves zoom / drills up.
+**Keys** — `e r t d f g c v b` activate a pane · `j`/`k` (`↑`/`↓`) move the cursor · `l`/`→` drill in, `h`/`←` drill out (Missions → steps, Comms → message) · `Enter` opens the contextual action menu · `z` zooms the active pane full-screen · `Tab`/`Shift+Tab` cycle panes · `:` command mode · `F1` toggle hints · `F2` cycle color mode · `F5` refresh · `?` help · `q` quit · `Esc` closes menu / leaves zoom / drills up.
 
 **Contextual menu** (`Enter`) — built per active pane + selection (`build_context_menu` → `Vec<MenuItem>`, disabled items shown with a reason). Firing an item launches the existing wizard (`MenuAction` → the matching `*Input`). Panes with rich wizards (Missions, Comms, Storage, Sector objects) reuse their legacy overlays instead of the popup.
 
@@ -117,11 +117,13 @@ The four reused panels (Probe / Inventory / Scanner / Mannies) keep their intern
 - **Comms pane** (`Enter`) — messaging inbox/sent (mark read, compose to a probe/planet recipient); alerts + damage-warnings live in the same pane.
 - **Storage pane** (`Enter`) — container browser with capacity bars; content view, rename, routing-rules editor (none → priority → exclusion → strict).
 - **Sector pane** (`Enter` on an object) — object-action picker (mine / inspect / salvage / recover / deploy waypoint); an inactive `scut_relay` offers **turn on relay** (needs a star + integrated_circuit) and salvage.
-- **Travel** wizard — coordinate input (absolute, or relative with a leading `+`), live parity check, fuel/ETA preview + confirmation.
-- **Mind-snapshot reassign** — only when the probe is dead or trapped by a black hole (`probe.alert`); reassigns the snapshot to a fresh probe.
+- **Map pane** — compact summary; `z` opens the full isometric map (pan `hjkl`, `g` travel to the centred sector, `c` coordinate center). `Enter` menu: open map, **Travel to coordinates…**, **Jump to visited sector…** (picker over `visited_sectors`), **Waypoints…** (picker over bookmarks/stars/mineable targets). Scanner `Enter` also offers **Travel here** to the selected observation.
+- **Travel** wizard — coordinate input (absolute, or relative with a leading `+`), live parity check, fuel/ETA preview + confirmation. Launched from Map/Scanner or `:travel`.
+- **Mind-snapshot reassign** — only when the probe is dead or trapped by a black hole (`probe.alert`); reassigns the snapshot to a fresh probe (Probe pane `Enter`).
+- **Command mode** (`:`) — `focus <pane>` · `travel <x y z|+dx dy dz>` · `goto <x y z>` · `filter <all|objects|minable|danger>` · `refresh` · `theme <mode>` · `zoom` · `help` · `q`. `Tab` completes the verb; verbs live in `AppState::run_command` (`app/command.rs`).
 - Shared bits: `EndpointId` is an untagged int|string (probe id | planet object id). `Manny.taskVisibility` (`local` / `scut_network` / `too_far`) drives remote display (`≣ via SCUT` / `too far`).
 
-**Not yet wired into the cockpit** (wizards that exist but have no launcher in the new interface — follow-ups): Travel, the full isometric Map overlay (the Map pane is a compact summary), Waypoints, SCUT-network inspect, mind-snapshot reassign, deploy-waypoint from Inventory, and drop-storage-container. Command mode (`:`) will cover several of these.
+**Remaining follow-ups** (wizards that exist but still have no cockpit launcher): SCUT-network inspect and deploy-waypoint from Inventory. Everything else — Travel, the full isometric Map (`z` on the Map pane), Waypoints, mind-snapshot reassign, drop-storage-container, and command mode (`:`) — is wired.
 
 ## Implemented API endpoints (API v63)
 
