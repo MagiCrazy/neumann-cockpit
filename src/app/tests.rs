@@ -1453,3 +1453,90 @@ fn manny_task_progress_complete_when_past_end() {
     m.task_estimated_end_time = Some(chrono::Utc::now() - chrono::Duration::seconds(10));
     assert_eq!(manny_task_progress(&m), 1.0);
 }
+
+// ── new v63 planet/asteroid fields ────────────────────────────────────────
+
+#[test]
+fn sector_object_planet_science_fields_deserialize() {
+    use crate::api::types::SectorObject;
+    let planet: SectorObject = serde_json::from_str(r#"{
+        "type": "planet",
+        "name": "Kepler-relative-1",
+        "summary": "temperate ocean world",
+        "category": "ocean",
+        "habitabilityScore": 0.82,
+        "mannyMineable": true,
+        "resourceTypes": ["metals", "ice"],
+        "resourceComposition": {"deuterium": 0.0, "metals": 0.6, "ice": 0.4, "carbon_compounds": 0.0}
+    }"#).unwrap();
+    assert_eq!(planet.category.as_deref(), Some("ocean"));
+    assert_eq!(planet.habitability_score, Some(0.82));
+    assert_eq!(planet.manny_mineable, Some(true));
+    assert_eq!(planet.resource_types, vec!["metals", "ice"]);
+    let comp = planet.resource_composition.expect("composition");
+    assert!((comp.metals - 0.6).abs() < 1e-9 && (comp.ice - 0.4).abs() < 1e-9);
+}
+
+#[test]
+fn sector_object_asteroid_reserves_deserialize() {
+    use crate::api::types::SectorObject;
+    let ast: SectorObject = serde_json::from_str(r#"{
+        "type": "asteroid",
+        "name": "AX-12",
+        "summary": "carbonaceous",
+        "composition": "carbonaceous",
+        "resourceAmounts": {"deuterium": 0.0, "metals": 1.25, "ice": 0.0, "carbon_compounds": 3.5}
+    }"#).unwrap();
+    assert_eq!(ast.composition.as_deref(), Some("carbonaceous"));
+    let amt = ast.resource_amounts.expect("amounts");
+    assert!((amt.carbon_compounds - 3.5).abs() < 1e-9);
+    // Absent fields stay None / empty.
+    assert!(ast.category.is_none() && ast.resource_types.is_empty());
+}
+
+#[test]
+fn scanner_objects_number_unnamed_by_type() {
+    let mut state = AppState::default();
+    state.probe = Some(probe_at(0., 0., 0.));
+    // Two unnamed top-level asteroids + one named planet.
+    state.scan_history = vec![make_sector_with_objects(0., 0., 0., r#"[
+        {"type": "asteroid", "id": "a1", "name": null, "summary": ""},
+        {"type": "planet", "id": "p1", "name": "Vulcan", "summary": ""},
+        {"type": "asteroid", "id": "a2", "name": null, "summary": ""}
+    ]"#)];
+    let entries = state.scanner_objects();
+    let by_id = |id: &str| entries.iter().find(|e| e.id == id).unwrap().name.clone();
+    assert_eq!(by_id("a1"), "asteroid #1");
+    assert_eq!(by_id("a2"), "asteroid #2");
+    assert_eq!(by_id("p1"), "Vulcan"); // real names kept
+}
+
+// ── mining target reserves ────────────────────────────────────────────────
+
+#[test]
+fn minable_target_reserves_reads_types_and_amounts() {
+    let mut state = AppState::default();
+    state.scan_history = vec![make_sector_with_objects(0., 0., 0., r#"[
+        {"type": "asteroid", "id": "ast-1", "name": "AX", "summary": "",
+         "resourceTypes": ["metals", "ice"],
+         "resourceAmounts": {"deuterium": 0.0, "metals": 2.0, "ice": 1.0, "carbon_compounds": 0.0}}
+    ]"#)];
+    let (flags, res) = state.minable_target_reserves("ast-1").expect("reserves");
+    assert_eq!(flags, [false, true, true, false]);
+    assert_eq!(res, [0.0, 2.0, 1.0, 0.0]);
+    // Sum of selected present reserves (metals+ice).
+    assert_eq!(state.mine_reserve_max("ast-1", [false, true, true, false]), 3.0);
+    // Unknown object → None.
+    assert!(state.minable_target_reserves("nope").is_none());
+}
+
+#[test]
+fn mine_reserve_max_falls_back_to_free_capacity_without_reserves() {
+    let mut state = AppState::default();
+    state.probe = Some(make_probe(0.5, 0., 0., 0.));
+    state.scan_history = vec![make_sector_with_objects(0., 0., 0., r#"[
+        {"type": "asteroid", "id": "ast-1", "name": "AX", "summary": "", "resourceTypes": ["metals"]}
+    ]"#)];
+    // No resourceAmounts → reserves are 0 → fall back to free capacity (0.5).
+    assert_eq!(state.mine_reserve_max("ast-1", [false, true, false, false]), 0.5);
+}

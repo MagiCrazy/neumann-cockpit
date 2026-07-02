@@ -1,4 +1,4 @@
-use crate::api::types::{DangerLevel, SectorObject, SectorObjectType, SensorMode};
+use crate::api::types::{DangerLevel, ResourceShares, SectorObject, SectorObjectType, SensorMode};
 use crate::app::AppState;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -9,8 +9,8 @@ use ratatui::{
 };
 
 use crate::ui::theme::{
-    knowledge_color, knowledge_label, map_cell_style, object_color, object_icon, palette,
-    pane_block, ratio_color, Palette,
+    knowledge_color, knowledge_label, map_cell_style, object_color, object_icon, object_type_label,
+    palette, pane_block, ratio_color, Palette,
 };
 // ── Scanner panel ─────────────────────────────────────────────────────────────
 //
@@ -301,6 +301,35 @@ pub(crate) fn sector_interest_color(s: &crate::api::types::SectorObservation, p:
     p.dim
 }
 
+/// A one-line breakdown of the four mineable resources, skipping zeros.
+/// `percent` renders shares as `40%`; otherwise reserves as `1.20`.
+pub(crate) fn resource_shares_line<'a>(
+    label: &'a str,
+    shares: Option<&ResourceShares>,
+    percent: bool,
+    p: Palette,
+) -> Option<Line<'a>> {
+    let s = shares?;
+    let parts = [
+        ("metals", s.metals),
+        ("ice", s.ice),
+        ("carbon", s.carbon_compounds),
+        ("deut", s.deuterium),
+    ];
+    let mut spans = vec![Span::styled(label, Style::default().fg(p.dim))];
+    let mut any = false;
+    for (name, v) in parts {
+        if v <= 0.0 {
+            continue;
+        }
+        any = true;
+        let val = if percent { format!("{:.0}%", v * 100.0) } else { format!("{v:.2}") };
+        spans.push(Span::styled(format!("{name} "), Style::default().fg(p.dim)));
+        spans.push(Span::styled(format!("{val}  "), Style::default().fg(p.text)));
+    }
+    any.then_some(Line::from(spans))
+}
+
 /// Lines for one scanned object. `compact` drops the scientific detail
 /// (mass / radius / uid and nested-body dimensions) shown only in the zoom view.
 pub(crate) fn sector_object_lines<'a>(obj: &'a SectorObject, compact: bool, p: Palette) -> Vec<Line<'a>> {
@@ -309,7 +338,11 @@ pub(crate) fn sector_object_lines<'a>(obj: &'a SectorObject, compact: bool, p: P
     let glyph = object_icon(&obj.object_type).0;
     let color = object_color(&obj.object_type, p);
     let estimated = if obj.estimated.unwrap_or(false) { "~ " } else { "" };
-    let name = obj.name.as_deref().unwrap_or("unnamed");
+    let name = obj
+        .name
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| object_type_label(&obj.object_type));
     let danger = obj
         .danger_level
         .as_ref()
@@ -380,6 +413,29 @@ pub(crate) fn sector_object_lines<'a>(obj: &'a SectorObject, compact: bool, p: P
             }
             lines.push(Line::from(detail_spans));
         }
+
+        // Planet / asteroid science (v63 fields).
+        if let Some(cat) = &obj.category {
+            lines.push(Line::from(vec![Span::styled("  class ", dim), Span::styled(cat.as_str(), text)]));
+        }
+        if let Some(h) = obj.habitability_score {
+            lines.push(Line::from(vec![
+                Span::styled("  habitability ", dim),
+                Span::styled(format!("{:.0}%", h * 100.0), Style::default().fg(ratio_color(h, p))),
+            ]));
+        }
+        if let Some(comp) = &obj.composition {
+            lines.push(Line::from(vec![Span::styled("  composition ", dim), Span::styled(comp.as_str(), text)]));
+        }
+        if obj.manny_mineable == Some(true) {
+            lines.push(Line::from(Span::styled("  ⛏ mineable", Style::default().fg(p.warn))));
+        }
+        if let Some(line) = resource_shares_line("  shares ", obj.resource_composition.as_ref(), true, p) {
+            lines.push(line);
+        }
+        if let Some(line) = resource_shares_line("  reserves ", obj.resource_amounts.as_ref(), false, p) {
+            lines.push(line);
+        }
     }
 
     // Minable asteroid targets with resource types (kept in both views —
@@ -388,7 +444,7 @@ pub(crate) fn sector_object_lines<'a>(obj: &'a SectorObject, compact: bool, p: P
         for target in targets {
             let tglyph = object_icon(&target.object_type).0;
             let tcolor = object_color(&target.object_type, p);
-            let name = target.name.as_deref().unwrap_or("unnamed");
+            let name = target.name.as_deref().filter(|s| !s.trim().is_empty()).unwrap_or_else(|| object_type_label(&target.object_type));
             let mut spans: Vec<Span> = vec![
                 Span::raw("  "),
                 Span::styled(tglyph, Style::default().fg(tcolor)),
@@ -416,7 +472,7 @@ pub(crate) fn sector_object_lines<'a>(obj: &'a SectorObject, compact: bool, p: P
     for target in &obj.bookmark_targets {
         let tglyph = object_icon(&target.object_type).0;
         let tcolor = object_color(&target.object_type, p);
-        let name = target.name.as_deref().unwrap_or("unnamed");
+        let name = target.name.as_deref().filter(|s| !s.trim().is_empty()).unwrap_or_else(|| object_type_label(&target.object_type));
         let mut spans: Vec<Span> = vec![
             Span::raw("  "),
             Span::styled(tglyph, Style::default().fg(tcolor)),

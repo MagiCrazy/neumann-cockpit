@@ -53,9 +53,10 @@ use crate::app::{
     RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput,
     ScanMode, ScutNetworkInput, ScutRelayInput, StorageMoveInput, TravelInput, WaypointsInput,
 };
+use crate::ui::theme::{palette, Palette};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
@@ -159,7 +160,7 @@ pub(crate) fn render_active_overlays(frame: &mut Frame, area: Rect, state: &AppS
         render_scan_input_overlay(frame, area, state);
     }
     if state.help_open {
-        render_help_overlay(frame, area);
+        render_help_overlay(frame, area, palette(state.color_mode));
     }
 }
 
@@ -173,6 +174,7 @@ pub(crate) fn centered_rect(width: u16, height: u16, r: Rect) -> Rect {
 pub(crate) fn render_pick_list(
     frame: &mut Frame,
     area: Rect,
+    p: Palette,
     title: &str,
     width: u16,
     height: u16,
@@ -188,7 +190,7 @@ pub(crate) fn render_pick_list(
         .title(title.to_owned())
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan));
+        .border_style(Style::default().fg(p.accent));
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
 
@@ -198,38 +200,35 @@ pub(crate) fn render_pick_list(
         .split(inner);
 
     let mut lines: Vec<Line> = Vec::new();
-    if let Some(p) = prompt {
-        lines.push(Line::from(Span::styled(p.to_owned(), Style::default().fg(Color::Cyan))));
+    if let Some(prompt) = prompt {
+        lines.push(Line::from(Span::styled(prompt.to_owned(), Style::default().fg(p.accent))));
         lines.push(Line::default());
     }
     for (i, name) in items.iter().enumerate() {
         if i == selection {
             lines.push(Line::from(vec![
-                Span::styled("▶ ", Style::default().fg(Color::Yellow)),
-                Span::styled(name.to_string(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                Span::styled("▶ ", Style::default().fg(p.accent)),
+                Span::styled(name.to_string(), Style::default().fg(p.text).add_modifier(Modifier::BOLD)),
             ]));
         } else {
             lines.push(Line::from(vec![
                 Span::raw("  "),
-                Span::styled(name.to_string(), Style::default().fg(Color::DarkGray)),
+                Span::styled(name.to_string(), Style::default().fg(p.dim)),
             ]));
         }
     }
     if let Some(err) = error {
         lines.push(Line::default());
-        lines.push(Line::from(Span::styled(
-            format!("✗ {err}"),
-            Style::default().fg(Color::Red),
-        )));
+        lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(p.crit))));
     }
     frame.render_widget(Paragraph::new(lines), rows[0]);
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
+            Span::styled("[↑/↓]", Style::default().fg(p.accent)),
             Span::raw(" select  "),
-            Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
             Span::raw(format!(" {action}  ")),
-            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::styled("[Esc]", Style::default().fg(p.accent)),
             Span::raw(" cancel"),
         ])),
         rows[1],

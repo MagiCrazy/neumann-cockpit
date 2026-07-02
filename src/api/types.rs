@@ -692,6 +692,7 @@ pub struct WaypointBookmarkTarget {
     pub mass_unit: Option<String>,
     pub radius: Option<f64>,
     pub radius_unit: Option<String>,
+    pub category: Option<String>,
     pub habitability_score: Option<f64>,
     #[serde(default)]
     pub waypoint_bookmarks: Vec<WaypointBookmarkHistory>,
@@ -703,6 +704,21 @@ pub struct SectorProbePresence {
     pub id: i64,
     pub name: String,
     pub moving: bool,
+}
+
+/// The four mineable-resource values shared by `resourceComposition`
+/// (normalized shares) and `resourceAmounts` (remaining reserves). JSON keys
+/// are snake_case, so this struct intentionally has no `rename_all`.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ResourceShares {
+    #[serde(default)]
+    pub deuterium: f64,
+    #[serde(default)]
+    pub metals: f64,
+    #[serde(default)]
+    pub ice: f64,
+    #[serde(default)]
+    pub carbon_compounds: f64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -720,6 +736,26 @@ pub struct SectorObject {
     pub radius_unit: Option<String>,
     pub danger_level: Option<DangerLevel>,
     pub habitability_score: Option<f64>,
+    /// Planet classification (present on planets).
+    pub category: Option<String>,
+    /// Asteroid composition class (iron, silicate, carbonaceous, ice, …).
+    pub composition: Option<String>,
+    /// True when a Manny can mine this object (planets & asteroids).
+    pub manny_mineable: Option<bool>,
+    /// Raw sensor material hints (asteroids); prefer resource_types for logic.
+    #[serde(default)]
+    pub resources: Vec<String>,
+    /// Mineable resource types present (planets, asteroids, stations).
+    #[serde(default)]
+    pub resource_types: Vec<String>,
+    /// Normalized mineable-resource shares (sum ≈ 1).
+    pub resource_composition: Option<ResourceShares>,
+    /// Remaining reserves in equivalent earth containers (asteroids).
+    pub resource_amounts: Option<ResourceShares>,
+    /// Solar-system body counts.
+    pub star_count: Option<i64>,
+    pub planet_count: Option<i64>,
+    pub orbital_body_count: Option<i64>,
     pub salvageable: Option<bool>,
     pub manny_state: Option<String>,
     pub manny_uid: Option<String>,
@@ -803,8 +839,8 @@ pub struct MinableTarget {
     pub name: Option<String>,
     pub mass: Option<f64>,
     pub resource_types: Option<Vec<String>>,
-    pub resource_amounts: Option<serde_json::Value>,
-    pub resource_composition: Option<serde_json::Value>,
+    pub resource_amounts: Option<ResourceShares>,
+    pub resource_composition: Option<ResourceShares>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

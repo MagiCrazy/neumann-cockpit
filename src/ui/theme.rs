@@ -179,6 +179,25 @@ pub(crate) fn object_color(t: &SectorObjectType, p: Palette) -> Color {
     }
 }
 
+/// Human label for an object type, used to synthesize a name (`asteroid #2`)
+/// when the API returns none.
+pub(crate) fn object_type_label(t: &SectorObjectType) -> &'static str {
+    match t {
+        SectorObjectType::Star => "star",
+        SectorObjectType::Planet => "planet",
+        SectorObjectType::Asteroid => "asteroid",
+        SectorObjectType::DustCloud => "dust cloud",
+        SectorObjectType::BlackHole => "black hole",
+        SectorObjectType::SolarSystem => "solar system",
+        SectorObjectType::Manny => "manny",
+        SectorObjectType::DriftingItem => "drifting item",
+        SectorObjectType::DetachedContainer => "container",
+        SectorObjectType::DeuteriumRefuelStation => "fuel station",
+        SectorObjectType::ScutRelay => "SCUT relay",
+        SectorObjectType::Unknown => "object",
+    }
+}
+
 pub(crate) fn object_icon(t: &SectorObjectType) -> (&'static str, Color) {
     match t {
         SectorObjectType::Star => ("★", Color::Yellow),

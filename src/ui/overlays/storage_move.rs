@@ -1,7 +1,8 @@
+use crate::ui::theme::{palette, Palette};
 use crate::app::{AppState, StorageMoveInput, MOVE_RESOURCE_TYPES};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
     Frame,
@@ -9,14 +10,14 @@ use ratatui::{
 
 use super::{centered_rect, render_pick_list};
 
-fn framed(title: &str, area: Rect, width: u16, height: u16, frame: &mut Frame) -> [Rect; 2] {
+fn framed(p: Palette, title: &str, area: Rect, width: u16, height: u16, frame: &mut Frame) -> [Rect; 2] {
     let popup = centered_rect(width, height, area);
     frame.render_widget(Clear, popup);
     let block = Block::default()
         .title(title.to_owned())
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan));
+        .border_style(Style::default().fg(p.accent));
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
     let rows = Layout::default()
@@ -27,11 +28,11 @@ fn framed(title: &str, area: Rect, width: u16, height: u16, frame: &mut Frame) -
 }
 
 /// One `label: < value >` form row, highlighted when active.
-fn field_row(label: &str, value: String, active: bool, editing: bool) -> Line<'static> {
+fn field_row(p: Palette, label: &str, value: String, active: bool, editing: bool) -> Line<'static> {
     let lab_style = if active {
-        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        Style::default().fg(p.accent).add_modifier(Modifier::BOLD)
     } else {
-        Style::default().fg(Color::DarkGray)
+        Style::default().fg(p.dim)
     };
     let val = if editing {
         format!("{value}█")
@@ -41,9 +42,9 @@ fn field_row(label: &str, value: String, active: bool, editing: bool) -> Line<'s
         format!("  {value}  ")
     };
     let val_style = if active {
-        Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+        Style::default().fg(p.text).add_modifier(Modifier::BOLD)
     } else {
-        Style::default().fg(Color::Gray)
+        Style::default().fg(p.text)
     };
     Line::from(vec![
         Span::styled(format!("{label:<10}"), lab_style),
@@ -52,47 +53,48 @@ fn field_row(label: &str, value: String, active: bool, editing: bool) -> Line<'s
 }
 
 pub(crate) fn render_storage_move_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let p = palette(state.color_mode);
     match &state.storage_move {
         StorageMoveInput::Inactive => {}
         StorageMoveInput::PickManny { mannies, selection } => {
             let names: Vec<&str> = mannies.iter().map(|(_, n)| n.as_str()).collect();
             let height = (mannies.len() as u16 + 6).min(18);
-            render_pick_list(frame, area, " STORAGE MOVE — SELECT MANNY ", 52, height,
+            render_pick_list(frame, area, p, " STORAGE MOVE — SELECT MANNY ", 52, height,
                 None, &names, *selection, None, "select");
         }
         StorageMoveInput::PickKind { selection, .. } => {
-            render_pick_list(frame, area, " STORAGE MOVE — KIND ", 46, 8,
+            render_pick_list(frame, area, p, " STORAGE MOVE — KIND ", 46, 8,
                 None, &["resource", "item"], *selection, None, "select");
         }
         StorageMoveInput::ConfigureResource {
             containers, resource_idx, from_sel, to_sel, amount_buf, field, error, ..
         } => {
-            let [body, footer] = framed(" STORAGE MOVE — RESOURCE ", area, 56, 9, frame);
+            let [body, footer] = framed(p, " STORAGE MOVE — RESOURCE ", area, 56, 9, frame);
             let cname = |i: usize| containers.get(i).map(|(_, l)| l.clone()).unwrap_or_default();
             let lines = vec![
-                field_row("Resource:", MOVE_RESOURCE_TYPES[*resource_idx].to_string(), *field == 0, false),
-                field_row("From:", cname(*from_sel), *field == 1, false),
-                field_row("To:", cname(*to_sel), *field == 2, false),
-                field_row("Amount:", format!("{amount_buf} ECE"), *field == 3, *field == 3),
-                error_line(error),
+                field_row(p, "Resource:", MOVE_RESOURCE_TYPES[*resource_idx].to_string(), *field == 0, false),
+                field_row(p, "From:", cname(*from_sel), *field == 1, false),
+                field_row(p, "To:", cname(*to_sel), *field == 2, false),
+                field_row(p, "Amount:", format!("{amount_buf} ECE"), *field == 3, *field == 3),
+                error_line(p, error),
             ];
             frame.render_widget(Paragraph::new(lines), body);
-            frame.render_widget(form_footer(), footer);
+            frame.render_widget(form_footer(p), footer);
         }
         StorageMoveInput::ConfigureItem {
             containers, items, to_sel, item_cursor, field, error, ..
         } => {
             let height = (items.len() as u16 + 7).clamp(10, 22);
-            let [body, footer] = framed(" STORAGE MOVE — ITEMS ", area, 60, height, frame);
+            let [body, footer] = framed(p, " STORAGE MOVE — ITEMS ", area, 60, height, frame);
             let rows = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Length(2), Constraint::Min(1)])
                 .split(body);
 
             let dest = containers.get(*to_sel).map(|(_, l)| l.clone()).unwrap_or_default();
-            let mut head = vec![field_row("To:", dest, *field == 1, false)];
+            let mut head = vec![field_row(p, "To:", dest, *field == 1, false)];
             if let Some(err) = error {
-                head.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(Color::Red))));
+                head.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(p.crit))));
             }
             frame.render_widget(Paragraph::new(head), rows[0]);
 
@@ -100,10 +102,10 @@ pub(crate) fn render_storage_move_overlay(frame: &mut Frame, area: Rect, state: 
                 .iter()
                 .map(|(_, label, sel)| {
                     let mark = if *sel { "[x] " } else { "[ ] " };
-                    let color = if *sel { Color::Green } else { Color::DarkGray };
+                    let color = if *sel { p.good } else { p.dim };
                     ListItem::new(Line::from(vec![
                         Span::styled(mark, Style::default().fg(color)),
-                        Span::styled(label.clone(), Style::default().fg(Color::White)),
+                        Span::styled(label.clone(), Style::default().fg(p.text)),
                     ]))
                 })
                 .collect();
@@ -118,42 +120,42 @@ pub(crate) fn render_storage_move_overlay(frame: &mut Frame, area: Rect, state: 
                 ls.select(Some((*item_cursor).min(items.len() - 1)));
             }
             frame.render_stateful_widget(list, rows[1], &mut ls);
-            frame.render_widget(item_footer(), footer);
+            frame.render_widget(item_footer(p), footer);
         }
     }
 }
 
-fn error_line(error: &Option<String>) -> Line<'static> {
+fn error_line(p: Palette, error: &Option<String>) -> Line<'static> {
     match error {
-        Some(err) => Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(Color::Red))),
+        Some(err) => Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(p.crit))),
         None => Line::default(),
     }
 }
 
-fn form_footer() -> Paragraph<'static> {
+fn form_footer(p: Palette) -> Paragraph<'static> {
     Paragraph::new(Line::from(vec![
-        Span::styled("[↑/↓]", Style::default().fg(Color::Cyan)),
+        Span::styled("[↑/↓]", Style::default().fg(p.accent)),
         Span::raw(" field  "),
-        Span::styled("[←/→]", Style::default().fg(Color::Cyan)),
+        Span::styled("[←/→]", Style::default().fg(p.accent)),
         Span::raw(" change  "),
-        Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+        Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
         Span::raw(" move  "),
-        Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+        Span::styled("[Esc]", Style::default().fg(p.accent)),
         Span::raw(" cancel"),
     ]))
 }
 
-fn item_footer() -> Paragraph<'static> {
+fn item_footer(p: Palette) -> Paragraph<'static> {
     Paragraph::new(Line::from(vec![
-        Span::styled("[Tab]", Style::default().fg(Color::Cyan)),
+        Span::styled("[Tab]", Style::default().fg(p.accent)),
         Span::raw(" pane  "),
-        Span::styled("[Space]", Style::default().fg(Color::Cyan)),
+        Span::styled("[Space]", Style::default().fg(p.accent)),
         Span::raw(" toggle  "),
-        Span::styled("[←/→]", Style::default().fg(Color::Cyan)),
+        Span::styled("[←/→]", Style::default().fg(p.accent)),
         Span::raw(" dest  "),
-        Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+        Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
         Span::raw(" move  "),
-        Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+        Span::styled("[Esc]", Style::default().fg(p.accent)),
         Span::raw(" cancel"),
     ]))
 }

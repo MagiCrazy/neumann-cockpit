@@ -1,7 +1,8 @@
+use crate::ui::theme::palette;
 use crate::app::{AppState, ContainerRulesInput, RenameContainerInput};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
     Frame,
@@ -10,6 +11,7 @@ use ratatui::{
 use super::centered_rect;
 
 pub(crate) fn render_rename_container_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let p = palette(state.color_mode);
     let RenameContainerInput::Typing { ref current_label, ref buf, ref error, .. } =
         state.rename_container
     else {
@@ -22,7 +24,7 @@ pub(crate) fn render_rename_container_overlay(frame: &mut Frame, area: Rect, sta
         .title(format!(" RENAME — {current_label} "))
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan));
+        .border_style(Style::default().fg(p.accent));
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
 
@@ -32,21 +34,21 @@ pub(crate) fn render_rename_container_overlay(frame: &mut Frame, area: Rect, sta
         .split(inner);
 
     let mut lines: Vec<Line> = vec![Line::from(vec![
-        Span::styled("Label: ", Style::default().fg(Color::Cyan)),
+        Span::styled("Label: ", Style::default().fg(p.accent)),
         Span::raw(buf.as_str()),
-        Span::styled("█", Style::default().fg(Color::Cyan)),
+        Span::styled("█", Style::default().fg(p.accent)),
     ])];
     if let Some(err) = error {
         lines.push(Line::default());
-        lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(Color::Red))));
+        lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(p.crit))));
     }
 
     frame.render_widget(Paragraph::new(lines), rows[0]);
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
             Span::raw(" rename  "),
-            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::styled("[Esc]", Style::default().fg(p.accent)),
             Span::raw(" cancel"),
         ])),
         rows[1],
@@ -54,6 +56,7 @@ pub(crate) fn render_rename_container_overlay(frame: &mut Frame, area: Rect, sta
 }
 
 pub(crate) fn render_container_rules_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let p = palette(state.color_mode);
     let ContainerRulesInput::Editing {
         ref container_label,
         ref types,
@@ -75,7 +78,7 @@ pub(crate) fn render_container_rules_overlay(frame: &mut Frame, area: Rect, stat
         .title(format!(" ROUTING RULES — {container_label} "))
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan));
+        .border_style(Style::default().fg(p.accent));
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
 
@@ -86,13 +89,13 @@ pub(crate) fn render_container_rules_overlay(frame: &mut Frame, area: Rect, stat
 
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("P", Style::default().fg(Color::Green)),
+            Span::styled("P", Style::default().fg(p.good)),
             Span::raw(" priority  "),
-            Span::styled("E", Style::default().fg(Color::Yellow)),
+            Span::styled("E", Style::default().fg(p.warn)),
             Span::raw(" exclude  "),
-            Span::styled("S", Style::default().fg(Color::Red)),
+            Span::styled("S", Style::default().fg(p.crit)),
             Span::raw(" strict  "),
-            Span::styled("·", Style::default().fg(Color::DarkGray)),
+            Span::styled("·", Style::default().fg(p.dim)),
             Span::raw(" none"),
         ])),
         rows[0],
@@ -102,17 +105,17 @@ pub(crate) fn render_container_rules_overlay(frame: &mut Frame, area: Rect, stat
         .iter()
         .map(|ty| {
             let (tag, color) = if priority.iter().any(|t| t == ty) {
-                ("[P]", Color::Green)
+                ("[P]", p.good)
             } else if exclusion.iter().any(|t| t == ty) {
-                ("[E]", Color::Yellow)
+                ("[E]", p.warn)
             } else if strict_exclusion.iter().any(|t| t == ty) {
-                ("[S]", Color::Red)
+                ("[S]", p.crit)
             } else {
-                ("[ ]", Color::DarkGray)
+                ("[ ]", p.dim)
             };
             ListItem::new(Line::from(vec![
                 Span::styled(format!("{tag} "), Style::default().fg(color).add_modifier(Modifier::BOLD)),
-                Span::styled(ty.clone(), Style::default().fg(Color::White)),
+                Span::styled(ty.clone(), Style::default().fg(p.text)),
             ]))
         })
         .collect();
@@ -126,16 +129,16 @@ pub(crate) fn render_container_rules_overlay(frame: &mut Frame, area: Rect, stat
     frame.render_stateful_widget(list, rows[1], &mut ls);
 
     let footer = if let Some(err) = error {
-        Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(Color::Red)))
+        Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(p.crit)))
     } else {
         Line::from(vec![
-            Span::styled("[Space]", Style::default().fg(Color::Cyan)),
+            Span::styled("[Space]", Style::default().fg(p.accent)),
             Span::raw(" cycle  "),
-            Span::styled("[Del]", Style::default().fg(Color::Cyan)),
+            Span::styled("[Del]", Style::default().fg(p.accent)),
             Span::raw(" clear  "),
-            Span::styled("[Enter]", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
             Span::raw(" save  "),
-            Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+            Span::styled("[Esc]", Style::default().fg(p.accent)),
             Span::raw(" cancel"),
         ])
     };

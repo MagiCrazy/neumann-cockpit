@@ -4,13 +4,13 @@ use crate::api::types::{
 use crate::app::AppState;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
 
-use crate::ui::theme::{format_duration, map_cell_symbol};
+use crate::ui::theme::{format_duration, map_cell_symbol, palette};
 use super::centered_rect;
 pub(crate) fn sector_brief(s: &SectorObservation) -> String {
     let Some(objects) = &s.objects else {
@@ -50,6 +50,7 @@ pub(crate) fn sector_brief(s: &SectorObservation) -> String {
 }
 
 pub(crate) fn render_map_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let p = palette(state.color_mode);
     use std::collections::HashMap;
 
     let popup = centered_rect(66, 24, area);
@@ -62,11 +63,11 @@ pub(crate) fn render_map_overlay(frame: &mut Frame, area: Rect, state: &AppState
                 state.map.center_x, state.map.y_layer, state.map.center_z,
                 state.map.y_layer,
             ),
-            Style::default().fg(Color::Cyan),
+            Style::default().fg(p.accent),
         ))
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan));
+        .border_style(Style::default().fg(p.accent));
     let map_inner = block.inner(popup);
     frame.render_widget(block, popup);
 
@@ -127,18 +128,18 @@ pub(crate) fn render_map_overlay(frame: &mut Frame, area: Rect, state: &AppState
     let mut info_spans: Vec<Span> = vec![
         Span::styled(
             format!("({cx},{y},{cz})"),
-            Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+            Style::default().fg(p.text).add_modifier(Modifier::BOLD),
         ),
     ];
     if let Some(d) = state.map_center_distance() {
         info_spans.push(Span::styled(
             format!("  d:{d}"),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(p.dim),
         ));
         if d > 0 {
             info_spans.push(Span::styled(
                 format!("  ETA ~{}", format_duration((5 + 35 * d) * 60)),
-                Style::default().fg(Color::Yellow),
+                Style::default().fg(p.warn),
             ));
         }
     }
@@ -160,29 +161,29 @@ pub(crate) fn render_map_overlay(frame: &mut Frame, area: Rect, state: &AppState
         });
     info_spans.push(Span::styled(
         format!("  {brief}"),
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(p.dim),
     ));
     frame.render_widget(Paragraph::new(Line::from(info_spans)), info_area);
 
     // ── Legend ──
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("⊕", Style::default().fg(Color::Cyan)),
-            Span::styled(" probe  ", Style::default().fg(Color::DarkGray)),
-            Span::styled("★", Style::default().fg(Color::Yellow)),
-            Span::styled(" star  ", Style::default().fg(Color::DarkGray)),
-            Span::styled("●", Style::default().fg(Color::Green)),
-            Span::styled(" objects  ", Style::default().fg(Color::DarkGray)),
-            Span::styled("◉", Style::default().fg(Color::Magenta)),
-            Span::styled(" black hole  ", Style::default().fg(Color::DarkGray)),
-            Span::styled("!", Style::default().fg(Color::Red)),
-            Span::styled(" danger  ", Style::default().fg(Color::DarkGray)),
-            Span::styled("○", Style::default().fg(Color::Blue)),
-            Span::styled(" visited  ", Style::default().fg(Color::DarkGray)),
-            Span::styled("·", Style::default().fg(Color::White)),
-            Span::styled(" empty  ", Style::default().fg(Color::DarkGray)),
-            Span::styled("·", Style::default().fg(Color::DarkGray)),
-            Span::styled(" unscanned", Style::default().fg(Color::DarkGray)),
+            Span::styled("⊕", Style::default().fg(p.accent)),
+            Span::styled(" probe  ", Style::default().fg(p.dim)),
+            Span::styled("★", Style::default().fg(p.warn)),
+            Span::styled(" star  ", Style::default().fg(p.dim)),
+            Span::styled("●", Style::default().fg(p.good)),
+            Span::styled(" objects  ", Style::default().fg(p.dim)),
+            Span::styled("◉", Style::default().fg(p.crit)),
+            Span::styled(" black hole  ", Style::default().fg(p.dim)),
+            Span::styled("!", Style::default().fg(p.crit)),
+            Span::styled(" danger  ", Style::default().fg(p.dim)),
+            Span::styled("○", Style::default().fg(p.accent)),
+            Span::styled(" visited  ", Style::default().fg(p.dim)),
+            Span::styled("·", Style::default().fg(p.text)),
+            Span::styled(" empty  ", Style::default().fg(p.dim)),
+            Span::styled("·", Style::default().fg(p.dim)),
+            Span::styled(" unscanned", Style::default().fg(p.dim)),
         ])),
         legend_area,
     );
@@ -191,13 +192,13 @@ pub(crate) fn render_map_overlay(frame: &mut Frame, area: Rect, state: &AppState
     if let Some(buf) = &state.map.coord_input {
         frame.render_widget(
             Paragraph::new(Line::from(vec![
-                Span::styled("go to (x y z): ", Style::default().fg(Color::Cyan)),
+                Span::styled("go to (x y z): ", Style::default().fg(p.accent)),
                 Span::raw(buf.as_str()),
-                Span::styled("█", Style::default().fg(Color::Cyan)),
+                Span::styled("█", Style::default().fg(p.accent)),
                 Span::raw("  "),
-                Span::styled("[Enter]", Style::default().fg(Color::Green)),
+                Span::styled("[Enter]", Style::default().fg(p.good)),
                 Span::raw(" center  "),
-                Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                Span::styled("[Esc]", Style::default().fg(p.accent)),
                 Span::raw(" cancel"),
             ])),
             hint_area,
@@ -205,17 +206,17 @@ pub(crate) fn render_map_overlay(frame: &mut Frame, area: Rect, state: &AppState
     } else {
         frame.render_widget(
             Paragraph::new(Line::from(vec![
-                Span::styled("[hjkl]", Style::default().fg(Color::Cyan)),
+                Span::styled("[hjkl]", Style::default().fg(p.accent)),
                 Span::raw(" pan  "),
-                Span::styled("[u/d]", Style::default().fg(Color::Cyan)),
+                Span::styled("[u/d]", Style::default().fg(p.accent)),
                 Span::raw(" y±1  "),
-                Span::styled("[0]", Style::default().fg(Color::Cyan)),
+                Span::styled("[0]", Style::default().fg(p.accent)),
                 Span::raw(" probe  "),
-                Span::styled("[c]", Style::default().fg(Color::Cyan)),
+                Span::styled("[c]", Style::default().fg(p.accent)),
                 Span::raw(" go to  "),
-                Span::styled("[g]", Style::default().fg(Color::Yellow)),
+                Span::styled("[g]", Style::default().fg(p.warn)),
                 Span::raw(" travel  "),
-                Span::styled("[b/Esc]", Style::default().fg(Color::Cyan)),
+                Span::styled("[b/Esc]", Style::default().fg(p.accent)),
                 Span::raw(" close"),
             ])),
             hint_area,
@@ -255,7 +256,7 @@ pub(crate) fn render_map_overlay(frame: &mut Frame, area: Rect, state: &AppState
             let is_center = dx == 0 && dz == 0;
 
             let (sym, style) = if is_probe {
-                ("⊕", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+                ("⊕", Style::default().fg(p.accent).add_modifier(Modifier::BOLD))
             } else if let Some(sector) = sector_lookup.get(&(x, y, z)) {
                 let (s, st) = map_cell_symbol(sector);
                 if is_center {
@@ -264,16 +265,16 @@ pub(crate) fn render_map_overlay(frame: &mut Frame, area: Rect, state: &AppState
                     (s, st)
                 }
             } else if visited.contains(&(x, y, z)) {
-                let st = Style::default().fg(Color::Blue);
+                let st = Style::default().fg(p.accent);
                 if is_center {
                     ("○", st.add_modifier(Modifier::REVERSED))
                 } else {
                     ("○", st)
                 }
             } else if is_center {
-                ("+", Style::default().fg(Color::DarkGray).add_modifier(Modifier::REVERSED))
+                ("+", Style::default().fg(p.dim).add_modifier(Modifier::REVERSED))
             } else {
-                ("·", Style::default().fg(Color::DarkGray))
+                ("·", Style::default().fg(p.dim))
             };
 
             buf.set_string(tc, tr, sym, style);
