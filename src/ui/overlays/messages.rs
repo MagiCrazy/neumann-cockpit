@@ -1,3 +1,4 @@
+use crate::ui::theme::palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -103,7 +104,7 @@ pub(crate) fn render_messages_overlay(frame: &mut Frame, area: Rect, state: &App
             let refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
             let height = (recipients.len() as u16 + 6).min(16);
             render_pick_list(
-                frame, area, " NEW MESSAGE — recipient ", 54, height,
+                frame, area, palette(state.color_mode), " NEW MESSAGE — recipient ", 54, height,
                 Some("Send to:"), &refs, *selection, None, "compose",
             );
         }

@@ -32,7 +32,7 @@ pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppStat
         MineInput::PickAsteroid { manny_name, candidates, selection, .. } => {
             let names: Vec<&str> = candidates.iter().map(|(_, n)| n.as_str()).collect();
             let height = (candidates.len() as u16 + 6).min(16);
-            render_pick_list(frame, area, &format!(" MINE — {manny_name} "), 50, height,
+            render_pick_list(frame, area, palette(state.color_mode), &format!(" MINE — {manny_name} "), 50, height,
                 Some("Select mining target:"), &names, *selection, None, "confirm");
         }
 

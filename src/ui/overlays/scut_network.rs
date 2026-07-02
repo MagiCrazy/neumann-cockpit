@@ -1,3 +1,4 @@
+use crate::ui::theme::palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -24,9 +25,7 @@ pub(crate) fn render_scut_network_overlay(frame: &mut Frame, area: Rect, state: 
             let items: Vec<&str> = networks.iter().map(|(_, name)| name.as_str()).collect();
             let height = (items.len() as u16) + 4;
             render_pick_list(
-                frame,
-                area,
-                " SCUT NETWORK ",
+                frame, area, palette(state.color_mode), " SCUT NETWORK ",
                 52,
                 height,
                 Some("Pick a network to inspect"),

@@ -1,3 +1,4 @@
+use crate::ui::theme::palette;
 use crate::app::{AppState, DeployInput, DetachInput, DropCargoInput, InspectInput, MindSnapshotInput, RecallInput, RecoverInput, RefuelInput, RenameMannyInput, SalvageInput, ScutRelayInput};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -13,7 +14,7 @@ pub(crate) fn render_salvage_overlay(frame: &mut Frame, area: Rect, state: &AppS
         SalvageInput::PickTarget { manny_name, candidates, selection, .. } => {
             let names: Vec<&str> = candidates.iter().map(|(_, n)| n.as_str()).collect();
             let height = (candidates.len() as u16 + 6).min(16);
-            render_pick_list(frame, area, &format!(" SALVAGE — {manny_name} "), 50, height,
+            render_pick_list(frame, area, palette(state.color_mode), &format!(" SALVAGE — {manny_name} "), 50, height,
                 Some("Select salvage target:"), &names, *selection, None, "confirm");
         }
 
@@ -365,14 +366,14 @@ pub(crate) fn render_deploy_overlay(frame: &mut Frame, area: Rect, state: &AppSt
         DeployInput::PickManny { mannies, selection } => {
             let names: Vec<&str> = mannies.iter().map(|(_, n)| n.as_str()).collect();
             let height = (mannies.len() as u16 + 6).min(18);
-            render_pick_list(frame, area, " DEPLOY WAYPOINT — SELECT MANNY ", 52, height,
+            render_pick_list(frame, area, palette(state.color_mode), " DEPLOY WAYPOINT — SELECT MANNY ", 52, height,
                 None, &names, *selection, None, "confirm");
         }
 
         DeployInput::PickObject { candidates, selection, .. } => {
             let names: Vec<&str> = candidates.iter().map(|(_, n)| n.as_str()).collect();
             let height = (candidates.len() as u16 + 6).min(18);
-            render_pick_list(frame, area, " DEPLOY WAYPOINT ", 52, height,
+            render_pick_list(frame, area, palette(state.color_mode), " DEPLOY WAYPOINT ", 52, height,
                 None, &names, *selection, None, "confirm");
         }
 
@@ -427,7 +428,7 @@ pub(crate) fn render_inspect_overlay(frame: &mut Frame, area: Rect, state: &AppS
     let names: Vec<&str> = candidates.iter().map(|(_, n)| n.as_str()).collect();
     let error_lines = if error.is_some() { 2u16 } else { 0 };
     let height = (candidates.len() as u16 + 6 + error_lines).min(18);
-    render_pick_list(frame, area, &format!(" INSPECT — {manny_name} "), 52, height,
+    render_pick_list(frame, area, palette(state.color_mode), &format!(" INSPECT — {manny_name} "), 52, height,
         Some("Select asteroid to inspect:"), &names, selection, error.as_deref(), "inspect");
 }
 
@@ -436,7 +437,7 @@ pub(crate) fn render_recover_overlay(frame: &mut Frame, area: Rect, state: &AppS
     let names: Vec<&str> = candidates.iter().map(|(_, n)| n.as_str()).collect();
     let error_lines = if error.is_some() { 2u16 } else { 0 };
     let height = (candidates.len() as u16 + 6 + error_lines).min(18);
-    render_pick_list(frame, area, &format!(" RECOVER — {manny_name} "), 52, height,
+    render_pick_list(frame, area, palette(state.color_mode), &format!(" RECOVER — {manny_name} "), 52, height,
         Some("Select container to recover:"), &names, selection, error.as_deref(), "recover");
 }
 
@@ -445,14 +446,14 @@ pub(crate) fn render_detach_overlay(frame: &mut Frame, area: Rect, state: &AppSt
         DetachInput::PickContainer { manny_name, containers, selection, .. } => {
             let names: Vec<&str> = containers.iter().map(|(_, n)| n.as_str()).collect();
             let height = (containers.len() as u16 + 6).min(16);
-            render_pick_list(frame, area, &format!(" DETACH — {manny_name} "), 52, height,
+            render_pick_list(frame, area, palette(state.color_mode), &format!(" DETACH — {manny_name} "), 52, height,
                 Some("Select container to detach:"), &names, *selection, None, "next");
         }
 
         DetachInput::PickMode { manny_name, container_name, selection, error, .. } => {
             let names: Vec<&str> = crate::app::DETACH_MODES.iter().map(|(_, l)| *l).collect();
             let prompt = format!("Detach mode  (manny: {manny_name})");
-            render_pick_list(frame, area, &format!(" DETACH — {container_name} "), 52, 10,
+            render_pick_list(frame, area, palette(state.color_mode), &format!(" DETACH — {container_name} "), 52, 10,
                 Some(&prompt), &names, *selection, error.as_deref(), "confirm");
         }
 
@@ -460,7 +461,7 @@ pub(crate) fn render_detach_overlay(frame: &mut Frame, area: Rect, state: &AppSt
             let names: Vec<&str> = asteroids.iter().map(|(_, n)| n.as_str()).collect();
             let height = (asteroids.len() as u16 + 8).min(18);
             let prompt = format!("Attach to asteroid  (manny: {manny_name})");
-            render_pick_list(frame, area, &format!(" DETACH — hide {container_name} "), 52, height,
+            render_pick_list(frame, area, palette(state.color_mode), &format!(" DETACH — hide {container_name} "), 52, height,
                 Some(&prompt), &names, *selection, error.as_deref(), "hide here");
         }
 

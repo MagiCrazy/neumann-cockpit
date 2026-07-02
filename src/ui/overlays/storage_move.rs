@@ -1,3 +1,4 @@
+use crate::ui::theme::palette;
 use crate::app::{AppState, StorageMoveInput, MOVE_RESOURCE_TYPES};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -57,11 +58,11 @@ pub(crate) fn render_storage_move_overlay(frame: &mut Frame, area: Rect, state: 
         StorageMoveInput::PickManny { mannies, selection } => {
             let names: Vec<&str> = mannies.iter().map(|(_, n)| n.as_str()).collect();
             let height = (mannies.len() as u16 + 6).min(18);
-            render_pick_list(frame, area, " STORAGE MOVE — SELECT MANNY ", 52, height,
+            render_pick_list(frame, area, palette(state.color_mode), " STORAGE MOVE — SELECT MANNY ", 52, height,
                 None, &names, *selection, None, "select");
         }
         StorageMoveInput::PickKind { selection, .. } => {
-            render_pick_list(frame, area, " STORAGE MOVE — KIND ", 46, 8,
+            render_pick_list(frame, area, palette(state.color_mode), " STORAGE MOVE — KIND ", 46, 8,
                 None, &["resource", "item"], *selection, None, "select");
         }
         StorageMoveInput::ConfigureResource {

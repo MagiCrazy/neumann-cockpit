@@ -1,3 +1,4 @@
+use crate::ui::theme::palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -38,7 +39,7 @@ pub(crate) fn render_remote_mine_overlay(frame: &mut Frame, area: Rect, state: &
             let names: Vec<&str> = candidates.iter().map(|(_, n)| n.as_str()).collect();
             let height = (candidates.len() as u16 + 6).min(16);
             render_pick_list(
-                frame, area, &format!(" REMOTE MINE — {manny_name} "), 52, height,
+                frame, area, palette(state.color_mode), &format!(" REMOTE MINE — {manny_name} "), 52, height,
                 Some("Asteroid in the Manny's sector:"), &names, *selection, None, "next",
             );
         }
@@ -101,7 +102,7 @@ pub(crate) fn render_remote_mine_overlay(frame: &mut Frame, area: Rect, state: &
             let names: Vec<&str> = containers.iter().map(|(_, n)| n.as_str()).collect();
             let height = (containers.len() as u16 + 6).min(16);
             render_pick_list(
-                frame, area, " REMOTE MINE — store in ", 52, height,
+                frame, area, palette(state.color_mode), " REMOTE MINE — store in ", 52, height,
                 Some("Detached container (required):"), &names, *selection, None, "mine",
             );
         }
