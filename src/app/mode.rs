@@ -148,18 +148,6 @@ impl super::AppState {
         let here = self.viewing_probe_sector();
         let items = vec![
             MenuItem {
-                action: MenuAction::ScanTravel,
-                label: "Travel here".into(),
-                enabled: has_selection && !here,
-                disabled_reason: if !has_selection {
-                    Some("no sector selected".to_string())
-                } else if here {
-                    Some("already here".to_string())
-                } else {
-                    None
-                },
-            },
-            MenuItem {
                 action: MenuAction::ScanAround,
                 label: "Scan around (neighbors)".into(),
                 enabled: has_pos,
@@ -182,6 +170,19 @@ impl super::AppState {
                 label: format!("Cycle filter (now: {})", self.scan_filter.label()),
                 enabled: !self.scan_history.is_empty(),
                 disabled_reason: self.scan_history.is_empty().then(|| "no history".to_string()),
+            },
+            // Travel is the terminal action — kept last, below the scan verbs.
+            MenuItem {
+                action: MenuAction::ScanTravel,
+                label: "Travel here".into(),
+                enabled: has_selection && !here,
+                disabled_reason: if !has_selection {
+                    Some("no sector selected".to_string())
+                } else if here {
+                    Some("already here".to_string())
+                } else {
+                    None
+                },
             },
         ];
         let cursor = items.iter().position(|i| i.enabled).unwrap_or(0);
