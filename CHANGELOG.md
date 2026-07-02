@@ -1,5 +1,17 @@
 # Changelog
 
+## [63.1.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v63.0.1...neumann-cockpit-v63.1.0) (2026-07-02)
+
+
+### Features
+
+* **cockpit:** unified tiling interface — 3×3 dashboard, keyboard-first, command mode ([#115](https://github.com/MagiCrazy/neumann-cockpit/issues/115)) ([e15e28e](https://github.com/MagiCrazy/neumann-cockpit/commit/e15e28e5adaa56d46b35231dda22edfb2bea6d68))
+
+
+### Documentation
+
+* **readme:** refresh for the cockpit — command mode, Map, live updates ([#113](https://github.com/MagiCrazy/neumann-cockpit/issues/113)) ([6b0e29f](https://github.com/MagiCrazy/neumann-cockpit/commit/6b0e29f122e4a3d95041ff312ca508bc5ffbd506))
+
 ## [63.0.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v63.0.0...neumann-cockpit-v63.0.1) (2026-07-01)
 
 
