@@ -252,9 +252,9 @@ fn render_status_line(frame: &mut Frame, area: Rect, state: &AppState, p: Palett
     if let Some(v) = state.api_version {
         meta.push((format!("API v{v}"), p.dim));
     }
-    if let Some(t) = state.last_update {
-        meta.push((t.format("%H:%M:%S").to_string(), p.dim));
-    }
+    // Live wall clock — ticks every second via the 1 s UI tick. (Sync recency
+    // lives in the ⟳ indicator above, so this is a real clock, not last-sync.)
+    meta.push((chrono::Local::now().format("%H:%M:%S").to_string(), p.dim));
     let meta_len: usize = meta.iter().map(|(s, _)| s.chars().count() + 3).sum();
     let meta_spans: Vec<Span> = meta
         .iter()
