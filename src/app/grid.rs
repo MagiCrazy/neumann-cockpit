@@ -167,7 +167,12 @@ impl super::AppState {
                     .map_or(0, |m| m.steps.len()),
                 _ => self.missions.len(),
             },
-            Pane::Storage => self.storage_containers.len(),
+            // Drilled into a container, the cursor is frozen (contents are
+            // rendered inline, read-only).
+            Pane::Storage => match drill {
+                Some(DrillLevel::Container(_)) => 0,
+                _ => self.probe.as_ref().map_or(0, |p| p.inventory.containers.len()),
+            },
             _ => 0,
         }
     }
@@ -229,6 +234,11 @@ impl super::AppState {
                 .messages
                 .get(cursor)
                 .map(|m| DrillLevel::MessageThread(m.id.to_string())),
+            Pane::Storage => self
+                .probe
+                .as_ref()
+                .and_then(|p| p.inventory.containers.get(cursor))
+                .map(|c| DrillLevel::Container(c.id.clone())),
             // Mannies uses its own selection cursor, not `pane_nav.cursor`.
             Pane::Mannies => self
                 .mannies
@@ -302,7 +312,9 @@ impl super::AppState {
                     .iter()
                     .find(|m| m.id.to_string() == *id)
                     .map_or_else(|| format!("msg {id}"), |m| m.sender.name.clone()),
-                DrillLevel::Container(id) => id.clone(),
+                DrillLevel::Container(id) => self
+                    .storage_container(id)
+                    .map_or_else(|| id.clone(), |c| c.label.clone()),
                 DrillLevel::ItemGroup(g) => g.clone(),
                 DrillLevel::Manny(id) => self
                     .mannies

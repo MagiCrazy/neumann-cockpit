@@ -5,7 +5,7 @@ use crate::api::client::ApiClient;
 use crate::api::tasks::fetch_sector;
 use crate::app::{
     AlertsInput, ApiMessage, AppState, AtomicPrinterCraftInput, ContainerRulesInput,
-    ContainersInput, CraftInput, DeployInput, DetachInput, DropCargoInput,
+    CraftInput, DeployInput, DetachInput, DropCargoInput,
     DropStorageContainerInput, InspectInput, JettisonInput, MindSnapshotInput, MineInput,
     MessagesInput, MissionsInput, ObjectActionInput, RecallInput, RecoverInput, RefuelInput,
     RemoteMineInput, RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode,
@@ -30,7 +30,7 @@ mod travel;
 use alerts::handle_alerts_event;
 use cockpit::handle_cockpit_event;
 use containers::{
-    handle_container_rules_event, handle_containers_event, handle_rename_container_event,
+    handle_container_rules_event, handle_rename_container_event,
 };
 use craft::{handle_atomic_printer_craft_event, handle_craft_event};
 use geometry::face_d2;
@@ -88,7 +88,6 @@ pub fn handle_event(
     let in_alerts = !matches!(state.alerts_input, AlertsInput::Inactive);
     let in_rename_container = !matches!(state.rename_container, RenameContainerInput::Inactive);
     let in_container_rules = !matches!(state.container_rules, ContainerRulesInput::Inactive);
-    let in_containers = !matches!(state.containers_input, ContainersInput::Inactive);
     let in_storage_move = !matches!(state.storage_move, StorageMoveInput::Inactive);
     let in_drop_cargo = !matches!(state.drop_cargo, DropCargoInput::Inactive);
     let in_drop_container = !matches!(state.drop_container, DropStorageContainerInput::Inactive);
@@ -222,11 +221,6 @@ pub fn handle_event(
 
     if in_container_rules {
         handle_container_rules_event(k.code, state, client, tx);
-        return;
-    }
-
-    if in_containers {
-        handle_containers_event(k.code, state, client, tx);
         return;
     }
 

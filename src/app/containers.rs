@@ -98,8 +98,24 @@ impl AppState {
 
     /// Build the routing-rules editor for a container (by id), seeded from its
     /// current rules. Returns `None` if the container is not in the list.
+    /// The storage container with this id, from the fetched list or the
+    /// probe's inventory (the latter is available as soon as the probe loads).
+    pub fn storage_container(&self, id: &str) -> Option<&crate::api::types::StorageContainer> {
+        self.storage_containers
+            .iter()
+            .chain(self.probe.iter().flat_map(|p| p.inventory.containers.iter()))
+            .find(|c| c.id == id)
+    }
+
+    /// Id of the container the Storage pane cursor is on (from the probe's
+    /// inventory, which the pane renders).
+    pub fn storage_selected_container_id(&self) -> Option<String> {
+        let cur = self.pane_nav[crate::app::Pane::Storage.index()].cursor;
+        self.probe.as_ref()?.inventory.containers.get(cur).map(|c| c.id.clone())
+    }
+
     pub fn rules_editor_for(&self, container_id: &str) -> Option<ContainerRulesInput> {
-        let c = self.storage_containers.iter().find(|c| c.id == container_id)?;
+        let c = self.storage_container(container_id)?;
         let types = self.routable_types(&c.rules);
         Some(ContainerRulesInput::Editing {
             container_id: c.id.clone(),

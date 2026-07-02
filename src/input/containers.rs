@@ -2,12 +2,8 @@ use crossterm::event::KeyCode;
 use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
-use crate::api::tasks::{
-    fetch_rename_container, fetch_storage_container_detail, fetch_update_container_rules,
-};
-use crate::app::{
-    ApiMessage, AppState, ContainerRulesInput, ContainersInput, RenameContainerInput,
-};
+use crate::api::tasks::{fetch_rename_container, fetch_update_container_rules};
+use crate::app::{ApiMessage, AppState, ContainerRulesInput, RenameContainerInput};
 
 use super::geometry::list_nav;
 
@@ -37,60 +33,6 @@ fn cycle_assignment(
         1 => priority.push(ty.to_string()),
         2 => exclusion.push(ty.to_string()),
         3 => strict.push(ty.to_string()),
-        _ => {}
-    }
-}
-
-pub(super) fn handle_containers_event(
-    code: KeyCode,
-    state: &mut AppState,
-    client: &ApiClient,
-    tx: &mpsc::Sender<ApiMessage>,
-) {
-    // The read-only detail popup takes precedence while open.
-    if state.storage_container_detail.is_some() {
-        if matches!(code, KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q')) {
-            state.storage_container_detail = None;
-        }
-        return;
-    }
-
-    let ContainersInput::Browsing { selection } = state.containers_input else {
-        return;
-    };
-    let count = state.storage_containers.len();
-    match code {
-        KeyCode::Esc | KeyCode::Char('C') | KeyCode::Char('q') => {
-            state.containers_input = ContainersInput::Inactive;
-        }
-        KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
-            if let Some(ns) = list_nav(code, selection, count) {
-                state.containers_input = ContainersInput::Browsing { selection: ns };
-            }
-        }
-        KeyCode::Enter => {
-            if let Some(c) = state.storage_containers.get(selection) {
-                fetch_storage_container_detail(c.id.clone(), client.clone(), tx.clone());
-            }
-        }
-        KeyCode::Char('n') => {
-            if let Some(c) = state.storage_containers.get(selection) {
-                state.rename_container = RenameContainerInput::Typing {
-                    container_id: c.id.clone(),
-                    current_label: c.label.clone(),
-                    buf: c.label.clone(),
-                    error: None,
-                };
-            }
-        }
-        KeyCode::Char('e') => {
-            if let Some(c) = state.storage_containers.get(selection) {
-                let id = c.id.clone();
-                if let Some(editor) = state.rules_editor_for(&id) {
-                    state.container_rules = editor;
-                }
-            }
-        }
         _ => {}
     }
 }

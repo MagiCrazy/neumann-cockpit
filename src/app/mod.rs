@@ -75,7 +75,6 @@ pub struct AppState {
     /// Storage containers fetched on demand when the containers overlay opens.
     pub storage_containers: Vec<StorageContainer>,
     pub storage_container_detail: Option<(StorageContainer, ContainerInventory)>,
-    pub containers_input: ContainersInput,
     pub rename_container: RenameContainerInput,
     pub container_rules: ContainerRulesInput,
     pub storage_move: StorageMoveInput,
