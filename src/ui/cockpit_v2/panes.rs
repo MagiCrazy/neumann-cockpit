@@ -72,7 +72,7 @@ pub fn render_map(frame: &mut Frame, area: Rect, state: &AppState, active: bool,
     } else {
         lines.push(Line::styled(format!("≣ SCUT: {} network(s)", nets.len()), Style::default().fg(p.accent)));
     }
-    lines.push(Line::styled("[z] zoom for full map", dim));
+    lines.push(Line::styled("z open map · Enter travel", dim));
     render_body(frame, area, " MAP ", active, p, lines);
 }
 

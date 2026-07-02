@@ -88,6 +88,7 @@ pub struct AppState {
     /// Sectors already visited by the probe (server-side history).
     pub visited_sectors: Vec<VisitedSector>,
     pub travel: TravelInput,
+    pub goto_visited: GotoVisitedInput,
     pub repair: RepairInput,
     pub mine: MineInput,
     pub remote_mine: RemoteMineInput,
