@@ -1,27 +1,24 @@
 use crate::app::{is_active_item, AppState};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::Paragraph,
     Frame,
 };
 
-use crate::ui::theme::{gauge_color, item_icon, make_line_gauge, palette, pane_block};
+use crate::ui::theme::{block_gauge_line, item_icon, palette, pane_block, ratio_color};
 // ── Inventory panel ───────────────────────────────────────────────────────────
 
 pub(crate) fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focused: bool) {
-    let block = pane_block(" INVENTORY ", focused, palette(state.color_mode));
-    let full_inner = block.inner(area);
+    let p = palette(state.color_mode);
+    let block = pane_block(" INVENTORY ", focused, p);
+    let inner = block.inner(area);
     frame.render_widget(block, area);
-
-    // Action hints come from the cockpit's shared hints line (F1); the pane
-    // uses its whole area for content.
-    let inner = full_inner;
 
     let Some(probe) = &state.probe else {
         frame.render_widget(
-            Paragraph::new("No data").style(Style::default().fg(Color::DarkGray)),
+            Paragraph::new("No data").style(Style::default().fg(p.dim)),
             inner,
         );
         return;
@@ -55,27 +52,29 @@ pub(crate) fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppS
     let mut nav_idx: usize = 0;
     let sel_prefix = |selected: bool| {
         if selected {
-            Span::styled("▶ ", Style::default().fg(Color::Yellow))
+            Span::styled("▶ ", Style::default().fg(p.accent))
         } else {
             Span::raw("  ")
         }
     };
     let name_style = |selected: bool, dim: bool| {
         if selected {
-            Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+            Style::default().fg(p.text).add_modifier(Modifier::BOLD)
         } else if dim {
-            Style::default().fg(Color::DarkGray)
+            Style::default().fg(p.dim)
         } else {
-            Style::default()
+            Style::default().fg(p.text)
         }
     };
 
     frame.render_widget(
-        make_line_gauge(
-            &format!("{:<12}{:.2} / {:.2}", "Cargo", inv.used_capacity, inv.capacity),
+        Paragraph::new(block_gauge_line(
+            "CARGO",
             cargo_ratio,
-            Color::Blue,
-        ),
+            &format!("{:.1}/{:.1}", inv.used_capacity, inv.capacity),
+            p.accent,
+            p,
+        )),
         rows[row],
     );
     row += 1;
@@ -83,19 +82,19 @@ pub(crate) fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppS
     for stock in &inv.resource_stocks {
         let selected = focused && nav_idx == state.inventory_selection;
         nav_idx += 1;
-        let (icon, color, label) = match stock.stock_type.as_str() {
-            "metals" => ("◆", Color::White, "Metals"),
-            "ice" => ("❄", Color::Cyan, "Ice"),
-            "carbon_compounds" => ("◇", Color::Green, "Carbon"),
-            _ => ("·", Color::DarkGray, stock.stock_type.as_str()),
+        let (icon, label) = match stock.stock_type.as_str() {
+            "metals" => ("◆", "Metals"),
+            "ice" => ("❄", "Ice"),
+            "carbon_compounds" => ("◇", "Carbon"),
+            _ => ("·", stock.stock_type.as_str()),
         };
         frame.render_widget(
             Paragraph::new(Line::from(vec![
                 sel_prefix(selected),
-                Span::styled(format!("{icon} "), Style::default().fg(color)),
-                Span::styled(format!("{:<11}", label), name_style(selected, false)),
-                Span::styled(format!("{:.3}", stock.amount), Style::default().fg(Color::White)),
-                Span::styled(" ECE", Style::default().fg(Color::DarkGray)),
+                Span::styled(format!("{icon} "), Style::default().fg(p.accent)),
+                Span::styled(format!("{label:<11}"), name_style(selected, false)),
+                Span::styled(format!("{:.3}", stock.amount), Style::default().fg(p.text)),
+                Span::styled(" ECE", Style::default().fg(p.dim)),
             ])),
             rows[row],
         );
@@ -105,10 +104,7 @@ pub(crate) fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppS
     // ── Items ──
     if items_expanded {
         frame.render_widget(
-            Paragraph::new(Line::from(Span::styled(
-                "── items ──",
-                Style::default().fg(Color::DarkGray),
-            ))),
+            Paragraph::new(Line::from(Span::styled("── items ──", Style::default().fg(p.dim)))),
             rows[row],
         );
         row += 1;
@@ -117,24 +113,21 @@ pub(crate) fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppS
         for item in inv.items.iter().filter(|i| is_active_item(&i.item_type)) {
             let selected = focused && nav_idx == state.inventory_selection;
             nav_idx += 1;
-            let (icon, icon_color) = item_icon(&item.item_type);
+            let icon = item_icon(&item.item_type).0;
             let (task_span, progress) = match item.current_task.as_deref() {
-                None => (
-                    Span::styled("idle", Style::default().fg(Color::DarkGray)),
-                    String::new(),
-                ),
+                None => (Span::styled("idle", Style::default().fg(p.dim)), String::new()),
                 Some(t) => (
-                    Span::styled(t.to_string(), Style::default().fg(Color::Yellow)),
+                    Span::styled(t.to_string(), Style::default().fg(p.warn)),
                     format!(" {:3.0}%", item.task_progress_percent),
                 ),
             };
             frame.render_widget(
                 Paragraph::new(Line::from(vec![
                     sel_prefix(selected),
-                    Span::styled(format!("{icon} "), Style::default().fg(icon_color)),
+                    Span::styled(format!("{icon} "), Style::default().fg(p.accent)),
                     Span::styled(format!("{:<14}", item.name), name_style(selected, false)),
                     task_span,
-                    Span::styled(progress, Style::default().fg(Color::DarkGray)),
+                    Span::styled(progress, Style::default().fg(p.dim)),
                 ])),
                 rows[row],
             );
@@ -151,13 +144,13 @@ pub(crate) fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppS
             let selected = focused && nav_idx == state.inventory_selection;
             nav_idx += 1;
             let count = inv.items.iter().filter(|i| i.item_type == item.item_type).count();
-            let (icon, icon_color) = item_icon(&item.item_type);
+            let icon = item_icon(&item.item_type).0;
             frame.render_widget(
                 Paragraph::new(Line::from(vec![
                     sel_prefix(selected),
-                    Span::styled(format!("{icon} "), Style::default().fg(icon_color)),
+                    Span::styled(format!("{icon} "), Style::default().fg(p.accent)),
                     Span::styled(format!("{:<14}", item.name), name_style(selected, false)),
-                    Span::styled(format!("× {count}"), Style::default().fg(Color::White)),
+                    Span::styled(format!("× {count}"), Style::default().fg(p.text)),
                 ])),
                 rows[row],
             );
@@ -166,9 +159,9 @@ pub(crate) fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppS
     } else if !inv.items.is_empty() {
         frame.render_widget(
             Paragraph::new(Line::from(vec![
-                Span::styled("  items  ", Style::default().fg(Color::DarkGray)),
-                Span::styled(format!("{}", inv.items.len()), Style::default().fg(Color::White)),
-                Span::styled("  (focus to expand)", Style::default().fg(Color::DarkGray)),
+                Span::styled("  items  ", Style::default().fg(p.dim)),
+                Span::styled(format!("{}", inv.items.len()), Style::default().fg(p.text)),
+                Span::styled("  (focus to expand)", Style::default().fg(p.dim)),
             ])),
             rows[row],
         );
@@ -178,10 +171,7 @@ pub(crate) fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppS
     // ── Containers ── (display only, expanded view)
     if containers_rows > 0 {
         frame.render_widget(
-            Paragraph::new(Line::from(Span::styled(
-                "── containers ──",
-                Style::default().fg(Color::DarkGray),
-            ))),
+            Paragraph::new(Line::from(Span::styled("── containers ──", Style::default().fg(p.dim)))),
             rows[row],
         );
         row += 1;
@@ -189,22 +179,20 @@ pub(crate) fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppS
         let mut containers: Vec<_> = inv.containers.iter().collect();
         containers.sort_by_key(|c| c.sort_order);
         for c in containers {
-            let name = if c.kind == "probe" {
-                c.label.clone()
-            } else {
-                format!("{} ({})", c.label, c.kind)
-            };
+            let name: String = c.label.chars().take(9).collect();
             let ratio = if c.capacity > 0.0 {
                 (c.used_capacity / c.capacity).clamp(0.0, 1.0)
             } else {
                 0.0
             };
             frame.render_widget(
-                make_line_gauge(
-                    &format!("  {:<18}{:.2} / {:.2}", name, c.used_capacity, c.capacity),
+                Paragraph::new(block_gauge_line(
+                    &name,
                     ratio,
-                    Color::Blue,
-                ),
+                    &format!("{:.1}/{:.1}", c.used_capacity, c.capacity),
+                    p.accent,
+                    p,
+                )),
                 rows[row],
             );
             row += 1;
@@ -214,22 +202,22 @@ pub(crate) fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppS
     // ── External tanks ── (display only, expanded view)
     if tanks_rows > 0 {
         frame.render_widget(
-            Paragraph::new(Line::from(Span::styled(
-                "── tanks ──",
-                Style::default().fg(Color::DarkGray),
-            ))),
+            Paragraph::new(Line::from(Span::styled("── tanks ──", Style::default().fg(p.dim)))),
             rows[row],
         );
         row += 1;
 
         for tank in &inv.external_tanks {
             let ratio = (tank.fill_percent / 100.0).clamp(0.0, 1.0);
+            let name: String = tank.name.chars().take(9).collect();
             frame.render_widget(
-                make_line_gauge(
-                    &format!("  {:<18}{:.1}%", tank.name, tank.fill_percent),
+                Paragraph::new(block_gauge_line(
+                    &name,
                     ratio,
-                    gauge_color(ratio),
-                ),
+                    &format!("{:.0}%", tank.fill_percent),
+                    ratio_color(ratio, p),
+                    p,
+                )),
                 rows[row],
             );
             row += 1;

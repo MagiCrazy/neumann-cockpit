@@ -5,7 +5,7 @@ use crate::app::ColorMode;
 use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, LineGauge},
+    widgets::{Block, BorderType, Borders},
 };
 
 /// Resolved colour palette for the cockpit, one per [`ColorMode`]. Mono modes
@@ -286,23 +286,6 @@ pub(crate) fn block_gauge_line(label: &str, ratio: f64, value: &str, fill: Color
     ])
 }
 
-pub(crate) fn make_line_gauge(label: &str, ratio: f64, color: Color) -> LineGauge<'_> {
-    LineGauge::default()
-        .label(Line::raw(label.to_owned()))
-        .filled_style(Style::default().fg(color))
-        .unfilled_style(Style::default().fg(Color::DarkGray))
-        .ratio(ratio)
-}
-
-pub(crate) fn gauge_color(ratio: f64) -> Color {
-    if ratio > 0.5 {
-        Color::Green
-    } else if ratio > 0.25 {
-        Color::Yellow
-    } else {
-        Color::Red
-    }
-}
 
 pub fn format_duration(secs: i64) -> String {
     if secs <= 0 {
