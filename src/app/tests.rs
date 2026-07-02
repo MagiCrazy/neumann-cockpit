@@ -1581,3 +1581,32 @@ fn map_menu_has_waypoints_disabled_when_empty() {
     let wp = menu.items.iter().find(|i| i.action == MenuAction::Waypoints).unwrap();
     assert!(!wp.enabled, "no waypoints → disabled");
 }
+
+// ── recipe affordability ──────────────────────────────────────────────────
+
+#[test]
+fn recipe_affordable_checks_stocks_and_items() {
+    use crate::api::types::CraftingRecipe;
+    let mut state = AppState::default();
+    state.probe = Some(probe_with_inventory(
+        r#"[{"id":"i1","type":"integrated_circuit","name":"IC","containerSpace":0.0,"taskProgressPercent":0.0}]"#,
+        r#"[{"id":"s1","type":"metals","name":"Metals","amount":5.0,"containerSpace":0.0}]"#,
+    ));
+    let recipe: CraftingRecipe = serde_json::from_str(r#"{
+        "id":"r","name":"Steel plate","craftableBy":["manny"],
+        "ingredients":[{"type":"metals","quantity":2.0,"unit":"ece","kind":null}],
+        "durationSeconds":600,
+        "output":{"type":"steel_plate","name":"Steel plate","containerSpace":0.1,"containerSpaceUnit":"ece","capacityBonus":null}
+    }"#).unwrap();
+    assert!(state.recipe_affordable(&recipe), "have 5.0 metals ≥ 2.0");
+
+    // Needs 2 integrated circuits but only 1 on hand.
+    let hungry: CraftingRecipe = serde_json::from_str(r#"{
+        "id":"r2","name":"Board","craftableBy":["manny"],
+        "ingredients":[{"type":"integrated_circuit","quantity":2.0,"unit":"item","kind":null}],
+        "durationSeconds":600,
+        "output":{"type":"board","name":"Board","containerSpace":0.1,"containerSpaceUnit":"ece","capacityBonus":null}
+    }"#).unwrap();
+    assert!(!state.recipe_affordable(&hungry));
+    assert_eq!(state.recipe_ingredient_have(&hungry.ingredients[0]), 1.0);
+}
