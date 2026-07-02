@@ -176,7 +176,11 @@ fn render_pane(frame: &mut Frame, area: Rect, pane: Pane, state: &AppState, acti
 }
 
 fn render_status(frame: &mut Frame, area: Rect, state: &AppState, p: Palette, visible: &[Pane]) {
-    let (bar, hints) = if state.hints_visible && area.height >= 2 {
+    // The command line always claims the second row while `:` is open, even if
+    // the hints line is toggled off.
+    let command = if let crate::app::InputMode::Command(cmd) = &state.mode { Some(cmd) } else { None };
+    let want_second = state.hints_visible || command.is_some();
+    let (bar, second) = if want_second && area.height >= 2 {
         let rows = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(1), Constraint::Length(1)])
@@ -187,12 +191,17 @@ fn render_status(frame: &mut Frame, area: Rect, state: &AppState, p: Palette, vi
     };
 
     render_status_line(frame, bar, state, p, visible);
-    if let Some(hints_area) = hints {
-        let line = Line::from(Span::styled(
-            format!(" {}", state.pane_hints()),
-            Style::default().fg(p.dim),
-        ));
-        frame.render_widget(Paragraph::new(line), hints_area);
+    if let Some(second_area) = second {
+        let line = if let Some(cmd) = command {
+            // `:verb args` with a caret; accent to signal text-entry mode.
+            Line::from(vec![
+                Span::styled(format!(" :{}", cmd.input), Style::default().fg(p.accent)),
+                Span::styled("█", Style::default().fg(p.accent)),
+            ])
+        } else {
+            Line::from(Span::styled(format!(" {}", state.pane_hints()), Style::default().fg(p.dim)))
+        };
+        frame.render_widget(Paragraph::new(line), second_area);
     }
 }
 

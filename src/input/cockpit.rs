@@ -17,7 +17,8 @@ use crate::api::tasks::{
 use crate::api::types::{MannyTask, MannyTaskVisibility};
 use crate::app::{
     ApiMessage, AppState, AtomicPrinterCraftInput, CraftInput, DetachInput, DropCargoInput,
-    DropStorageContainerInput, DrillLevel, InputMode, InspectInput, MenuAction, MessagesInput,
+    CommandLine, DropStorageContainerInput, DrillLevel, InputMode, InspectInput, MenuAction,
+    MessagesInput,
     MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput, Pane, RecallInput, RecoverInput,
     GotoVisitedInput, RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput,
     RepairInput, SalvageInput, ScanMode, StorageMoveInput, TravelInput, WaypointsInput,
@@ -51,6 +52,7 @@ pub fn handle_cockpit_event(
         // map overlay (its own pan/travel controls take over).
         KeyCode::Char('z') if state.active_pane == Pane::Map => state.open_map(),
         KeyCode::Char('z') => state.toggle_zoom(),
+        KeyCode::Char(':') => state.mode = InputMode::Command(CommandLine::default()),
         KeyCode::Char('?') => state.help_open = true,
         KeyCode::F(1) => state.hints_visible = !state.hints_visible,
         // Esc backs out one step: leave zoom first, then drill up.

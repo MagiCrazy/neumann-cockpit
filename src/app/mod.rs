@@ -1,5 +1,6 @@
 mod boot;
 mod color;
+mod command;
 mod containers;
 mod grid;
 mod inputs;
@@ -16,6 +17,7 @@ mod tests;
 
 pub use boot::{BOOT_CHARS_PER_FRAME, BOOT_LINE_STRIDE};
 pub use color::*;
+pub use command::COMMANDS;
 pub use grid::*;
 pub use inputs::*;
 pub use inventory::*;

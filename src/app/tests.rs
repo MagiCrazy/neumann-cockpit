@@ -1610,3 +1610,49 @@ fn recipe_affordable_checks_stocks_and_items() {
     assert!(!state.recipe_affordable(&hungry));
     assert_eq!(state.recipe_ingredient_have(&hungry.ingredients[0]), 1.0);
 }
+
+// ── command mode (:) ──────────────────────────────────────────────────────
+
+#[test]
+fn run_command_focus_zoom_theme_filter() {
+    let mut state = AppState::default();
+    assert!(!state.run_command("focus mannies"));
+    assert_eq!(state.active_pane, Pane::Mannies);
+    assert!(state.zoomed);
+
+    state.run_command("zoom"); // toggles off
+    assert!(!state.zoomed);
+
+    state.run_command("theme mono-amber");
+    assert_eq!(state.color_mode, ColorMode::MonoAmber);
+
+    state.run_command("filter minable");
+    assert_eq!(state.scan_filter, ScanFilter::Minable);
+}
+
+#[test]
+fn run_command_refresh_signals_fetch() {
+    let mut state = AppState::default();
+    assert!(state.run_command("refresh"), "refresh asks the caller to fetch_all");
+    assert!(!state.run_command("zoom"), "other commands do not");
+}
+
+#[test]
+fn run_command_travel_and_goto() {
+    let mut state = AppState::default();
+    state.probe = Some(probe_at(0., 0., 0.));
+    // even-sum target → travel confirm
+    state.run_command("travel 2 0 -2");
+    assert!(matches!(state.travel, TravelInput::Confirming { x: 2, y: 0, z: -2, .. }));
+
+    state.run_command("goto 1 1 0");
+    assert!(state.map.open);
+    assert_eq!((state.map.center_x, state.map.y_layer, state.map.center_z), (1, 1, 0));
+}
+
+#[test]
+fn run_command_unknown_sets_toast() {
+    let mut state = AppState::default();
+    assert!(!state.run_command("frobnicate"));
+    assert!(state.active_toast().is_some());
+}

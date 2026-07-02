@@ -9,11 +9,12 @@ use crate::app::{
     DropStorageContainerInput, InspectInput, JettisonInput, MindSnapshotInput, MineInput,
     MessagesInput, MissionsInput, ObjectActionInput, RecallInput, RecoverInput, RefuelInput,
     RemoteMineInput, RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode,
-    GotoVisitedInput, ScutNetworkInput, ScutRelayInput, StorageMoveInput, TravelInput,
+    GotoVisitedInput, InputMode, ScutNetworkInput, ScutRelayInput, StorageMoveInput, TravelInput,
     WaypointsInput,
 };
 mod alerts;
 mod cockpit;
+mod command;
 mod containers;
 mod craft;
 mod geometry;
@@ -36,6 +37,7 @@ use containers::{
 use craft::{handle_atomic_printer_craft_event, handle_craft_event};
 use geometry::face_d2;
 use jettison::handle_jettison_event;
+use command::handle_command_event;
 use map::{handle_goto_visited_event, handle_map_event};
 use messages::handle_messages_event;
 use mine::{handle_mine_event, handle_remote_mine_event};
@@ -132,6 +134,11 @@ pub fn handle_event(
 
     if matches!(state.goto_visited, GotoVisitedInput::Picking { .. }) {
         handle_goto_visited_event(k.code, state);
+        return;
+    }
+
+    if matches!(state.mode, InputMode::Command(_)) {
+        handle_command_event(k.code, state, client, tx);
         return;
     }
 
