@@ -20,7 +20,7 @@ use crate::app::{
     DropStorageContainerInput, DrillLevel, InputMode, InspectInput, MenuAction, MessagesInput,
     MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput, Pane, RecallInput, RecoverInput,
     RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput,
-    StorageMoveInput,
+    ScanMode, StorageMoveInput,
 };
 
 pub fn handle_cockpit_event(
@@ -73,7 +73,7 @@ pub fn handle_cockpit_event(
 /// the contextual menu; panes backed by a rich wizard reuse its overlay.
 fn open_actions(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
     match state.active_pane {
-        Pane::Mannies | Pane::Inventory | Pane::Probe | Pane::Storage => {
+        Pane::Mannies | Pane::Inventory | Pane::Probe | Pane::Storage | Pane::Scanner => {
             match state.build_context_menu() {
                 Some(menu) if !menu.items.is_empty() => state.mode = InputMode::Menu(menu),
                 _ => state.set_toast("no actions here"),
@@ -244,6 +244,27 @@ fn fire_menu_action(
                     state.container_rules = editor;
                 }
             }
+            return;
+        }
+        MenuAction::ScanObserve => {
+            state.scan_mode = ScanMode::Input(String::new());
+            return;
+        }
+        MenuAction::ScanNeighbors => {
+            if state.probe_sector_coords().is_some() {
+                state.scan_mode = ScanMode::DirectionPick;
+            }
+            return;
+        }
+        MenuAction::ScanRefresh => {
+            state.scan_loading = true;
+            state.scan_error = None;
+            fetch_sector(None, client.clone(), tx.clone());
+            return;
+        }
+        MenuAction::ScanFilter => {
+            state.cycle_scan_filter();
+            state.set_toast(format!("filter: {}", state.scan_filter.label()));
             return;
         }
         _ => {}

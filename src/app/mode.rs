@@ -32,6 +32,11 @@ pub enum MenuAction {
     // Storage pane
     RenameContainer,
     EditContainerRules,
+    // Scanner pane
+    ScanObserve,
+    ScanNeighbors,
+    ScanRefresh,
+    ScanFilter,
 }
 
 /// A single entry in a contextual action menu.
@@ -97,8 +102,41 @@ impl super::AppState {
             super::Pane::Inventory => Some(self.inventory_context_menu()),
             super::Pane::Probe => self.probe_context_menu(),
             super::Pane::Storage => self.storage_context_menu(),
+            super::Pane::Scanner => Some(self.scanner_context_menu()),
             _ => None,
         }
+    }
+
+    fn scanner_context_menu(&self) -> ContextMenu {
+        // Neighbor batch scan needs a known probe position to offset from.
+        let has_pos = self.probe_sector_coords().is_some();
+        let items = vec![
+            MenuItem {
+                action: MenuAction::ScanObserve,
+                label: "Observe coordinates…".into(),
+                enabled: true,
+                disabled_reason: None,
+            },
+            MenuItem {
+                action: MenuAction::ScanNeighbors,
+                label: "Scan neighbors…".into(),
+                enabled: has_pos,
+                disabled_reason: (!has_pos).then(|| "unknown position".to_string()),
+            },
+            MenuItem {
+                action: MenuAction::ScanRefresh,
+                label: "Refresh current sector".into(),
+                enabled: true,
+                disabled_reason: None,
+            },
+            MenuItem {
+                action: MenuAction::ScanFilter,
+                label: format!("Cycle filter (now: {})", self.scan_filter.label()),
+                enabled: !self.scan_history.is_empty(),
+                disabled_reason: self.scan_history.is_empty().then(|| "no history".to_string()),
+            },
+        ];
+        ContextMenu { title: "SCANNER".into(), items, cursor: 0 }
     }
 
     fn storage_context_menu(&self) -> Option<ContextMenu> {
