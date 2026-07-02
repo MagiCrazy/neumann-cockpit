@@ -26,7 +26,7 @@ pub(crate) use drop_container::render_drop_container_overlay;
 pub(crate) use help::render_help_overlay;
 pub(crate) use inventory_detail::render_inventory_detail_overlay;
 pub(crate) use jettison::render_jettison_overlay;
-pub(crate) use map::render_map_overlay;
+pub(crate) use map::{render_goto_visited_overlay, render_map_overlay};
 pub(crate) use messages::render_messages_overlay;
 pub(crate) use mine::render_mine_overlay;
 pub(crate) use remote_mine::render_remote_mine_overlay;
@@ -47,8 +47,8 @@ pub(crate) use waypoints::render_waypoints_overlay;
 
 use crate::app::{
     AlertsInput, AppState, AtomicPrinterCraftInput, ContainerRulesInput,
-    CraftInput, DeployInput, DetachInput, DropCargoInput, DropStorageContainerInput, InspectInput,
-    JettisonInput, MineInput,
+    CraftInput, DeployInput, DetachInput, DropCargoInput, DropStorageContainerInput,
+    GotoVisitedInput, InspectInput, JettisonInput, MineInput,
     MessagesInput, MindSnapshotInput, MissionsInput, ObjectActionInput, RecallInput, RecoverInput,
     RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput,
     ScanMode, ScutNetworkInput, ScutRelayInput, StorageMoveInput, TravelInput, WaypointsInput,
@@ -82,6 +82,9 @@ pub(crate) fn render_active_overlays(frame: &mut Frame, area: Rect, state: &AppS
     }
     if state.map.open {
         render_map_overlay(frame, area, state);
+    }
+    if matches!(state.goto_visited, GotoVisitedInput::Picking { .. }) {
+        render_goto_visited_overlay(frame, area, state);
     }
     if !matches!(state.jettison, JettisonInput::Inactive) {
         render_jettison_overlay(frame, area, state);

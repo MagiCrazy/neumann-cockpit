@@ -37,6 +37,11 @@ pub enum MenuAction {
     ScanDirection,
     ScanObserve,
     ScanFilter,
+    ScanTravel,
+    // Map pane
+    OpenMap,
+    Travel,
+    GotoVisited,
 }
 
 /// A single entry in a contextual action menu.
@@ -103,14 +108,44 @@ impl super::AppState {
             super::Pane::Probe => self.probe_context_menu(),
             super::Pane::Storage => self.storage_context_menu(),
             super::Pane::Scanner => Some(self.scanner_context_menu()),
+            super::Pane::Map => Some(self.map_context_menu()),
             _ => None,
         }
+    }
+
+    fn map_context_menu(&self) -> ContextMenu {
+        let has_visited = !self.visited_sectors.is_empty();
+        let items = vec![
+            MenuItem {
+                action: MenuAction::OpenMap,
+                label: "Open map".into(),
+                enabled: true,
+                disabled_reason: None,
+            },
+            MenuItem {
+                action: MenuAction::Travel,
+                label: "Travel to coordinates…".into(),
+                enabled: true,
+                disabled_reason: None,
+            },
+            MenuItem {
+                action: MenuAction::GotoVisited,
+                label: "Jump to visited sector…".into(),
+                enabled: has_visited,
+                disabled_reason: (!has_visited).then(|| "none visited".to_string()),
+            },
+        ];
+        ContextMenu { title: "MAP".into(), items, cursor: 0 }
     }
 
     fn scanner_context_menu(&self) -> ContextMenu {
         // Batch scans need a known probe position to offset from.
         let has_pos = self.probe_sector_coords().is_some();
         let pos_reason = (!has_pos).then(|| "unknown position".to_string());
+        // Travel to the observation under the history cursor — unless it is the
+        // sector we are already in.
+        let has_selection = self.current_sector().is_some();
+        let here = self.viewing_probe_sector();
         let items = vec![
             MenuItem {
                 action: MenuAction::ScanAround,
@@ -136,8 +171,22 @@ impl super::AppState {
                 enabled: !self.scan_history.is_empty(),
                 disabled_reason: self.scan_history.is_empty().then(|| "no history".to_string()),
             },
+            // Travel is the terminal action — kept last, below the scan verbs.
+            MenuItem {
+                action: MenuAction::ScanTravel,
+                label: "Travel here".into(),
+                enabled: has_selection && !here,
+                disabled_reason: if !has_selection {
+                    Some("no sector selected".to_string())
+                } else if here {
+                    Some("already here".to_string())
+                } else {
+                    None
+                },
+            },
         ];
-        ContextMenu { title: "SCANNER".into(), items, cursor: 0 }
+        let cursor = items.iter().position(|i| i.enabled).unwrap_or(0);
+        ContextMenu { title: "SCANNER".into(), items, cursor }
     }
 
     fn storage_context_menu(&self) -> Option<ContextMenu> {

@@ -293,6 +293,7 @@ impl super::AppState {
                     | Pane::Storage
                     | Pane::Sector
                     | Pane::Scanner
+                    | Pane::Map
             )
         {
             parts.push("Enter act");

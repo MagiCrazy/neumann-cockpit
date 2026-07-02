@@ -11,7 +11,38 @@ use ratatui::{
 };
 
 use crate::ui::theme::{format_duration, map_cell_symbol, palette};
-use super::centered_rect;
+use super::{centered_rect, render_pick_list};
+
+/// Picker over visited sectors (most-recent first, as returned by the API):
+/// coordinates, distance from the probe, and visit count.
+pub(crate) fn render_goto_visited_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let crate::app::GotoVisitedInput::Picking { selection } = state.goto_visited else {
+        return;
+    };
+    let p = palette(state.color_mode);
+    let probe = state.probe_sector_coords();
+    let labels: Vec<String> = state
+        .visited_sectors
+        .iter()
+        .map(|v| {
+            let c = &v.relative_coordinates;
+            let (x, y, z) = (c.x.round() as i32, c.y.round() as i32, c.z.round() as i32);
+            let dist = probe
+                .map(|(px, py, pz)| (x - px).abs().max((y - py).abs()).max((z - pz).abs()))
+                .map(|d| format!("  d{d}"))
+                .unwrap_or_default();
+            let times = if v.visit_count > 1 { format!("  ×{}", v.visit_count) } else { String::new() };
+            format!("({x}, {y}, {z}){dist}{times}")
+        })
+        .collect();
+    let refs: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
+    let height = (refs.len() as u16 + 6).clamp(8, 20);
+    render_pick_list(
+        frame, area, p, " JUMP TO VISITED SECTOR ", 46, height,
+        Some("Travel to:"), &refs, selection, None, "travel",
+    );
+}
+
 pub(crate) fn sector_brief(s: &SectorObservation) -> String {
     let Some(objects) = &s.objects else {
         return "estimated only".into();

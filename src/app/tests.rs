@@ -1540,3 +1540,34 @@ fn mine_reserve_max_falls_back_to_free_capacity_without_reserves() {
     // No resourceAmounts → reserves are 0 → fall back to free capacity (0.5).
     assert_eq!(state.mine_reserve_max("ast-1", [false, true, false, false]), 0.5);
 }
+
+// ── map & travel context menus ────────────────────────────────────────────
+
+#[test]
+fn map_context_menu_goto_disabled_without_visited() {
+    let mut state = AppState::default();
+    state.active_pane = Pane::Map;
+    let menu = state.build_context_menu().expect("map menu");
+    assert_eq!(menu.items.len(), 3);
+    let goto = menu.items.iter().find(|i| i.action == MenuAction::GotoVisited).unwrap();
+    assert!(!goto.enabled, "no visited sectors → jump disabled");
+    // Open map / travel are always available.
+    assert!(menu.items.iter().find(|i| i.action == MenuAction::Travel).unwrap().enabled);
+}
+
+#[test]
+fn scanner_travel_here_enabled_for_remote_selection_only() {
+    let mut state = AppState::default();
+    state.active_pane = Pane::Scanner;
+    state.probe = Some(probe_at(0., 0., 0.));
+    // Remote observation selected → Travel here enabled.
+    state.scan_history = vec![make_sector(2., 0., 0.)];
+    let travel = state.build_context_menu().unwrap().items.into_iter()
+        .find(|i| i.action == MenuAction::ScanTravel).unwrap();
+    assert!(travel.enabled);
+    // Current sector selected → disabled ("already here").
+    state.scan_history = vec![make_sector(0., 0., 0.)];
+    let travel = state.build_context_menu().unwrap().items.into_iter()
+        .find(|i| i.action == MenuAction::ScanTravel).unwrap();
+    assert!(!travel.enabled);
+}

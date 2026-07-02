@@ -19,8 +19,8 @@ use crate::app::{
     ApiMessage, AppState, AtomicPrinterCraftInput, CraftInput, DetachInput, DropCargoInput,
     DropStorageContainerInput, DrillLevel, InputMode, InspectInput, MenuAction, MessagesInput,
     MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput, Pane, RecallInput, RecoverInput,
-    RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput,
-    ScanMode, StorageMoveInput,
+    GotoVisitedInput, RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput,
+    RepairInput, SalvageInput, ScanMode, StorageMoveInput, TravelInput,
 };
 
 pub fn handle_cockpit_event(
@@ -47,6 +47,9 @@ pub fn handle_cockpit_event(
         KeyCode::Left | KeyCode::Char('h') => {
             drill_out(state);
         }
+        // The Map pane has no in-pane zoom view — `z` opens the full isometric
+        // map overlay (its own pan/travel controls take over).
+        KeyCode::Char('z') if state.active_pane == Pane::Map => state.open_map(),
         KeyCode::Char('z') => state.toggle_zoom(),
         KeyCode::Char('?') => state.help_open = true,
         KeyCode::F(1) => state.hints_visible = !state.hints_visible,
@@ -73,7 +76,7 @@ pub fn handle_cockpit_event(
 /// the contextual menu; panes backed by a rich wizard reuse its overlay.
 fn open_actions(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
     match state.active_pane {
-        Pane::Mannies | Pane::Inventory | Pane::Probe | Pane::Storage | Pane::Scanner => {
+        Pane::Mannies | Pane::Inventory | Pane::Probe | Pane::Storage | Pane::Scanner | Pane::Map => {
             match state.build_context_menu() {
                 Some(menu) if !menu.items.is_empty() => state.mode = InputMode::Menu(menu),
                 _ => state.set_toast("no actions here"),
@@ -93,7 +96,6 @@ fn open_actions(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiM
             fetch_sent_messages(client.clone(), tx.clone());
         }
         Pane::Sector => open_sector_object_actions(state),
-        _ => state.set_toast("no actions here"),
     }
 }
 
@@ -269,6 +271,28 @@ fn fire_menu_action(
         MenuAction::ScanFilter => {
             state.cycle_scan_filter();
             state.set_toast(format!("filter: {}", state.scan_filter.label()));
+            return;
+        }
+        MenuAction::ScanTravel => {
+            if let Some(s) = state.current_sector() {
+                let c = &s.relative_coordinates;
+                let (x, y, z) = (c.x.round() as i32, c.y.round() as i32, c.z.round() as i32);
+                state.travel_go_sector(x, y, z);
+            }
+            return;
+        }
+        MenuAction::OpenMap => {
+            state.open_map();
+            return;
+        }
+        MenuAction::Travel => {
+            state.travel = TravelInput::Typing(String::new());
+            return;
+        }
+        MenuAction::GotoVisited => {
+            if !state.visited_sectors.is_empty() {
+                state.goto_visited = GotoVisitedInput::Picking { selection: 0 };
+            }
             return;
         }
         _ => {}

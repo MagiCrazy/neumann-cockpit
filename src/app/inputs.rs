@@ -37,6 +37,17 @@ pub enum TravelInput {
     },
 }
 
+/// Picker over the probe's visited sectors; selecting one launches the travel
+/// wizard (confirm step) for its coordinates.
+#[derive(Default)]
+pub enum GotoVisitedInput {
+    #[default]
+    Inactive,
+    Picking {
+        selection: usize,
+    },
+}
+
 pub const RESOURCE_TYPES: [&str; 4] = ["deuterium", "metals", "ice", "carbon_compounds"];
 
 pub const RESOURCE_LABELS: [&str; 4] = ["deuterium", "metals", "ice", "carbon"];
