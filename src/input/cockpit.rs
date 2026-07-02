@@ -20,7 +20,7 @@ use crate::app::{
     DropStorageContainerInput, DrillLevel, InputMode, InspectInput, MenuAction, MessagesInput,
     MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput, Pane, RecallInput, RecoverInput,
     GotoVisitedInput, RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput,
-    RepairInput, SalvageInput, ScanMode, StorageMoveInput, TravelInput,
+    RepairInput, SalvageInput, ScanMode, StorageMoveInput, TravelInput, WaypointsInput,
 };
 
 pub fn handle_cockpit_event(
@@ -292,6 +292,13 @@ fn fire_menu_action(
         MenuAction::GotoVisited => {
             if !state.visited_sectors.is_empty() {
                 state.goto_visited = GotoVisitedInput::Picking { selection: 0 };
+            }
+            return;
+        }
+        MenuAction::Waypoints => {
+            let entries = state.collect_waypoints();
+            if !entries.is_empty() {
+                state.waypoints = WaypointsInput::Browsing { entries, selection: 0 };
             }
             return;
         }
