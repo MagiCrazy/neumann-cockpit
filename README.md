@@ -48,8 +48,9 @@ neumann-cockpit
 
 A single **phosphor cockpit**: a 3×3 tiling dashboard of nine panes, keyboard-first, *navigate then act*.
 
-- **Navigate** — `e r t / d f g / c v b` (a square on the keyboard) jump to a pane; `j`/`k` (or `↑`/`↓`) move the cursor; `l`/`h` drill in/out.
+- **Navigate** — `e r t / d f g / c v b` (a square on the keyboard) jump to a pane; `j`/`k` (or `↑`/`↓`) move the cursor; `l`/`h` drill in/out; `Tab`/`Shift+Tab` cycle panes.
 - **Act** — `Enter` opens the pane's contextual action menu.
+- **Command** — `:` opens a vim-style command line (`:travel`, `:goto`, `:filter`, `:theme`, `:refresh`…); `Tab` completes the verb.
 - **Zoom** — `z` blows the active pane up to full screen.
 - **Adapts** — the grid shrinks to 2×2 or a single pane on smaller terminals, following the active pane; a mini-map shows where you are.
 - **`F1`** toggle hints · **`F2`** cycle color mode · **`F5`** refresh · **`?`** help · **`q`** quit.
@@ -59,16 +60,18 @@ Startup plays a GUPPI self-check that assembles the cockpit centre-out; any key 
 ## Features
 
 - **Probe** — status, fuel, integrity, movement ETA and speed gauges
-- **Inventory** — cargo stocks, onboard items; jettison resources or eject mannies; deploy waypoint bookmarks
-- **Mannies** — per-manny status and progress; repair, mine, craft, salvage, recall, rename
-- **Scanner / Sector** — scan the current sector or arbitrary coordinates, neighbor sweep, deep scan; browsable history
+- **Scanner / Sector** — scan neighbors, a direction (distance 2), or arbitrary coordinates; filterable history; the Sector pane shows the current sector's objects with resources, planet class and habitability
+- **Map** — isometric sector map (`z`); travel to a scanned/visited sector or a waypoint, with fuel/ETA preview
+- **Mannies** — per-manny status and live task progress; repair, mine, craft, salvage, recall, rename, drop cargo
+- **Inventory** — cargo stocks and onboard items; jettison, move stock, atomic-printer craft
+- **Crafting** — recipes show what you can build right now (ingredients owned / required); mining shows the target's reserves
 - **Comms** — inter-probe messaging (inbox / sent / compose), alerts and damage warnings
 - **Missions & Storage** — track directives; browse storage containers with capacity and routing rules
-- **Colour modes** — mono-green, mono-amber, phosphor-semantic, or a 16-colour fallback
+- **Colour modes** — mono-green, mono-amber, phosphor-semantic, or a 16-colour fallback (`F2`)
 
-## Auto-refresh
+## Live updates
 
-The UI refreshes automatically when a movement completes — the timer is set to the probe's `arrival_at` timestamp. When idle the next deadline is 24 h away; no background polling.
+Time-derived values (progress bars, percentages, ETAs, the clock) tick every second, so a manny's mining % or a movement's countdown advances on screen without any input. Data is re-fetched when an action needs it, when a movement completes (the timer follows the probe's `arrival_at`), and otherwise at most once a minute — the bottom-right `⟳` shows how long since the last sync.
 
 ## Build from source
 
