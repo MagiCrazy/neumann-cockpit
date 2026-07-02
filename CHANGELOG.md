@@ -1,5 +1,12 @@
 # Changelog
 
+## [63.0.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v63.0.0...neumann-cockpit-v63.0.1) (2026-07-01)
+
+
+### Documentation
+
+* add CONTRIBUTING guide and link it from the README ([#82](https://github.com/MagiCrazy/neumann-cockpit/issues/82)) ([cf23039](https://github.com/MagiCrazy/neumann-cockpit/commit/cf2303960c735c03589bbf804b997717c73ea5d9))
+
 ## [63.0.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v23.5.0...neumann-cockpit-v63.0.0) (2026-06-30)
 
 
