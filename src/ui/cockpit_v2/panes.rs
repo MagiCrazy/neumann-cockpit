@@ -127,30 +127,71 @@ fn render_message_detail(frame: &mut Frame, area: Rect, state: &AppState, id: &s
 }
 
 pub fn render_sector(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {
+    use crate::ui::panels::scanner::sector_object_lines;
+    use crate::ui::theme::object_color;
+
     let dim = Style::default().fg(p.dim);
-    let mut lines = Vec::new();
-    match state.current_sector() {
-        Some(s) => {
-            let v = &s.relative_coordinates;
-            lines.push(Line::styled(
-                format!("({}, {}, {})  d{}", v.x as i32, v.y as i32, v.z as i32, s.distance),
-                Style::default().fg(p.text),
-            ));
-            let objs = state.scanner_objects();
-            lines.push(Line::styled(format!("{} object(s)", objs.len()), dim));
-            let cur = cursor(state, Pane::Sector);
-            for (i, e) in objs.iter().enumerate() {
-                let (icon, color) = object_icon(&e.object_type);
-                let name: String = e.name.chars().take(20).collect();
-                lines.push(Line::from(vec![
-                    Span::styled(format!("{icon} "), Style::default().fg(color)),
-                    Span::styled(name, row_style(active, i == cur).patch(Style::default().fg(p.text))),
-                ]));
+    let text = Style::default().fg(p.text);
+    let Some(s) = state.current_sector() else {
+        render_body(frame, area, " SECTOR ", active, p, vec![Line::styled("no sector scan yet", dim)]);
+        return;
+    };
+    let v = &s.relative_coordinates;
+    let header = format!("({}, {}, {})  d{}", v.x as i32, v.y as i32, v.z as i32, s.distance);
+
+    // Zoom: the science station — full per-object detail (class, habitability,
+    // composition, resource shares/reserves, mineability, dimensions).
+    if state.zoomed {
+        let mut lines = vec![Line::styled(header, text), Line::raw("")];
+        match &s.objects {
+            Some(objs) if !objs.is_empty() => {
+                for obj in objs {
+                    lines.extend(sector_object_lines(obj, false, p));
+                }
             }
+            _ => lines.push(Line::styled("empty sector", dim)),
         }
-        None => lines.push(Line::styled("no sector scan yet", dim)),
+        render_body(frame, area, " SECTOR ", active, p, lines);
+        return;
+    }
+
+    // Compact: navigable object list, each row tagged with its headline datum
+    // (planet habitability/class, asteroid composition).
+    let mut lines = vec![Line::styled(header, text)];
+    let objs = state.scanner_objects();
+    lines.push(Line::styled(format!("{} object(s)", objs.len()), dim));
+    let cur = cursor(state, Pane::Sector);
+    for (i, e) in objs.iter().enumerate() {
+        let color = object_color(&e.object_type, p);
+        let icon = object_icon(&e.object_type).0;
+        let name: String = e.name.chars().take(18).collect();
+        let mut spans = vec![
+            Span::styled(format!("{icon} "), Style::default().fg(color)),
+            Span::styled(name, row_style(active, i == cur).patch(text)),
+        ];
+        if let Some(tag) = sector_entry_tag(state, &e.id, p) {
+            spans.push(tag);
+        }
+        lines.push(Line::from(spans));
     }
     render_body(frame, area, " SECTOR ", active, p, lines);
+}
+
+/// A terse dim tag for a compact Sector row, looked up from the raw object:
+/// planet habitability/class, asteroid composition, else a mineable marker.
+fn sector_entry_tag<'a>(state: &AppState, id: &str, p: Palette) -> Option<Span<'a>> {
+    let s = state.current_sector()?;
+    let obj = s.objects.as_ref()?.iter().find(|o| o.id.as_deref() == Some(id))?;
+    if let Some(h) = obj.habitability_score {
+        return Some(Span::styled(format!("  hab {:.0}%", h * 100.0), Style::default().fg(p.dim)));
+    }
+    if let Some(cat) = &obj.category {
+        return Some(Span::styled(format!("  {cat}"), Style::default().fg(p.dim)));
+    }
+    if let Some(comp) = &obj.composition {
+        return Some(Span::styled(format!("  {comp}"), Style::default().fg(p.dim)));
+    }
+    (obj.manny_mineable == Some(true)).then(|| Span::styled("  ⛏", Style::default().fg(p.warn)))
 }
 
 pub fn render_missions(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {

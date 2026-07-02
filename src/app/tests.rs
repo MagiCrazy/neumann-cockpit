@@ -1453,3 +1453,43 @@ fn manny_task_progress_complete_when_past_end() {
     m.task_estimated_end_time = Some(chrono::Utc::now() - chrono::Duration::seconds(10));
     assert_eq!(manny_task_progress(&m), 1.0);
 }
+
+// ── new v63 planet/asteroid fields ────────────────────────────────────────
+
+#[test]
+fn sector_object_planet_science_fields_deserialize() {
+    use crate::api::types::SectorObject;
+    let planet: SectorObject = serde_json::from_str(r#"{
+        "type": "planet",
+        "name": "Kepler-relative-1",
+        "summary": "temperate ocean world",
+        "category": "ocean",
+        "habitabilityScore": 0.82,
+        "mannyMineable": true,
+        "resourceTypes": ["metals", "ice"],
+        "resourceComposition": {"deuterium": 0.0, "metals": 0.6, "ice": 0.4, "carbon_compounds": 0.0}
+    }"#).unwrap();
+    assert_eq!(planet.category.as_deref(), Some("ocean"));
+    assert_eq!(planet.habitability_score, Some(0.82));
+    assert_eq!(planet.manny_mineable, Some(true));
+    assert_eq!(planet.resource_types, vec!["metals", "ice"]);
+    let comp = planet.resource_composition.expect("composition");
+    assert!((comp.metals - 0.6).abs() < 1e-9 && (comp.ice - 0.4).abs() < 1e-9);
+}
+
+#[test]
+fn sector_object_asteroid_reserves_deserialize() {
+    use crate::api::types::SectorObject;
+    let ast: SectorObject = serde_json::from_str(r#"{
+        "type": "asteroid",
+        "name": "AX-12",
+        "summary": "carbonaceous",
+        "composition": "carbonaceous",
+        "resourceAmounts": {"deuterium": 0.0, "metals": 1.25, "ice": 0.0, "carbon_compounds": 3.5}
+    }"#).unwrap();
+    assert_eq!(ast.composition.as_deref(), Some("carbonaceous"));
+    let amt = ast.resource_amounts.expect("amounts");
+    assert!((amt.carbon_compounds - 3.5).abs() < 1e-9);
+    // Absent fields stay None / empty.
+    assert!(ast.category.is_none() && ast.resource_types.is_empty());
+}
