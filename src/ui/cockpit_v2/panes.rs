@@ -6,12 +6,18 @@
 //! swaps a pane to its detail view (Missions → steps, Comms → message).
 //! Colours come from the active [`Palette`].
 
-use crate::api::types::{Manny, MannyLocationType, MannyTaskVisibility, MissionStatus, MissionStepStatus};
+use crate::api::types::{
+    Manny, MannyLocationType, MannyTaskVisibility, MissionStatus, MissionStepStatus, SectorObject,
+    SectorObjectType,
+};
 use crate::app::{AppState, DrillLevel, Pane};
 use crate::ui::panels::mannies::{
     manny_mining_detail, manny_task_eta, manny_task_label, manny_task_progress,
 };
-use crate::ui::theme::{block_gauge_line, object_icon, pane_block, Palette};
+use crate::ui::panels::scanner::{resource_shares_line, sector_object_lines};
+use crate::ui::theme::{
+    block_gauge_line, object_color, object_icon, object_type_label, pane_block, ratio_color, Palette,
+};
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
@@ -127,9 +133,6 @@ fn render_message_detail(frame: &mut Frame, area: Rect, state: &AppState, id: &s
 }
 
 pub fn render_sector(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {
-    use crate::ui::panels::scanner::sector_object_lines;
-    use crate::ui::theme::object_color;
-
     let dim = Style::default().fg(p.dim);
     let text = Style::default().fg(p.text);
     let Some(s) = state.current_sector() else {
@@ -139,14 +142,21 @@ pub fn render_sector(frame: &mut Frame, area: Rect, state: &AppState, active: bo
     let v = &s.relative_coordinates;
     let header = format!("({}, {}, {})  d{}", v.x as i32, v.y as i32, v.z as i32, s.distance);
 
-    // Zoom: the science station — full per-object detail (class, habitability,
-    // composition, resource shares/reserves, mineability, dimensions).
+    // Zoom: the science station — full per-object detail. Solar systems get a
+    // merged per-body breakdown (star, each planet's class/habitability, each
+    // mineable body's resources); standalone objects reuse the scanner's
+    // verbose object lines.
     if state.zoomed {
         let mut lines = vec![Line::styled(header, text), Line::raw("")];
         match &s.objects {
             Some(objs) if !objs.is_empty() => {
                 for obj in objs {
-                    lines.extend(sector_object_lines(obj, false, p));
+                    if obj.object_type == SectorObjectType::SolarSystem {
+                        lines.extend(solar_system_zoom_lines(obj, p));
+                    } else {
+                        lines.extend(sector_object_lines(obj, false, p));
+                    }
+                    lines.push(Line::raw(""));
                 }
             }
             _ => lines.push(Line::styled("empty sector", dim)),
@@ -155,8 +165,9 @@ pub fn render_sector(frame: &mut Frame, area: Rect, state: &AppState, active: bo
         return;
     }
 
-    // Compact: navigable object list, each row tagged with its headline datum
-    // (planet habitability/class, asteroid composition).
+    // Compact: navigable object list, each row tagged with its headline data
+    // (system star/planet count, asteroid composition/resources, planet
+    // habitability).
     let mut lines = vec![Line::styled(header, text)];
     let objs = state.scanner_objects();
     lines.push(Line::styled(format!("{} object(s)", objs.len()), dim));
@@ -164,34 +175,177 @@ pub fn render_sector(frame: &mut Frame, area: Rect, state: &AppState, active: bo
     for (i, e) in objs.iter().enumerate() {
         let color = object_color(&e.object_type, p);
         let icon = object_icon(&e.object_type).0;
-        let name: String = e.name.chars().take(18).collect();
+        let name: String = e.name.chars().take(16).collect();
         let mut spans = vec![
             Span::styled(format!("{icon} "), Style::default().fg(color)),
             Span::styled(name, row_style(active, i == cur).patch(text)),
         ];
-        if let Some(tag) = sector_entry_tag(state, &e.id, p) {
-            spans.push(tag);
-        }
+        spans.extend(sector_entry_tags(state, &e.id, p));
         lines.push(Line::from(spans));
     }
     render_body(frame, area, " SECTOR ", active, p, lines);
 }
 
-/// A terse dim tag for a compact Sector row, looked up from the raw object:
-/// planet habitability/class, asteroid composition, else a mineable marker.
-fn sector_entry_tag<'a>(state: &AppState, id: &str, p: Palette) -> Option<Span<'a>> {
-    let s = state.current_sector()?;
-    let obj = s.objects.as_ref()?.iter().find(|o| o.id.as_deref() == Some(id))?;
-    if let Some(h) = obj.habitability_score {
-        return Some(Span::styled(format!("  hab {:.0}%", h * 100.0), Style::default().fg(p.dim)));
+/// Join mineable resource types into a terse label (`metals ice carbon`).
+fn resource_types_str(types: &[String]) -> String {
+    types
+        .iter()
+        .map(|r| match r.as_str() {
+            "carbon_compounds" => "carbon",
+            other => other,
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Terse headline tags for a compact Sector row, looked up from the raw object
+/// (top-level or nested by id): system star/planet count, asteroid
+/// composition/resources, planet habitability + class.
+fn sector_entry_tags(state: &AppState, id: &str, p: Palette) -> Vec<Span<'static>> {
+    let dim = Style::default().fg(p.dim);
+    let mut out: Vec<Span<'static>> = Vec::new();
+    let Some(s) = state.current_sector() else { return out };
+    let Some(objs) = s.objects.as_ref() else { return out };
+
+    if let Some(o) = objs.iter().find(|o| o.id.as_deref() == Some(id)) {
+        match o.object_type {
+            SectorObjectType::SolarSystem => {
+                out.push(Span::styled("  ★".to_string(), Style::default().fg(p.warn)));
+                out.push(Span::styled(format!(" · {} planet(s)", o.planet_count.unwrap_or(0)), dim));
+            }
+            SectorObjectType::Asteroid => {
+                if let Some(c) = &o.composition {
+                    out.push(Span::styled(format!("  {c}"), dim));
+                } else if !o.resource_types.is_empty() {
+                    out.push(Span::styled(format!("  {}", resource_types_str(&o.resource_types)), dim));
+                }
+            }
+            SectorObjectType::Planet => {
+                if let Some(h) = o.habitability_score {
+                    out.push(Span::styled(format!("  hab {:.0}%", h * 100.0), Style::default().fg(ratio_color(h, p))));
+                }
+                if let Some(c) = &o.category {
+                    out.push(Span::styled(format!(" {c}"), dim));
+                }
+            }
+            _ => {
+                if o.manny_mineable == Some(true) {
+                    out.push(Span::styled("  ⛏".to_string(), Style::default().fg(p.warn)));
+                }
+            }
+        }
+        return out;
     }
-    if let Some(cat) = &obj.category {
-        return Some(Span::styled(format!("  {cat}"), Style::default().fg(p.dim)));
+
+    // Nested body of a solar system, matched by id.
+    for o in objs {
+        if let Some(t) = o.minable_targets.iter().flatten().find(|t| t.id == id) {
+            if let Some(rt) = &t.resource_types {
+                if !rt.is_empty() {
+                    out.push(Span::styled(format!("  {}", resource_types_str(rt)), dim));
+                }
+            }
+            return out;
+        }
+        if let Some(t) = o.bookmark_targets.iter().find(|t| t.id == id) {
+            if let Some(h) = t.habitability_score {
+                out.push(Span::styled(format!("  hab {:.0}%", h * 100.0), Style::default().fg(ratio_color(h, p))));
+            }
+            if let Some(c) = &t.category {
+                out.push(Span::styled(format!(" {c}"), dim));
+            }
+            return out;
+        }
     }
-    if let Some(comp) = &obj.composition {
-        return Some(Span::styled(format!("  {comp}"), Style::default().fg(p.dim)));
+    out
+}
+
+/// Zoom breakdown of a solar system: header + body counts, then one entry per
+/// nested body (union of bookmark + mineable targets, merged by id) with its
+/// type, class, habitability and mineable resources.
+fn solar_system_zoom_lines(obj: &SectorObject, p: Palette) -> Vec<Line<'static>> {
+    let dim = Style::default().fg(p.dim);
+    let text = Style::default().fg(p.text);
+    let mut lines: Vec<Line<'static>> = Vec::new();
+
+    let name = obj
+        .name
+        .clone()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| object_type_label(&obj.object_type).to_string());
+    lines.push(Line::from(vec![
+        Span::styled(format!("{} ", object_icon(&obj.object_type).0), Style::default().fg(object_color(&obj.object_type, p))),
+        Span::styled(name, text),
+    ]));
+    lines.push(Line::styled(
+        format!(
+            "  ★ {} star(s) · {} planet(s) · {} bodies",
+            obj.star_count.unwrap_or(0),
+            obj.planet_count.unwrap_or(0),
+            obj.orbital_body_count.unwrap_or(0),
+        ),
+        dim,
+    ));
+
+    // Union of nested body ids, bookmark targets first, then mineable-only.
+    let mut ids: Vec<String> = Vec::new();
+    for t in &obj.bookmark_targets {
+        if !ids.contains(&t.id) {
+            ids.push(t.id.clone());
+        }
     }
-    (obj.manny_mineable == Some(true)).then(|| Span::styled("  ⛏", Style::default().fg(p.warn)))
+    for t in obj.minable_targets.iter().flatten() {
+        if !ids.contains(&t.id) {
+            ids.push(t.id.clone());
+        }
+    }
+
+    let mut counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    for id in ids {
+        let bt = obj.bookmark_targets.iter().find(|t| t.id == id);
+        let mt = obj.minable_targets.iter().flatten().find(|t| t.id == id);
+        let otype = bt.map(|b| b.object_type.clone()).or_else(|| mt.map(|m| m.object_type.clone()));
+        let Some(otype) = otype else { continue };
+        let label = object_type_label(&otype);
+        let n = counts.entry(label).or_insert(0);
+        *n += 1;
+        let name = bt
+            .and_then(|b| b.name.clone())
+            .or_else(|| mt.and_then(|m| m.name.clone()))
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| format!("{label} #{n}"));
+
+        lines.push(Line::from(vec![
+            Span::styled(format!("  {} ", object_icon(&otype).0), Style::default().fg(object_color(&otype, p))),
+            Span::styled(name, text),
+            Span::styled(format!("  {label}"), dim),
+        ]));
+        if let Some(b) = bt {
+            if let Some(h) = b.habitability_score {
+                lines.push(Line::from(vec![
+                    Span::styled("      habitability ", dim),
+                    Span::styled(format!("{:.0}%", h * 100.0), Style::default().fg(ratio_color(h, p))),
+                ]));
+            }
+            if let Some(c) = &b.category {
+                lines.push(Line::from(vec![Span::styled("      class ", dim), Span::styled(c.clone(), text)]));
+            }
+        }
+        if let Some(m) = mt {
+            if let Some(rt) = &m.resource_types {
+                if !rt.is_empty() {
+                    lines.push(Line::from(vec![
+                        Span::styled("      resources ", dim),
+                        Span::styled(resource_types_str(rt), Style::default().fg(p.warn)),
+                    ]));
+                }
+            }
+            if let Some(line) = resource_shares_line("      shares ", m.resource_composition.as_ref(), true, p) {
+                lines.push(line);
+            }
+        }
+    }
+    lines
 }
 
 pub fn render_missions(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {

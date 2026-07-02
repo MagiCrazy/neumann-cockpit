@@ -692,6 +692,7 @@ pub struct WaypointBookmarkTarget {
     pub mass_unit: Option<String>,
     pub radius: Option<f64>,
     pub radius_unit: Option<String>,
+    pub category: Option<String>,
     pub habitability_score: Option<f64>,
     #[serde(default)]
     pub waypoint_bookmarks: Vec<WaypointBookmarkHistory>,
@@ -838,8 +839,8 @@ pub struct MinableTarget {
     pub name: Option<String>,
     pub mass: Option<f64>,
     pub resource_types: Option<Vec<String>>,
-    pub resource_amounts: Option<serde_json::Value>,
-    pub resource_composition: Option<serde_json::Value>,
+    pub resource_amounts: Option<ResourceShares>,
+    pub resource_composition: Option<ResourceShares>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
