@@ -121,6 +121,26 @@ pub(crate) fn manny_task_eta(m: &Manny) -> Option<String> {
         .map(|end| format_duration((end - Utc::now()).num_seconds().max(0)))
 }
 
+/// Task progress in 0..=1, interpolated client-side so it ticks between
+/// fetches. The server sends a snapshot `task_progress_percent` at
+/// `observed_at` plus an estimated end time; assuming a linear task we rebuild
+/// the timeline and advance progress with the wall clock. Falls back to the
+/// raw snapshot when timestamps are missing, and never runs backward from it.
+pub(crate) fn manny_task_progress(m: &Manny) -> f64 {
+    let p0 = (m.task_progress_percent / 100.0).clamp(0.0, 1.0);
+    let (Some(obs), Some(end)) = (m.observed_at, m.task_estimated_end_time) else {
+        return p0;
+    };
+    let remaining_at_obs = (end - obs).num_seconds() as f64;
+    if remaining_at_obs <= 0.0 || p0 >= 1.0 {
+        // Overdue or already complete at the snapshot.
+        return if end <= Utc::now() { 1.0 } else { p0 };
+    }
+    let total = remaining_at_obs / (1.0 - p0);
+    let remaining_now = (end - Utc::now()).num_seconds() as f64;
+    (1.0 - remaining_now / total).clamp(p0, 1.0)
+}
+
 pub(crate) fn manny_list_item(m: &Manny, selected: bool, p: Palette) -> ListItem<'_> {
     // On the selected row everything is accent so the ETA/% stay legible;
     // otherwise the palette's text for the name/task and dim for the rest.
@@ -144,7 +164,7 @@ pub(crate) fn manny_list_item(m: &Manny, selected: bool, p: Palette) -> ListItem
     let task_style = if task.is_none() { secondary } else { primary };
 
     let progress = if m.current_task.is_some() {
-        format!(" {:3.0}%", m.task_progress_percent)
+        format!(" {:3.0}%", manny_task_progress(m) * 100.0)
     } else {
         String::new()
     };

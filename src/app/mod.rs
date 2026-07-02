@@ -146,7 +146,13 @@ impl AppState {
         self.clamp_inventory_selection();
     }
 
-    pub fn update_mannies(&mut self, mannies: Vec<Manny>) {
+    pub fn update_mannies(&mut self, mut mannies: Vec<Manny>) {
+        // Stamp receipt time so the UI can interpolate task progress between
+        // fetches (server sends a snapshot % + an estimated end time).
+        let now = Utc::now();
+        for m in &mut mannies {
+            m.observed_at = Some(now);
+        }
         // Clamp selection in case list shrank.
         if !mannies.is_empty() {
             self.mannies_selection = self.mannies_selection.min(mannies.len() - 1);

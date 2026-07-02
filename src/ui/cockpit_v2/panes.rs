@@ -8,7 +8,9 @@
 
 use crate::api::types::{Manny, MannyLocationType, MannyTaskVisibility, MissionStatus, MissionStepStatus};
 use crate::app::{AppState, DrillLevel, Pane};
-use crate::ui::panels::mannies::{manny_mining_detail, manny_task_eta, manny_task_label};
+use crate::ui::panels::mannies::{
+    manny_mining_detail, manny_task_eta, manny_task_label, manny_task_progress,
+};
 use crate::ui::theme::{block_gauge_line, object_icon, pane_block, Palette};
 use ratatui::{
     layout::Rect,
@@ -362,7 +364,7 @@ fn manny_detail_lines(state: &AppState, m: &Manny, p: Palette) -> Vec<Line<'stat
     if task.is_some() {
         lines.push(Line::from(vec![
             Span::styled(manny_task_label(task), Style::default().fg(p.accent)),
-            Span::styled(format!("  {:.0}%", m.task_progress_percent), text),
+            Span::styled(format!("  {:.0}%", manny_task_progress(m) * 100.0), text),
         ]));
         if let Some(eta) = manny_task_eta(m) {
             lines.push(Line::from(vec![Span::styled("ETA ", dim), Span::styled(eta, text)]));
@@ -463,7 +465,7 @@ pub fn render_mannies_overview(frame: &mut Frame, area: Rect, state: &AppState, 
             Span::styled(manny_task_label(task), if task.is_none() { sec } else { name_style }),
         ];
         if m.current_task.is_some() {
-            header.push(Span::styled(format!(" {:.0}%", m.task_progress_percent), sec));
+            header.push(Span::styled(format!(" {:.0}%", manny_task_progress(m) * 100.0), sec));
             if let Some(eta) = manny_task_eta(m) {
                 header.push(Span::styled(format!(" · {eta}"), sec));
             }
