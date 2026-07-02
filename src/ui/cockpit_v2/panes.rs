@@ -225,6 +225,13 @@ pub fn render_storage(frame: &mut Frame, area: Rect, state: &AppState, active: b
     let zoomed = state.zoomed;
     let mut lines = Vec::new();
 
+    // Drilled into a container: render its contents inline (fetched on drill-in).
+    if let Some(DrillLevel::Container(id)) =
+        state.pane_nav[Pane::Storage.index()].drill.last()
+    {
+        return render_container_contents(frame, area, state, id, active, p);
+    }
+
     // Containers come with the probe (probe.inventory.containers), so the pane
     // fills as soon as the probe loads — Enter opens the full browser.
     match state.probe.as_ref().map(|pr| &pr.inventory.containers) {
@@ -242,10 +249,10 @@ pub fn render_storage(frame: &mut Frame, area: Rect, state: &AppState, active: b
                     text
                 };
                 let sec = if selected { Style::default().fg(p.accent) } else { dim };
-                let label: String = c.label.chars().take(10).collect();
+                let label: String = c.label.chars().take(12).collect();
                 let mut spans = vec![
                     Span::styled(if selected { "▶ " } else { "  " }, Style::default().fg(p.accent)),
-                    Span::styled(format!("{label:<10} "), name_style),
+                    Span::styled(format!("{label:<12}   "), name_style),
                     Span::styled("▓".repeat(filled), Style::default().fg(fill_color(p, 1.0 - ratio))),
                     Span::styled("░".repeat(W - filled), dim),
                     Span::styled(format!(" {:.0}%", ratio * 100.0), sec),
@@ -273,6 +280,72 @@ pub fn render_storage(frame: &mut Frame, area: Rect, state: &AppState, active: b
         }
     }
     render_body(frame, area, " STORAGE ", active, p, lines);
+}
+
+/// Inline contents of a container (drill-in `l` on the Storage pane): capacity,
+/// resource stocks, and unit items. Fetched on drill-in; shows a placeholder
+/// until the detail arrives.
+fn render_container_contents(
+    frame: &mut Frame,
+    area: Rect,
+    state: &AppState,
+    id: &str,
+    active: bool,
+    p: Palette,
+) {
+    let dim = Style::default().fg(p.dim);
+    let text = Style::default().fg(p.text);
+    let mut lines: Vec<Line> = Vec::new();
+
+    // Prefer the fetched detail; fall back to the summary while it loads.
+    let summary = state.storage_container(id);
+    let label = summary.map(|c| c.label.clone()).unwrap_or_else(|| "container".into());
+
+    match state.storage_container_detail.as_ref().filter(|(c, _)| c.id == id) {
+        None => {
+            lines.push(Line::styled("fetching contents…", dim));
+        }
+        Some((c, inv)) => {
+            let ratio = if c.capacity > 0.0 {
+                (c.used_capacity / c.capacity).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            lines.push(block_gauge_line("USED", ratio, &format!("{:.0}%", ratio * 100.0), fill_color(p, 1.0 - ratio), p));
+            lines.push(Line::styled(format!("free {:.2} of {:.2}", c.free_capacity, c.capacity), dim));
+
+            let rules = &c.rules;
+            if !rules.priority.is_empty() {
+                lines.push(Line::styled(format!("priority: {}", rules.priority.join(", ")), dim));
+            }
+            if !rules.exclusion.is_empty() {
+                lines.push(Line::styled(format!("exclude:  {}", rules.exclusion.join(", ")), dim));
+            }
+            if !rules.strict_exclusion.is_empty() {
+                lines.push(Line::styled(format!("strict:   {}", rules.strict_exclusion.join(", ")), dim));
+            }
+
+            lines.push(Line::raw(""));
+            if inv.resource_stocks.is_empty() && inv.items.is_empty() {
+                lines.push(Line::styled("empty", dim));
+            }
+            for st in &inv.resource_stocks {
+                lines.push(Line::from(vec![
+                    Span::styled(format!("{:<12} ", st.name), text),
+                    Span::styled(format!("{:.2}", st.amount), Style::default().fg(p.accent)),
+                ]));
+            }
+            for it in &inv.items {
+                lines.push(Line::from(vec![
+                    Span::styled("• ", dim),
+                    Span::styled(it.name.clone(), text),
+                ]));
+            }
+        }
+    }
+
+    let title = format!(" {label} ");
+    render_body(frame, area, &title, active, p, lines);
 }
 
 /// Detail view for a single manny (drill-in `l` on the Mannies pane): task,

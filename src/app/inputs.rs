@@ -78,15 +78,6 @@ pub enum AlertsInput {
 }
 
 #[derive(Default)]
-pub enum ContainersInput {
-    #[default]
-    Inactive,
-    /// Browsing the storage-container list (entries live in
-    /// `AppState::storage_containers`).
-    Browsing { selection: usize },
-}
-
-#[derive(Default)]
 pub enum RenameContainerInput {
     #[default]
     Inactive,

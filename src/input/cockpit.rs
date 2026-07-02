@@ -12,14 +12,15 @@ use tokio::sync::mpsc;
 use crate::api::client::ApiClient;
 use crate::api::tasks::{
     fetch_all, fetch_inspect, fetch_messages, fetch_recover, fetch_sector, fetch_sent_messages,
-    fetch_storage_containers,
+    fetch_storage_container_detail,
 };
 use crate::api::types::{MannyTask, MannyTaskVisibility};
 use crate::app::{
-    ApiMessage, AppState, AtomicPrinterCraftInput, ContainersInput, CraftInput, DetachInput,
-    DropCargoInput, DropStorageContainerInput, InputMode, InspectInput, MenuAction, MessagesInput,
+    ApiMessage, AppState, AtomicPrinterCraftInput, CraftInput, DetachInput, DropCargoInput,
+    DropStorageContainerInput, DrillLevel, InputMode, InspectInput, MenuAction, MessagesInput,
     MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput, Pane, RecallInput, RecoverInput,
-    RefuelInput, RemoteMineInput, RenameMannyInput, RepairInput, SalvageInput, StorageMoveInput,
+    RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput,
+    StorageMoveInput,
 };
 
 pub fn handle_cockpit_event(
@@ -42,9 +43,9 @@ pub fn handle_cockpit_event(
         }
         KeyCode::Down | KeyCode::Char('j') => state.pane_cursor_down(),
         KeyCode::Up | KeyCode::Char('k') => state.pane_cursor_up(),
-        KeyCode::Right | KeyCode::Char('l') => state.pane_drill_in(),
+        KeyCode::Right | KeyCode::Char('l') => drill_in(state, client, tx),
         KeyCode::Left | KeyCode::Char('h') => {
-            state.pane_drill_out();
+            drill_out(state);
         }
         KeyCode::Char('z') => state.toggle_zoom(),
         KeyCode::Char('?') => state.help_open = true,
@@ -54,7 +55,7 @@ pub fn handle_cockpit_event(
             if state.zoomed {
                 state.zoomed = false;
             } else {
-                state.pane_drill_out();
+                drill_out(state);
             }
         }
         KeyCode::Tab => state.cycle_pane(true),
@@ -72,10 +73,12 @@ pub fn handle_cockpit_event(
 /// the contextual menu; panes backed by a rich wizard reuse its overlay.
 fn open_actions(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
     match state.active_pane {
-        Pane::Mannies | Pane::Inventory | Pane::Probe => match state.build_context_menu() {
-            Some(menu) if !menu.items.is_empty() => state.mode = InputMode::Menu(menu),
-            _ => state.set_toast("no actions here"),
-        },
+        Pane::Mannies | Pane::Inventory | Pane::Probe | Pane::Storage => {
+            match state.build_context_menu() {
+                Some(menu) if !menu.items.is_empty() => state.mode = InputMode::Menu(menu),
+                _ => state.set_toast("no actions here"),
+            }
+        }
         Pane::Missions => {
             if state.missions.is_empty() {
                 state.set_toast("no missions");
@@ -89,13 +92,31 @@ fn open_actions(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiM
             fetch_messages(client.clone(), tx.clone());
             fetch_sent_messages(client.clone(), tx.clone());
         }
-        Pane::Storage => {
-            fetch_storage_containers(client.clone(), tx.clone());
-            state.containers_input = ContainersInput::Browsing { selection: 0 };
-        }
         Pane::Sector => open_sector_object_actions(state),
         _ => state.set_toast("no actions here"),
     }
+}
+
+/// Drill into the selected element. For Storage, this fetches the container's
+/// contents so they can be rendered inline (no legacy content modal).
+fn drill_in(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
+    state.pane_drill_in();
+    if state.active_pane == Pane::Storage {
+        if let Some(DrillLevel::Container(id)) =
+            state.pane_nav[Pane::Storage.index()].drill.last().cloned()
+        {
+            state.storage_container_detail = None;
+            fetch_storage_container_detail(id, client.clone(), tx.clone());
+        }
+    }
+}
+
+/// Drill out one level, clearing any transient detail loaded for the level.
+fn drill_out(state: &mut AppState) {
+    if state.active_pane == Pane::Storage {
+        state.storage_container_detail = None;
+    }
+    state.pane_drill_out();
 }
 
 fn open_sector_object_actions(state: &mut AppState) {
@@ -199,6 +220,29 @@ fn fire_menu_action(
         MenuAction::MindSnapshot => {
             if state.probe_terminal_alert().is_some() {
                 state.mind_snapshot = MindSnapshotInput::Confirm { error: None };
+            }
+            return;
+        }
+        MenuAction::RenameContainer => {
+            if let Some(id) = state.storage_selected_container_id() {
+                if let Some((container_id, label)) =
+                    state.storage_container(&id).map(|c| (c.id.clone(), c.label.clone()))
+                {
+                    state.rename_container = RenameContainerInput::Typing {
+                        container_id,
+                        current_label: label.clone(),
+                        buf: label,
+                        error: None,
+                    };
+                }
+            }
+            return;
+        }
+        MenuAction::EditContainerRules => {
+            if let Some(id) = state.storage_selected_container_id() {
+                if let Some(editor) = state.rules_editor_for(&id) {
+                    state.container_rules = editor;
+                }
             }
             return;
         }

@@ -29,6 +29,9 @@ pub enum MenuAction {
     MindSnapshot,
     // Mannies pane (extra)
     DropStorageContainer,
+    // Storage pane
+    RenameContainer,
+    EditContainerRules,
 }
 
 /// A single entry in a contextual action menu.
@@ -93,8 +96,32 @@ impl super::AppState {
             super::Pane::Mannies => self.mannies_context_menu(),
             super::Pane::Inventory => Some(self.inventory_context_menu()),
             super::Pane::Probe => self.probe_context_menu(),
+            super::Pane::Storage => self.storage_context_menu(),
             _ => None,
         }
+    }
+
+    fn storage_context_menu(&self) -> Option<ContextMenu> {
+        let cur = self.pane_nav[super::Pane::Storage.index()].cursor;
+        let c = self.probe.as_ref()?.inventory.containers.get(cur)?;
+        Some(ContextMenu {
+            title: c.label.clone(),
+            items: vec![
+                MenuItem {
+                    action: MenuAction::RenameContainer,
+                    label: "Rename…".into(),
+                    enabled: true,
+                    disabled_reason: None,
+                },
+                MenuItem {
+                    action: MenuAction::EditContainerRules,
+                    label: "Edit routing rules…".into(),
+                    enabled: true,
+                    disabled_reason: None,
+                },
+            ],
+            cursor: 0,
+        })
     }
 
     fn probe_context_menu(&self) -> Option<ContextMenu> {
