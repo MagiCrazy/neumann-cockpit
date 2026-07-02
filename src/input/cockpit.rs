@@ -246,20 +246,24 @@ fn fire_menu_action(
             }
             return;
         }
-        MenuAction::ScanObserve => {
-            state.scan_mode = ScanMode::Input(String::new());
+        MenuAction::ScanAround => {
+            if let Some((x, y, z)) = state.probe_sector_coords() {
+                let offsets = super::geometry::neighbors_d1();
+                state.start_batch(offsets.len());
+                for (dx, dy, dz) in offsets {
+                    fetch_sector(Some((x + dx, y + dy, z + dz)), client.clone(), tx.clone());
+                }
+            }
             return;
         }
-        MenuAction::ScanNeighbors => {
+        MenuAction::ScanDirection => {
             if state.probe_sector_coords().is_some() {
                 state.scan_mode = ScanMode::DirectionPick;
             }
             return;
         }
-        MenuAction::ScanRefresh => {
-            state.scan_loading = true;
-            state.scan_error = None;
-            fetch_sector(None, client.clone(), tx.clone());
+        MenuAction::ScanObserve => {
+            state.scan_mode = ScanMode::Input(String::new());
             return;
         }
         MenuAction::ScanFilter => {

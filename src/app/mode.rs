@@ -33,9 +33,9 @@ pub enum MenuAction {
     RenameContainer,
     EditContainerRules,
     // Scanner pane
+    ScanAround,
+    ScanDirection,
     ScanObserve,
-    ScanNeighbors,
-    ScanRefresh,
     ScanFilter,
 }
 
@@ -108,24 +108,25 @@ impl super::AppState {
     }
 
     fn scanner_context_menu(&self) -> ContextMenu {
-        // Neighbor batch scan needs a known probe position to offset from.
+        // Batch scans need a known probe position to offset from.
         let has_pos = self.probe_sector_coords().is_some();
+        let pos_reason = (!has_pos).then(|| "unknown position".to_string());
         let items = vec![
+            MenuItem {
+                action: MenuAction::ScanAround,
+                label: "Scan around (neighbors)".into(),
+                enabled: has_pos,
+                disabled_reason: pos_reason.clone(),
+            },
+            MenuItem {
+                action: MenuAction::ScanDirection,
+                label: "Scan a direction (×2)…".into(),
+                enabled: has_pos,
+                disabled_reason: pos_reason,
+            },
             MenuItem {
                 action: MenuAction::ScanObserve,
                 label: "Observe coordinates…".into(),
-                enabled: true,
-                disabled_reason: None,
-            },
-            MenuItem {
-                action: MenuAction::ScanNeighbors,
-                label: "Scan neighbors…".into(),
-                enabled: has_pos,
-                disabled_reason: (!has_pos).then(|| "unknown position".to_string()),
-            },
-            MenuItem {
-                action: MenuAction::ScanRefresh,
-                label: "Refresh current sector".into(),
                 enabled: true,
                 disabled_reason: None,
             },
