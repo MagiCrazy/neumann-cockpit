@@ -35,7 +35,8 @@ pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppStat
                 Some("Select mining target:"), &names, *selection, None, "confirm");
         }
 
-        MineInput::Configure { manny_name, object_name, resources, amount_buf, amount_mode, target_container, error, .. } => {
+        MineInput::Configure { manny_name, object_name, object_id, resources, amount_buf, amount_mode, target_container, error, .. } => {
+            let reserves = state.minable_target_reserves(object_id);
             let popup = centered_rect(52, 15, area);
             frame.render_widget(Clear, popup);
 
@@ -67,17 +68,30 @@ pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppStat
                 ),
             ]));
             for (i, (&label, &_type_str)) in RESOURCE_LABELS.iter().zip(RESOURCE_TYPES.iter()).enumerate() {
-                let checked = if resources[i] { "[✓]" } else { "[ ]" };
-                let (checked_color, label_color) = if resources[i] {
-                    (Color::Green, Color::White)
+                let present = reserves.map(|(f, _)| f[i]).unwrap_or(true);
+                let reserve = reserves.map(|(_, r)| r[i]);
+                let (checkbox, checked_color, label_color) = if !present {
+                    ("[·]", Color::DarkGray, Color::DarkGray)
+                } else if resources[i] {
+                    ("[✓]", Color::Green, Color::White)
                 } else {
-                    (Color::DarkGray, Color::DarkGray)
+                    ("[ ]", Color::DarkGray, Color::Gray)
                 };
-                lines.push(Line::from(vec![
-                    Span::styled(format!("  {checked} "), Style::default().fg(checked_color)),
+                let mut spans = vec![
+                    Span::styled(format!("  {checkbox} "), Style::default().fg(checked_color)),
                     Span::styled(format!("{} ", i + 1), Style::default().fg(Color::DarkGray)),
-                    Span::styled(label, Style::default().fg(label_color)),
-                ]));
+                    Span::styled(format!("{label:<9}"), Style::default().fg(label_color)),
+                ];
+                // Remaining reserve (ECE) when the target exposes it.
+                match (present, reserve) {
+                    (true, Some(r)) if r > 0.0 => spans.push(Span::styled(
+                        format!(" {r:.2}"),
+                        Style::default().fg(Color::DarkGray),
+                    )),
+                    (false, _) => spans.push(Span::styled(" —", Style::default().fg(Color::DarkGray))),
+                    _ => {}
+                }
+                lines.push(Line::from(spans));
             }
 
             lines.push(Line::default());

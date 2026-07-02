@@ -138,6 +138,49 @@ impl AppState {
     /// Actionable objects of the probe's current sector, in display order:
     /// for each top-level object, the object itself (if it has an id), then
     /// its minable targets, then its bookmark-target asteroids.
+    /// Presence flags and remaining reserves (ECE) per mineable resource for a
+    /// sector object, indexed as [`RESOURCE_TYPES`] (deuterium, metals, ice,
+    /// carbon_compounds). Looks up a top-level object or a nested mining target
+    /// by id. `None` when the object isn't in the current sector scan.
+    pub fn minable_target_reserves(&self, object_id: &str) -> Option<([bool; 4], [f64; 4])> {
+        use crate::api::types::ResourceShares;
+        let objs = self.current_sector()?.objects.as_ref()?;
+        let build = |types: &[String], amt: Option<&ResourceShares>| {
+            let has = |t: &str| types.iter().any(|x| x == t);
+            let flags = [has("deuterium"), has("metals"), has("ice"), has("carbon_compounds")];
+            let res = amt
+                .map(|a| [a.deuterium, a.metals, a.ice, a.carbon_compounds])
+                .unwrap_or([0.0; 4]);
+            (flags, res)
+        };
+        for o in objs {
+            if o.id.as_deref() == Some(object_id) {
+                return Some(build(&o.resource_types, o.resource_amounts.as_ref()));
+            }
+            if let Some(t) = o.minable_targets.iter().flatten().find(|t| t.id == object_id) {
+                let types = t.resource_types.clone().unwrap_or_default();
+                return Some(build(&types, t.resource_amounts.as_ref()));
+            }
+        }
+        None
+    }
+
+    /// Max sensible mining amount for the selected resources: the sum of their
+    /// remaining reserves when known, else the probe's free cargo capacity.
+    pub fn mine_reserve_max(&self, object_id: &str, resources: [bool; 4]) -> f64 {
+        match self.minable_target_reserves(object_id) {
+            Some((_, res)) => {
+                let sum: f64 = res.iter().zip(resources).filter(|(_, sel)| *sel).map(|(r, _)| *r).sum();
+                if sum > 0.0 {
+                    (sum * 10000.0).round() / 10000.0
+                } else {
+                    self.mine_max_amount()
+                }
+            }
+            None => self.mine_max_amount(),
+        }
+    }
+
     pub fn scanner_objects(&self) -> Vec<ScannerObjectEntry> {
         if !self.viewing_probe_sector() {
             return vec![];

@@ -1510,3 +1510,33 @@ fn scanner_objects_number_unnamed_by_type() {
     assert_eq!(by_id("a2"), "asteroid #2");
     assert_eq!(by_id("p1"), "Vulcan"); // real names kept
 }
+
+// ── mining target reserves ────────────────────────────────────────────────
+
+#[test]
+fn minable_target_reserves_reads_types_and_amounts() {
+    let mut state = AppState::default();
+    state.scan_history = vec![make_sector_with_objects(0., 0., 0., r#"[
+        {"type": "asteroid", "id": "ast-1", "name": "AX", "summary": "",
+         "resourceTypes": ["metals", "ice"],
+         "resourceAmounts": {"deuterium": 0.0, "metals": 2.0, "ice": 1.0, "carbon_compounds": 0.0}}
+    ]"#)];
+    let (flags, res) = state.minable_target_reserves("ast-1").expect("reserves");
+    assert_eq!(flags, [false, true, true, false]);
+    assert_eq!(res, [0.0, 2.0, 1.0, 0.0]);
+    // Sum of selected present reserves (metals+ice).
+    assert_eq!(state.mine_reserve_max("ast-1", [false, true, true, false]), 3.0);
+    // Unknown object → None.
+    assert!(state.minable_target_reserves("nope").is_none());
+}
+
+#[test]
+fn mine_reserve_max_falls_back_to_free_capacity_without_reserves() {
+    let mut state = AppState::default();
+    state.probe = Some(make_probe(0.5, 0., 0., 0.));
+    state.scan_history = vec![make_sector_with_objects(0., 0., 0., r#"[
+        {"type": "asteroid", "id": "ast-1", "name": "AX", "summary": "", "resourceTypes": ["metals"]}
+    ]"#)];
+    // No resourceAmounts → reserves are 0 → fall back to free capacity (0.5).
+    assert_eq!(state.mine_reserve_max("ast-1", [false, true, false, false]), 0.5);
+}
