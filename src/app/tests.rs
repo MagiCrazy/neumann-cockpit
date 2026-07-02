@@ -1493,3 +1493,20 @@ fn sector_object_asteroid_reserves_deserialize() {
     // Absent fields stay None / empty.
     assert!(ast.category.is_none() && ast.resource_types.is_empty());
 }
+
+#[test]
+fn scanner_objects_number_unnamed_by_type() {
+    let mut state = AppState::default();
+    state.probe = Some(probe_at(0., 0., 0.));
+    // Two unnamed top-level asteroids + one named planet.
+    state.scan_history = vec![make_sector_with_objects(0., 0., 0., r#"[
+        {"type": "asteroid", "id": "a1", "name": null, "summary": ""},
+        {"type": "planet", "id": "p1", "name": "Vulcan", "summary": ""},
+        {"type": "asteroid", "id": "a2", "name": null, "summary": ""}
+    ]"#)];
+    let entries = state.scanner_objects();
+    let by_id = |id: &str| entries.iter().find(|e| e.id == id).unwrap().name.clone();
+    assert_eq!(by_id("a1"), "asteroid #1");
+    assert_eq!(by_id("a2"), "asteroid #2");
+    assert_eq!(by_id("p1"), "Vulcan"); // real names kept
+}

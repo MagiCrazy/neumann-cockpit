@@ -9,8 +9,8 @@ use ratatui::{
 };
 
 use crate::ui::theme::{
-    knowledge_color, knowledge_label, map_cell_style, object_color, object_icon, palette,
-    pane_block, ratio_color, Palette,
+    knowledge_color, knowledge_label, map_cell_style, object_color, object_icon, object_type_label,
+    palette, pane_block, ratio_color, Palette,
 };
 // ── Scanner panel ─────────────────────────────────────────────────────────────
 //
@@ -338,7 +338,11 @@ pub(crate) fn sector_object_lines<'a>(obj: &'a SectorObject, compact: bool, p: P
     let glyph = object_icon(&obj.object_type).0;
     let color = object_color(&obj.object_type, p);
     let estimated = if obj.estimated.unwrap_or(false) { "~ " } else { "" };
-    let name = obj.name.as_deref().unwrap_or("unnamed");
+    let name = obj
+        .name
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| object_type_label(&obj.object_type));
     let danger = obj
         .danger_level
         .as_ref()
@@ -440,7 +444,7 @@ pub(crate) fn sector_object_lines<'a>(obj: &'a SectorObject, compact: bool, p: P
         for target in targets {
             let tglyph = object_icon(&target.object_type).0;
             let tcolor = object_color(&target.object_type, p);
-            let name = target.name.as_deref().unwrap_or("unnamed");
+            let name = target.name.as_deref().filter(|s| !s.trim().is_empty()).unwrap_or_else(|| object_type_label(&target.object_type));
             let mut spans: Vec<Span> = vec![
                 Span::raw("  "),
                 Span::styled(tglyph, Style::default().fg(tcolor)),
@@ -468,7 +472,7 @@ pub(crate) fn sector_object_lines<'a>(obj: &'a SectorObject, compact: bool, p: P
     for target in &obj.bookmark_targets {
         let tglyph = object_icon(&target.object_type).0;
         let tcolor = object_color(&target.object_type, p);
-        let name = target.name.as_deref().unwrap_or("unnamed");
+        let name = target.name.as_deref().filter(|s| !s.trim().is_empty()).unwrap_or_else(|| object_type_label(&target.object_type));
         let mut spans: Vec<Span> = vec![
             Span::raw("  "),
             Span::styled(tglyph, Style::default().fg(tcolor)),

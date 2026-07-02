@@ -155,7 +155,7 @@ impl AppState {
             if let Some(id) = &o.id {
                 push(&mut out, ScannerObjectEntry {
                     id: id.clone(),
-                    name: o.name.clone().unwrap_or_else(|| format!("{:?}", o.object_type).to_lowercase()),
+                    name: o.name.clone().unwrap_or_default(),
                     object_type: o.object_type.clone(),
                     provenance: ObjectProvenance::TopLevel,
                 });
@@ -163,7 +163,7 @@ impl AppState {
             for t in o.minable_targets.iter().flatten() {
                 push(&mut out, ScannerObjectEntry {
                     id: t.id.clone(),
-                    name: t.name.clone().unwrap_or_else(|| "unnamed".into()),
+                    name: t.name.clone().unwrap_or_default(),
                     object_type: t.object_type.clone(),
                     provenance: ObjectProvenance::MinableTarget,
                 });
@@ -172,11 +172,22 @@ impl AppState {
                 if matches!(t.object_type, SectorObjectType::Asteroid) {
                     push(&mut out, ScannerObjectEntry {
                         id: t.id.clone(),
-                        name: t.name.clone().unwrap_or_else(|| "unnamed".into()),
+                        name: t.name.clone().unwrap_or_default(),
                         object_type: t.object_type.clone(),
                         provenance: ObjectProvenance::BookmarkTarget,
                     });
                 }
+            }
+        }
+        // Synthesize a stable "type #n" label for objects the API left unnamed,
+        // numbered per type in scan order.
+        let mut counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+        for e in out.iter_mut() {
+            let label = crate::ui::theme::object_type_label(&e.object_type);
+            let n = counts.entry(label).or_insert(0);
+            *n += 1;
+            if e.name.trim().is_empty() {
+                e.name = format!("{label} #{n}");
             }
         }
         out
