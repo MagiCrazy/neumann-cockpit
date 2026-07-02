@@ -58,6 +58,7 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, p: Palette) {
         Line::default(),
         help_section("Act & global", p),
         help_key_line("Enter", "contextual action menu", p),
+        help_key_line(":", "command line (travel, goto, focus…)", p),
         help_key_line("F1", "toggle hints line", p),
         help_key_line("F2", "cycle color mode", p),
         help_key_line("F5", "refresh", p),

@@ -342,7 +342,13 @@ impl AppState {
     }
 
     pub fn cycle_scan_filter(&mut self) {
-        self.scan_filter = self.scan_filter.next();
+        self.set_scan_filter(self.scan_filter.next());
+    }
+
+    /// Set the scan filter and snap the history cursor onto the first entry it
+    /// keeps visible.
+    pub fn set_scan_filter(&mut self, filter: ScanFilter) {
+        self.scan_filter = filter;
         let idxs = self.filtered_history_indices();
         if !idxs.contains(&self.scan_history_idx) {
             if let Some(&first) = idxs.first() {
