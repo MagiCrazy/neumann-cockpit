@@ -1,13 +1,13 @@
 use crate::app::{AppState, MineInput, RESOURCE_LABELS, RESOURCE_TYPES};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
 
-use crate::ui::theme::format_duration;
+use crate::ui::theme::{format_duration, palette};
 use super::{centered_rect, render_pick_list};
 pub(crate) fn estimate_mine_duration(target_amount: f64) -> (i64, i64) {
     const CARGO_CAP: f64 = 0.30;
@@ -27,6 +27,7 @@ pub(crate) fn estimate_mine_duration(target_amount: f64) -> (i64, i64) {
 }
 
 pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let p = palette(state.color_mode);
     match &state.mine {
         MineInput::PickAsteroid { manny_name, candidates, selection, .. } => {
             let names: Vec<&str> = candidates.iter().map(|(_, n)| n.as_str()).collect();
@@ -47,7 +48,7 @@ pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppStat
                 .title(title)
                 .title_alignment(Alignment::Center)
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan));
+                .border_style(Style::default().fg(p.accent));
             let inner = block.inner(popup);
             frame.render_widget(block, popup);
 
@@ -59,36 +60,36 @@ pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppStat
             let mut lines: Vec<Line> = Vec::new();
 
             // Resources section
-            let res_header_color = if *amount_mode { Color::DarkGray } else { Color::Cyan };
+            let res_header_color = if *amount_mode { p.dim } else { p.accent };
             lines.push(Line::from(vec![
                 Span::styled("Resources", Style::default().fg(res_header_color)),
                 Span::styled(
                     if *amount_mode { "  (Tab to edit)" } else { "  [1-4 to toggle]" },
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(p.dim),
                 ),
             ]));
             for (i, (&label, &_type_str)) in RESOURCE_LABELS.iter().zip(RESOURCE_TYPES.iter()).enumerate() {
                 let present = reserves.map(|(f, _)| f[i]).unwrap_or(true);
                 let reserve = reserves.map(|(_, r)| r[i]);
                 let (checkbox, checked_color, label_color) = if !present {
-                    ("[·]", Color::DarkGray, Color::DarkGray)
+                    ("[·]", p.dim, p.dim)
                 } else if resources[i] {
-                    ("[✓]", Color::Green, Color::White)
+                    ("[✓]", p.good, p.text)
                 } else {
-                    ("[ ]", Color::DarkGray, Color::Gray)
+                    ("[ ]", p.dim, p.text)
                 };
                 let mut spans = vec![
                     Span::styled(format!("  {checkbox} "), Style::default().fg(checked_color)),
-                    Span::styled(format!("{} ", i + 1), Style::default().fg(Color::DarkGray)),
+                    Span::styled(format!("{} ", i + 1), Style::default().fg(p.dim)),
                     Span::styled(format!("{label:<9}"), Style::default().fg(label_color)),
                 ];
                 // Remaining reserve (ECE) when the target exposes it.
                 match (present, reserve) {
                     (true, Some(r)) if r > 0.0 => spans.push(Span::styled(
                         format!(" {r:.2}"),
-                        Style::default().fg(Color::DarkGray),
+                        Style::default().fg(p.dim),
                     )),
-                    (false, _) => spans.push(Span::styled(" —", Style::default().fg(Color::DarkGray))),
+                    (false, _) => spans.push(Span::styled(" —", Style::default().fg(p.dim))),
                     _ => {}
                 }
                 lines.push(Line::from(spans));
@@ -97,23 +98,23 @@ pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppStat
             lines.push(Line::default());
 
             // Amount section
-            let amt_header_color = if *amount_mode { Color::Cyan } else { Color::DarkGray };
+            let amt_header_color = if *amount_mode { p.accent } else { p.dim };
             if *amount_mode {
                 lines.push(Line::from(vec![
                     Span::styled("Amount: ", Style::default().fg(amt_header_color)),
                     Span::raw(amount_buf.as_str()),
-                    Span::styled("█", Style::default().fg(Color::Cyan)),
-                    Span::styled(" ECE", Style::default().fg(Color::DarkGray)),
+                    Span::styled("█", Style::default().fg(p.accent)),
+                    Span::styled(" ECE", Style::default().fg(p.dim)),
                     Span::raw("  "),
-                    Span::styled("[M]", Style::default().fg(Color::Yellow)),
-                    Span::styled(" max", Style::default().fg(Color::DarkGray)),
+                    Span::styled("[M]", Style::default().fg(p.warn)),
+                    Span::styled(" max", Style::default().fg(p.dim)),
                 ]));
             } else {
                 lines.push(Line::from(vec![
                     Span::styled("Amount: ", Style::default().fg(amt_header_color)),
-                    Span::styled(amount_buf.as_str(), Style::default().fg(Color::DarkGray)),
-                    Span::styled(" ECE", Style::default().fg(Color::DarkGray)),
-                    Span::styled("  [Tab to edit]", Style::default().fg(Color::DarkGray)),
+                    Span::styled(amount_buf.as_str(), Style::default().fg(p.dim)),
+                    Span::styled(" ECE", Style::default().fg(p.dim)),
+                    Span::styled("  [Tab to edit]", Style::default().fg(p.dim)),
                 ]));
             }
 
@@ -124,7 +125,7 @@ pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppStat
                     lines.push(Line::from(vec![
                         Span::styled(
                             format!("{trips} trip{}  •  ~{}", if trips == 1 { "" } else { "s" }, format_duration(secs)),
-                            Style::default().fg(Color::DarkGray),
+                            Style::default().fg(p.dim),
                         ),
                     ]));
                 } else {
@@ -142,9 +143,9 @@ pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppStat
                     None => "probe (none)",
                 };
                 lines.push(Line::from(vec![
-                    Span::styled("Store in: ", Style::default().fg(Color::DarkGray)),
-                    Span::styled(target_label, Style::default().fg(Color::Cyan)),
-                    Span::styled("  [c] cycle", Style::default().fg(Color::DarkGray)),
+                    Span::styled("Store in: ", Style::default().fg(p.dim)),
+                    Span::styled(target_label, Style::default().fg(p.accent)),
+                    Span::styled("  [c] cycle", Style::default().fg(p.dim)),
                 ]));
             }
 
@@ -153,7 +154,7 @@ pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppStat
                 lines.push(Line::default());
                 lines.push(Line::from(Span::styled(
                     format!("✗ {err}"),
-                    Style::default().fg(Color::Red),
+                    Style::default().fg(p.crit),
                 )));
             }
 
@@ -165,22 +166,22 @@ pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppStat
             let can_send = any_resource && valid_amount;
             let hint = if *amount_mode {
                 Line::from(vec![
-                    Span::styled("[Tab]", Style::default().fg(Color::Cyan)),
+                    Span::styled("[Tab]", Style::default().fg(p.accent)),
                     Span::raw(" resources  "),
-                    Span::styled("[Enter]", if can_send { Style::default().fg(Color::Green).add_modifier(Modifier::BOLD) } else { Style::default().fg(Color::DarkGray) }),
+                    Span::styled("[Enter]", if can_send { Style::default().fg(p.good).add_modifier(Modifier::BOLD) } else { Style::default().fg(p.dim) }),
                     Span::raw(" send  "),
-                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                    Span::styled("[Esc]", Style::default().fg(p.accent)),
                     Span::raw(" cancel"),
                 ])
             } else {
                 Line::from(vec![
-                    Span::styled("[1-4]", Style::default().fg(Color::Cyan)),
+                    Span::styled("[1-4]", Style::default().fg(p.accent)),
                     Span::raw(" toggle  "),
-                    Span::styled("[Tab]", Style::default().fg(Color::Cyan)),
+                    Span::styled("[Tab]", Style::default().fg(p.accent)),
                     Span::raw(" amount  "),
-                    Span::styled("[Enter]", if can_send { Style::default().fg(Color::Green).add_modifier(Modifier::BOLD) } else { Style::default().fg(Color::DarkGray) }),
+                    Span::styled("[Enter]", if can_send { Style::default().fg(p.good).add_modifier(Modifier::BOLD) } else { Style::default().fg(p.dim) }),
                     Span::raw(" send  "),
-                    Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                    Span::styled("[Esc]", Style::default().fg(p.accent)),
                     Span::raw(" cancel"),
                 ])
             };
