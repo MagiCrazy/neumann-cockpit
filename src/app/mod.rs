@@ -35,14 +35,6 @@ use crate::api::types::{
 use chrono::{DateTime, Local, Utc};
 use tokio::time::Instant;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Panel {
-    Probe,
-    Inventory,
-    Mannies,
-    Scanner,
-}
-
 #[derive(Default)]
 pub struct AppState {
     pub probe: Option<Probe>,
@@ -59,7 +51,6 @@ pub struct AppState {
     pub error: Option<String>,
     pub loading: bool,
     pub quit: bool,
-    pub focused: Option<Panel>,
     pub mannies_selection: usize,
     pub inventory_selection: usize,
     pub scan_history: Vec<SectorObservation>,
@@ -265,38 +256,6 @@ impl AppState {
 
     pub fn set_quit(&mut self) {
         self.quit = true;
-    }
-
-    /// Toggle focus on a panel; pressing the same shortcut again unfocuses.
-    pub fn toggle_focus(&mut self, panel: Panel) {
-        if self.focused == Some(panel) {
-            self.focused = None;
-        } else {
-            self.focused = Some(panel);
-        }
-    }
-
-    /// Visual order for Tab cycling: top-left → top-right → bottom-left → bottom-right.
-    const PANEL_ORDER: [Panel; 4] = [Panel::Probe, Panel::Inventory, Panel::Scanner, Panel::Mannies];
-
-    pub fn focus_next_panel(&mut self) {
-        self.focused = Some(match self.focused {
-            None => Self::PANEL_ORDER[0],
-            Some(p) => {
-                let i = Self::PANEL_ORDER.iter().position(|&x| x == p).unwrap_or(0);
-                Self::PANEL_ORDER[(i + 1) % Self::PANEL_ORDER.len()]
-            }
-        });
-    }
-
-    pub fn focus_prev_panel(&mut self) {
-        self.focused = Some(match self.focused {
-            None => Self::PANEL_ORDER[Self::PANEL_ORDER.len() - 1],
-            Some(p) => {
-                let i = Self::PANEL_ORDER.iter().position(|&x| x == p).unwrap_or(0);
-                Self::PANEL_ORDER[(i + Self::PANEL_ORDER.len() - 1) % Self::PANEL_ORDER.len()]
-            }
-        });
     }
 
     pub fn probe_sector_coords(&self) -> Option<(i32, i32, i32)> {
