@@ -42,6 +42,7 @@ fn restore_terminal() -> io::Result<()> {
 async fn main() -> Result<()> {
     let cfg = config::Config::load()?;
     let hints = cfg.hints;
+    let boot = cfg.boot;
     let color_mode = cfg.color_mode();
     let client = ApiClient::new(cfg.base_url, cfg.api_key)?;
 
@@ -64,7 +65,7 @@ async fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let result = run(&client, &mut terminal, hints, color_mode).await;
+    let result = run(&client, &mut terminal, hints, boot, color_mode).await;
 
     restore_terminal()?;
 
@@ -75,13 +76,14 @@ async fn run(
     client: &ApiClient,
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     hints: bool,
+    boot: bool,
     color_mode: ColorMode,
 ) -> Result<()> {
     let (tx, mut rx) = mpsc::channel::<ApiMessage>(32);
     let mut state = AppState {
         hints_visible: hints,
         color_mode,
-        booting: true,
+        booting: boot,
         ..Default::default()
     };
     // Local SQLite store: load the scan history and get a writer handle. On any
