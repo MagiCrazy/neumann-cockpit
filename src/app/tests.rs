@@ -1688,3 +1688,16 @@ fn run_command_unknown_sets_toast() {
     assert!(!state.run_command("frobnicate"));
     assert!(state.active_toast().is_some());
 }
+
+#[test]
+fn pane_paging_terminates_on_empty_panes() {
+    // The top/bottom jump steps until the cursor stops moving; on an empty pane
+    // it must terminate immediately (no infinite loop) and leave the cursor put.
+    let mut state = AppState::default();
+    state.active_pane = Pane::Missions;
+    state.pane_cursor_page_down();
+    state.pane_cursor_bottom();
+    state.pane_cursor_top();
+    state.pane_cursor_page_up();
+    assert_eq!(state.pane_nav[Pane::Missions.index()].cursor, 0);
+}

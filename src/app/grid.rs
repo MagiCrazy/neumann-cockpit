@@ -5,6 +5,12 @@
 //! that `AppState` carries, so most of it is not read yet.
 #![allow(dead_code)]
 
+/// Rows moved by one PageUp/PageDown in a pane list.
+const PANE_PAGE: usize = 10;
+/// Safety cap on the step-until-stable jump to top/bottom (guards against a
+/// hypothetical wrapping cursor looping forever).
+const PANE_JUMP_CAP: usize = 4096;
+
 /// The nine panes of the Cockpit v2 grid, laid out to match the
 /// `e r t / d f g / c v b` navigation square (identical on AZERTY and
 /// QWERTY). `Probe` is the centre — the `f` home key with the tactile bump.
@@ -212,6 +218,57 @@ impl super::AppState {
         }
     }
 
+    /// The active pane's current cursor position, whichever backing field it
+    /// uses — so paging/jumping can detect when it has reached a bound.
+    fn pane_cursor_pos(&self) -> usize {
+        match self.active_pane {
+            Pane::Inventory => self.inventory_selection,
+            Pane::Scanner => self.scan_history_idx,
+            Pane::Mannies => self.mannies_selection,
+            pane => self.pane_nav[pane.index()].cursor,
+        }
+    }
+
+    /// Move the cursor a page (10 rows) down/up, reusing the per-pane routing.
+    /// Useful on lists that grow over a session (scan history, messages).
+    pub fn pane_cursor_page_down(&mut self) {
+        for _ in 0..PANE_PAGE {
+            self.pane_cursor_down();
+        }
+    }
+
+    pub fn pane_cursor_page_up(&mut self) {
+        for _ in 0..PANE_PAGE {
+            self.pane_cursor_up();
+        }
+    }
+
+    /// Jump to the first/last row: step until the cursor stops moving (capped so
+    /// a wrapping cursor can never loop forever).
+    pub fn pane_cursor_top(&mut self) {
+        let mut last = self.pane_cursor_pos();
+        for _ in 0..PANE_JUMP_CAP {
+            self.pane_cursor_up();
+            let now = self.pane_cursor_pos();
+            if now == last {
+                break;
+            }
+            last = now;
+        }
+    }
+
+    pub fn pane_cursor_bottom(&mut self) {
+        let mut last = self.pane_cursor_pos();
+        for _ in 0..PANE_JUMP_CAP {
+            self.pane_cursor_down();
+            let now = self.pane_cursor_pos();
+            if now == last {
+                break;
+            }
+            last = now;
+        }
+    }
+
     /// Toggle full-screen zoom of the active pane.
     pub fn toggle_zoom(&mut self) {
         self.zoomed = !self.zoomed;
@@ -277,7 +334,7 @@ impl super::AppState {
         if !matches!(pane, Pane::Probe | Pane::Map) {
             parts.push("jk move");
         }
-        if !drilled && matches!(pane, Pane::Missions | Pane::Comms) {
+        if !drilled && matches!(pane, Pane::Missions | Pane::Comms | Pane::Storage | Pane::Mannies) {
             parts.push("l open");
         }
         // Panes that expose actions on Enter (menu or reused overlay). Probe
