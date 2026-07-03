@@ -60,6 +60,23 @@ pub fn history_path() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("scan_history.json"))
 }
 
+/// Path to the local SQLite database (scan history today; action audit later).
+///
+/// This is mutable state, not configuration, so it lives in the XDG state dir
+/// (`~/.local/state/…`) rather than `~/.config`. State dir is Linux-only in the
+/// spec, so fall back to the data dir elsewhere. The legacy `scan_history.json`
+/// stays under `config_dir` (see `history_path`) purely as a one-time import
+/// source.
+pub fn db_path() -> PathBuf {
+    ProjectDirs::from("net", "neumann", "neumann-cockpit")
+        .map(|d| {
+            d.state_dir()
+                .unwrap_or_else(|| d.data_local_dir())
+                .join("cockpit.db")
+        })
+        .unwrap_or_else(|| PathBuf::from("cockpit.db"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
