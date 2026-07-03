@@ -1,5 +1,12 @@
 # Changelog
 
+## [63.2.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v63.1.4...neumann-cockpit-v63.2.0) (2026-07-03)
+
+
+### Features
+
+* **store:** persist scan history in local SQLite ([#133](https://github.com/MagiCrazy/neumann-cockpit/issues/133)) ([91f76be](https://github.com/MagiCrazy/neumann-cockpit/commit/91f76be462a53233b8a6164501844b1801fc6da1))
+
 ## [63.1.4](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v63.1.3...neumann-cockpit-v63.1.4) (2026-07-03)
 
 
