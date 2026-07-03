@@ -30,6 +30,15 @@ pub fn handle_cockpit_event(
     client: &ApiClient,
     tx: &mpsc::Sender<ApiMessage>,
 ) {
+    // Cockpit keys (ertdfgcvb, jkhl, z, q, …) are all lowercase, but CapsLock —
+    // or Shift — sends uppercase letters, and no cockpit binding uses those.
+    // Normalize so the grid stays navigable regardless of CapsLock. Text entry
+    // is handled by the wizard/command layers before this, so it is unaffected.
+    let code = match code {
+        KeyCode::Char(c) => KeyCode::Char(c.to_ascii_lowercase()),
+        other => other,
+    };
+
     // A context menu, when open, captures all input.
     if matches!(state.mode, InputMode::Menu(_)) {
         handle_menu_key(code, state, client, tx);

@@ -250,6 +250,14 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn cockpit_pane_key_works_with_capslock() {
+        // CapsLock (or Shift) sends an uppercase letter; cockpit keys must still work.
+        let mut state = AppState::default();
+        press(&mut state, KeyCode::Char('E'));
+        assert_eq!(state.active_pane, Pane::Scanner, "uppercase 'E' routes like 'e'");
+    }
+
+    #[tokio::test]
     async fn open_wizard_captures_keys_before_cockpit() {
         let mut state = AppState::default();
         state.travel = TravelInput::Typing(String::new());
