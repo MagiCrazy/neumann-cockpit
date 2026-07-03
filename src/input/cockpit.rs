@@ -53,6 +53,12 @@ pub fn handle_cockpit_event(
         }
         KeyCode::Down | KeyCode::Char('j') => state.pane_cursor_down(),
         KeyCode::Up | KeyCode::Char('k') => state.pane_cursor_up(),
+        // Paging + jump to ends, for lists that grow over a session (scan
+        // history, messages). `g`/`G` are pane keys, so use PageUp/Down/Home/End.
+        KeyCode::PageDown => state.pane_cursor_page_down(),
+        KeyCode::PageUp => state.pane_cursor_page_up(),
+        KeyCode::Home => state.pane_cursor_top(),
+        KeyCode::End => state.pane_cursor_bottom(),
         KeyCode::Right | KeyCode::Char('l') => drill_in(state, client, tx),
         KeyCode::Left | KeyCode::Char('h') => {
             drill_out(state);
