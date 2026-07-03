@@ -1,5 +1,15 @@
 # Changelog
 
+## [63.1.2](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v63.1.1...neumann-cockpit-v63.1.2) (2026-07-03)
+
+
+### Bug Fixes
+
+* **api:** harden HTTP client — timeouts + richer user-agent ([#121](https://github.com/MagiCrazy/neumann-cockpit/issues/121)) ([ee2292f](https://github.com/MagiCrazy/neumann-cockpit/commit/ee2292f2f1a0aeed80608750fcccbba711c58199))
+* **errors:** surface swallowed fetch errors instead of silent no-ops ([#123](https://github.com/MagiCrazy/neumann-cockpit/issues/123)) ([e0698ea](https://github.com/MagiCrazy/neumann-cockpit/commit/e0698eadb56ab938133e9c42c1ba677f101317c9))
+* **refresh:** back off periodic auto-refresh on consecutive failures ([#122](https://github.com/MagiCrazy/neumann-cockpit/issues/122)) ([2a20276](https://github.com/MagiCrazy/neumann-cockpit/commit/2a20276087480b3df6dbe8ae982f2b178a3ee28f))
+* **tui:** restore terminal on panic via panic hook ([#119](https://github.com/MagiCrazy/neumann-cockpit/issues/119)) ([3f0fcca](https://github.com/MagiCrazy/neumann-cockpit/commit/3f0fcca4a3d0263c14890a3e6b58d921c065decf))
+
 ## [63.1.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v63.1.0...neumann-cockpit-v63.1.1) (2026-07-03)
 
 
