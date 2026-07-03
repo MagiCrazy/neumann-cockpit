@@ -45,7 +45,14 @@ pub(crate) use storage_move::render_storage_move_overlay;
 pub(crate) use travel::render_travel_overlay;
 pub(crate) use waypoints::render_waypoints_overlay;
 
-use crate::app::{AppState, GotoVisitedInput, ScanMode};
+use crate::app::{
+    AlertsInput, AppState, AtomicPrinterCraftInput, ContainerRulesInput, CraftInput, DeployInput,
+    DetachInput, DropCargoInput, DropStorageContainerInput, GotoVisitedInput, InspectInput,
+    JettisonInput, MessagesInput, MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput,
+    RecallInput, RecoverInput, RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput,
+    RepairInput, SalvageInput, ScanMode, ScutNetworkInput, ScutRelayInput, StorageMoveInput,
+    TravelInput, WaypointsInput,
+};
 use crate::ui::theme::{palette, Palette};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -55,48 +62,53 @@ use ratatui::{
     Frame,
 };
 
-/// The wizard overlays, in z-order (back to front). Every one self-guards —
-/// its render fn early-returns when its `*Input` field is `Inactive` — so they
-/// can be painted unconditionally. Only one wizard is active at a time (the
-/// input router routes keys to a single wizard and launch sites are mutually
-/// exclusive), so the relative order only matters as documentation. Adding a
-/// wizard overlay means adding one line here — the single source of truth for
-/// the render side, replacing the hand-synchronized `if !matches!` ladder.
-const WIZARD_OVERLAYS: &[fn(&mut Frame, Rect, &AppState)] = &[
-    render_alerts_overlay,
-    render_travel_overlay,
-    render_repair_overlay,
-    render_mine_overlay,
-    render_remote_mine_overlay,
-    render_jettison_overlay,
-    render_craft_overlay,
-    render_atomic_printer_craft_overlay,
-    render_salvage_overlay,
-    render_recall_overlay,
-    render_refuel_overlay,
-    render_mind_snapshot_overlay,
-    render_missions_overlay,
-    render_messages_overlay,
-    render_scut_relay_overlay,
-    render_scut_network_overlay,
-    render_drop_cargo_overlay,
-    render_deploy_overlay,
-    render_rename_manny_overlay,
-    render_inspect_overlay,
-    render_recover_overlay,
-    render_detach_overlay,
-    render_drop_container_overlay,
-    render_object_action_overlay,
-    render_waypoints_overlay,
-    render_rename_container_overlay,
-    render_container_rules_overlay,
-    render_storage_move_overlay,
+type OverlayGuard = fn(&AppState) -> bool;
+type OverlayRender = fn(&mut Frame, Rect, &AppState);
+
+/// The wizard overlays, in z-order (back to front): a guard (is this wizard
+/// active?) paired with its render fn. This is the single source of truth for
+/// the render side — adding a wizard overlay is one line here, replacing the
+/// hand-synchronized `if !matches!` ladder. The guard is required: not every
+/// render fn early-returns when inactive (several draw their frame before
+/// matching the state), so the caller must gate them.
+#[allow(clippy::type_complexity)]
+const WIZARD_OVERLAYS: &[(OverlayGuard, OverlayRender)] = &[
+    (|s| !matches!(s.alerts_input, AlertsInput::Inactive), render_alerts_overlay),
+    (|s| !matches!(s.travel, TravelInput::Inactive), render_travel_overlay),
+    (|s| !matches!(s.repair, RepairInput::Inactive), render_repair_overlay),
+    (|s| !matches!(s.mine, MineInput::Inactive), render_mine_overlay),
+    (|s| !matches!(s.remote_mine, RemoteMineInput::Inactive), render_remote_mine_overlay),
+    (|s| !matches!(s.jettison, JettisonInput::Inactive), render_jettison_overlay),
+    (|s| !matches!(s.craft, CraftInput::Inactive), render_craft_overlay),
+    (|s| !matches!(s.atomic_printer_craft, AtomicPrinterCraftInput::Inactive), render_atomic_printer_craft_overlay),
+    (|s| !matches!(s.salvage, SalvageInput::Inactive), render_salvage_overlay),
+    (|s| !matches!(s.recall, RecallInput::Inactive), render_recall_overlay),
+    (|s| !matches!(s.refuel, RefuelInput::Inactive), render_refuel_overlay),
+    (|s| !matches!(s.mind_snapshot, MindSnapshotInput::Inactive), render_mind_snapshot_overlay),
+    (|s| !matches!(s.missions_input, MissionsInput::Inactive), render_missions_overlay),
+    (|s| !matches!(s.messages_input, MessagesInput::Inactive), render_messages_overlay),
+    (|s| !matches!(s.scut_relay, ScutRelayInput::Inactive), render_scut_relay_overlay),
+    (|s| !matches!(s.scut_network, ScutNetworkInput::Inactive), render_scut_network_overlay),
+    (|s| !matches!(s.drop_cargo, DropCargoInput::Inactive), render_drop_cargo_overlay),
+    (|s| !matches!(s.deploy, DeployInput::Inactive), render_deploy_overlay),
+    (|s| !matches!(s.rename_manny, RenameMannyInput::Inactive), render_rename_manny_overlay),
+    (|s| !matches!(s.inspect, InspectInput::Inactive), render_inspect_overlay),
+    (|s| !matches!(s.recover, RecoverInput::Inactive), render_recover_overlay),
+    (|s| !matches!(s.detach, DetachInput::Inactive), render_detach_overlay),
+    (|s| !matches!(s.drop_container, DropStorageContainerInput::Inactive), render_drop_container_overlay),
+    (|s| !matches!(s.object_action, ObjectActionInput::Inactive), render_object_action_overlay),
+    (|s| !matches!(s.waypoints, WaypointsInput::Inactive), render_waypoints_overlay),
+    (|s| !matches!(s.rename_container, RenameContainerInput::Inactive), render_rename_container_overlay),
+    (|s| !matches!(s.container_rules, ContainerRulesInput::Inactive), render_container_rules_overlay),
+    (|s| !matches!(s.storage_move, StorageMoveInput::Inactive), render_storage_move_overlay),
 ];
 
 /// Render whichever wizard overlays are active, on top of the cockpit grid.
 pub(crate) fn render_active_overlays(frame: &mut Frame, area: Rect, state: &AppState) {
-    for render in WIZARD_OVERLAYS {
-        render(frame, area, state);
+    for (active, render) in WIZARD_OVERLAYS {
+        if active(state) {
+            render(frame, area, state);
+        }
     }
     // Modals that don't follow the `*Input::Inactive` pattern (bool flags or a
     // distinct enum) stay explicit. `help` is topmost, so it renders last.
@@ -243,3 +255,40 @@ pub(crate) fn render_pick_list(
     );
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::render_active_overlays;
+    use crate::app::{AppState, TravelInput};
+    use ratatui::{backend::TestBackend, Terminal};
+
+    /// Render the overlays over a blank terminal and return all cell text.
+    fn rendered_text(state: &AppState) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+        terminal
+            .draw(|f| {
+                let area = f.area();
+                render_active_overlays(f, area, state);
+            })
+            .unwrap();
+        terminal.backend().buffer().content.iter().map(|c| c.symbol()).collect()
+    }
+
+    #[test]
+    fn no_overlay_frame_when_all_wizards_inactive() {
+        // Regression: several overlay render fns draw their frame (Clear + border)
+        // before matching Inactive, so rendering them unconditionally painted an
+        // empty modal — e.g. a stray " TRAVEL " frame after boot. The registry
+        // guard prevents it.
+        let text = rendered_text(&AppState::default());
+        assert!(!text.contains("TRAVEL"), "no empty TRAVEL frame with an inactive wizard");
+        assert!(!text.contains("REMOTE MINE"), "no empty overlay frames at all");
+    }
+
+    #[test]
+    fn active_wizard_frame_renders() {
+        let mut state = AppState::default();
+        state.travel = TravelInput::Typing(String::new());
+        assert!(rendered_text(&state).contains("TRAVEL"), "active travel wizard renders its frame");
+    }
+}
