@@ -1,5 +1,21 @@
 # Changelog
 
+## [63.3.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v63.2.0...neumann-cockpit-v63.3.0) (2026-07-03)
+
+
+### Features
+
+* **boot:** auto-continue after the self-check + boot config key ([#141](https://github.com/MagiCrazy/neumann-cockpit/issues/141)) ([ec45226](https://github.com/MagiCrazy/neumann-cockpit/commit/ec45226f4f618af6882de369585c79a28d2a78ba))
+* **cockpit:** 1-9 accelerators in the contextual menu ([#137](https://github.com/MagiCrazy/neumann-cockpit/issues/137)) ([bd1c81c](https://github.com/MagiCrazy/neumann-cockpit/commit/bd1c81c1a5267162aea7e6166b5031de92c563ea))
+* **cockpit:** paging + jump on pane lists, and l-open hints ([#142](https://github.com/MagiCrazy/neumann-cockpit/issues/142)) ([5f73b18](https://github.com/MagiCrazy/neumann-cockpit/commit/5f73b188638c47fb75aee187999fb101c519fe43))
+* **help:** bigger scrollable help + command-mode section ([#138](https://github.com/MagiCrazy/neumann-cockpit/issues/138)) ([16dac18](https://github.com/MagiCrazy/neumann-cockpit/commit/16dac186987c3158302e7601a85fbb7cd7cc3cd9))
+
+
+### Bug Fixes
+
+* **cockpit:** render the command-line caret at the cursor ([#136](https://github.com/MagiCrazy/neumann-cockpit/issues/136)) ([786faf4](https://github.com/MagiCrazy/neumann-cockpit/commit/786faf4587bfa11744d42c4a7f3a5dabdc9c6247))
+* **theme:** make urgency signals stand out in the mono palettes ([#140](https://github.com/MagiCrazy/neumann-cockpit/issues/140)) ([68e2931](https://github.com/MagiCrazy/neumann-cockpit/commit/68e2931634c646fe65c86ad5f4d49d4e6ab2830e))
+
 ## [63.2.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v63.1.4...neumann-cockpit-v63.2.0) (2026-07-03)
 
 
