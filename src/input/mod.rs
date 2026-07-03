@@ -147,8 +147,29 @@ pub fn handle_event(
     }
 
     if state.help_open {
-        if matches!(k.code, KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q')) {
-            state.help_open = false;
+        // Clamp against the same body height the renderer uses (near-fullscreen
+        // minus a 2-row margin, 2 borders and the footer).
+        let (_, term_h) = crossterm::terminal::size().unwrap_or((80, 24));
+        let max = (crate::ui::overlays::help_row_count() as u16)
+            .saturating_sub(term_h.saturating_sub(5));
+        match k.code {
+            KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q') => {
+                state.help_open = false;
+                state.help_scroll = 0;
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                state.help_scroll = state.help_scroll.saturating_add(1).min(max);
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                state.help_scroll = state.help_scroll.saturating_sub(1);
+            }
+            KeyCode::PageDown | KeyCode::Char(' ') => {
+                state.help_scroll = state.help_scroll.saturating_add(10).min(max);
+            }
+            KeyCode::PageUp => state.help_scroll = state.help_scroll.saturating_sub(10),
+            KeyCode::Char('g') | KeyCode::Home => state.help_scroll = 0,
+            KeyCode::Char('G') | KeyCode::End => state.help_scroll = max,
+            _ => {}
         }
         return;
     }
