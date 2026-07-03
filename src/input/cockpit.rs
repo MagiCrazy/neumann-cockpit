@@ -185,6 +185,20 @@ fn handle_menu_key(
                 fire_menu_action(action, state, client, tx);
             }
         }
+        // 1-9 accelerators: fire the nth enabled item directly (one keystroke
+        // instead of walking there with j/k). Disabled/out-of-range digits noop.
+        KeyCode::Char(c @ '1'..='9') => {
+            let idx = c as usize - '1' as usize;
+            let action = if let InputMode::Menu(m) = &state.mode {
+                m.items.get(idx).filter(|i| i.enabled).map(|i| i.action)
+            } else {
+                None
+            };
+            if let Some(action) = action {
+                state.mode = InputMode::Normal;
+                fire_menu_action(action, state, client, tx);
+            }
+        }
         _ => {}
     }
 }

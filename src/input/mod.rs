@@ -258,6 +258,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn menu_digit_accelerator_fires_nth_item() {
+        use crate::app::{ContextMenu, InputMode, MenuAction, MenuItem};
+        let mut state = AppState::default();
+        state.mode = InputMode::Menu(ContextMenu {
+            title: "TEST".into(),
+            items: vec![MenuItem {
+                action: MenuAction::Travel,
+                label: "Travel…".into(),
+                enabled: true,
+                disabled_reason: None,
+            }],
+            cursor: 0,
+        });
+        press(&mut state, KeyCode::Char('1'));
+        assert!(matches!(state.mode, InputMode::Normal), "digit fired and closed the menu");
+        assert!(!matches!(state.travel, TravelInput::Inactive), "the item's wizard launched");
+    }
+
+    #[tokio::test]
     async fn open_wizard_captures_keys_before_cockpit() {
         let mut state = AppState::default();
         state.travel = TravelInput::Typing(String::new());
