@@ -16,8 +16,12 @@ pub const BOOT_CHARS_PER_FRAME: usize = 3;
 /// the eight subsystems come online, centre-out, at the fast cadence.
 const PROBE_LEAD: u64 = 12;
 /// Frame by which the whole self-check has typed out. Past this the boot is
-/// "complete" and waits on a keypress to continue.
+/// "complete" and shows the "any key to continue" prompt.
 const BOOT_SEQUENCE_END: u64 = 34;
+/// Frame at which the boot auto-continues on its own (~2 s after the self-check
+/// finishes, at the 90 ms boot tick), so a relaunch under tmux/ssh never sits
+/// on the prompt forever. A keypress still continues immediately.
+const BOOT_AUTO_CONTINUE: u64 = BOOT_SEQUENCE_END + 22;
 
 /// The eight non-probe panes in centre-out order: axial neighbours, then
 /// corners.
@@ -43,10 +47,14 @@ fn boot_reveal_frame(pane: Pane) -> u64 {
 }
 
 impl AppState {
-    /// Advance the boot animation one frame. The boot never ends on its own —
-    /// it plays the self-check, then waits for a keypress (see `skip_boot`).
+    /// Advance the boot animation one frame. It plays the self-check, shows the
+    /// "any key to continue" prompt, then auto-continues a couple seconds later
+    /// (a keypress via `skip_boot` continues immediately).
     pub fn boot_tick(&mut self) {
         self.boot_frame = self.boot_frame.saturating_add(1);
+        if self.boot_frame >= BOOT_AUTO_CONTINUE {
+            self.booting = false;
+        }
     }
 
     /// Leave the boot screen — either skipping the animation or continuing
@@ -165,18 +173,20 @@ mod tests {
     }
 
     #[test]
-    fn boot_completes_after_the_sequence_then_waits() {
+    fn boot_completes_then_auto_continues() {
         let mut s = AppState { booting: true, ..Default::default() };
         assert!(!s.boot_complete());
         for _ in 0..BOOT_SEQUENCE_END {
             s.boot_tick();
         }
         assert!(s.boot_complete());
-        // Ticking never ends the boot on its own — it waits for a key.
-        for _ in 0..50 {
+        // Just-completed: still holds on the "any key to continue" prompt.
+        assert!(s.booting, "holds on the prompt right after the self-check");
+        // ...then auto-continues on its own so a relaunch is never stuck.
+        for _ in 0..(BOOT_AUTO_CONTINUE - BOOT_SEQUENCE_END + 1) {
             s.boot_tick();
         }
-        assert!(s.booting, "boot waits for a keypress");
+        assert!(!s.booting, "auto-continues shortly after completion");
     }
 
     #[test]

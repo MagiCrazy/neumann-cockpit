@@ -14,6 +14,10 @@ pub struct Config {
     /// Show the contextual hints line in the cockpit interface (F1 toggles).
     #[serde(default = "default_true")]
     pub hints: bool,
+    /// Play the boot self-check animation on startup. Set `false` to drop
+    /// straight into the live cockpit (handy over tmux/ssh or on relaunch).
+    #[serde(default = "default_true")]
+    pub boot: bool,
 }
 
 fn default_true() -> bool {
@@ -87,6 +91,7 @@ mod tests {
             api_key: "x".into(),
             theme: theme.map(String::from),
             hints: true,
+            boot: true,
         }
     }
 

@@ -7,3 +7,6 @@ api_key  = "vng_your_api_key_here"
 #theme = "mono-green"
 # Show the contextual hints line at the bottom (F1 toggles at runtime).
 #hints = true
+# Play the boot self-check animation on startup. Set false to drop straight
+# into the live cockpit (handy over tmux/ssh or on relaunch).
+#boot = true
