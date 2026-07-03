@@ -468,55 +468,6 @@ fn probe_at(x: f64, y: f64, z: f64) -> Probe {
     make_probe(7.0, x, y, z)
 }
 
-// ── toggle_focus ──────────────────────────────────────────────────────────
-
-#[test]
-fn toggle_focus_sets_panel() {
-    let mut state = AppState::default();
-    state.toggle_focus(Panel::Probe);
-    assert_eq!(state.focused, Some(Panel::Probe));
-}
-
-#[test]
-fn toggle_focus_same_panel_clears() {
-    let mut state = AppState::default();
-    state.toggle_focus(Panel::Scanner);
-    state.toggle_focus(Panel::Scanner);
-    assert_eq!(state.focused, None);
-}
-
-#[test]
-fn toggle_focus_different_panel_switches() {
-    let mut state = AppState::default();
-    state.toggle_focus(Panel::Probe);
-    state.toggle_focus(Panel::Mannies);
-    assert_eq!(state.focused, Some(Panel::Mannies));
-}
-
-#[test]
-fn focus_next_panel_cycles_in_visual_order() {
-    let mut state = AppState::default();
-    state.focus_next_panel();
-    assert_eq!(state.focused, Some(Panel::Probe));
-    state.focus_next_panel();
-    assert_eq!(state.focused, Some(Panel::Inventory));
-    state.focus_next_panel();
-    assert_eq!(state.focused, Some(Panel::Scanner));
-    state.focus_next_panel();
-    assert_eq!(state.focused, Some(Panel::Mannies));
-    state.focus_next_panel();
-    assert_eq!(state.focused, Some(Panel::Probe));
-}
-
-#[test]
-fn focus_prev_panel_cycles_backwards() {
-    let mut state = AppState::default();
-    state.focus_prev_panel();
-    assert_eq!(state.focused, Some(Panel::Mannies));
-    state.focus_prev_panel();
-    assert_eq!(state.focused, Some(Panel::Scanner));
-}
-
 // ── manny_next / manny_prev ───────────────────────────────────────────────
 
 #[test]

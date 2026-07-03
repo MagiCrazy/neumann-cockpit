@@ -45,7 +45,7 @@ Single `tokio::select!` loop over three sources:
 
 The timer deadline is set to `movement.arrival_at` (ISO 8601) converted to a `tokio::time::Instant`. When no movement is in progress the deadline is 24 h away — no polling.
 
-A fourth `select!` branch is a **short-lived ~90 ms boot tick**, guarded by `state.booting`: it only runs during the startup boot sequence (see UI › Boot), then stops. Steady state stays fully event-driven — no tick.
+Two more `select!` branches are timers: a **short-lived ~90 ms boot tick** (guarded by `state.booting`, runs only during the startup boot sequence — see UI › Boot — then stops) and a **steady-state 1 s `ui_tick`** that redraws so time-derived values (progress bars, ETAs, sync age) advance and fires the periodic auto-refresh when one is due.
 
 `fetch_all()` spawns **seven** independent `tokio::spawn` tasks: probe, mannies, sector, visited sectors, alerts, damage warnings, and missions. All but probe are non-fatal.
 
@@ -56,7 +56,7 @@ All other API calls (move, repair, mine, craft, storage container CRUD, storage 
 `AppState` is the single source of truth passed to the renderer. Split by domain: `mod.rs` (struct `AppState`, core impl — updates, toasts, refresh deadline — and `pub use` re-exports keeping `crate::app::*` paths stable), `grid.rs` (`Pane` — the 9 cockpit panes — + `PaneNav` per-pane cursor/drill state + grid navigation helpers), `mode.rs` (`InputMode`, `ContextMenu`, `MenuAction`, `MenuItem`), `boot.rs` (startup self-check schedule), `color.rs` (`ColorMode`), `inputs.rs` (all wizard input enums + constants), `scan.rs`, `travel.rs`, `inventory.rs`, `mannies.rs`, `containers.rs` (storage-container/move helpers), `map.rs`, `waypoints.rs`, `message.rs` (`ApiMessage`), `tests.rs` (unit tests). Key design choices:
 
 - **Cockpit v2 state**: `active_pane: Pane`, `zoomed: bool`, `mode: InputMode` (`Normal` / `Menu` / `Command`), `pane_nav: [PaneNav; 9]` (cursor + drill-in stack per pane), `hints_visible`, `color_mode`, and `booting` / `boot_frame` for the startup sequence. `build_context_menu()` produces the `Enter` menu for the active pane; menu items map to `MenuAction`s that launch the existing wizards.
-- The legacy `Panel` enum + `focused` field remain, still used by the four reused panel renderers to mark the active pane; the classic single-key action handlers are gone.
+- The four reused panel renderers (Probe/Inventory/Scanner/Mannies) take an `active: bool` to mark the active pane; the old `Panel` enum + `focused` state and the classic single-key action handlers are gone.
 
 - Each interactive action (travel, repair, mine, craft, jettison, salvage, recall, rename, deploy, inspect, recover, detach, atomic printer craft, object actions, waypoints, alerts, storage containers + rename + routing rules, storage moves, drop cargo) has its own input state enum (`TravelInput`, `RepairInput`, `ObjectActionInput`, `AlertsInput`, `ContainersInput`, `ContainerRulesInput`, `StorageMoveInput`, etc.) with variants for each wizard step. All start as `Inactive`.
 - `update_probe()` extracts `movement_arrival` from the response and stores it separately so the event loop can compute the next deadline without re-reading the full probe struct.
