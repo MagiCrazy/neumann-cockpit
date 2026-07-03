@@ -193,11 +193,24 @@ fn render_status(frame: &mut Frame, area: Rect, state: &AppState, p: Palette, vi
     render_status_line(frame, bar, state, p, visible);
     if let Some(second_area) = second {
         let line = if let Some(cmd) = command {
-            // `:verb args` with a caret; accent to signal text-entry mode.
-            Line::from(vec![
-                Span::styled(format!(" :{}", cmd.input), Style::default().fg(p.accent)),
-                Span::styled("█", Style::default().fg(p.accent)),
-            ])
+            // `:verb args` with the caret at cmd.cursor (accent = text-entry
+            // mode). The caret is a REVERSED cell over the character it sits on,
+            // or a block when it's past the end — so mid-line edits are visible.
+            let chars: Vec<char> = cmd.input.chars().collect();
+            let cur = cmd.cursor.min(chars.len());
+            let accent = Style::default().fg(p.accent);
+            let before: String = chars[..cur].iter().collect();
+            let mut spans = vec![Span::styled(format!(" :{before}"), accent)];
+            if cur < chars.len() {
+                spans.push(Span::styled(
+                    chars[cur].to_string(),
+                    accent.add_modifier(Modifier::REVERSED),
+                ));
+                spans.push(Span::styled(chars[cur + 1..].iter().collect::<String>(), accent));
+            } else {
+                spans.push(Span::styled("█", accent));
+            }
+            Line::from(spans)
         } else {
             Line::from(Span::styled(format!(" {}", state.pane_hints()), Style::default().fg(p.dim)))
         };
