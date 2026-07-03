@@ -20,7 +20,8 @@ pub fn render(frame: &mut Frame, area: Rect, menu: &ContextMenu, p: Palette) {
         .items
         .iter()
         .map(|i| {
-            i.label.chars().count()
+            // 3 = the " N " accelerator gutter rendered before every label.
+            3 + i.label.chars().count()
                 + i.disabled_reason.as_ref().map_or(0, |r| r.chars().count() + 3)
         })
         .max()
@@ -28,7 +29,7 @@ pub fn render(frame: &mut Frame, area: Rect, menu: &ContextMenu, p: Palette) {
         .max(menu.title.chars().count())
         // Keep the popup wide enough for the footer hint line.
         .max(FOOTER_WIDTH);
-    let w = (widest as u16 + 4).clamp(18, 48);
+    let w = (widest as u16 + 4).clamp(18, 56);
     // items + footer + two border rows
     let h = menu.items.len() as u16 + 3;
     let rect = centered_rect(w, h, area);
@@ -50,10 +51,13 @@ pub fn render(frame: &mut Frame, area: Rect, menu: &ContextMenu, p: Palette) {
         .iter()
         .enumerate()
         .map(|(i, item)| {
+            // The first nine items get a 1-9 accelerator (see handle_menu_key);
+            // later items align under a two-space gutter and stay j/k-only.
+            let acc = if i < 9 { format!(" {} ", i + 1) } else { "   ".to_string() };
             if !item.enabled {
                 let reason = item.disabled_reason.as_deref().unwrap_or("unavailable");
                 return Line::from(vec![
-                    Span::styled(format!(" {}", item.label), Style::default().fg(p.dim)),
+                    Span::styled(format!("{acc}{}", item.label), Style::default().fg(p.dim)),
                     Span::styled(format!(" ({reason})"), Style::default().fg(p.dim)),
                 ]);
             }
@@ -62,7 +66,10 @@ pub fn render(frame: &mut Frame, area: Rect, menu: &ContextMenu, p: Palette) {
             } else {
                 Style::default().fg(p.text)
             };
-            Line::from(Span::styled(format!(" {}", item.label), style))
+            Line::from(vec![
+                Span::styled(acc, Style::default().fg(p.dim)),
+                Span::styled(item.label.clone(), style),
+            ])
         })
         .collect();
 
@@ -77,12 +84,13 @@ pub fn render(frame: &mut Frame, area: Rect, menu: &ContextMenu, p: Palette) {
         p,
         &[
             FooterKey::nav("[↑/↓]", "move"),
+            FooterKey::nav("[1-9]", "pick"),
             FooterKey::nav("[Enter]", "select"),
             FooterKey::nav("[Esc]", "close"),
         ],
     );
 }
 
-/// Character width of the footer hint line (`[↑/↓] move  [Enter] select  [Esc]
-/// close`), used to size the popup.
-const FOOTER_WIDTH: usize = 39;
+/// Character width of the footer hint line (`[↑/↓] move  [1-9] pick  [Enter]
+/// select  [Esc] close`), used to size the popup.
+const FOOTER_WIDTH: usize = 51;
