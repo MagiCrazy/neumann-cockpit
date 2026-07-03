@@ -90,4 +90,22 @@ both through its release PR.
 Once merged, release-please rolls your commit into the pending release PR; a
 maintainer cuts the release from there.
 
+## Versioning & Release-As
+
+The crate version tracks the **game API version** the client targets, so a
+release is usually cut when the API implementation moves.
+
+Two rules keep release-please honest:
+
+- **Never merge a stale release PR.** If commits landed on `main` after the
+  pending release PR was generated, let release-please regenerate it first —
+  merging the old one swallows those commits into the wrong bump and omits them
+  from the changelog. (This bit us once: the cockpit rewrite — a `feat` — shipped
+  in patch `63.0.1`, absent from the changelog, and had to be re-landed.)
+- **Force a specific version with `Release-As`.** To cut an exact version (e.g.
+  an API catch-up that should jump to match the server), add a commit whose body
+  carries a `Release-As: X.Y.Z` footer; release-please cuts that version with a
+  proper changelog entry. An empty commit is fine:
+  `git commit --allow-empty -m "chore: release X.Y.Z" -m "Release-As: X.Y.Z"`.
+
 Happy hacking! 🛰️
