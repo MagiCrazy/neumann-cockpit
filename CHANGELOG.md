@@ -1,5 +1,14 @@
 # Changelog
 
+## [63.1.4](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v63.1.3...neumann-cockpit-v63.1.4) (2026-07-03)
+
+
+### Bug Fixes
+
+* **input:** make cockpit keys work with CapsLock ([#131](https://github.com/MagiCrazy/neumann-cockpit/issues/131)) ([89df53c](https://github.com/MagiCrazy/neumann-cockpit/commit/89df53c695d181580f5927d7c65a5a616aa6a4da))
+* **overlays:** only render an overlay when its wizard is active ([#132](https://github.com/MagiCrazy/neumann-cockpit/issues/132)) ([50f964d](https://github.com/MagiCrazy/neumann-cockpit/commit/50f964d8585df9a3b4b3113d069625d08764d3da))
+* **tui:** stop capturing the mouse ([#129](https://github.com/MagiCrazy/neumann-cockpit/issues/129)) ([dd71083](https://github.com/MagiCrazy/neumann-cockpit/commit/dd71083fd60d7cfa2f94573eac0f2962ee0b1dea))
+
 ## [63.1.3](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v63.1.2...neumann-cockpit-v63.1.3) (2026-07-03)
 
 
