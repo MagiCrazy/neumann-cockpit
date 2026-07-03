@@ -94,7 +94,7 @@ One unified phosphor theme (there is no classic/retro split any more). `theme.rs
 │ cargo · stocks││ containers    ││ ● manny list  │
 │ items         ││ + capacity    ││ task + %      │
 └═══════════════┘└═══════════════┘└═══════════════┘
- NAV  COCKPIT › MANNIES        ⟳ · ≣ SCUT · ! 2 · API v63 · 14:09
+ NAV  COCKPIT › MANNIES        ⟳ · ≣ SCUT · ! 2 · API vN · 14:09
  ↑↓ move · hl drill · z zoom · Enter act · ertdfgcvb pane · F1 hints
 ```
 
@@ -125,7 +125,11 @@ The four reused panels (Probe / Inventory / Scanner / Mannies) keep their intern
 
 **Remaining follow-ups** (wizards that exist but still have no cockpit launcher): SCUT-network inspect and deploy-waypoint from Inventory. Everything else — Travel, the full isometric Map (`z` on the Map pane), Waypoints, mind-snapshot reassign, drop-storage-container, and command mode (`:`) — is wired.
 
-## Implemented API endpoints (API v63)
+## Implemented API endpoints
+
+<!-- The live server version shows as "API vN" in the status bar; the versioned
+     contract lives in api-specs/. Keep this table, but not a hardcoded version. -->
+
 
 | Endpoint | Method | Status |
 |---|---|---|
