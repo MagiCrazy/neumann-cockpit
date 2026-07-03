@@ -43,6 +43,19 @@ pub(super) fn list_nav(code: KeyCode, sel: usize, count: usize) -> Option<usize>
         _ => None,
     }
 }
+
+/// Apply a pick-list nav key to `selection` in place. Returns `true` when the
+/// key was a navigation key (`j`/`k`/arrows) — so a handler can consume it and
+/// stop before its Esc/Enter arms, without re-matching the state to write back.
+pub(super) fn list_move(code: KeyCode, selection: &mut usize, count: usize) -> bool {
+    match list_nav(code, *selection, count) {
+        Some(n) => {
+            *selection = n;
+            true
+        }
+        None => false,
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

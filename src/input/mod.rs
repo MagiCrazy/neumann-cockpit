@@ -325,4 +325,23 @@ mod tests {
         press(&mut state, KeyCode::Esc);
         assert!(matches!(state.alerts_input, AlertsInput::Inactive), "Esc closes the alerts overlay");
     }
+
+    #[tokio::test]
+    async fn pick_list_j_moves_selection_and_esc_closes() {
+        use crate::app::SalvageInput;
+        let mut state = AppState::default();
+        state.salvage = SalvageInput::PickTarget {
+            manny_id: "m1".into(),
+            manny_name: "M".into(),
+            candidates: vec![("a".into(), "A".into()), ("b".into(), "B".into())],
+            selection: 0,
+        };
+        press(&mut state, KeyCode::Char('j'));
+        match &state.salvage {
+            SalvageInput::PickTarget { selection, .. } => assert_eq!(*selection, 1, "j moves the cursor"),
+            _ => panic!("should still be picking"),
+        }
+        press(&mut state, KeyCode::Esc);
+        assert!(matches!(state.salvage, SalvageInput::Inactive), "Esc closes the picker");
+    }
 }
