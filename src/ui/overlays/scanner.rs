@@ -2,13 +2,13 @@ use crate::ui::theme::{palette, Palette};
 use crate::app::{AppState, ScanMode};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
+    style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
 
-use super::centered_rect;
+use super::{centered_rect, render_footer, FooterKey};
 
 /// Coordinate-entry and neighbor-scan prompts for the Scanner pane. Both modes
 /// are handled by the shared scan-input router in `input/mod.rs`; this only
@@ -53,15 +53,10 @@ fn render_coord_input(frame: &mut Frame, area: Rect, buf: &str, p: Palette) {
         ])),
         rows[1],
     );
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
-            Span::raw(" observe  "),
-            Span::styled("[Esc]", Style::default().fg(p.accent)),
-            Span::raw(" cancel"),
-        ])),
-        rows[2],
-    );
+    render_footer(frame, rows[2], p, &[
+        FooterKey::commit("[Enter]", "OBSERVE"),
+        FooterKey::nav("[Esc]", "cancel"),
+    ]);
 }
 
 fn render_direction_pick(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -96,13 +91,8 @@ fn render_direction_pick(frame: &mut Frame, area: Rect, state: &AppState) {
         ]),
         rows[0],
     );
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled("[x] [y] [z]", Style::default().fg(p.accent).add_modifier(Modifier::BOLD)),
-            Span::raw(" scan  "),
-            Span::styled("[Esc]", Style::default().fg(p.accent)),
-            Span::raw(" cancel"),
-        ])),
-        rows[1],
-    );
+    render_footer(frame, rows[1], p, &[
+        FooterKey::nav("[x] [y] [z]", "scan"),
+        FooterKey::nav("[Esc]", "cancel"),
+    ]);
 }

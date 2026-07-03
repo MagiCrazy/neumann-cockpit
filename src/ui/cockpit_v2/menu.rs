@@ -5,10 +5,10 @@
 //! the menu teaches what is (not yet) possible rather than hiding it.
 
 use crate::app::ContextMenu;
-use crate::ui::overlays::centered_rect;
+use crate::ui::overlays::{centered_rect, render_footer, FooterKey};
 use crate::ui::theme::Palette;
 use ratatui::{
-    layout::Rect,
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Clear, Paragraph},
@@ -25,9 +25,12 @@ pub fn render(frame: &mut Frame, area: Rect, menu: &ContextMenu, p: Palette) {
         })
         .max()
         .unwrap_or(0)
-        .max(menu.title.chars().count());
+        .max(menu.title.chars().count())
+        // Keep the popup wide enough for the footer hint line.
+        .max(FOOTER_WIDTH);
     let w = (widest as u16 + 4).clamp(18, 48);
-    let h = menu.items.len() as u16 + 2;
+    // items + footer + two border rows
+    let h = menu.items.len() as u16 + 3;
     let rect = centered_rect(w, h, area);
 
     frame.render_widget(Clear, rect);
@@ -62,5 +65,24 @@ pub fn render(frame: &mut Frame, area: Rect, menu: &ContextMenu, p: Palette) {
             Line::from(Span::styled(format!(" {}", item.label), style))
         })
         .collect();
-    frame.render_widget(Paragraph::new(lines), inner);
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .split(inner);
+    frame.render_widget(Paragraph::new(lines), rows[0]);
+    render_footer(
+        frame,
+        rows[1],
+        p,
+        &[
+            FooterKey::nav("[↑/↓]", "move"),
+            FooterKey::nav("[Enter]", "select"),
+            FooterKey::nav("[Esc]", "close"),
+        ],
+    );
 }
+
+/// Character width of the footer hint line (`[↑/↓] move  [Enter] select  [Esc]
+/// close`), used to size the popup.
+const FOOTER_WIDTH: usize = 39;

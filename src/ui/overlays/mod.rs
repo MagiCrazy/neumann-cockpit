@@ -173,6 +173,62 @@ pub(crate) fn centered_rect(width: u16, height: u16, r: Rect) -> Rect {
     Rect::new(x, y, width.min(r.width), height.min(r.height))
 }
 
+/// Semantic weight of a footer key, driving its colour and emphasis.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum KeyTone {
+    /// Navigation / intermediate step (no game effect). Accent, not bold.
+    Nav,
+    /// Terminal commit with a game effect (POST/PATCH). Good + bold.
+    Commit,
+    /// Terminal commit that is destructive or irreversible. Crit + bold.
+    Danger,
+    /// A commit key that is currently unavailable (form invalid). Dim.
+    Disabled,
+}
+
+/// One `[key] label` entry in a modal footer.
+pub(crate) struct FooterKey<'a> {
+    pub key: &'a str,
+    pub label: &'a str,
+    pub tone: KeyTone,
+}
+
+impl<'a> FooterKey<'a> {
+    pub fn nav(key: &'a str, label: &'a str) -> Self {
+        Self { key, label, tone: KeyTone::Nav }
+    }
+    pub fn commit(key: &'a str, label: &'a str) -> Self {
+        Self { key, label, tone: KeyTone::Commit }
+    }
+    pub fn danger(key: &'a str, label: &'a str) -> Self {
+        Self { key, label, tone: KeyTone::Danger }
+    }
+}
+
+/// Render the unified modal footer into `area` (expected to be a single row).
+///
+/// Each key is drawn as a bracketed, coloured `[key]` followed by its raw
+/// label, entries separated by two spaces. This is the single source of truth
+/// for every modal's bottom hint line; `[Esc]` should always come last as a
+/// `Nav` key.
+pub(crate) fn render_footer(frame: &mut Frame, area: Rect, p: Palette, keys: &[FooterKey]) {
+    let mut spans: Vec<Span> = Vec::with_capacity(keys.len() * 2);
+    for (i, fk) in keys.iter().enumerate() {
+        if i > 0 {
+            spans.push(Span::raw("  "));
+        }
+        let key_style = match fk.tone {
+            KeyTone::Nav => Style::default().fg(p.accent),
+            KeyTone::Commit => Style::default().fg(p.good).add_modifier(Modifier::BOLD),
+            KeyTone::Danger => Style::default().fg(p.crit).add_modifier(Modifier::BOLD),
+            KeyTone::Disabled => Style::default().fg(p.dim),
+        };
+        spans.push(Span::styled(fk.key.to_owned(), key_style));
+        spans.push(Span::raw(format!(" {}", fk.label)));
+    }
+    frame.render_widget(Paragraph::new(Line::from(spans)), area);
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn render_pick_list(
     frame: &mut Frame,
@@ -225,16 +281,15 @@ pub(crate) fn render_pick_list(
         lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(p.crit))));
     }
     frame.render_widget(Paragraph::new(lines), rows[0]);
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled("[↑/↓]", Style::default().fg(p.accent)),
-            Span::raw(" select  "),
-            Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
-            Span::raw(format!(" {action}  ")),
-            Span::styled("[Esc]", Style::default().fg(p.accent)),
-            Span::raw(" cancel"),
-        ])),
+    render_footer(
+        frame,
         rows[1],
+        p,
+        &[
+            FooterKey::nav("[↑/↓]", "select"),
+            FooterKey::commit("[Enter]", action),
+            FooterKey::nav("[Esc]", "cancel"),
+        ],
     );
 }
 

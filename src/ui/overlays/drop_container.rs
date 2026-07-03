@@ -18,7 +18,7 @@ pub(crate) fn render_drop_container_overlay(frame: &mut Frame, area: Rect, state
             let height = (planets.len() as u16 + 7).min(18);
             let prompt = format!("Drop {container_name} on planet:");
             render_pick_list(frame, area, palette(state.color_mode), " DROP CONTAINER — SELECT PLANET ", 54, height,
-                Some(&prompt), &names, *selection, error.as_deref(), "drop");
+                Some(&prompt), &names, *selection, error.as_deref(), "DROP");
         }
     }
 }

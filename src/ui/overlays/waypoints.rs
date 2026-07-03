@@ -4,11 +4,11 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, Clear, List, ListItem, ListState},
     Frame,
 };
 
-use super::centered_rect;
+use super::{centered_rect, render_footer, FooterKey};
 pub(crate) fn render_waypoints_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
     let WaypointsInput::Browsing { ref entries, selection } = state.waypoints else { return };
@@ -56,16 +56,10 @@ pub(crate) fn render_waypoints_overlay(frame: &mut Frame, area: Rect, state: &Ap
     list_state.select(Some(selection));
     frame.render_stateful_widget(list, rows[0], &mut list_state);
 
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled("[↑/↓]", Style::default().fg(p.accent)),
-            Span::raw(" select  "),
-            Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
-            Span::raw(" travel  "),
-            Span::styled("[Esc]", Style::default().fg(p.accent)),
-            Span::raw(" close"),
-        ])),
-        rows[1],
-    );
+    render_footer(frame, rows[1], p, &[
+        FooterKey::nav("[↑/↓]", "select"),
+        FooterKey::commit("[Enter]", "TRAVEL"),
+        FooterKey::nav("[Esc]", "close"),
+    ]);
 }
 

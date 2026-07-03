@@ -10,7 +10,7 @@ use ratatui::{
 use crate::api::types::{Mission, MissionStatus, MissionStepStatus};
 use crate::app::{AppState, MissionsInput};
 
-use super::centered_rect;
+use super::{centered_rect, render_footer, FooterKey};
 
 fn mission_status_style(s: &MissionStatus, p: Palette) -> (&'static str, Style) {
     match s {
@@ -102,17 +102,11 @@ pub(crate) fn render_missions_overlay(frame: &mut Frame, area: Rect, state: &App
     }
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), rows[0]);
 
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled("[↑↓]", Style::default().fg(p.accent)),
-            Span::raw(" select  "),
-            Span::styled("[a]", Style::default().fg(p.warn)),
-            Span::raw(" abandon  "),
-            Span::styled("[Esc]", Style::default().fg(p.accent)),
-            Span::raw(" close"),
-        ])),
-        rows[1],
-    );
+    render_footer(frame, rows[1], p, &[
+        FooterKey::nav("[↑↓]", "select"),
+        FooterKey::nav("[a]", "abandon"),
+        FooterKey::nav("[Esc]", "close"),
+    ]);
 
     if let MissionsInput::ConfirmAbandon { ref mission_title, ref error, .. } = state.missions_input {
         render_abandon_confirm(frame, area, mission_title, error.as_deref(), p);
@@ -147,13 +141,8 @@ fn render_abandon_confirm(frame: &mut Frame, area: Rect, title: &str, error: Opt
         )));
     }
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), rows[0]);
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled("[Enter]", Style::default().fg(p.warn).add_modifier(Modifier::BOLD)),
-            Span::raw(" abandon  "),
-            Span::styled("[Esc]", Style::default().fg(p.accent)),
-            Span::raw(" keep"),
-        ])),
-        rows[1],
-    );
+    render_footer(frame, rows[1], p, &[
+        FooterKey::danger("[Enter]", "ABANDON"),
+        FooterKey::nav("[Esc]", "keep"),
+    ]);
 }

@@ -8,7 +8,7 @@ use ratatui::{
     Frame,
 };
 
-use super::{centered_rect, render_pick_list};
+use super::{centered_rect, render_footer, render_pick_list, FooterKey};
 pub(crate) fn render_salvage_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
     match &state.salvage {
@@ -48,15 +48,10 @@ pub(crate) fn render_salvage_overlay(frame: &mut Frame, area: Rect, state: &AppS
                 )));
             }
             frame.render_widget(Paragraph::new(lines), rows[0]);
-            frame.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
-                    Span::raw(" SALVAGE  "),
-                    Span::styled("[Esc]", Style::default().fg(p.accent)),
-                    Span::raw(" cancel"),
-                ])),
-                rows[1],
-            );
+            render_footer(frame, rows[1], p, &[
+                FooterKey::commit("[Enter]", "SALVAGE"),
+                FooterKey::nav("[Esc]", "cancel"),
+            ]);
         }
 
         SalvageInput::Inactive => {}
@@ -99,15 +94,10 @@ pub(crate) fn render_drop_cargo_overlay(frame: &mut Frame, area: Rect, state: &A
         lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(p.crit))));
     }
     frame.render_widget(Paragraph::new(lines), rows[0]);
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled("[Enter/y]", Style::default().fg(p.crit).add_modifier(Modifier::BOLD)),
-            Span::raw(" DROP  "),
-            Span::styled("[Esc]", Style::default().fg(p.accent)),
-            Span::raw(" cancel"),
-        ])),
-        rows[1],
-    );
+    render_footer(frame, rows[1], p, &[
+        FooterKey::danger("[Enter/y]", "DROP"),
+        FooterKey::nav("[Esc]", "cancel"),
+    ]);
 }
 
 pub(crate) fn render_recall_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -154,15 +144,13 @@ pub(crate) fn render_recall_overlay(frame: &mut Frame, area: Rect, state: &AppSt
         )));
     }
     frame.render_widget(Paragraph::new(lines), rows[0]);
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled("[Enter]", Style::default().fg(p.warn).add_modifier(Modifier::BOLD)),
-            Span::raw(if remote { " ABANDON  " } else { " RECALL  " }),
-            Span::styled("[Esc]", Style::default().fg(p.accent)),
-            Span::raw(" cancel"),
-        ])),
-        rows[1],
-    );
+    // Abandon (remote) is irreversible → Danger; a normal recall is a Commit.
+    let recall_key = if remote {
+        FooterKey::danger("[Enter]", "ABANDON")
+    } else {
+        FooterKey::commit("[Enter]", "RECALL")
+    };
+    render_footer(frame, rows[1], p, &[recall_key, FooterKey::nav("[Esc]", "cancel")]);
 }
 
 pub(crate) fn render_refuel_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -199,15 +187,10 @@ pub(crate) fn render_refuel_overlay(frame: &mut Frame, area: Rect, state: &AppSt
         )));
     }
     frame.render_widget(Paragraph::new(lines), rows[0]);
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
-            Span::raw(" REFUEL  "),
-            Span::styled("[Esc]", Style::default().fg(p.accent)),
-            Span::raw(" cancel"),
-        ])),
-        rows[1],
-    );
+    render_footer(frame, rows[1], p, &[
+        FooterKey::commit("[Enter]", "REFUEL"),
+        FooterKey::nav("[Esc]", "cancel"),
+    ]);
 }
 
 pub(crate) fn render_scut_relay_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -251,15 +234,10 @@ pub(crate) fn render_scut_relay_overlay(frame: &mut Frame, area: Rect, state: &A
         lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(p.crit))));
     }
     frame.render_widget(Paragraph::new(lines), rows[0]);
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled("[Enter]", Style::default().fg(p.accent).add_modifier(Modifier::BOLD)),
-            Span::raw(" turn on  "),
-            Span::styled("[Esc]", Style::default().fg(p.accent)),
-            Span::raw(" cancel"),
-        ])),
-        rows[1],
-    );
+    render_footer(frame, rows[1], p, &[
+        FooterKey::commit("[Enter]", "TURN ON"),
+        FooterKey::nav("[Esc]", "cancel"),
+    ]);
 }
 
 pub(crate) fn render_mind_snapshot_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -310,15 +288,10 @@ pub(crate) fn render_mind_snapshot_overlay(frame: &mut Frame, area: Rect, state:
         )));
     }
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), rows[0]);
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled("[Enter]", Style::default().fg(p.crit).add_modifier(Modifier::BOLD)),
-            Span::raw(" REASSIGN  "),
-            Span::styled("[Esc]", Style::default().fg(p.accent)),
-            Span::raw(" cancel"),
-        ])),
-        rows[1],
-    );
+    render_footer(frame, rows[1], p, &[
+        FooterKey::danger("[Enter]", "REASSIGN"),
+        FooterKey::nav("[Esc]", "cancel"),
+    ]);
 }
 
 pub(crate) fn render_rename_manny_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -357,15 +330,10 @@ pub(crate) fn render_rename_manny_overlay(frame: &mut Frame, area: Rect, state: 
     }
 
     frame.render_widget(Paragraph::new(lines), rows[0]);
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
-            Span::raw(" rename  "),
-            Span::styled("[Esc]", Style::default().fg(p.accent)),
-            Span::raw(" cancel"),
-        ])),
-        rows[1],
-    );
+    render_footer(frame, rows[1], p, &[
+        FooterKey::commit("[Enter]", "RENAME"),
+        FooterKey::nav("[Esc]", "cancel"),
+    ]);
 }
 
 pub(crate) fn render_deploy_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -416,15 +384,10 @@ pub(crate) fn render_deploy_overlay(frame: &mut Frame, area: Rect, state: &AppSt
                 )));
             }
             frame.render_widget(Paragraph::new(lines), rows[0]);
-            frame.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
-                    Span::raw(" DEPLOY  "),
-                    Span::styled("[Esc]", Style::default().fg(p.accent)),
-                    Span::raw(" cancel"),
-                ])),
-                rows[1],
-            );
+            render_footer(frame, rows[1], p, &[
+                FooterKey::commit("[Enter]", "DEPLOY"),
+                FooterKey::nav("[Esc]", "cancel"),
+            ]);
         }
 
         DeployInput::Inactive => {}
@@ -438,7 +401,7 @@ pub(crate) fn render_inspect_overlay(frame: &mut Frame, area: Rect, state: &AppS
     let error_lines = if error.is_some() { 2u16 } else { 0 };
     let height = (candidates.len() as u16 + 6 + error_lines).min(18);
     render_pick_list(frame, area, p, &format!(" INSPECT — {manny_name} "), 52, height,
-        Some("Select asteroid to inspect:"), &names, selection, error.as_deref(), "inspect");
+        Some("Select asteroid to inspect:"), &names, selection, error.as_deref(), "INSPECT");
 }
 
 pub(crate) fn render_recover_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -448,7 +411,7 @@ pub(crate) fn render_recover_overlay(frame: &mut Frame, area: Rect, state: &AppS
     let error_lines = if error.is_some() { 2u16 } else { 0 };
     let height = (candidates.len() as u16 + 6 + error_lines).min(18);
     render_pick_list(frame, area, p, &format!(" RECOVER — {manny_name} "), 52, height,
-        Some("Select container to recover:"), &names, selection, error.as_deref(), "recover");
+        Some("Select container to recover:"), &names, selection, error.as_deref(), "RECOVER");
 }
 
 pub(crate) fn render_detach_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -473,7 +436,7 @@ pub(crate) fn render_detach_overlay(frame: &mut Frame, area: Rect, state: &AppSt
             let height = (asteroids.len() as u16 + 8).min(18);
             let prompt = format!("Attach to asteroid  (manny: {manny_name})");
             render_pick_list(frame, area, p, &format!(" DETACH — hide {container_name} "), 52, height,
-                Some(&prompt), &names, *selection, error.as_deref(), "hide here");
+                Some(&prompt), &names, *selection, error.as_deref(), "HIDE HERE");
         }
 
         DetachInput::Inactive => {}

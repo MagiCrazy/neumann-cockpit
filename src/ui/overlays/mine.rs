@@ -1,14 +1,14 @@
 use crate::app::{AppState, MineInput, RESOURCE_LABELS, RESOURCE_TYPES};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
+    style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
 
 use crate::ui::theme::{format_duration, palette};
-use super::{centered_rect, render_pick_list};
+use super::{centered_rect, render_footer, render_pick_list, FooterKey, KeyTone};
 pub(crate) fn estimate_mine_duration(target_amount: f64) -> (i64, i64) {
     const CARGO_CAP: f64 = 0.30;
     const TRAVEL_SECS: i64 = 1800; // 900s each way
@@ -164,28 +164,22 @@ pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppStat
             let any_resource = resources.iter().any(|&r| r);
             let valid_amount = amount_buf.parse::<f64>().ok().filter(|&v| v > 0.0).is_some();
             let can_send = any_resource && valid_amount;
-            let hint = if *amount_mode {
-                Line::from(vec![
-                    Span::styled("[Tab]", Style::default().fg(p.accent)),
-                    Span::raw(" resources  "),
-                    Span::styled("[Enter]", if can_send { Style::default().fg(p.good).add_modifier(Modifier::BOLD) } else { Style::default().fg(p.dim) }),
-                    Span::raw(" send  "),
-                    Span::styled("[Esc]", Style::default().fg(p.accent)),
-                    Span::raw(" cancel"),
-                ])
+            let mine_key = if can_send {
+                FooterKey::commit("[Enter]", "MINE")
             } else {
-                Line::from(vec![
-                    Span::styled("[1-4]", Style::default().fg(p.accent)),
-                    Span::raw(" toggle  "),
-                    Span::styled("[Tab]", Style::default().fg(p.accent)),
-                    Span::raw(" amount  "),
-                    Span::styled("[Enter]", if can_send { Style::default().fg(p.good).add_modifier(Modifier::BOLD) } else { Style::default().fg(p.dim) }),
-                    Span::raw(" send  "),
-                    Span::styled("[Esc]", Style::default().fg(p.accent)),
-                    Span::raw(" cancel"),
-                ])
+                FooterKey { key: "[Enter]", label: "MINE", tone: KeyTone::Disabled }
             };
-            frame.render_widget(Paragraph::new(hint), rows[1]);
+            let keys = if *amount_mode {
+                vec![FooterKey::nav("[Tab]", "resources"), mine_key, FooterKey::nav("[Esc]", "cancel")]
+            } else {
+                vec![
+                    FooterKey::nav("[1-4]", "toggle"),
+                    FooterKey::nav("[Tab]", "amount"),
+                    mine_key,
+                    FooterKey::nav("[Esc]", "cancel"),
+                ]
+            };
+            render_footer(frame, rows[1], p, &keys);
         }
 
         MineInput::Inactive => {}
