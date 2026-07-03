@@ -1,5 +1,12 @@
 # Changelog
 
+## [63.1.3](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v63.1.2...neumann-cockpit-v63.1.3) (2026-07-03)
+
+
+### Bug Fixes
+
+* **cockpit:** scroll compact panes to keep the cursor visible ([#124](https://github.com/MagiCrazy/neumann-cockpit/issues/124)) ([80e566e](https://github.com/MagiCrazy/neumann-cockpit/commit/80e566e94aec9626c2c2fb9b91fee42748154555))
+
 ## [63.1.2](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v63.1.1...neumann-cockpit-v63.1.2) (2026-07-03)
 
 
