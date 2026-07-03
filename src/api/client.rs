@@ -6,6 +6,7 @@ use super::types::{
 use anyhow::{Context, Result};
 use reqwest::{Client, StatusCode, Url};
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 #[derive(Clone)]
 pub struct ApiClient {
@@ -16,8 +17,24 @@ pub struct ApiClient {
 
 impl ApiClient {
     pub fn new(base_url: String, api_key: String) -> Result<Self> {
+        // Identify the client to the game server: app version + platform.
+        // e.g. "neumann-cockpit/63.1.0 (linux; x86_64)".
+        let user_agent = format!(
+            "neumann-cockpit/{} ({}; {})",
+            env!("CARGO_PKG_VERSION"),
+            std::env::consts::OS,
+            std::env::consts::ARCH,
+        );
+
+        // reqwest has no default timeout: a half-open connection (suspend/resume,
+        // wifi dropping mid-request) would otherwise hang a fetch task forever —
+        // no ApiMessage ever arrives, `loading` stays true, and all three refresh
+        // paths are gated on `!loading`. Bound both the connect and the overall
+        // request so a stuck fetch always fails and frees the refresh loop.
         let client = Client::builder()
-            .user_agent("neumann-cockpit/0.1")
+            .user_agent(user_agent)
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(30))
             .build()
             .context("Failed to build HTTP client")?;
         let base_url = Url::parse(&base_url).context("Invalid base_url in config")?;
