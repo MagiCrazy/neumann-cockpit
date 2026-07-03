@@ -243,12 +243,6 @@ impl super::AppState {
         let idle_manny = !self.collect_idle_onboard_mannies().is_empty();
         let items = vec![
             MenuItem {
-                action: MenuAction::Jettison,
-                label: "Jettison…".into(),
-                enabled: has_row,
-                disabled_reason: (!has_row).then(|| "no item selected".to_string()),
-            },
-            MenuItem {
                 action: MenuAction::AtomicCraft,
                 label: "Atomic craft…".into(),
                 enabled: has_printer,
@@ -259,6 +253,12 @@ impl super::AppState {
                 label: "Move stock…".into(),
                 enabled: idle_manny,
                 disabled_reason: (!idle_manny).then(|| "no idle manny".to_string()),
+            },
+            MenuItem {
+                action: MenuAction::Jettison,
+                label: "Jettison…".into(),
+                enabled: has_row,
+                disabled_reason: (!has_row).then(|| "no item selected".to_string()),
             },
         ];
         let cursor = items.iter().position(|i| i.enabled).unwrap_or(0);
