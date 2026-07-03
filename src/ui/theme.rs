@@ -73,6 +73,21 @@ pub(crate) fn palette(mode: ColorMode) -> Palette {
     }
 }
 
+impl Palette {
+    /// Style for at-a-glance urgency signals (the `! n` badge, the `✗` status
+    /// line, the RECOVER banner). In the mono palettes `crit == accent`, so
+    /// colour alone can't convey urgency — fall back to bold + REVERSED, which
+    /// reads regardless of hue. Semantic palettes keep the red, bold.
+    pub(crate) fn crit_style(&self) -> Style {
+        let base = Style::default().fg(self.crit).add_modifier(Modifier::BOLD);
+        if self.crit == self.accent {
+            base.add_modifier(Modifier::REVERSED)
+        } else {
+            base
+        }
+    }
+}
+
 /// Palette-aware pane frame with retro double-line borders. Active panes get
 /// the accent colour and a bold title; inactive ones the dim accent.
 pub(crate) fn pane_block(title: &str, active: bool, p: Palette) -> Block<'_> {
@@ -300,5 +315,29 @@ pub fn format_duration(secs: i64) -> String {
         format!("{}m {:02}s", m, s)
     } else {
         format!("{}s", s)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::ColorMode;
+
+    #[test]
+    fn crit_style_reverses_only_in_mono() {
+        // Mono palettes: crit == accent, so urgency needs REVERSED to read.
+        for mode in [ColorMode::MonoGreen, ColorMode::MonoAmber] {
+            assert!(
+                palette(mode).crit_style().add_modifier.contains(Modifier::REVERSED),
+                "{mode:?} crit_style must reverse"
+            );
+        }
+        // Semantic palettes keep the distinct red — no reverse needed.
+        for mode in [ColorMode::PhosphorSemantic, ColorMode::Modern16] {
+            assert!(
+                !palette(mode).crit_style().add_modifier.contains(Modifier::REVERSED),
+                "{mode:?} crit_style must not reverse"
+            );
+        }
     }
 }

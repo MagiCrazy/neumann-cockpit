@@ -250,42 +250,45 @@ fn render_status_line(frame: &mut Frame, area: Rect, state: &AppState, p: Palett
     }
     // An error takes over the line until dismissed; otherwise a success toast.
     if let Some(err) = &state.error {
-        left.push(Span::styled(format!("  ✗ {err}"), Style::default().fg(p.crit)));
+        left.push(Span::styled(format!("  ✗ {err}"), p.crit_style()));
     } else if let Some(toast) = state.active_toast() {
         left.push(Span::styled(format!("  ✓ {toast}"), Style::default().fg(p.good)));
     }
 
-    let mut meta = Vec::new();
+    let mut meta: Vec<(String, Style)> = Vec::new();
+    let dim = Style::default().fg(p.dim);
+    let accent = Style::default().fg(p.accent);
     // Sync status: spinner while a refresh is in flight, else the age since the
     // last successful sync (ticks live via the 1 s UI tick).
     if state.loading {
-        meta.push(("⟳ sync".to_string(), p.accent));
+        meta.push(("⟳ sync".to_string(), accent));
     } else if let Some(age) = state.seconds_since_sync() {
         let label = if age < 60 { format!("⟳ {age}s") } else { format!("⟳ {}m", age / 60) };
-        meta.push((label, p.dim));
+        meta.push((label, dim));
     }
     if !state.scut_coverage().is_empty() {
-        meta.push(("≣ SCUT".to_string(), p.accent));
+        meta.push(("≣ SCUT".to_string(), accent));
     }
     let unread = state.unread_alert_count();
     if unread > 0 {
-        meta.push((format!("! {unread}"), p.crit));
+        // Urgency signal: crit_style survives the mono palettes (bold+REVERSED).
+        meta.push((format!("! {unread}"), p.crit_style()));
     }
     if let Some(v) = state.api_version {
-        meta.push((format!("API v{v}"), p.dim));
+        meta.push((format!("API v{v}"), dim));
     }
     // Live wall clock — ticks every second via the 1 s UI tick. (Sync recency
     // lives in the ⟳ indicator above, so this is a real clock, not last-sync.)
-    meta.push((chrono::Local::now().format("%H:%M:%S").to_string(), p.dim));
+    meta.push((chrono::Local::now().format("%H:%M:%S").to_string(), dim));
     let meta_len: usize = meta.iter().map(|(s, _)| s.chars().count() + 3).sum();
     let meta_spans: Vec<Span> = meta
         .iter()
         .enumerate()
-        .flat_map(|(i, (s, c))| {
+        .flat_map(|(i, (s, st))| {
             let sep = if i == 0 { "" } else { " · " };
             [
                 Span::styled(sep, Style::default().fg(p.dim)),
-                Span::styled(s.clone(), Style::default().fg(*c)),
+                Span::styled(s.clone(), *st),
             ]
         })
         .collect();
