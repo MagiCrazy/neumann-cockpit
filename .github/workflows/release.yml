@@ -53,7 +53,10 @@ jobs:
         run: |
           BIN=neumann-cockpit
           ARCHIVE="${BIN}-${{ matrix.platform }}.tar.gz"
-          tar czf "$ARCHIVE" -C "target/${{ matrix.target }}/release" "$BIN"
+          # Bundle the example config next to the binary to ease first-run setup.
+          tar czf "$ARCHIVE" \
+            -C "target/${{ matrix.target }}/release" "$BIN" \
+            -C "$GITHUB_WORKSPACE" config.example.toml
           if command -v sha256sum >/dev/null; then
             sha256sum "$ARCHIVE" > "${ARCHIVE}.sha256"
           else
@@ -67,7 +70,7 @@ jobs:
         run: |
           $BIN = "neumann-cockpit"
           $ARCHIVE = "${BIN}-${{ matrix.platform }}.zip"
-          Compress-Archive -Path "target\${{ matrix.target }}\release\${BIN}.exe" -DestinationPath $ARCHIVE
+          Compress-Archive -Path "target\${{ matrix.target }}\release\${BIN}.exe", "config.example.toml" -DestinationPath $ARCHIVE
           $hash = (Get-FileHash -Algorithm SHA256 $ARCHIVE).Hash.ToLower()
           "$hash  $ARCHIVE" | Out-File -FilePath "${ARCHIVE}.sha256" -Encoding ascii
           "ARCHIVE=${ARCHIVE}" | Out-File -FilePath $env:GITHUB_ENV -Append
