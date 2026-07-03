@@ -1,5 +1,13 @@
 # Changelog
 
+## [63.3.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v63.3.0...neumann-cockpit-v63.3.1) (2026-07-03)
+
+
+### Documentation
+
+* **claude:** drop hardcoded API version literals ([#146](https://github.com/MagiCrazy/neumann-cockpit/issues/146)) ([a57fd56](https://github.com/MagiCrazy/neumann-cockpit/commit/a57fd56787f10930876e869bd45e3986fcd381e0))
+* **contributing:** document versioning + Release-As ([#148](https://github.com/MagiCrazy/neumann-cockpit/issues/148)) ([748240b](https://github.com/MagiCrazy/neumann-cockpit/commit/748240b362c9e0a3413c57e8c469f022f361d4c0))
+
 ## [63.3.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v63.2.0...neumann-cockpit-v63.3.0) (2026-07-03)
 
 
