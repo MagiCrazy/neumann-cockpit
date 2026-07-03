@@ -7,25 +7,131 @@ use ratatui::{
     Frame,
 };
 
-use super::{centered_rect, render_footer, FooterKey};
-// ── Help overlay ──────────────────────────────────────────────────────────────
+use super::{render_footer, FooterKey};
 
-pub(crate) fn help_key_line(key: &'static str, desc: &'static str, p: Palette) -> Line<'static> {
+// ── Help overlay ──────────────────────────────────────────────────────────────
+//
+// Content is static data (title + (key, desc) rows) so the row count is known
+// without a palette — the input layer uses it to clamp scrolling. The overlay
+// is near-fullscreen and scrolls vertically, so nothing is ever hidden however
+// short the terminal.
+
+/// One key/description row. An empty `key` continues the previous row's desc.
+type Row = (&'static str, &'static str);
+/// A titled group of rows.
+type Section = (&'static str, &'static [Row]);
+
+const LEFT: &[Section] = &[
+    (
+        "Navigate",
+        &[
+            ("e r t", "Scanner · Map · Comms"),
+            ("d f g", "Sector · Probe · Missions"),
+            ("c v b", "Inventory · Storage · Mannies"),
+            ("j k / ↑↓", "move cursor in pane"),
+            ("l / h", "drill in / out (→ ←)"),
+            ("Tab", "cycle panes (Shift-Tab reverse)"),
+            ("z", "zoom active pane full screen"),
+            ("Esc", "close / leave zoom / drill up"),
+        ],
+    ),
+    (
+        "Act & global",
+        &[
+            ("Enter", "contextual action menu"),
+            (":", "command line (see right)"),
+            ("F1", "toggle hints line"),
+            ("F2", "cycle color mode"),
+            ("F5", "refresh"),
+            ("?", "this help"),
+            ("q", "quit"),
+        ],
+    ),
+    (
+        "In a menu",
+        &[
+            ("1-9", "fire the nth item"),
+            ("j k", "move"),
+            ("Enter", "fire selected"),
+            ("Esc", "close"),
+        ],
+    ),
+];
+
+const RIGHT: &[Section] = &[
+    (
+        "Actions per pane (Enter)",
+        &[
+            ("Mannies", "mine, craft, repair, salvage,"),
+            ("", "inspect, recover, detach, refuel,"),
+            ("", "drop cargo, recall/abandon, rename"),
+            ("Inventory", "jettison, atomic craft, move stock"),
+            ("Missions", "browse steps, abandon"),
+            ("Comms", "messages inbox/sent/compose, alerts"),
+            ("Storage", "rename, rules, recover, detach, move"),
+            ("Sector", "object actions: mine, inspect,"),
+            ("", "salvage, recover, deploy, relay"),
+        ],
+    ),
+    (
+        "Command mode  ( : )",
+        &[
+            ("Tab", "complete the verb"),
+            (":focus", "<pane> — zoom that pane"),
+            (":travel", "<x y z | +dx dy dz>"),
+            (":goto", "<x y z> — center the map"),
+            (":filter", "<all|objects|minable|danger>"),
+            (":theme", "<mono-green|mono-amber|…>"),
+            (":refresh", "reload all data"),
+            (":zoom", "toggle zoom"),
+            (":help  :q", "this help · quit"),
+        ],
+    ),
+];
+
+fn key_line(key: &str, desc: &str, p: Palette) -> Line<'static> {
     Line::from(vec![
         Span::styled(format!("  {key:<10}"), Style::default().fg(p.accent)),
-        Span::raw(desc),
+        Span::raw(desc.to_string()),
     ])
 }
 
-pub(crate) fn help_section(title: &'static str, p: Palette) -> Line<'static> {
-    Line::from(Span::styled(
-        title,
-        Style::default().fg(p.warn).add_modifier(Modifier::BOLD),
-    ))
+/// Render a column of sections to styled lines (title, its rows, a blank gap).
+fn column_lines(sections: &[Section], p: Palette) -> Vec<Line<'static>> {
+    let mut lines = Vec::new();
+    for (i, (title, rows)) in sections.iter().enumerate() {
+        if i > 0 {
+            lines.push(Line::default());
+        }
+        lines.push(Line::from(Span::styled(
+            title.to_string(),
+            Style::default().fg(p.warn).add_modifier(Modifier::BOLD),
+        )));
+        for (key, desc) in *rows {
+            lines.push(key_line(key, desc, p));
+        }
+    }
+    lines
 }
 
-pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, p: Palette) {
-    let popup = centered_rect(76, 28, area);
+/// Rendered line count of a column (palette-independent): one title + its rows
+/// per section, plus a blank line between sections.
+fn column_len(sections: &[Section]) -> usize {
+    let rows: usize = sections.iter().map(|(_, r)| 1 + r.len()).sum();
+    rows + sections.len().saturating_sub(1)
+}
+
+/// Tallest column — the scrollable content height, used by the input layer to
+/// clamp the scroll offset.
+pub(crate) fn help_row_count() -> usize {
+    column_len(LEFT).max(column_len(RIGHT))
+}
+
+pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, p: Palette, scroll: u16) {
+    // Near-fullscreen: leave a thin margin so the grid peeks around it.
+    let w = area.width.saturating_sub(4).clamp(20, 96);
+    let h = area.height.saturating_sub(2).max(6);
+    let popup = super::centered_rect(w, h, area);
     frame.render_widget(Clear, popup);
     let block = Block::default()
         .title(" HELP — KEYBINDINGS ")
@@ -39,58 +145,64 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, p: Palette) {
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
-
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(rows[0]);
 
-    let left: Vec<Line> = vec![
-        help_section("Navigate", p),
-        help_key_line("e r t", "Scanner · Map · Comms", p),
-        help_key_line("d f g", "Sector · Probe · Missions", p),
-        help_key_line("c v b", "Inventory · Storage · Mannies", p),
-        help_key_line("j k / ↑↓", "move cursor in pane", p),
-        help_key_line("l / h", "drill in / out (→ ←)", p),
-        help_key_line("Tab", "cycle panes (Shift-Tab reverse)", p),
-        help_key_line("z", "zoom active pane full screen", p),
-        help_key_line("Esc", "close / leave zoom / drill up", p),
-        Line::default(),
-        help_section("Act & global", p),
-        help_key_line("Enter", "contextual action menu", p),
-        help_key_line(":", "command line (travel, goto, focus…)", p),
-        help_key_line("F1", "toggle hints line", p),
-        help_key_line("F2", "cycle color mode", p),
-        help_key_line("F5", "refresh", p),
-        help_key_line("?", "this help", p),
-        help_key_line("q", "quit", p),
-        Line::default(),
-        help_section("In a menu", p),
-        help_key_line("j k", "move", p),
-        help_key_line("Enter", "fire selected", p),
-        help_key_line("Esc", "close", p),
-    ];
+    // Clamp the applied scroll so it never runs into blank space.
+    let body_h = rows[0].height;
+    let max_scroll = (help_row_count() as u16).saturating_sub(body_h);
+    let off = scroll.min(max_scroll);
 
-    let right: Vec<Line> = vec![
-        help_section("Actions per pane (Enter)", p),
-        help_key_line("Mannies", "mine, craft, repair, salvage,", p),
-        help_key_line("", "inspect, recover, detach, refuel,", p),
-        help_key_line("", "drop cargo, recall/abandon, rename", p),
-        help_key_line("Inventory", "jettison, atomic craft, move stock", p),
-        help_key_line("Missions", "browse steps, abandon", p),
-        help_key_line("Comms", "messages inbox/sent/compose, alerts", p),
-        help_key_line("Storage", "rename, rules, recover, detach, move", p),
-        help_key_line("Sector", "object actions: mine, inspect,", p),
-        help_key_line("", "salvage, recover, deploy, relay", p),
-        Line::default(),
-        help_section("Config", p),
-        help_key_line("theme", "color mode (mono-green/amber,", p),
-        help_key_line("", "phosphor-semantic, modern-16, p)", p),
-        help_key_line("hints", "show the hints line (F1)", p),
-    ];
+    frame.render_widget(Paragraph::new(column_lines(LEFT, p)).scroll((off, 0)), cols[0]);
+    frame.render_widget(Paragraph::new(column_lines(RIGHT, p)).scroll((off, 0)), cols[1]);
 
-    frame.render_widget(Paragraph::new(left), cols[0]);
-    frame.render_widget(Paragraph::new(right), cols[1]);
-    render_footer(frame, rows[1], p, &[FooterKey::nav("[Esc/?]", "close")]);
+    // Only advertise scrolling when there is something below the fold.
+    if max_scroll > 0 {
+        render_footer(
+            frame,
+            rows[1],
+            p,
+            &[
+                FooterKey::nav("[↑/↓]", "scroll"),
+                FooterKey::nav("[g/G]", "top/end"),
+                FooterKey::nav("[Esc/?]", "close"),
+            ],
+        );
+    } else {
+        render_footer(frame, rows[1], p, &[FooterKey::nav("[Esc/?]", "close")]);
+    }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::ColorMode;
+    use crate::ui::theme::palette;
+    use ratatui::{backend::TestBackend, Terminal};
+
+    #[test]
+    fn row_count_matches_rendered_columns() {
+        // Keeps the scroll clamp honest: column_len must track column_lines.
+        let p = palette(ColorMode::MonoGreen);
+        let expected = column_lines(LEFT, p).len().max(column_lines(RIGHT, p).len());
+        assert_eq!(help_row_count(), expected);
+    }
+
+    #[test]
+    fn renders_all_sections_including_command_mode() {
+        let p = palette(ColorMode::MonoGreen);
+        let mut t = Terminal::new(TestBackend::new(100, 40)).unwrap();
+        t.draw(|f| {
+            let a = f.area();
+            render_help_overlay(f, a, p, 0);
+        })
+        .unwrap();
+        let text: String =
+            t.backend().buffer().content.iter().map(|c| c.symbol()).collect();
+        assert!(text.contains("Navigate"), "navigation section shown");
+        assert!(text.contains("Command mode"), "command-mode section shown");
+        assert!(text.contains(":travel"), "command verbs documented");
+    }
+}

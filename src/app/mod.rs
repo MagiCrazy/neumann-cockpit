@@ -93,6 +93,8 @@ pub struct AppState {
     pub drop_cargo: DropCargoInput,
     pub drop_container: DropStorageContainerInput,
     pub help_open: bool,
+    /// Vertical scroll offset of the help overlay (rows). Reset when it closes.
+    pub help_scroll: u16,
     /// Read-only detail popup for the selected inventory row.
     pub inventory_detail_open: bool,
     /// Transient success message shown in the status bar.

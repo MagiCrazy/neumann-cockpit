@@ -23,7 +23,7 @@ pub(crate) use alerts::render_alerts_overlay;
 pub(crate) use containers::{render_container_rules_overlay, render_rename_container_overlay};
 pub(crate) use craft::{render_atomic_printer_craft_overlay, render_craft_overlay};
 pub(crate) use drop_container::render_drop_container_overlay;
-pub(crate) use help::render_help_overlay;
+pub(crate) use help::{help_row_count, render_help_overlay};
 pub(crate) use inventory_detail::render_inventory_detail_overlay;
 pub(crate) use jettison::render_jettison_overlay;
 pub(crate) use map::{render_goto_visited_overlay, render_map_overlay};
@@ -125,7 +125,7 @@ pub(crate) fn render_active_overlays(frame: &mut Frame, area: Rect, state: &AppS
         render_scan_input_overlay(frame, area, state);
     }
     if state.help_open {
-        render_help_overlay(frame, area, palette(state.color_mode));
+        render_help_overlay(frame, area, palette(state.color_mode), state.help_scroll);
     }
 }
 
