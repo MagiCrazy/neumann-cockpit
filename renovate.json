@@ -12,6 +12,12 @@
       "matchUpdateTypes": ["patch", "minor"]
     },
     {
+      "description": "ratatui/crossterm are pre-1.0: a minor is breaking by convention, and the TUI has no rendering coverage to catch a behavioural regression. Review these by hand.",
+      "matchManagers": ["cargo"],
+      "matchPackageNames": ["ratatui", "crossterm"],
+      "automerge": false
+    },
+    {
       "matchManagers": ["github-actions"],
       "groupName": "GitHub Actions",
       "automerge": true,
