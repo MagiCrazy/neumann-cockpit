@@ -1,14 +1,14 @@
 use crate::app::{AppState, RepairInput};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
+    style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
 
 use crate::ui::theme::{format_duration, palette};
-use super::centered_rect;
+use super::{centered_rect, render_footer, FooterKey, KeyTone};
 pub(crate) fn render_repair_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
     let RepairInput::Typing { ref manny_name, ref buf, ref error, .. } = state.repair else { return };
@@ -114,21 +114,11 @@ pub(crate) fn render_repair_overlay(frame: &mut Frame, area: Rect, state: &AppSt
 
     // Hint bar
     let can_send = parsed.is_some() && !insufficient;
-    let hint = if can_send {
-        Line::from(vec![
-            Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
-            Span::raw(" send  "),
-            Span::styled("[Esc]", Style::default().fg(p.accent)),
-            Span::raw(" cancel"),
-        ])
+    let repair_key = if can_send {
+        FooterKey::commit("[Enter]", "REPAIR")
     } else {
-        Line::from(vec![
-            Span::styled("[Enter]", Style::default().fg(p.dim)),
-            Span::raw(" send  "),
-            Span::styled("[Esc]", Style::default().fg(p.accent)),
-            Span::raw(" cancel"),
-        ])
+        FooterKey { key: "[Enter]", label: "REPAIR", tone: KeyTone::Disabled }
     };
-    frame.render_widget(Paragraph::new(hint), hint_area);
+    render_footer(frame, hint_area, p, &[repair_key, FooterKey::nav("[Esc]", "cancel")]);
 }
 

@@ -2,13 +2,13 @@ use crate::ui::theme::palette;
 use crate::app::{AppState, JettisonInput};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
+    style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
 
-use super::centered_rect;
+use super::{centered_rect, render_footer, FooterKey};
 pub(crate) fn render_jettison_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
     match &state.jettison {
@@ -41,15 +41,10 @@ pub(crate) fn render_jettison_overlay(frame: &mut Frame, area: Rect, state: &App
                 )));
             }
             frame.render_widget(Paragraph::new(lines), rows[0]);
-            frame.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled("[Enter]", Style::default().fg(p.crit).add_modifier(Modifier::BOLD)),
-                    Span::raw(" EJECT  "),
-                    Span::styled("[Esc]", Style::default().fg(p.accent)),
-                    Span::raw(" cancel"),
-                ])),
-                rows[1],
-            );
+            render_footer(frame, rows[1], p, &[
+                FooterKey::danger("[Enter]", "EJECT"),
+                FooterKey::nav("[Esc]", "cancel"),
+            ]);
         }
 
         JettisonInput::ConfirmRelay { error, .. } => {
@@ -80,15 +75,10 @@ pub(crate) fn render_jettison_overlay(frame: &mut Frame, area: Rect, state: &App
                 )));
             }
             frame.render_widget(Paragraph::new(lines), rows[0]);
-            frame.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled("[Enter]", Style::default().fg(p.accent).add_modifier(Modifier::BOLD)),
-                    Span::raw(" DEPLOY  "),
-                    Span::styled("[Esc]", Style::default().fg(p.accent)),
-                    Span::raw(" cancel"),
-                ])),
-                rows[1],
-            );
+            render_footer(frame, rows[1], p, &[
+                FooterKey::commit("[Enter]", "DEPLOY"),
+                FooterKey::nav("[Esc]", "cancel"),
+            ]);
         }
 
         JettisonInput::EnterAmount { item_name, max_amount, buf, error, .. } => {
@@ -129,15 +119,10 @@ pub(crate) fn render_jettison_overlay(frame: &mut Frame, area: Rect, state: &App
                 )));
             }
             frame.render_widget(Paragraph::new(lines), rows[0]);
-            frame.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
-                    Span::raw(" confirm  "),
-                    Span::styled("[Esc]", Style::default().fg(p.accent)),
-                    Span::raw(" cancel"),
-                ])),
-                rows[1],
-            );
+            render_footer(frame, rows[1], p, &[
+                FooterKey::danger("[Enter]", "JETTISON"),
+                FooterKey::nav("[Esc]", "cancel"),
+            ]);
         }
 
         JettisonInput::Inactive => {}

@@ -8,7 +8,7 @@ use ratatui::{
     Frame,
 };
 
-use super::centered_rect;
+use super::{centered_rect, render_footer, FooterKey};
 
 pub(crate) fn render_rename_container_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
@@ -44,15 +44,10 @@ pub(crate) fn render_rename_container_overlay(frame: &mut Frame, area: Rect, sta
     }
 
     frame.render_widget(Paragraph::new(lines), rows[0]);
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
-            Span::raw(" rename  "),
-            Span::styled("[Esc]", Style::default().fg(p.accent)),
-            Span::raw(" cancel"),
-        ])),
-        rows[1],
-    );
+    render_footer(frame, rows[1], p, &[
+        FooterKey::commit("[Enter]", "RENAME"),
+        FooterKey::nav("[Esc]", "cancel"),
+    ]);
 }
 
 pub(crate) fn render_container_rules_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -128,19 +123,20 @@ pub(crate) fn render_container_rules_overlay(frame: &mut Frame, area: Rect, stat
     }
     frame.render_stateful_widget(list, rows[1], &mut ls);
 
-    let footer = if let Some(err) = error {
-        Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(p.crit)))
+    if let Some(err) = error {
+        frame.render_widget(
+            Paragraph::new(Line::from(Span::styled(
+                format!("✗ {err}"),
+                Style::default().fg(p.crit),
+            ))),
+            rows[2],
+        );
     } else {
-        Line::from(vec![
-            Span::styled("[Space]", Style::default().fg(p.accent)),
-            Span::raw(" cycle  "),
-            Span::styled("[Del]", Style::default().fg(p.accent)),
-            Span::raw(" clear  "),
-            Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
-            Span::raw(" save  "),
-            Span::styled("[Esc]", Style::default().fg(p.accent)),
-            Span::raw(" cancel"),
-        ])
-    };
-    frame.render_widget(Paragraph::new(footer), rows[2]);
+        render_footer(frame, rows[2], p, &[
+            FooterKey::nav("[Space]", "cycle"),
+            FooterKey::nav("[Del]", "clear"),
+            FooterKey::commit("[Enter]", "SAVE"),
+            FooterKey::nav("[Esc]", "cancel"),
+        ]);
+    }
 }

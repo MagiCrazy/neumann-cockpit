@@ -10,7 +10,7 @@ use ratatui::{
 use crate::api::types::{ProbeSector, ScutRelayStatus};
 use crate::app::{AppState, ScutNetworkInput};
 
-use super::{centered_rect, render_pick_list};
+use super::{centered_rect, render_footer, render_pick_list, FooterKey};
 
 fn rel(sector: &ProbeSector) -> String {
     match sector.relative.as_ref() {
@@ -33,7 +33,7 @@ pub(crate) fn render_scut_network_overlay(frame: &mut Frame, area: Rect, state: 
                 &items,
                 *selection,
                 None,
-                "inspect",
+                "INSPECT",
             );
         }
         ScutNetworkInput::Viewing { error } => {
@@ -102,13 +102,7 @@ pub(crate) fn render_scut_network_overlay(frame: &mut Frame, area: Rect, state: 
                 lines.push(Line::from(Span::styled("loading…", Style::default().fg(p.dim))));
             }
             frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), rows[0]);
-            frame.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled("[Esc]", Style::default().fg(p.accent)),
-                    Span::raw(" close"),
-                ])),
-                rows[1],
-            );
+            render_footer(frame, rows[1], p, &[FooterKey::nav("[Esc]", "close")]);
         }
         ScutNetworkInput::Inactive => {}
     }

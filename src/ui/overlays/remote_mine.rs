@@ -1,14 +1,14 @@
 use crate::ui::theme::palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
+    style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
 
 use crate::app::{AppState, RemoteMineInput, RESOURCE_LABELS};
-use super::{centered_rect, render_pick_list};
+use super::{centered_rect, render_footer, render_pick_list, FooterKey};
 
 pub(crate) fn render_remote_mine_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
@@ -23,17 +23,19 @@ pub(crate) fn render_remote_mine_overlay(frame: &mut Frame, area: Rect, state: &
                 .border_style(Style::default().fg(p.accent));
             let inner = block.inner(popup);
             frame.render_widget(block, popup);
+
+            let rows = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(1), Constraint::Length(1)])
+                .split(inner);
             frame.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled(
-                        format!("scanning sector ({x},{y},{z}) via SCUT… "),
-                        Style::default().fg(p.text),
-                    ),
-                    Span::styled("[Esc]", Style::default().fg(p.accent)),
-                    Span::raw(" cancel"),
-                ])),
-                inner,
+                Paragraph::new(Line::from(Span::styled(
+                    format!("scanning sector ({x},{y},{z}) via SCUT…"),
+                    Style::default().fg(p.text),
+                ))),
+                rows[0],
             );
+            render_footer(frame, rows[1], p, &[FooterKey::nav("[Esc]", "cancel")]);
         }
 
         RemoteMineInput::PickAsteroid { manny_name, candidates, selection, .. } => {
@@ -84,19 +86,12 @@ pub(crate) fn render_remote_mine_overlay(frame: &mut Frame, area: Rect, state: &
                 lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(p.crit))));
             }
             frame.render_widget(Paragraph::new(lines), rows[0]);
-            frame.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled("[1-4]", Style::default().fg(p.accent)),
-                    Span::raw(" res  "),
-                    Span::styled("[Tab]", Style::default().fg(p.accent)),
-                    Span::raw(" amount  "),
-                    Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
-                    Span::raw(" container →  "),
-                    Span::styled("[Esc]", Style::default().fg(p.accent)),
-                    Span::raw(" cancel"),
-                ])),
-                rows[1],
-            );
+            render_footer(frame, rows[1], p, &[
+                FooterKey::nav("[1-4]", "res"),
+                FooterKey::nav("[Tab]", "amount"),
+                FooterKey::nav("[Enter]", "container →"),
+                FooterKey::nav("[Esc]", "cancel"),
+            ]);
         }
 
         RemoteMineInput::PickContainer { containers, selection, .. } => {
@@ -104,7 +99,7 @@ pub(crate) fn render_remote_mine_overlay(frame: &mut Frame, area: Rect, state: &
             let height = (containers.len() as u16 + 6).min(16);
             render_pick_list(
                 frame, area, palette(state.color_mode), " REMOTE MINE — store in ", 52, height,
-                Some("Detached container (required):"), &names, *selection, None, "mine",
+                Some("Detached container (required):"), &names, *selection, None, "MINE",
             );
         }
 

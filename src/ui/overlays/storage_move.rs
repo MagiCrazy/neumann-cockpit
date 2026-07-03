@@ -8,7 +8,7 @@ use ratatui::{
     Frame,
 };
 
-use super::{centered_rect, render_pick_list};
+use super::{centered_rect, render_footer, render_pick_list, FooterKey};
 
 fn framed(p: Palette, title: &str, area: Rect, width: u16, height: u16, frame: &mut Frame) -> [Rect; 2] {
     let popup = centered_rect(width, height, area);
@@ -79,7 +79,12 @@ pub(crate) fn render_storage_move_overlay(frame: &mut Frame, area: Rect, state: 
                 error_line(p, error),
             ];
             frame.render_widget(Paragraph::new(lines), body);
-            frame.render_widget(form_footer(p), footer);
+            render_footer(frame, footer, p, &[
+                FooterKey::nav("[↑/↓]", "field"),
+                FooterKey::nav("[←/→]", "change"),
+                FooterKey::commit("[Enter]", "MOVE"),
+                FooterKey::nav("[Esc]", "cancel"),
+            ]);
         }
         StorageMoveInput::ConfigureItem {
             containers, items, to_sel, item_cursor, field, error, ..
@@ -120,7 +125,13 @@ pub(crate) fn render_storage_move_overlay(frame: &mut Frame, area: Rect, state: 
                 ls.select(Some((*item_cursor).min(items.len() - 1)));
             }
             frame.render_stateful_widget(list, rows[1], &mut ls);
-            frame.render_widget(item_footer(p), footer);
+            render_footer(frame, footer, p, &[
+                FooterKey::nav("[Tab]", "pane"),
+                FooterKey::nav("[Space]", "toggle"),
+                FooterKey::nav("[←/→]", "dest"),
+                FooterKey::commit("[Enter]", "MOVE"),
+                FooterKey::nav("[Esc]", "cancel"),
+            ]);
         }
     }
 }
@@ -132,30 +143,3 @@ fn error_line(p: Palette, error: &Option<String>) -> Line<'static> {
     }
 }
 
-fn form_footer(p: Palette) -> Paragraph<'static> {
-    Paragraph::new(Line::from(vec![
-        Span::styled("[↑/↓]", Style::default().fg(p.accent)),
-        Span::raw(" field  "),
-        Span::styled("[←/→]", Style::default().fg(p.accent)),
-        Span::raw(" change  "),
-        Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
-        Span::raw(" move  "),
-        Span::styled("[Esc]", Style::default().fg(p.accent)),
-        Span::raw(" cancel"),
-    ]))
-}
-
-fn item_footer(p: Palette) -> Paragraph<'static> {
-    Paragraph::new(Line::from(vec![
-        Span::styled("[Tab]", Style::default().fg(p.accent)),
-        Span::raw(" pane  "),
-        Span::styled("[Space]", Style::default().fg(p.accent)),
-        Span::raw(" toggle  "),
-        Span::styled("[←/→]", Style::default().fg(p.accent)),
-        Span::raw(" dest  "),
-        Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
-        Span::raw(" move  "),
-        Span::styled("[Esc]", Style::default().fg(p.accent)),
-        Span::raw(" cancel"),
-    ]))
-}

@@ -7,7 +7,7 @@ use ratatui::{
     Frame,
 };
 
-use super::centered_rect;
+use super::{centered_rect, render_footer, FooterKey};
 // ── Help overlay ──────────────────────────────────────────────────────────────
 
 pub(crate) fn help_key_line(key: &'static str, desc: &'static str, p: Palette) -> Line<'static> {
@@ -91,12 +91,6 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, p: Palette) {
 
     frame.render_widget(Paragraph::new(left), cols[0]);
     frame.render_widget(Paragraph::new(right), cols[1]);
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled("[Esc/?]", Style::default().fg(p.accent)),
-            Span::raw(" close"),
-        ])),
-        rows[1],
-    );
+    render_footer(frame, rows[1], p, &[FooterKey::nav("[Esc/?]", "close")]);
 }
 

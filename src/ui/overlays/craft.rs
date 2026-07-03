@@ -9,7 +9,7 @@ use ratatui::{
     Frame,
 };
 
-use super::centered_rect;
+use super::{centered_rect, render_footer, FooterKey, KeyTone};
 
 pub(crate) fn render_craft_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let CraftInput::PickRecipe { ref manny_name, selection, ref error, .. } = state.craft else {
@@ -135,20 +135,14 @@ fn render_recipe_picker(
 
     // Footer — Enter dimmed when the selected recipe isn't affordable.
     let can = sel.map(|r| state.recipe_affordable(r)).unwrap_or(false);
-    let enter_style = if can {
-        Style::default().fg(p.good).add_modifier(Modifier::BOLD)
+    let craft_key = if can {
+        FooterKey::commit("[Enter]", "CRAFT")
     } else {
-        dim
+        FooterKey { key: "[Enter]", label: "CRAFT", tone: KeyTone::Disabled }
     };
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled("[↑/↓]", Style::default().fg(p.accent)),
-            Span::raw(" select  "),
-            Span::styled("[Enter]", enter_style),
-            Span::raw(" start  "),
-            Span::styled("[Esc]", Style::default().fg(p.accent)),
-            Span::raw(" cancel"),
-        ])),
-        rows[1],
-    );
+    render_footer(frame, rows[1], p, &[
+        FooterKey::nav("[↑/↓]", "select"),
+        craft_key,
+        FooterKey::nav("[Esc]", "cancel"),
+    ]);
 }

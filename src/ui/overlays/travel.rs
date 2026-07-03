@@ -8,7 +8,7 @@ use ratatui::{
 };
 
 use crate::ui::theme::{format_duration, palette};
-use super::centered_rect;
+use super::{centered_rect, render_footer, FooterKey};
 pub(crate) fn render_travel_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
     let popup = centered_rect(46, 11, area);
@@ -84,15 +84,10 @@ pub(crate) fn render_travel_overlay(frame: &mut Frame, area: Rect, state: &AppSt
             }
 
             frame.render_widget(Paragraph::new(lines), body);
-            frame.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled("[Enter]", Style::default().fg(p.accent)),
-                    Span::raw(" preview  "),
-                    Span::styled("[Esc]", Style::default().fg(p.accent)),
-                    Span::raw(" cancel"),
-                ])),
-                hint_area,
-            );
+            render_footer(frame, hint_area, p, &[
+                FooterKey::nav("[Enter]", "preview"),
+                FooterKey::nav("[Esc]", "cancel"),
+            ]);
         }
 
         TravelInput::Confirming { x, y, z, sector_distance, fuel_cost, eta_minutes, error } => {
@@ -141,20 +136,14 @@ pub(crate) fn render_travel_overlay(frame: &mut Frame, area: Rect, state: &AppSt
 
             frame.render_widget(Paragraph::new(lines), body);
 
-            let hint = if error.is_some() {
-                Line::from(vec![
-                    Span::styled("[Esc]", Style::default().fg(p.accent)),
-                    Span::raw(" cancel"),
-                ])
+            if error.is_some() {
+                render_footer(frame, hint_area, p, &[FooterKey::nav("[Esc]", "cancel")]);
             } else {
-                Line::from(vec![
-                    Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
-                    Span::raw(" GO  "),
-                    Span::styled("[Esc]", Style::default().fg(p.accent)),
-                    Span::raw(" cancel"),
-                ])
-            };
-            frame.render_widget(Paragraph::new(hint), hint_area);
+                render_footer(frame, hint_area, p, &[
+                    FooterKey::commit("[Enter]", "GO"),
+                    FooterKey::nav("[Esc]", "cancel"),
+                ]);
+            }
         }
     }
 }

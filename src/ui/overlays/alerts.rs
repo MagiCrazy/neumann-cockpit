@@ -9,7 +9,7 @@ use ratatui::{
     Frame,
 };
 
-use super::centered_rect;
+use super::{centered_rect, render_footer, FooterKey};
 
 fn alert_type_label(t: &AlertType) -> &'static str {
     match t {
@@ -124,17 +124,10 @@ pub(crate) fn render_alerts_overlay(frame: &mut Frame, area: Rect, state: &AppSt
     }
 
     // ── Footer ──
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled("[↑/↓]", Style::default().fg(p.accent)),
-            Span::raw(" select  "),
-            Span::styled("[Tab]", Style::default().fg(p.accent)),
-            Span::raw(" switch  "),
-            Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
-            Span::raw(" ack  "),
-            Span::styled("[Esc]", Style::default().fg(p.accent)),
-            Span::raw(" close"),
-        ])),
-        rows[2],
-    );
+    render_footer(frame, rows[2], p, &[
+        FooterKey::nav("[↑/↓]", "select"),
+        FooterKey::nav("[Tab]", "switch"),
+        FooterKey::commit("[Enter]", "ACK"),
+        FooterKey::nav("[Esc]", "close"),
+    ]);
 }

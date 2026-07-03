@@ -8,7 +8,7 @@ use ratatui::{
     Frame,
 };
 
-use super::centered_rect;
+use super::{centered_rect, render_footer, FooterKey};
 // ── Inventory detail overlay ──────────────────────────────────────────────────
 
 pub(crate) fn detail_kv(p: Palette, key: &str, value: String) -> Line<'static> {
@@ -121,12 +121,6 @@ pub(crate) fn render_inventory_detail_overlay(frame: &mut Frame, area: Rect, sta
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
     frame.render_widget(Paragraph::new(lines), rows[0]);
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled("[Esc]", Style::default().fg(p.accent)),
-            Span::raw(" close"),
-        ])),
-        rows[1],
-    );
+    render_footer(frame, rows[1], p, &[FooterKey::nav("[Esc]", "close")]);
 }
 

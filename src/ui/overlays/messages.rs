@@ -9,7 +9,7 @@ use ratatui::{
 
 use crate::api::types::MessageStatus;
 use crate::app::{AppState, MessagesInput};
-use super::{centered_rect, render_pick_list};
+use super::{centered_rect, render_footer, render_pick_list, FooterKey};
 
 fn preview(body: &str) -> String {
     let one = body.replace('\n', " ");
@@ -83,19 +83,12 @@ pub(crate) fn render_messages_overlay(frame: &mut Frame, area: Rect, state: &App
             }
             frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), rows[1]);
 
-            frame.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled("[Tab]", Style::default().fg(p.accent)),
-                    Span::raw(" inbox/sent  "),
-                    Span::styled("[Enter]", Style::default().fg(p.accent)),
-                    Span::raw(" read  "),
-                    Span::styled("[c]", Style::default().fg(p.accent)),
-                    Span::raw(" compose  "),
-                    Span::styled("[Esc]", Style::default().fg(p.accent)),
-                    Span::raw(" close"),
-                ])),
-                rows[2],
-            );
+            render_footer(frame, rows[2], p, &[
+                FooterKey::nav("[Tab]", "inbox/sent"),
+                FooterKey::nav("[Enter]", "read"),
+                FooterKey::nav("[c]", "compose"),
+                FooterKey::nav("[Esc]", "close"),
+            ]);
         }
 
         MessagesInput::PickRecipient { recipients, selection } => {
@@ -135,15 +128,10 @@ pub(crate) fn render_messages_overlay(frame: &mut Frame, area: Rect, state: &App
                 lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(p.crit))));
             }
             frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), rows[0]);
-            frame.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled("[Enter]", Style::default().fg(p.good).add_modifier(Modifier::BOLD)),
-                    Span::raw(" send  "),
-                    Span::styled("[Esc]", Style::default().fg(p.accent)),
-                    Span::raw(" cancel"),
-                ])),
-                rows[1],
-            );
+            render_footer(frame, rows[1], p, &[
+                FooterKey::commit("[Enter]", "SEND"),
+                FooterKey::nav("[Esc]", "cancel"),
+            ]);
         }
 
         MessagesInput::Inactive => {}

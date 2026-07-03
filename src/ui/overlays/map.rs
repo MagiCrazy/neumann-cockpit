@@ -11,7 +11,7 @@ use ratatui::{
 };
 
 use crate::ui::theme::{format_duration, map_cell_symbol, palette};
-use super::{centered_rect, render_pick_list};
+use super::{centered_rect, render_footer, render_pick_list, FooterKey};
 
 /// Picker over visited sectors (most-recent first, as returned by the API):
 /// coordinates, distance from the probe, and visit count.
@@ -235,23 +235,14 @@ pub(crate) fn render_map_overlay(frame: &mut Frame, area: Rect, state: &AppState
             hint_area,
         );
     } else {
-        frame.render_widget(
-            Paragraph::new(Line::from(vec![
-                Span::styled("[hjkl]", Style::default().fg(p.accent)),
-                Span::raw(" pan  "),
-                Span::styled("[u/d]", Style::default().fg(p.accent)),
-                Span::raw(" y±1  "),
-                Span::styled("[0]", Style::default().fg(p.accent)),
-                Span::raw(" probe  "),
-                Span::styled("[c]", Style::default().fg(p.accent)),
-                Span::raw(" go to  "),
-                Span::styled("[g]", Style::default().fg(p.warn)),
-                Span::raw(" travel  "),
-                Span::styled("[b/Esc]", Style::default().fg(p.accent)),
-                Span::raw(" close"),
-            ])),
-            hint_area,
-        );
+        render_footer(frame, hint_area, p, &[
+            FooterKey::nav("[hjkl]", "pan"),
+            FooterKey::nav("[u/d]", "y±1"),
+            FooterKey::nav("[0]", "probe"),
+            FooterKey::nav("[c]", "go to"),
+            FooterKey::commit("[g]", "TRAVEL"),
+            FooterKey::nav("[b/Esc]", "close"),
+        ]);
     }
     let w = map_area.width as i32;
     let h = map_area.height as i32;
