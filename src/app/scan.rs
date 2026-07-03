@@ -1,6 +1,5 @@
 use crate::api::types::{ScutRelayStatus, SectorObjectType, SectorObservation};
 use chrono::Utc;
-use std::path::Path;
 use super::*;
 
 /// Cyclic filter applied to the scan history list ([f] in the scanner).
@@ -432,12 +431,5 @@ impl AppState {
             }
         }
         None
-    }
-
-    pub fn load_scan_history(&mut self, path: &Path) {
-        let Ok(data) = std::fs::read(path) else { return };
-        if let Ok(history) = serde_json::from_slice::<Vec<SectorObservation>>(&data) {
-            self.scan_history = history;
-        }
     }
 }

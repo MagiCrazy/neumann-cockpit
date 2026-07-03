@@ -27,6 +27,7 @@ use neumann_cockpit::app::{
 };
 use neumann_cockpit::config;
 use neumann_cockpit::input::handle_event;
+use neumann_cockpit::store;
 use neumann_cockpit::ui;
 
 /// Best-effort restoration of the terminal to its cooked state. Writes the
@@ -83,8 +84,17 @@ async fn run(
         booting: true,
         ..Default::default()
     };
-    let scan_history_path = config::history_path();
-    state.load_scan_history(&scan_history_path);
+    // Local SQLite store: load the scan history and get a writer handle. On any
+    // DB error we start with an empty history (like the old corrupt-JSON path)
+    // and simply don't persist.
+    let persist_tx = match store::open(&config::db_path()) {
+        Ok(conn) => {
+            store::import_legacy_json(&conn, &config::history_path());
+            state.scan_history = store::load_observations(&conn);
+            Some(store::spawn_writer(conn))
+        }
+        Err(_) => None,
+    };
     let mut events = EventStream::new();
 
     // Short-lived tick that drives the boot assembly; runs only while booting.
@@ -141,13 +151,11 @@ async fn run(
                         state.update_sector(sector);
                         state.remote_mine_sector_loaded(sx, sy, sz);
                         state.batch_tick();
-                        let history = state.scan_history.clone();
-                        let path = scan_history_path.clone();
-                        tokio::spawn(async move {
-                            if let Ok(json) = serde_json::to_string(&history) {
-                                let _ = tokio::fs::write(path, json).await;
-                            }
-                        });
+                        // Persist just the observation that changed (upsert by
+                        // coordinates), via the single writer thread.
+                        if let (Some(tx), Some(obs)) = (&persist_tx, state.scan_history.first()) {
+                            let _ = tx.send(store::PersistMsg::UpsertObservation(obs.clone()));
+                        }
                     }
                     ApiMessage::ScanError(e) => {
                         if matches!(state.remote_mine, RemoteMineInput::Loading { .. }) {
