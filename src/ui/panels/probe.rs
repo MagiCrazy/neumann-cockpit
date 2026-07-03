@@ -60,16 +60,13 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
 
     // ── Badges ──
     if state.probe_terminal_alert().is_some() {
-        lines.push(Line::styled(
-            "⚠ RECOVER — Enter",
-            Style::default().fg(p.crit).add_modifier(Modifier::BOLD),
-        ));
+        lines.push(Line::styled("⚠ RECOVER — Enter", p.crit_style()));
     }
     let unread = state.unread_alert_count();
     if unread > 0 {
         lines.push(Line::from(vec![
             label("alerts"),
-            Span::styled(format!("{unread} unread"), Style::default().fg(p.crit)),
+            Span::styled(format!("{unread} unread"), p.crit_style()),
         ]));
     }
     if !state.scut_coverage().is_empty() {
