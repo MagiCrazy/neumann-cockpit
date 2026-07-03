@@ -23,14 +23,13 @@ jobs:
       - name: Cache
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
-      - name: Check
-        run: cargo check
-
+      # `cargo check` is subsumed by clippy, which type-checks too — dropped.
+      # `--locked` proves CI builds against the committed Cargo.lock.
       - name: Clippy
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --locked -- -D warnings
 
       - name: Test
-        run: cargo test
+        run: cargo test --locked
 
       - name: Build release
-        run: cargo build --release
+        run: cargo build --release --locked
