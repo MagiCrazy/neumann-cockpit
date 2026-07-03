@@ -13,9 +13,15 @@ The official game instance runs at **[https://neumann-probe.net](https://neumann
 
 **Prebuilt binaries** for Linux, macOS, and Windows are available on the [releases page](https://github.com/MagiCrazy/neumann-cockpit/releases/latest).
 
+Every archive ships a matching `.sha256` — download, verify, then extract:
+
 ```bash
 # Linux x86_64 example
-curl -sL https://github.com/MagiCrazy/neumann-cockpit/releases/latest/download/neumann-cockpit-linux-x86_64.tar.gz | tar xz
+base=https://github.com/MagiCrazy/neumann-cockpit/releases/latest/download
+curl -sLO "$base/neumann-cockpit-linux-x86_64.tar.gz"
+curl -sLO "$base/neumann-cockpit-linux-x86_64.tar.gz.sha256"
+sha256sum -c neumann-cockpit-linux-x86_64.tar.gz.sha256
+tar xzf neumann-cockpit-linux-x86_64.tar.gz
 ./neumann-cockpit
 ```
 
