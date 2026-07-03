@@ -148,7 +148,12 @@ async fn run(
                         });
                     }
                     ApiMessage::ScanError(e) => {
-                        if state.scan_batch.is_some() {
+                        if matches!(state.remote_mine, RemoteMineInput::Loading { .. }) {
+                            // The remote-mine sector fetch failed — don't leave the
+                            // wizard hung on "fetching…". Abort and surface why.
+                            state.remote_mine = RemoteMineInput::Inactive;
+                            state.set_error(e);
+                        } else if state.scan_batch.is_some() {
                             state.batch_tick();
                         } else {
                             state.set_scan_error(e);
@@ -299,6 +304,11 @@ async fn run(
                     ApiMessage::StorageContainersFetched(c) => state.storage_containers = c,
                     ApiMessage::StorageContainerDetailFetched(c, inv) => {
                         state.storage_container_detail = Some((c, inv));
+                        state.storage_container_detail_error = None;
+                    }
+                    ApiMessage::StorageContainerDetailError(e) => {
+                        state.storage_container_detail = None;
+                        state.storage_container_detail_error = Some(e);
                     }
                     ApiMessage::RenameContainerDone(c, inv) => {
                         state.apply_container_update(c, inv);
@@ -359,6 +369,7 @@ async fn run(
                     ApiMessage::RenameMannyError(e) => state.set_rename_manny_error(e),
                     ApiMessage::VersionFetched(v) => state.api_version = Some(v),
                     ApiMessage::VisitedSectorsFetched(v) => state.visited_sectors = v,
+                    ApiMessage::ActionError(e) => state.set_error(e),
                     ApiMessage::Error(e) => {
                         state.note_refresh_failure();
                         state.set_error(e);

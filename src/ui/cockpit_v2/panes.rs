@@ -500,7 +500,11 @@ fn render_container_contents(
 
     match state.storage_container_detail.as_ref().filter(|(c, _)| c.id == id) {
         None => {
-            lines.push(Line::styled("fetching contents…", dim));
+            if let Some(err) = &state.storage_container_detail_error {
+                lines.push(Line::styled(format!("✗ {err}"), Style::default().fg(p.crit)));
+            } else {
+                lines.push(Line::styled("fetching contents…", dim));
+            }
         }
         Some((c, inv)) => {
             let ratio = if c.capacity > 0.0 {

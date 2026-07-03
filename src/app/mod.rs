@@ -84,6 +84,9 @@ pub struct AppState {
     /// Storage containers fetched on demand when the containers overlay opens.
     pub storage_containers: Vec<StorageContainer>,
     pub storage_container_detail: Option<(StorageContainer, ContainerInventory)>,
+    /// Error from the last container-detail fetch, shown in the drill-in instead
+    /// of a "fetching…" line that would otherwise hang forever.
+    pub storage_container_detail_error: Option<String>,
     pub rename_container: RenameContainerInput,
     pub container_rules: ContainerRulesInput,
     pub storage_move: StorageMoveInput,
