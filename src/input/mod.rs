@@ -55,6 +55,64 @@ use scanner::{
 };
 use storage_move::handle_storage_move_event;
 use travel::handle_travel_event;
+
+type WizardGuard = fn(&AppState) -> bool;
+type WizardHandler = fn(KeyCode, &mut AppState, &ApiClient, &mpsc::Sender<ApiMessage>);
+
+/// The wizards, in input-precedence order: the first whose guard matches
+/// consumes the key. This is the single source of truth for key routing —
+/// adding a wizard means adding one line here, instead of a hoisted `in_*`
+/// bool plus a block in the old hand-ordered if-cascade. Handlers all take the
+/// uniform `(KeyCode, &mut AppState, &ApiClient, &Sender)` shape; `waypoints`
+/// (which ignores client/tx) is wrapped to match.
+#[allow(clippy::type_complexity)]
+const WIZARD_INPUTS: &[(WizardGuard, WizardHandler)] = &[
+    (|s| !matches!(s.jettison, JettisonInput::Inactive), handle_jettison_event),
+    (|s| !matches!(s.craft, CraftInput::Inactive), handle_craft_event),
+    (|s| !matches!(s.atomic_printer_craft, AtomicPrinterCraftInput::Inactive), handle_atomic_printer_craft_event),
+    (|s| !matches!(s.salvage, SalvageInput::Inactive), handle_salvage_event),
+    (|s| !matches!(s.recall, RecallInput::Inactive), handle_recall_event),
+    (|s| !matches!(s.refuel, RefuelInput::Inactive), handle_refuel_event),
+    (|s| !matches!(s.mind_snapshot, MindSnapshotInput::Inactive), handle_mind_snapshot_event),
+    (|s| !matches!(s.scut_relay, ScutRelayInput::Inactive), handle_scut_relay_event),
+    (|s| !matches!(s.scut_network, ScutNetworkInput::Inactive), handle_scut_network_event),
+    (|s| !matches!(s.missions_input, MissionsInput::Inactive), handle_missions_event),
+    (|s| !matches!(s.messages_input, MessagesInput::Inactive), handle_messages_event),
+    (|s| !matches!(s.rename_manny, RenameMannyInput::Inactive), handle_rename_manny_event),
+    (|s| !matches!(s.deploy, DeployInput::Inactive), handle_deploy_event),
+    (|s| !matches!(s.inspect, InspectInput::Inactive), handle_inspect_event),
+    (|s| !matches!(s.recover, RecoverInput::Inactive), handle_recover_event),
+    (|s| !matches!(s.detach, DetachInput::Inactive), handle_detach_event),
+    (|s| !matches!(s.alerts_input, AlertsInput::Inactive), handle_alerts_event),
+    (|s| !matches!(s.rename_container, RenameContainerInput::Inactive), handle_rename_container_event),
+    (|s| !matches!(s.container_rules, ContainerRulesInput::Inactive), handle_container_rules_event),
+    (|s| !matches!(s.storage_move, StorageMoveInput::Inactive), handle_storage_move_event),
+    (|s| !matches!(s.drop_cargo, DropCargoInput::Inactive), handle_drop_cargo_event),
+    (|s| !matches!(s.drop_container, DropStorageContainerInput::Inactive), handle_drop_container_event),
+    (|s| !matches!(s.object_action, ObjectActionInput::Inactive), handle_object_action_event),
+    (|s| !matches!(s.waypoints, WaypointsInput::Inactive), |c, s, _, _| handle_waypoints_event(c, s)),
+    (|s| !matches!(s.travel, TravelInput::Inactive), handle_travel_event),
+    (|s| !matches!(s.repair, RepairInput::Inactive), handle_repair_event),
+    (|s| !matches!(s.mine, MineInput::Inactive), handle_mine_event),
+    (|s| !matches!(s.remote_mine, RemoteMineInput::Inactive), handle_remote_mine_event),
+];
+
+/// Route a key to the first active wizard. Returns `true` if one consumed it.
+fn dispatch_wizard_key(
+    code: KeyCode,
+    state: &mut AppState,
+    client: &ApiClient,
+    tx: &mpsc::Sender<ApiMessage>,
+) -> bool {
+    for (active, handle) in WIZARD_INPUTS {
+        if active(state) {
+            handle(code, state, client, tx);
+            return true;
+        }
+    }
+    false
+}
+
 pub fn handle_event(
     event: Event,
     state: &mut AppState,
@@ -69,31 +127,6 @@ pub fn handle_event(
     let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
     let in_scan_input = matches!(state.scan_mode, ScanMode::Input(_));
     let in_direction_pick = matches!(state.scan_mode, ScanMode::DirectionPick);
-    let in_travel = !matches!(state.travel, TravelInput::Inactive);
-    let in_repair = !matches!(state.repair, RepairInput::Inactive);
-    let in_jettison = !matches!(state.jettison, JettisonInput::Inactive);
-    let in_craft = !matches!(state.craft, CraftInput::Inactive);
-    let in_atomic_craft = !matches!(state.atomic_printer_craft, AtomicPrinterCraftInput::Inactive);
-    let in_salvage = !matches!(state.salvage, SalvageInput::Inactive);
-    let in_recall = !matches!(state.recall, RecallInput::Inactive);
-    let in_refuel = !matches!(state.refuel, RefuelInput::Inactive);
-    let in_mind_snapshot = !matches!(state.mind_snapshot, MindSnapshotInput::Inactive);
-    let in_remote_mine = !matches!(state.remote_mine, RemoteMineInput::Inactive);
-    let in_scut_relay = !matches!(state.scut_relay, ScutRelayInput::Inactive);
-    let in_scut_network = !matches!(state.scut_network, ScutNetworkInput::Inactive);
-    let in_missions = !matches!(state.missions_input, MissionsInput::Inactive);
-    let in_messages = !matches!(state.messages_input, MessagesInput::Inactive);
-    let in_rename_manny = !matches!(state.rename_manny, RenameMannyInput::Inactive);
-    let in_deploy = !matches!(state.deploy, DeployInput::Inactive);
-    let in_inspect = !matches!(state.inspect, InspectInput::Inactive);
-    let in_recover = !matches!(state.recover, RecoverInput::Inactive);
-    let in_detach = !matches!(state.detach, DetachInput::Inactive);
-    let in_alerts = !matches!(state.alerts_input, AlertsInput::Inactive);
-    let in_rename_container = !matches!(state.rename_container, RenameContainerInput::Inactive);
-    let in_container_rules = !matches!(state.container_rules, ContainerRulesInput::Inactive);
-    let in_storage_move = !matches!(state.storage_move, StorageMoveInput::Inactive);
-    let in_drop_cargo = !matches!(state.drop_cargo, DropCargoInput::Inactive);
-    let in_drop_container = !matches!(state.drop_container, DropStorageContainerInput::Inactive);
 
     if ctrl && k.code == KeyCode::Char('c') {
         state.set_quit();
@@ -142,144 +175,8 @@ pub fn handle_event(
         return;
     }
 
-    if in_jettison {
-        handle_jettison_event(k.code, state, client, tx);
-        return;
-    }
-
-    if in_craft {
-        handle_craft_event(k.code, state, client, tx);
-        return;
-    }
-
-    if in_atomic_craft {
-        handle_atomic_printer_craft_event(k.code, state, client, tx);
-        return;
-    }
-
-    if in_salvage {
-        handle_salvage_event(k.code, state, client, tx);
-        return;
-    }
-
-    if in_recall {
-        handle_recall_event(k.code, state, client, tx);
-        return;
-    }
-
-    if in_refuel {
-        handle_refuel_event(k.code, state, client, tx);
-        return;
-    }
-
-    if in_mind_snapshot {
-        handle_mind_snapshot_event(k.code, state, client, tx);
-        return;
-    }
-
-    if in_scut_relay {
-        handle_scut_relay_event(k.code, state, client, tx);
-        return;
-    }
-
-    if in_scut_network {
-        handle_scut_network_event(k.code, state, client, tx);
-        return;
-    }
-
-    if in_missions {
-        handle_missions_event(k.code, state, client, tx);
-        return;
-    }
-
-    if in_messages {
-        handle_messages_event(k.code, state, client, tx);
-        return;
-    }
-
-    if in_rename_manny {
-        handle_rename_manny_event(k.code, state, client, tx);
-        return;
-    }
-
-    if in_deploy {
-        handle_deploy_event(k.code, state, client, tx);
-        return;
-    }
-
-    if in_inspect {
-        handle_inspect_event(k.code, state, client, tx);
-        return;
-    }
-
-    if in_recover {
-        handle_recover_event(k.code, state, client, tx);
-        return;
-    }
-
-    if in_detach {
-        handle_detach_event(k.code, state, client, tx);
-        return;
-    }
-
-    if in_alerts {
-        handle_alerts_event(k.code, state, client, tx);
-        return;
-    }
-
-    if in_rename_container {
-        handle_rename_container_event(k.code, state, client, tx);
-        return;
-    }
-
-    if in_container_rules {
-        handle_container_rules_event(k.code, state, client, tx);
-        return;
-    }
-
-    if in_storage_move {
-        handle_storage_move_event(k.code, state, client, tx);
-        return;
-    }
-
-    if in_drop_cargo {
-        handle_drop_cargo_event(k.code, state, client, tx);
-        return;
-    }
-
-    if in_drop_container {
-        handle_drop_container_event(k.code, state, client, tx);
-        return;
-    }
-
-    if !matches!(state.object_action, ObjectActionInput::Inactive) {
-        handle_object_action_event(k.code, state, client, tx);
-        return;
-    }
-
-    if !matches!(state.waypoints, WaypointsInput::Inactive) {
-        handle_waypoints_event(k.code, state);
-        return;
-    }
-
-    if in_travel {
-        handle_travel_event(k.code, state, client, tx);
-        return;
-    }
-
-    if in_repair {
-        handle_repair_event(k.code, state, client, tx);
-        return;
-    }
-
-    let in_mine = !matches!(state.mine, MineInput::Inactive);
-    if in_mine {
-        handle_mine_event(k.code, state, client, tx);
-        return;
-    }
-
-    if in_remote_mine {
-        handle_remote_mine_event(k.code, state, client, tx);
+    // A single wizard consumes the key if one is active (registry below).
+    if dispatch_wizard_key(k.code, state, client, tx) {
         return;
     }
 
