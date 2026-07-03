@@ -1,7 +1,7 @@
 use anyhow::Result;
 use crossterm::{
     cursor::Show,
-    event::{DisableMouseCapture, EnableMouseCapture, EventStream},
+    event::EventStream,
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -34,7 +34,7 @@ use neumann_cockpit::ui;
 /// the `Terminal` value is out of reach.
 fn restore_terminal() -> io::Result<()> {
     disable_raw_mode()?;
-    execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture, Show)
+    execute!(io::stdout(), LeaveAlternateScreen, Show)
 }
 
 #[tokio::main]
@@ -46,12 +46,14 @@ async fn main() -> Result<()> {
 
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    // No mouse capture: the cockpit handles no mouse events, and capturing would
+    // steal the terminal's native selection/copy and scroll-wheel.
+    execute!(stdout, EnterAlternateScreen)?;
 
     // A panic anywhere in the ~16k lines of render/input unwinds past the
-    // teardown below, leaving the shell in raw mode with mouse capture on and
-    // the panic message hidden in the alternate screen. Restore the terminal
-    // first, then let the original hook print the report to the real screen.
+    // teardown below, leaving the shell in raw mode and the panic message hidden
+    // in the alternate screen. Restore the terminal first, then let the original
+    // hook print the report to the real screen.
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         let _ = restore_terminal();
