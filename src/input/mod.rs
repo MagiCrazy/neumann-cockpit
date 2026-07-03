@@ -323,3 +323,61 @@ pub fn handle_event(
     // wizard/overlay handlers above, so an open wizard keeps receiving keys.
     handle_cockpit_event(k.code, state, client, tx);
 }
+
+#[cfg(test)]
+mod tests {
+    //! Characterization tests locking the current key-dispatch precedence:
+    //! an open wizard captures keys before the cockpit grid, and Esc closes it.
+    //! These pin behavior ahead of the wizard-registry refactor.
+    use super::*;
+    use crate::app::Pane;
+    use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+
+    fn dummy_client() -> ApiClient {
+        ApiClient::new("http://localhost:0".into(), "test-key".into()).unwrap()
+    }
+
+    /// Feed one key press through the real `handle_event`.
+    fn press(state: &mut AppState, code: KeyCode) {
+        let client = dummy_client();
+        let (tx, _rx) = mpsc::channel(32);
+        handle_event(Event::Key(KeyEvent::new(code, KeyModifiers::NONE)), state, &client, &tx);
+    }
+
+    #[tokio::test]
+    async fn cockpit_pane_key_switches_pane_without_a_wizard() {
+        let mut state = AppState::default();
+        assert_eq!(state.active_pane, Pane::Probe, "default centre pane");
+        press(&mut state, KeyCode::Char('e'));
+        assert_eq!(state.active_pane, Pane::Scanner, "no wizard → cockpit handles the pane key");
+    }
+
+    #[tokio::test]
+    async fn open_wizard_captures_keys_before_cockpit() {
+        let mut state = AppState::default();
+        state.travel = TravelInput::Typing(String::new());
+        press(&mut state, KeyCode::Char('e'));
+        assert_eq!(state.active_pane, Pane::Probe, "wizard swallows the key; cockpit must not switch pane");
+        assert!(!matches!(state.travel, TravelInput::Inactive), "the wizard stays open");
+    }
+
+    #[tokio::test]
+    async fn esc_closes_the_active_wizard() {
+        let mut state = AppState::default();
+        state.travel = TravelInput::Typing("12".into());
+        press(&mut state, KeyCode::Esc);
+        assert!(matches!(state.travel, TravelInput::Inactive), "Esc closes the travel wizard");
+    }
+
+    #[tokio::test]
+    async fn tabbed_wizard_also_captures_keys_and_closes_on_esc() {
+        let mut state = AppState::default();
+        state.alerts_input = AlertsInput::Browsing { selection: 0, show_warnings: false };
+        // A pane key must not reach the cockpit while the alerts overlay is open.
+        press(&mut state, KeyCode::Char('b'));
+        assert_eq!(state.active_pane, Pane::Probe, "alerts overlay swallows the pane key");
+        assert!(!matches!(state.alerts_input, AlertsInput::Inactive));
+        press(&mut state, KeyCode::Esc);
+        assert!(matches!(state.alerts_input, AlertsInput::Inactive), "Esc closes the alerts overlay");
+    }
+}
