@@ -1,5 +1,12 @@
 # Changelog
 
+## [63.1.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v63.1.0...neumann-cockpit-v63.1.1) (2026-07-03)
+
+
+### Bug Fixes
+
+* **inventory:** reorder context menu to atomic craft, move stock, jettison ([#116](https://github.com/MagiCrazy/neumann-cockpit/issues/116)) ([3343148](https://github.com/MagiCrazy/neumann-cockpit/commit/334314887bb7ffa771b6fa7514c9aa4c97b793fa))
+
 ## [63.1.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v63.0.1...neumann-cockpit-v63.1.0) (2026-07-02)
 
 
