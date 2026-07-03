@@ -54,6 +54,11 @@ jobs:
           BIN=neumann-cockpit
           ARCHIVE="${BIN}-${{ matrix.platform }}.tar.gz"
           tar czf "$ARCHIVE" -C "target/${{ matrix.target }}/release" "$BIN"
+          if command -v sha256sum >/dev/null; then
+            sha256sum "$ARCHIVE" > "${ARCHIVE}.sha256"
+          else
+            shasum -a 256 "$ARCHIVE" > "${ARCHIVE}.sha256"
+          fi
           echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
 
       - name: Package (Windows)
@@ -63,9 +68,13 @@ jobs:
           $BIN = "neumann-cockpit"
           $ARCHIVE = "${BIN}-${{ matrix.platform }}.zip"
           Compress-Archive -Path "target\${{ matrix.target }}\release\${BIN}.exe" -DestinationPath $ARCHIVE
+          $hash = (Get-FileHash -Algorithm SHA256 $ARCHIVE).Hash.ToLower()
+          "$hash  $ARCHIVE" | Out-File -FilePath "${ARCHIVE}.sha256" -Encoding ascii
           "ARCHIVE=${ARCHIVE}" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Upload to release
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3
         with:
-          files: ${{ env.ARCHIVE }}
+          files: |
+            ${{ env.ARCHIVE }}
+            ${{ env.ARCHIVE }}.sha256
