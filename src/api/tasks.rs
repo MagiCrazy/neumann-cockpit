@@ -95,9 +95,11 @@ pub fn fetch_send_message(
 
 pub fn fetch_mark_message_read(id: i64, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     tokio::spawn(async move {
-        if let Ok(m) = client.mark_message_read(id).await {
-            let _ = tx.send(ApiMessage::MessageMarkedRead(m)).await;
-        }
+        let msg = match client.mark_message_read(id).await {
+            Ok(m) => ApiMessage::MessageMarkedRead(m),
+            Err(e) => ApiMessage::ActionError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
     });
 }
 
@@ -129,17 +131,21 @@ pub fn fetch_damage_warnings(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
 
 pub fn fetch_ack_alert(id: i64, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     tokio::spawn(async move {
-        if let Ok(a) = client.ack_alert(id).await {
-            let _ = tx.send(ApiMessage::AlertAcknowledged(a)).await;
-        }
+        let msg = match client.ack_alert(id).await {
+            Ok(a) => ApiMessage::AlertAcknowledged(a),
+            Err(e) => ApiMessage::ActionError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
     });
 }
 
 pub fn fetch_ack_damage_warning(id: i64, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     tokio::spawn(async move {
-        if let Ok(w) = client.ack_damage_warning(id).await {
-            let _ = tx.send(ApiMessage::DamageWarningAcknowledged(w)).await;
-        }
+        let msg = match client.ack_damage_warning(id).await {
+            Ok(w) => ApiMessage::DamageWarningAcknowledged(w),
+            Err(e) => ApiMessage::ActionError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
     });
 }
 
@@ -185,9 +191,11 @@ pub fn fetch_storage_containers(client: ApiClient, tx: mpsc::Sender<ApiMessage>)
 
 pub fn fetch_storage_container_detail(id: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     tokio::spawn(async move {
-        if let Ok((c, inv)) = client.get_storage_container(&id).await {
-            let _ = tx.send(ApiMessage::StorageContainerDetailFetched(c, inv)).await;
-        }
+        let msg = match client.get_storage_container(&id).await {
+            Ok((c, inv)) => ApiMessage::StorageContainerDetailFetched(c, inv),
+            Err(e) => ApiMessage::StorageContainerDetailError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
     });
 }
 

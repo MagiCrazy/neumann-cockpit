@@ -44,6 +44,7 @@ pub enum ApiMessage {
     AlertAcknowledged(ProbeAlert),
     StorageContainersFetched(Vec<StorageContainer>),
     StorageContainerDetailFetched(StorageContainer, ContainerInventory),
+    StorageContainerDetailError(String),
     RenameContainerDone(StorageContainer, ProbeInventory),
     RenameContainerError(String),
     UpdateContainerRulesDone(StorageContainer, ProbeInventory),
@@ -70,5 +71,10 @@ pub enum ApiMessage {
     MessageMarkedRead(ProbeMessage),
     DropStorageContainerStarted(Manny),
     DropStorageContainerError(String),
+    /// A direct user action (ack alert / damage warning, mark message read) that
+    /// failed — surfaced in the status bar so the key does not feel dead.
+    /// Distinct from `Error`, which is the fatal-probe channel that drives
+    /// refresh backoff.
+    ActionError(String),
     Error(String),
 }

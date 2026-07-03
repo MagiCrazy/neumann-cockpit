@@ -110,6 +110,7 @@ fn drill_in(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessa
             state.pane_nav[Pane::Storage.index()].drill.last().cloned()
         {
             state.storage_container_detail = None;
+            state.storage_container_detail_error = None;
             fetch_storage_container_detail(id, client.clone(), tx.clone());
         }
     }
@@ -119,6 +120,7 @@ fn drill_in(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessa
 fn drill_out(state: &mut AppState) {
     if state.active_pane == Pane::Storage {
         state.storage_container_detail = None;
+        state.storage_container_detail_error = None;
     }
     state.pane_drill_out();
 }
