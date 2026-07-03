@@ -120,6 +120,7 @@ async fn run(
                 // only fire the periodic refresh when it is due.
                 if !state.booting && state.periodic_refresh_due() {
                     fetch_all(client.clone(), tx.clone());
+                    state.note_refresh_attempt();
                     state.loading = true;
                 }
             }
@@ -358,7 +359,10 @@ async fn run(
                     ApiMessage::RenameMannyError(e) => state.set_rename_manny_error(e),
                     ApiMessage::VersionFetched(v) => state.api_version = Some(v),
                     ApiMessage::VisitedSectorsFetched(v) => state.visited_sectors = v,
-                    ApiMessage::Error(e) => state.set_error(e),
+                    ApiMessage::Error(e) => {
+                        state.note_refresh_failure();
+                        state.set_error(e);
+                    }
                 }
             }
 

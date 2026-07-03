@@ -1421,6 +1421,38 @@ fn periodic_refresh_not_due_when_recent_or_loading() {
     assert!(!state.periodic_refresh_due(), "a fetch already in flight");
 }
 
+#[test]
+fn refresh_backoff_grows_then_caps_at_60() {
+    let mut state = AppState::default();
+    assert_eq!(state.refresh_backoff_secs(), 60, "healthy cadence is 60s");
+    for (failures, expected) in [(1, 5), (2, 10), (3, 20), (4, 40), (5, 60), (6, 60), (99, 60)] {
+        state.consecutive_failures = failures;
+        assert_eq!(state.refresh_backoff_secs(), expected, "after {failures} failures");
+    }
+}
+
+#[test]
+fn periodic_refresh_backs_off_after_failure() {
+    let mut state = AppState::default();
+    // Stale data (never re-synced), one recent failed attempt.
+    state.last_update = Some(chrono::Local::now() - chrono::Duration::seconds(300));
+    state.consecutive_failures = 1; // backoff = 5s
+    state.last_attempt = Some(chrono::Local::now() - chrono::Duration::seconds(2));
+    assert!(!state.periodic_refresh_due(), "2s < 5s backoff → not due yet");
+    state.last_attempt = Some(chrono::Local::now() - chrono::Duration::seconds(6));
+    assert!(state.periodic_refresh_due(), "6s ≥ 5s backoff → due");
+}
+
+#[test]
+fn successful_probe_sync_clears_backoff() {
+    let mut state = AppState::default();
+    state.consecutive_failures = 4;
+    state.note_refresh_failure();
+    assert_eq!(state.consecutive_failures, 5);
+    state.update_probe(make_probe(1.0, 0.0, 0.0, 0.0));
+    assert_eq!(state.consecutive_failures, 0, "a successful sync resets the backoff");
+}
+
 // ── manny task progress interpolation ─────────────────────────────────────
 
 #[test]

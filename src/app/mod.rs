@@ -48,6 +48,13 @@ pub struct AppState {
     pub probe: Option<Probe>,
     pub mannies: Option<Vec<Manny>>,
     pub last_update: Option<DateTime<Local>>,
+    /// When the last automatic (periodic) refresh was *fired*, as opposed to
+    /// `last_update` (last *successful* sync). Lets the periodic refresh throttle
+    /// by elapsed-since-attempt instead of firing every tick while the last sync
+    /// stays stale during an outage.
+    pub last_attempt: Option<DateTime<Local>>,
+    /// Consecutive failed periodic refreshes, driving exponential backoff.
+    pub consecutive_failures: u32,
     pub movement_arrival: Option<DateTime<Utc>>,
     pub error: Option<String>,
     pub loading: bool,
@@ -145,6 +152,8 @@ impl AppState {
             .filter(|&a| a > Utc::now());
         self.probe = Some(probe);
         self.last_update = Some(Local::now());
+        // A successful probe sync clears the refresh backoff.
+        self.consecutive_failures = 0;
         self.error = None;
         self.clamp_inventory_selection();
     }
@@ -297,11 +306,42 @@ impl AppState {
         self.last_update.map(|t| (Local::now() - t).num_seconds().max(0))
     }
 
-    /// Whether a periodic auto-refresh is due: idle and ≥60 s since the last
-    /// sync. Requires a prior successful sync, so a failed initial fetch does
-    /// not spin-retry every tick.
+    /// Interval the periodic refresh must respect: the normal 60 s cadence when
+    /// healthy, otherwise exponential backoff (5→10→20→40→60 s) so a network
+    /// outage does not trigger a request storm (7 spawns per tick).
+    pub fn refresh_backoff_secs(&self) -> i64 {
+        match self.consecutive_failures {
+            0 => 60,
+            n => (5_i64 << (n - 1).min(4)).min(60),
+        }
+    }
+
+    /// Record that an automatic refresh was just fired.
+    pub fn note_refresh_attempt(&mut self) {
+        self.last_attempt = Some(Local::now());
+    }
+
+    /// Record a failed refresh (fatal probe error), growing the backoff.
+    pub fn note_refresh_failure(&mut self) {
+        self.consecutive_failures = self.consecutive_failures.saturating_add(1);
+    }
+
+    /// Whether a periodic auto-refresh is due. Requires a prior successful sync
+    /// (so a failed initial fetch does not spin-retry), the data to be stale
+    /// (≥60 s), and — crucially — the backoff-adjusted interval to have elapsed
+    /// since the last *attempt*, so consecutive failures back off instead of
+    /// firing every 1 s tick while `last_update` stays stale.
     pub fn periodic_refresh_due(&self) -> bool {
-        !self.loading && matches!(self.seconds_since_sync(), Some(s) if s >= 60)
+        if self.loading || self.last_update.is_none() {
+            return false;
+        }
+        if !matches!(self.seconds_since_sync(), Some(s) if s >= 60) {
+            return false;
+        }
+        match self.last_attempt {
+            None => true,
+            Some(t) => (Local::now() - t).num_seconds().max(0) >= self.refresh_backoff_secs(),
+        }
     }
 
     pub fn next_refresh_instant(&self) -> Instant {
