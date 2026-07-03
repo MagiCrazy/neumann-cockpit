@@ -88,8 +88,8 @@ async fn run(
     // DB error we start with an empty history (like the old corrupt-JSON path)
     // and simply don't persist.
     let persist_tx = match store::open(&config::db_path()) {
-        Ok(conn) => {
-            store::import_legacy_json(&conn, &config::history_path());
+        Ok(mut conn) => {
+            let _ = store::migrate_legacy_json(&mut conn, &config::history_path());
             state.scan_history = store::load_observations(&conn);
             Some(store::spawn_writer(conn))
         }
