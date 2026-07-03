@@ -51,11 +51,39 @@ fn cursor(state: &AppState, pane: Pane) -> usize {
     state.pane_nav[pane.index()].cursor
 }
 
-fn render_body(frame: &mut Frame, area: Rect, title: &str, active: bool, p: Palette, lines: Vec<Line>) {
+/// Vertical scroll offset that keeps `cursor_line` on screen within `height`
+/// visible rows out of `total`. Scrolls only when the content overflows, keeps
+/// the cursor on the last visible row when scrolling down, and never scrolls
+/// past the end.
+fn scroll_offset(cursor_line: usize, total: usize, height: usize) -> u16 {
+    if height == 0 || total <= height {
+        return 0;
+    }
+    let max_off = total - height;
+    let off = if cursor_line < height { 0 } else { cursor_line + 1 - height };
+    off.min(max_off) as u16
+}
+
+/// Render a pane body. When `cursor_line` is `Some`, the content is scrolled so
+/// that absolute line index stays visible — the compact list panes render more
+/// rows than a 1/3 cell can show, so without this the cursor (and the row
+/// `Enter` acts on) can sit off-screen.
+fn render_body(
+    frame: &mut Frame,
+    area: Rect,
+    title: &str,
+    active: bool,
+    p: Palette,
+    lines: Vec<Line>,
+    cursor_line: Option<usize>,
+) {
     let block = pane_block(title, active, p);
     let inner = block.inner(area);
     frame.render_widget(block, area);
-    frame.render_widget(Paragraph::new(lines), inner);
+    let offset = cursor_line
+        .map(|c| scroll_offset(c, lines.len(), inner.height as usize))
+        .unwrap_or(0);
+    frame.render_widget(Paragraph::new(lines).scroll((offset, 0)), inner);
 }
 
 pub fn render_map(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {
@@ -73,7 +101,7 @@ pub fn render_map(frame: &mut Frame, area: Rect, state: &AppState, active: bool,
         lines.push(Line::styled(format!("≣ SCUT: {} network(s)", nets.len()), Style::default().fg(p.accent)));
     }
     lines.push(Line::styled("z open map · Enter travel", dim));
-    render_body(frame, area, " MAP ", active, p, lines);
+    render_body(frame, area, " MAP ", active, p, lines, None);
 }
 
 pub fn render_comms(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {
@@ -97,6 +125,7 @@ pub fn render_comms(frame: &mut Frame, area: Rect, state: &AppState, active: boo
         Line::raw(""),
     ];
     let cur = cursor(state, Pane::Comms);
+    let mut sel_line = None;
     if state.messages.is_empty() {
         lines.push(Line::styled("no messages", dim));
     } else {
@@ -104,13 +133,16 @@ pub fn render_comms(frame: &mut Frame, area: Rect, state: &AppState, active: boo
             let unread = m.status == crate::api::types::MessageStatus::Unread;
             let mark = if unread { "✉" } else { "·" };
             let body: String = m.body.chars().take(18).collect();
+            if i == cur {
+                sel_line = Some(lines.len());
+            }
             lines.push(Line::from(Span::styled(
                 format!("{mark} {}: {}", m.sender.name, body),
                 row_style(active, i == cur).patch(text),
             )));
         }
     }
-    render_body(frame, area, " COMMS ", active, p, lines);
+    render_body(frame, area, " COMMS ", active, p, lines, sel_line);
 }
 
 fn render_message_detail(frame: &mut Frame, area: Rect, state: &AppState, id: &str, active: bool, p: Palette) {
@@ -136,7 +168,7 @@ pub fn render_sector(frame: &mut Frame, area: Rect, state: &AppState, active: bo
     let dim = Style::default().fg(p.dim);
     let text = Style::default().fg(p.text);
     let Some(s) = state.current_sector() else {
-        render_body(frame, area, " SECTOR ", active, p, vec![Line::styled("no sector scan yet", dim)]);
+        render_body(frame, area, " SECTOR ", active, p, vec![Line::styled("no sector scan yet", dim)], None);
         return;
     };
     let v = &s.relative_coordinates;
@@ -161,7 +193,7 @@ pub fn render_sector(frame: &mut Frame, area: Rect, state: &AppState, active: bo
             }
             _ => lines.push(Line::styled("empty sector", dim)),
         }
-        render_body(frame, area, " SECTOR ", active, p, lines);
+        render_body(frame, area, " SECTOR ", active, p, lines, None);
         return;
     }
 
@@ -172,6 +204,7 @@ pub fn render_sector(frame: &mut Frame, area: Rect, state: &AppState, active: bo
     let objs = state.scanner_objects();
     lines.push(Line::styled(format!("{} object(s)", objs.len()), dim));
     let cur = cursor(state, Pane::Sector);
+    let mut sel_line = None;
     for (i, e) in objs.iter().enumerate() {
         let color = object_color(&e.object_type, p);
         let icon = object_icon(&e.object_type).0;
@@ -181,9 +214,12 @@ pub fn render_sector(frame: &mut Frame, area: Rect, state: &AppState, active: bo
             Span::styled(name, row_style(active, i == cur).patch(text)),
         ];
         spans.extend(sector_entry_tags(state, &e.id, p));
+        if i == cur {
+            sel_line = Some(lines.len());
+        }
         lines.push(Line::from(spans));
     }
-    render_body(frame, area, " SECTOR ", active, p, lines);
+    render_body(frame, area, " SECTOR ", active, p, lines, sel_line);
 }
 
 /// Join mineable resource types into a terse label (`metals ice carbon`).
@@ -354,6 +390,7 @@ pub fn render_missions(frame: &mut Frame, area: Rect, state: &AppState, active: 
     }
     let dim = Style::default().fg(p.dim);
     let mut lines = Vec::new();
+    let mut sel_line = None;
     if state.missions.is_empty() {
         lines.push(Line::styled("no active missions", dim));
     } else {
@@ -371,6 +408,9 @@ pub fn render_missions(frame: &mut Frame, area: Rect, state: &AppState, active: 
                 .filter(|s| matches!(s.status, MissionStepStatus::Completed))
                 .count();
             let title: String = m.title.chars().take(22).collect();
+            if i == cur {
+                sel_line = Some(lines.len());
+            }
             lines.push(Line::from(vec![
                 Span::styled("▸ ", Style::default().fg(color)),
                 Span::styled(title, row_style(active, i == cur).patch(Style::default().fg(p.text))),
@@ -378,7 +418,7 @@ pub fn render_missions(frame: &mut Frame, area: Rect, state: &AppState, active: 
             ]));
         }
     }
-    render_body(frame, area, " MISSIONS ", active, p, lines);
+    render_body(frame, area, " MISSIONS ", active, p, lines, sel_line);
 }
 
 fn render_mission_detail(frame: &mut Frame, area: Rect, state: &AppState, id: &str, active: bool, p: Palette) {
@@ -421,6 +461,7 @@ pub fn render_storage(frame: &mut Frame, area: Rect, state: &AppState, active: b
     let cur = cursor(state, Pane::Storage);
     let zoomed = state.zoomed;
     let mut lines = Vec::new();
+    let mut sel_line = None;
 
     // Drilled into a container: render its contents inline (fetched on drill-in).
     if let Some(DrillLevel::Container(id)) =
@@ -458,6 +499,9 @@ pub fn render_storage(frame: &mut Frame, area: Rect, state: &AppState, active: b
                 if !rules.priority.is_empty() || !rules.exclusion.is_empty() || !rules.strict_exclusion.is_empty() {
                     spans.push(Span::styled(" ⚙", Style::default().fg(p.accent)));
                 }
+                if i == cur {
+                    sel_line = Some(lines.len());
+                }
                 lines.push(Line::from(spans));
 
                 // Zoom: routing rules and free capacity per container.
@@ -476,7 +520,7 @@ pub fn render_storage(frame: &mut Frame, area: Rect, state: &AppState, active: b
             }
         }
     }
-    render_body(frame, area, " STORAGE ", active, p, lines);
+    render_body(frame, area, " STORAGE ", active, p, lines, sel_line);
 }
 
 /// Inline contents of a container (drill-in `l` on the Storage pane): capacity,
@@ -546,7 +590,7 @@ fn render_container_contents(
     }
 
     let title = format!(" {label} ");
-    render_body(frame, area, &title, active, p, lines);
+    render_body(frame, area, &title, active, p, lines, None);
 }
 
 /// Detail view for a single manny (drill-in `l` on the Mannies pane): task,
@@ -641,8 +685,12 @@ pub fn render_mannies_overview(frame: &mut Frame, area: Rect, state: &AppState, 
 
     let sel = state.mannies_selection;
     let mut lines: Vec<Line> = Vec::new();
+    let mut sel_line = None;
     for (i, m) in mannies.iter().enumerate() {
         let selected = i == sel;
+        if selected {
+            sel_line = Some(lines.len());
+        }
         let name_style = if selected {
             Style::default().fg(p.accent).add_modifier(Modifier::BOLD)
         } else {
@@ -704,7 +752,10 @@ pub fn render_mannies_overview(frame: &mut Frame, area: Rect, state: &AppState, 
         lines.push(Line::raw(""));
     }
 
-    frame.render_widget(Paragraph::new(lines), inner);
+    let offset = sel_line
+        .map(|c| scroll_offset(c, lines.len(), inner.height as usize))
+        .unwrap_or(0);
+    frame.render_widget(Paragraph::new(lines).scroll((offset, 0)), inner);
 }
 
 /// Zoom view for the Scanner pane: a spatial mini-map of the six sectors
@@ -801,4 +852,40 @@ pub fn render_scanner_neighbors(frame: &mut Frame, area: Rect, state: &AppState,
     }
 
     frame.render_widget(Paragraph::new(lines), inner);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::scroll_offset;
+
+    #[test]
+    fn no_scroll_when_content_fits() {
+        assert_eq!(scroll_offset(0, 3, 5), 0);
+        assert_eq!(scroll_offset(4, 5, 5), 0, "exactly fills → no scroll");
+    }
+
+    #[test]
+    fn no_scroll_while_cursor_on_first_page() {
+        // 10 rows, 4 visible: cursor within the first 4 stays put.
+        assert_eq!(scroll_offset(0, 10, 4), 0);
+        assert_eq!(scroll_offset(3, 10, 4), 0);
+    }
+
+    #[test]
+    fn scrolls_to_keep_cursor_on_last_visible_row() {
+        // 10 rows, 4 visible: cursor 4 → window shows rows 1..=4.
+        assert_eq!(scroll_offset(4, 10, 4), 1);
+        assert_eq!(scroll_offset(6, 10, 4), 3);
+    }
+
+    #[test]
+    fn never_scrolls_past_the_end() {
+        // 10 rows, 4 visible: last cursor pins to the final window (offset 6).
+        assert_eq!(scroll_offset(9, 10, 4), 6);
+    }
+
+    #[test]
+    fn zero_height_is_safe() {
+        assert_eq!(scroll_offset(5, 10, 0), 0);
+    }
 }
