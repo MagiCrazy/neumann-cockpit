@@ -1,5 +1,23 @@
 # Changelog
 
+## [71.0.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v63.5.0...neumann-cockpit-v71.0.0) (2026-07-05)
+
+
+* target game API v71 ([#167](https://github.com/MagiCrazy/neumann-cockpit/issues/167)) ([d812738](https://github.com/MagiCrazy/neumann-cockpit/commit/d812738ac1f0eb73606c049fc99754a152e3af7c))
+
+
+### Features
+
+* **api:** catch up type drift for API v71 (Lot A) ([#161](https://github.com/MagiCrazy/neumann-cockpit/issues/161)) ([3dec98d](https://github.com/MagiCrazy/neumann-cockpit/commit/3dec98dfd37d307cd461c923dada6dcd69da2cff))
+* **api:** inspect-sector-object + dormant constructs (API v71 Lot C) ([#164](https://github.com/MagiCrazy/neumann-cockpit/issues/164)) ([d00b007](https://github.com/MagiCrazy/neumann-cockpit/commit/d00b007c0070cd009eb25e5d64357ffda9a1f27e))
+* **api:** probe improvements (API v71 Lot B) ([#163](https://github.com/MagiCrazy/neumann-cockpit/issues/163)) ([f5866f9](https://github.com/MagiCrazy/neumann-cockpit/commit/f5866f9ee746d3ba79b723da4943af3d4460bc1b))
+* **api:** surface mining artificial-object detection + message sector (v71 Lot D) ([#165](https://github.com/MagiCrazy/neumann-cockpit/issues/165)) ([4dbca97](https://github.com/MagiCrazy/neumann-cockpit/commit/4dbca9720cb97701e73cc8cada6cc900a3f67dbd))
+
+
+### Documentation
+
+* **readme:** refresh for onboarding, unified fabrication, and v71 ([#166](https://github.com/MagiCrazy/neumann-cockpit/issues/166)) ([7f9c674](https://github.com/MagiCrazy/neumann-cockpit/commit/7f9c67411f77edd3c024f0db6cdf07e8a38a6781))
+
 ## [63.5.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v63.4.0...neumann-cockpit-v63.5.0) (2026-07-05)
 
 
