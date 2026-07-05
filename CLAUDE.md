@@ -29,11 +29,21 @@ hints    = true           # show the contextual hints line (optional)
 
 Unknown keys are ignored, so legacy configs (`ui`, `phosphor`, `animations`, `theme = "retro"`) still load.
 
-Copy `config.example.toml` to that path and fill in the API key (generated once via the web UI).
+Copy `config.example.toml` to that path and fill in the API key (generated once via the web UI). **First run needs no manual file**: if the config is missing or has no real key, the boot preflight prompts for an API key and writes `config.toml` for you (see Boot preflight).
 
-Scan history is persisted across runs to `~/.config/neumann-cockpit/scan_history.json`.
+Scan history is persisted across runs in a local SQLite database (`cockpit.db`, under the XDG state dir); the legacy `scan_history.json` is migrated into it once, then removed (`src/store.rs`, issue #134).
 
 ## Architecture
+
+### Boot preflight (`src/preflight.rs` + `src/ui/preflight.rs`)
+
+`main()` enters the alternate screen **before** any fallible startup, then runs `preflight::run()`, which draws the boot grid with the real check-list **inside the centre Probe pane** (the eight surrounding subsystems stay dark until the link comes up) and returns a `preflight::Ready` (config, `ApiClient`, DB connection, scan history, api_version, link_ok) or `Outcome::Quit`. This is the Windows first-run fix: `Config::load()` used to error out before the terminal existed, so a double-clicked binary flashed a console and vanished — now every failure has an in-TUI outcome. Steps:
+
+- **CONFIG** — `Config::load_status()` returns `Ready` / `NeedsKey` / `Invalid` (a lenient parse so a keyless file doesn't error). On `NeedsKey`/`Invalid`, an onboarding prompt in the Probe pane collects an API key and `config::write_config()` writes `config.toml` (base URL defaulted to `DEFAULT_BASE_URL`); Esc/Ctrl-C quits cleanly.
+- **ARCHIVE** — `store::open` + `migrate_legacy_json` (reports `MigrationOutcome`: imported N / already migrated / none) + `load_observations`.
+- **REMOTE LINK** — `get_api_version()` under an 8 s timeout, retried interactively: a bad key or outage shows in the Probe pane with actions — `[R]` retry · `[K]` re-enter key (re-runs onboarding) · `[Enter]` continue offline. Continuing enters **degraded mode** (an error toast; `F5` retries), per the API-KO decision.
+
+Once the link is up (or the pilot continues offline), it hands off to `run()`, which builds `AppState`, spawns the persistence writer from the preflight's connection, and plays the cosmetic boot animation that lights the eight subsystems centre-out (see UI › Boot).
 
 ### Event loop (`src/main.rs`)
 

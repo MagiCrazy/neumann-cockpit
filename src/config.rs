@@ -3,6 +3,14 @@ use directories::ProjectDirs;
 use serde::Deserialize;
 use std::path::PathBuf;
 
+/// The production probe server, pre-filled when onboarding writes a fresh config
+/// so the pilot only ever has to paste an API key.
+pub const DEFAULT_BASE_URL: &str = "https://neumann-probe.net";
+
+/// The placeholder key shipped in `config.example.toml`; treated as "no key yet"
+/// so a copied-but-unedited example still triggers onboarding.
+const PLACEHOLDER_KEY: &str = "vng_your_api_key_here";
+
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub base_url: String,
@@ -37,19 +45,79 @@ impl Config {
     }
 }
 
+/// A lenient view of `config.toml` where every key is optional, so a file that
+/// exists but lacks an API key parses cleanly (and drives onboarding) instead of
+/// erroring out. Unknown keys are ignored, matching the tolerant load contract.
+#[derive(Debug, Default, Deserialize)]
+struct RawConfig {
+    base_url: Option<String>,
+    api_key: Option<String>,
+    theme: Option<String>,
+    hints: Option<bool>,
+    boot: Option<bool>,
+}
+
+/// The outcome of inspecting the on-disk config at boot.
+pub enum ConfigStatus {
+    /// A usable config with a real API key.
+    Ready(Config),
+    /// No file, or the file has no usable key yet — onboarding should collect one.
+    NeedsKey,
+    /// The file exists but is not valid TOML — surfaced so the pilot can fix it.
+    Invalid(String),
+}
+
 impl Config {
-    pub fn load() -> Result<Self> {
-        let path = config_path();
-        let content = std::fs::read_to_string(&path).with_context(|| {
-            format!(
-                "Config not found: {}\n\nCreate it:\n  mkdir -p {}\n  cp config.example.toml {}",
-                path.display(),
-                path.parent().unwrap_or(&path).display(),
-                path.display()
-            )
-        })?;
-        toml::from_str(&content).context("Invalid config.toml")
+    /// Inspect `config.toml` without failing on a missing/keyless file. This is
+    /// the boot entry point: it never returns an error the caller must print to
+    /// a vanishing console — every case maps to an in-TUI outcome.
+    pub fn load_status() -> ConfigStatus {
+        load_status_at(&config_path())
     }
+}
+
+/// Path-injectable core of `Config::load_status`, so tests never touch the real
+/// user config.
+fn load_status_at(path: &std::path::Path) -> ConfigStatus {
+    let content = match std::fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(_) => return ConfigStatus::NeedsKey,
+    };
+    let raw: RawConfig = match toml::from_str(&content) {
+        Ok(r) => r,
+        Err(e) => return ConfigStatus::Invalid(e.to_string()),
+    };
+    let key = raw.api_key.unwrap_or_default();
+    if key.trim().is_empty() || key == PLACEHOLDER_KEY {
+        return ConfigStatus::NeedsKey;
+    }
+    ConfigStatus::Ready(Config {
+        base_url: raw.base_url.unwrap_or_else(|| DEFAULT_BASE_URL.to_string()),
+        api_key: key,
+        theme: raw.theme,
+        hints: raw.hints.unwrap_or(true),
+        boot: raw.boot.unwrap_or(true),
+    })
+}
+
+/// Write a minimal `config.toml` (base URL + API key), creating the config
+/// directory if needed. Returns the path written, for the boot log.
+pub fn write_config(base_url: &str, api_key: &str) -> Result<PathBuf> {
+    write_config_at(&config_path(), base_url, api_key)?;
+    Ok(config_path())
+}
+
+/// Path-injectable core of `write_config`.
+fn write_config_at(path: &std::path::Path, base_url: &str, api_key: &str) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("creating config dir {}", parent.display()))?;
+    }
+    // `{:?}` emits a double-quoted, backslash-escaped string — valid TOML basic
+    // string syntax, and API keys / URLs never contain anything exotic.
+    let body = format!("base_url = {base_url:?}\napi_key  = {api_key:?}\n");
+    std::fs::write(path, body).with_context(|| format!("writing {}", path.display()))?;
+    Ok(())
 }
 
 pub fn config_path() -> PathBuf {
@@ -115,5 +183,52 @@ mod tests {
         let m = m.cycle().cycle();
         assert_eq!(m, ColorMode::Modern16);
         assert_eq!(m.cycle(), ColorMode::MonoGreen);
+    }
+
+    fn tmp(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("nc_cfg_test_{name}.toml"))
+    }
+
+    #[test]
+    fn write_then_load_round_trips_with_default_base_url() {
+        let path = tmp("roundtrip");
+        let _ = std::fs::remove_file(&path);
+        write_config_at(&path, DEFAULT_BASE_URL, "vng_realkey123").unwrap();
+        match load_status_at(&path) {
+            ConfigStatus::Ready(c) => {
+                assert_eq!(c.api_key, "vng_realkey123");
+                assert_eq!(c.base_url, DEFAULT_BASE_URL);
+                assert!(c.hints && c.boot, "defaults applied");
+            }
+            _ => panic!("a freshly written key must load as Ready"),
+        }
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn missing_file_needs_key() {
+        let path = tmp("missing");
+        let _ = std::fs::remove_file(&path);
+        assert!(matches!(load_status_at(&path), ConfigStatus::NeedsKey));
+    }
+
+    #[test]
+    fn placeholder_and_empty_key_need_key() {
+        let path = tmp("placeholder");
+        std::fs::write(&path, format!("api_key = {PLACEHOLDER_KEY:?}\n")).unwrap();
+        assert!(matches!(load_status_at(&path), ConfigStatus::NeedsKey), "example key is not real");
+        std::fs::write(&path, "api_key = \"\"\n").unwrap();
+        assert!(matches!(load_status_at(&path), ConfigStatus::NeedsKey), "empty key");
+        std::fs::write(&path, "base_url = \"https://x\"\n").unwrap();
+        assert!(matches!(load_status_at(&path), ConfigStatus::NeedsKey), "no key at all");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn malformed_toml_is_invalid() {
+        let path = tmp("malformed");
+        std::fs::write(&path, "this is = = not toml\n").unwrap();
+        assert!(matches!(load_status_at(&path), ConfigStatus::Invalid(_)));
+        let _ = std::fs::remove_file(&path);
     }
 }
