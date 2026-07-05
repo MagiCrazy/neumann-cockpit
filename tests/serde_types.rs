@@ -816,3 +816,18 @@ fn probe_improvement_deserializes() {
     assert_eq!(imp.ingredients[0].ingredient_type, "electric_motor");
     assert!(imp.effects.is_some());
 }
+
+// ── ArtificialObjectDetection (mining reveal, API v71) ──────────────────────────
+
+#[test]
+fn artificial_object_detection_deserializes() {
+    use neumann_cockpit::api::types::ArtificialObjectDetection;
+    let d: ArtificialObjectDetection = deser(
+        r#"{"type":"detached_storage_container","detection":"hidden_on_asteroid",
+            "objectId":"container-hidden-1","targetObjectId":"ast-9"}"#,
+    );
+    assert_eq!(d.object_type, "detached_storage_container");
+    assert_eq!(d.detection, "hidden_on_asteroid");
+    assert_eq!(d.object_id.as_deref(), Some("container-hidden-1"));
+    assert_eq!(d.target_object_id.as_deref(), Some("ast-9"));
+}
