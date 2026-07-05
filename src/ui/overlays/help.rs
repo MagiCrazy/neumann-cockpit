@@ -39,6 +39,7 @@ const LEFT: &[Section] = &[
         "Act & global",
         &[
             ("Enter", "contextual action menu"),
+            ("a", "alerts & damage warnings"),
             (":", "command line (see right)"),
             ("F1", "toggle hints line"),
             ("F2", "cycle color mode"),

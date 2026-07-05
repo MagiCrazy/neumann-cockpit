@@ -11,12 +11,12 @@ use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
 use crate::api::tasks::{
-    fetch_all, fetch_inspect, fetch_messages, fetch_recover, fetch_scut_network, fetch_sector,
-    fetch_sent_messages, fetch_storage_container_detail,
+    fetch_alerts, fetch_all, fetch_damage_warnings, fetch_inspect, fetch_messages, fetch_recover,
+    fetch_scut_network, fetch_sector, fetch_sent_messages, fetch_storage_container_detail,
 };
 use crate::api::types::{MannyTask, MannyTaskVisibility};
 use crate::app::{
-    ApiMessage, AppState, DeployInput, FabricationInput, ImproveInput, DetachInput, DropCargoInput,
+    AlertsInput, ApiMessage, AppState, DeployInput, FabricationInput, ImproveInput, DetachInput, DropCargoInput,
     CommandLine, DropStorageContainerInput, DrillLevel, InputMode, InspectInput, MenuAction,
     MessagesInput,
     MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput, Pane, RecallInput, RecoverInput,
@@ -66,6 +66,13 @@ pub fn handle_cockpit_event(
         }
         // The Map pane has no in-pane zoom view — `z` opens the full isometric
         // map overlay (its own pan/travel controls take over).
+        // Alerts + damage warnings — a global overlay (the `! n` badge is global);
+        // refresh on open so it reflects the latest.
+        KeyCode::Char('a') => {
+            state.alerts_input = AlertsInput::Browsing { selection: 0, show_warnings: false };
+            fetch_alerts(client.clone(), tx.clone());
+            fetch_damage_warnings(client.clone(), tx.clone());
+        }
         KeyCode::Char('z') if state.active_pane == Pane::Map => state.open_map(),
         KeyCode::Char('z') => state.toggle_zoom(),
         KeyCode::Char(':') => state.mode = InputMode::Command(CommandLine::default()),

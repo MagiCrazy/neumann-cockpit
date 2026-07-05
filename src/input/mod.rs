@@ -433,6 +433,16 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_opens_the_alerts_overlay() {
+        let mut state = AppState::default();
+        press(&mut state, KeyCode::Char('a'));
+        assert!(
+            matches!(state.alerts_input, AlertsInput::Browsing { show_warnings: false, .. }),
+            "`a` opens the alerts overlay on the Alerts tab"
+        );
+    }
+
+    #[tokio::test]
     async fn improve_from_probe_menu_opens_the_picker() {
         use crate::app::{ImproveInput, Pane};
         let mut state = AppState::default();

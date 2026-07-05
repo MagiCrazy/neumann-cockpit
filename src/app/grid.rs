@@ -356,6 +356,7 @@ impl super::AppState {
             parts.push("Enter act");
         }
         parts.push("z zoom");
+        parts.push("a alerts");
         parts.push("ertdfgcvb pane");
         parts.push("F1 hints");
         parts.push("? help");
