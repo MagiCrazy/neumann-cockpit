@@ -11,17 +11,18 @@ use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
 use crate::api::tasks::{
-    fetch_all, fetch_inspect, fetch_messages, fetch_recover, fetch_sector, fetch_sent_messages,
-    fetch_storage_container_detail,
+    fetch_all, fetch_inspect, fetch_messages, fetch_recover, fetch_scut_network, fetch_sector,
+    fetch_sent_messages, fetch_storage_container_detail,
 };
 use crate::api::types::{MannyTask, MannyTaskVisibility};
 use crate::app::{
-    ApiMessage, AppState, FabricationInput, DetachInput, DropCargoInput,
+    ApiMessage, AppState, DeployInput, FabricationInput, DetachInput, DropCargoInput,
     CommandLine, DropStorageContainerInput, DrillLevel, InputMode, InspectInput, MenuAction,
     MessagesInput,
     MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput, Pane, RecallInput, RecoverInput,
     GotoVisitedInput, RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput,
-    RepairInput, SalvageInput, ScanMode, StorageMoveInput, TravelInput, WaypointsInput,
+    RepairInput, SalvageInput, ScanMode, ScutNetworkInput, StorageMoveInput, TravelInput,
+    WaypointsInput,
 };
 
 pub fn handle_cockpit_event(
@@ -253,6 +254,32 @@ fn fire_menu_action(
                     };
                 }
                 _ => state.storage_move = StorageMoveInput::PickManny { mannies, selection: 0 },
+            }
+            return;
+        }
+        MenuAction::Deploy => {
+            // Deploy a held waypoint bookmark: pick the installing Manny, then a
+            // target object in the current sector, then a name.
+            let mannies = state.collect_idle_onboard_mannies();
+            if mannies.is_empty() {
+                state.error = Some("no idle Manny on board".into());
+            } else if state.collect_deploy_candidates().is_empty() {
+                state.error = Some("no target object in current sector — scan first".into());
+            } else {
+                state.deploy = DeployInput::PickManny { mannies, selection: 0 };
+            }
+            return;
+        }
+        MenuAction::ScutInspect => {
+            let nets = state.scut_coverage();
+            match nets.len() {
+                0 => state.error = Some("no SCUT network covers this sector".into()),
+                1 => {
+                    state.scut_network = ScutNetworkInput::Viewing { error: None };
+                    state.scut_network_view = None;
+                    fetch_scut_network(nets[0].0, client.clone(), tx.clone());
+                }
+                _ => state.scut_network = ScutNetworkInput::Picking { networks: nets, selection: 0 },
             }
             return;
         }
