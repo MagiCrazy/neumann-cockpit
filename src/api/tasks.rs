@@ -381,7 +381,7 @@ pub fn fetch_deploy(manny_id: String, object_id: String, name: String, client: A
 
 pub fn fetch_inspect(manny_id: String, object_id: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     tokio::spawn(async move {
-        let msg = match client.inspect_asteroid(&manny_id, &object_id).await {
+        let msg = match client.inspect_sector_object(&manny_id, &object_id).await {
             Ok(_) => ApiMessage::InspectStarted,
             Err(e) => ApiMessage::InspectError(e.to_string()),
         };

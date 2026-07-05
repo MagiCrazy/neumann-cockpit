@@ -122,12 +122,12 @@ One unified phosphor theme (there is no classic/retro split any more). `theme.rs
 The four reused panels (Probe / Inventory / Scanner / Mannies) keep their internal content colours; gauge colors: green > 50 %, yellow 25–50 %, red < 25 %. Movement progress is derived from `started_at` / `arrival_at` client-side. Scanner history shows symbol + coords + distance and scrolls with the selection.
 
 **Overlays** (wizards, rendered on top of the grid; launched from the contextual menu or the reused panels):
-- **Mannies pane menu** (`Enter`) — Fabricate, Mine, Repair, Salvage, Inspect, Recover/Detach container, Refill deuterium, Drop cargo, Recall/Abandon, Rename. Each launches its wizard (`*Input`). Fabricate opens the unified catalog with the selected Manny pre-chosen as builder. Remote mine (SCUT-reachable manny) fetches the manny's sector first, then picks asteroid → resources/amount → mandatory detached container. Recall on a SCUT-remote manny is labelled **abandon**.
+- **Mannies pane menu** (`Enter`) — Fabricate, Mine, Repair, Salvage, Inspect, Recover/Detach container, Refill deuterium, Drop cargo, Recall/Abandon, Rename. Each launches its wizard (`*Input`). Fabricate opens the unified catalog with the selected Manny pre-chosen as builder. Inspect (`inspect-sector-object`, API v65) targets any inspectable object — asteroid, dormant construct, or detached container (`collect_inspectable_candidates`). Remote mine (SCUT-reachable manny) fetches the manny's sector first, then picks asteroid → resources/amount → mandatory detached container. Recall on a SCUT-remote manny is labelled **abandon**.
 - **Inventory pane menu** (`Enter`) — Fabricate, Move stock, Jettison, and **Deploy waypoint…** (only when a `waypoint_bookmark` is held; picks the installing Manny → sector target → name, firing `install-bookmark`). Fabricate opens the unified catalog with no builder pre-chosen.
 - **Missions pane** (`Enter`) — active-mission list with steps/status; abandon (confirmation).
 - **Comms pane** (`Enter`) — messaging inbox/sent (mark read, compose to a probe/planet recipient); alerts + damage-warnings live in the same pane.
 - **Storage pane** (`Enter`) — container browser with capacity bars; content view, rename, routing-rules editor (none → priority → exclusion → strict).
-- **Sector pane** (`Enter` on an object) — object-action picker (mine / inspect / salvage / recover / deploy waypoint); an inactive `scut_relay` offers **turn on relay** (needs a star + integrated_circuit) and salvage.
+- **Sector pane** (`Enter` on an object) — object-action picker (mine / inspect / salvage / recover / deploy waypoint); inspect is offered on asteroids, **dormant constructs**, and detached containers; an inactive `scut_relay` offers **turn on relay** (needs a star + integrated_circuit) and salvage.
 - **Map pane** — compact summary; `z` opens the full isometric map (pan `hjkl`, `g` travel to the centred sector, `c` coordinate center). `Enter` menu: open map, **Travel to coordinates…**, **Jump to visited sector…** (picker over `visited_sectors`), **Waypoints…** (picker over bookmarks/stars/mineable targets). Scanner `Enter` also offers **Travel here** to the selected observation.
 - **Travel** wizard — coordinate input (absolute, or relative with a leading `+`), live parity check, fuel/ETA preview + confirmation. Launched from Map/Scanner or `:travel`.
 - **Probe pane menu** (`Enter`) — **Inspect SCUT network…** (enabled when a SCUT relay covers the current sector; auto-views the sole network or picks among several via `scut-network/{id}`), **Improve probe…** (enabled when an unlocked, not-yet-done improvement exists; two-panel catalog → resolve the installing Manny → `improve-probe`), plus **Reassign mind snapshot** only when the probe is dead or trapped by a black hole (`probe.alert`); reassigns the snapshot to a fresh probe. Improvements are fetched in `fetch_all` (`ProbeImprovement`).
@@ -159,7 +159,7 @@ The four reused panels (Probe / Inventory / Scanner / Mannies) keep their intern
 | `/api/probe/mannies/{id}/recall` | POST | ✓ |
 | `/api/probe/mannies/{id}` | PATCH | ✓ (rename) |
 | `/api/probe/mannies/{id}/install-bookmark` | POST | ✓ |
-| `/api/probe/mannies/{id}/inspect-asteroid` | POST | ✓ |
+| `/api/probe/mannies/{id}/inspect-sector-object` | POST | ✓ |
 | `/api/probe/mannies/{id}/recover-storage-container` | POST | ✓ |
 | `/api/probe/mannies/{id}/detach-storage-container` | POST | ✓ |
 | `/api/probe/mannies/{id}/drop-manny-cargo` | POST | ✓ |

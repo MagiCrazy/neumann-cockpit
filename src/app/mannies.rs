@@ -202,6 +202,30 @@ impl AppState {
         }
     }
 
+    /// Objects a Manny can inspect in the probe's current sector (API v65):
+    /// asteroids plus top-level dormant constructs and detached containers.
+    pub fn collect_inspectable_candidates(&self) -> Vec<(String, String)> {
+        let Some(sector) = self.probe_current_sector_scan() else { return Vec::new() };
+        let mut out = self.collect_asteroid_candidates_in(sector);
+        if let Some(objects) = sector.objects.as_ref() {
+            for o in objects {
+                let inspectable = matches!(
+                    o.object_type,
+                    SectorObjectType::DormantConstruct | SectorObjectType::DetachedContainer
+                );
+                if !inspectable {
+                    continue;
+                }
+                if let Some(id) = &o.id {
+                    if out.iter().all(|(existing, _)| existing != id) {
+                        out.push((id.clone(), o.name.clone().unwrap_or_else(|| "unnamed".into())));
+                    }
+                }
+            }
+        }
+        out
+    }
+
     pub fn collect_asteroid_candidates_in(
         &self,
         sector: &crate::api::types::SectorObservation,
@@ -313,7 +337,7 @@ impl AppState {
     }
 
     pub fn set_inspect_error(&mut self, msg: String) {
-        if let InspectInput::PickAsteroid { ref mut error, .. } = self.inspect {
+        if let InspectInput::PickTarget { ref mut error, .. } = self.inspect {
             *error = Some(msg);
         } else {
             // Inspect was dispatched without the picker overlay (single

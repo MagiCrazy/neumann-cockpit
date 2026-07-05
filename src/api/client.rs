@@ -433,13 +433,15 @@ impl ApiClient {
         Ok(self.post::<Resp, _>(&path, &Body { container_id, mode, object_id }).await?.manny)
     }
 
-    pub async fn inspect_asteroid(&self, manny_id: &str, object_id: &str) -> Result<Manny> {
+    /// Inspect a sector object (asteroid, dormant construct, or detached
+    /// container). Replaces the deprecated `inspect-asteroid` endpoint (API v65).
+    pub async fn inspect_sector_object(&self, manny_id: &str, object_id: &str) -> Result<Manny> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
         struct Body<'a> { object_id: &'a str }
         #[derive(Deserialize)]
         struct Resp { manny: Manny }
-        let path = format!("/api/probe/mannies/{manny_id}/inspect-asteroid");
+        let path = format!("/api/probe/mannies/{manny_id}/inspect-sector-object");
         Ok(self.post::<Resp, _>(&path, &Body { object_id }).await?.manny)
     }
 

@@ -264,6 +264,10 @@ impl AppState {
             }
             (ObjectProvenance::TopLevel, SectorObjectType::DetachedContainer) => {
                 actions.push(ObjectAction::Recover);
+                actions.push(ObjectAction::Inspect);
+            }
+            (ObjectProvenance::TopLevel, SectorObjectType::DormantConstruct) => {
+                actions.push(ObjectAction::Inspect);
             }
             // An inactive relay (status != On) can be turned on or salvaged.
             (ObjectProvenance::TopLevel, SectorObjectType::ScutRelay)

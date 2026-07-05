@@ -449,14 +449,14 @@ fn fire_menu_action(
             }
         }
         MenuAction::Inspect if can => {
-            let candidates = state.collect_asteroid_candidates();
+            let candidates = state.collect_inspectable_candidates();
             match candidates.len() {
-                0 => state.error = Some("no asteroids in current sector — scan first".into()),
+                0 => state.error = Some("no inspectable objects in current sector — scan first".into()),
                 1 => {
                     let (object_id, _) = candidates.into_iter().next().unwrap();
                     fetch_inspect(id, object_id, client.clone(), tx.clone());
                 }
-                _ => state.inspect = InspectInput::PickAsteroid { manny_id: id, manny_name: name, candidates, selection: 0, error: None },
+                _ => state.inspect = InspectInput::PickTarget { manny_id: id, manny_name: name, candidates, selection: 0, error: None },
             }
         }
         MenuAction::Recover if can => {
