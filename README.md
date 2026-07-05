@@ -29,12 +29,19 @@ tar xzf neumann-cockpit-linux-x86_64.tar.gz
 
 **1. Get an API key** — create an account on [neumann-probe.net](https://neumann-probe.net), go to Settings and generate an API key. It is shown only once.
 
-**2. Configure**
+**2. Run**
+
+```bash
+neumann-cockpit
+```
+
+On the **first run** you don't need to create any file: the boot screen detects the missing key, tells you where to get one, and lets you paste it in — it then writes `~/.config/neumann-cockpit/config.toml` for you.
+
+Prefer to configure it by hand? Copy the example and edit it:
 
 ```bash
 mkdir -p ~/.config/neumann-cockpit
 cp config.example.toml ~/.config/neumann-cockpit/config.toml
-# then edit the file and paste your API key
 ```
 
 ```toml
@@ -44,33 +51,27 @@ api_key  = "vng_your_api_key_here"
 # hints = true           # show the contextual hints line
 ```
 
-**3. Run**
-
-```bash
-neumann-cockpit
-```
-
 ## Interface
 
 A single **phosphor cockpit**: a 3×3 tiling dashboard of nine panes, keyboard-first, *navigate then act*.
 
 - **Navigate** — `e r t / d f g / c v b` (a square on the keyboard) jump to a pane; `j`/`k` (or `↑`/`↓`) move the cursor; `l`/`h` drill in/out; `Tab`/`Shift+Tab` cycle panes.
 - **Act** — `Enter` opens the pane's contextual action menu.
-- **Command** — `:` opens a vim-style command line (`:travel`, `:goto`, `:filter`, `:theme`, `:refresh`…); `Tab` completes the verb.
+- **Command** — `:` opens a vim-style command line (`:travel`, `:goto`, `:filter`, `:craft`, `:theme`, `:refresh`…); `Tab` completes the verb.
 - **Zoom** — `z` blows the active pane up to full screen.
 - **Adapts** — the grid shrinks to 2×2 or a single pane on smaller terminals, following the active pane; a mini-map shows where you are.
 - **`F1`** toggle hints · **`F2`** cycle color mode · **`F5`** refresh · **`?`** help · **`q`** quit.
 
-Startup plays a GUPPI self-check that assembles the cockpit centre-out; any key continues.
+Startup runs a preflight in the centre pane — config check (with first-run key onboarding), local scan-history archive, and the remote API link — then a GUPPI self-check assembles the cockpit centre-out; any key continues. If the link is down it enters in degraded mode (`F5` retries).
 
 ## Features
 
-- **Probe** — status, fuel, integrity, movement ETA and speed gauges
-- **Scanner / Sector** — scan neighbors, a direction (distance 2), or arbitrary coordinates; filterable history; the Sector pane shows the current sector's objects with resources, planet class and habitability
+- **Probe** — status, fuel, integrity, movement ETA and speed gauges; inspect the SCUT relay network and install **probe improvements** (build them with an idle manny)
+- **Scanner / Sector** — scan neighbors, a direction (distance 2), or arbitrary coordinates; filterable history; the Sector pane shows the current sector's objects with resources, planet class and habitability, and lets a manny inspect asteroids, detached containers, and **dormant constructs**
 - **Map** — isometric sector map (`z`); travel to a scanned/visited sector or a waypoint, with fuel/ETA preview
-- **Mannies** — per-manny status and live task progress; repair, mine, craft, salvage, recall, rename, drop cargo
-- **Inventory** — cargo stocks and onboard items; jettison, move stock, atomic-printer craft
-- **Crafting** — recipes show what you can build right now (ingredients owned / required); mining shows the target's reserves
+- **Mannies** — per-manny status and live task progress; fabricate, mine, repair, salvage, inspect, recover/detach containers, refuel, recall, rename, drop cargo; a mining manny flags a hidden container it turns up
+- **Inventory** — cargo stocks and onboard items; fabricate, move stock, jettison, deploy a waypoint bookmark
+- **Fabrication** — one unified catalog spanning the atomic printer and manny crafting; recipes show what you can build right now (ingredients owned / required), and mining shows the target's reserves
 - **Comms** — inter-probe messaging (inbox / sent / compose), alerts and damage warnings
 - **Missions & Storage** — track directives; browse storage containers with capacity and routing rules
 - **Colour modes** — mono-green, mono-amber, phosphor-semantic, or a 16-colour fallback (`F2`)
