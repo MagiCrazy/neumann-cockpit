@@ -2,8 +2,8 @@ use super::*;
 
 /// Command verbs recognised by `:` mode. Kept as a table so the input layer can
 /// offer Tab-completion and a `:help`-style listing.
-pub const COMMANDS: [&str; 9] =
-    ["focus", "travel", "goto", "filter", "refresh", "theme", "zoom", "help", "quit"];
+pub const COMMANDS: [&str; 10] =
+    ["focus", "travel", "goto", "filter", "refresh", "theme", "zoom", "craft", "help", "quit"];
 
 fn pane_from_name(name: &str) -> Option<Pane> {
     Pane::ALL.into_iter().find(|p| p.label().eq_ignore_ascii_case(name))
@@ -87,6 +87,17 @@ impl AppState {
                 None => self.set_toast("usage: theme <mono-green|mono-amber|phosphor-semantic|modern-16>"),
             },
             "zoom" => self.toggle_zoom(),
+            "craft" => {
+                if self.recipes.is_empty() {
+                    self.set_toast("recipes loading — F5 to refresh");
+                } else {
+                    self.fabrication = FabricationInput::PickRecipe {
+                        prefilled_manny: None,
+                        selection: 0,
+                        error: None,
+                    };
+                }
+            }
             "help" => self.help_open = true,
             "q" | "quit" => self.set_quit(),
             other => self.set_toast(format!("unknown command: {other}")),

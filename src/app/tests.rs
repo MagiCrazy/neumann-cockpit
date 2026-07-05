@@ -701,6 +701,32 @@ fn atomic_printer_recipes_filters_correctly() {
     assert_eq!(printer[0].id, "r2");
 }
 
+#[test]
+fn fabrication_recipes_orders_atomic_then_manny() {
+    use crate::app::Fabricator;
+    let mut state = AppState::default();
+    state.recipes = vec![
+        serde_json::from_str(r#"{"id":"r1","name":"R1","craftableBy":["manny"],
+            "ingredients":[],"durationSeconds":60,
+            "output":{"type":"x","name":"X","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}"#).unwrap(),
+        serde_json::from_str(r#"{"id":"r2","name":"R2","craftableBy":["atomic_3d_printer"],
+            "ingredients":[],"durationSeconds":60,
+            "output":{"type":"x","name":"X","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}"#).unwrap(),
+        // Craftable by both → appears once in each section.
+        serde_json::from_str(r#"{"id":"r3","name":"R3","craftableBy":["manny","atomic_3d_printer"],
+            "ingredients":[],"durationSeconds":60,
+            "output":{"type":"x","name":"X","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}"#).unwrap(),
+    ];
+    let rows: Vec<(Fabricator, &str)> = state.fabrication_recipes()
+        .into_iter().map(|(f, r)| (f, r.id.as_str())).collect();
+    assert_eq!(rows, vec![
+        (Fabricator::AtomicPrinter, "r2"),
+        (Fabricator::AtomicPrinter, "r3"),
+        (Fabricator::Manny, "r1"),
+        (Fabricator::Manny, "r3"),
+    ]);
+}
+
 // ── has_atomic_printer ────────────────────────────────────────────────────
 
 #[test]
@@ -1305,7 +1331,7 @@ fn mannies_context_menu_reflects_manny_state() {
     let menu = state.build_context_menu().expect("mannies menu");
     assert!(menu_item(&menu, MenuAction::Mine).enabled);
     assert!(menu_item(&menu, MenuAction::Repair).enabled);
-    assert!(menu_item(&menu, MenuAction::Craft).enabled);
+    assert!(menu_item(&menu, MenuAction::Fabricate).enabled);
     assert!(menu_item(&menu, MenuAction::Salvage).enabled);
     assert!(menu_item(&menu, MenuAction::Inspect).enabled);
     assert!(menu_item(&menu, MenuAction::Rename).enabled);

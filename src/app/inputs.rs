@@ -202,11 +202,37 @@ pub enum WaypointsInput {
     },
 }
 
+/// Which fabricator produces a recipe, derived from its `craftable_by`. Drives
+/// both the section a recipe is shown under and which endpoint a craft fires.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Fabricator {
+    /// `atomic_3d_printer` — the printer auto-reserves a Manny as assistant.
+    AtomicPrinter,
+    /// `manny` — the craft is assigned to a specific idle onboard Manny.
+    Manny,
+}
+
+/// Unified fabrication wizard: a single item-first catalog spanning both the
+/// atomic printer and Manny craft. `PickRecipe` lists every recipe sectioned by
+/// fabricator; selecting a Manny recipe with no pre-chosen builder advances to
+/// `PickBuilder`, atomic recipes fire straight away.
 #[derive(Default)]
-pub enum AtomicPrinterCraftInput {
+pub enum FabricationInput {
     #[default]
     Inactive,
     PickRecipe {
+        /// A builder Manny (id, name) pre-chosen when the catalog was opened
+        /// from the Mannies pane on an orderable Manny. Manny recipes skip the
+        /// builder-selection step when this is set; atomic recipes ignore it.
+        prefilled_manny: Option<(String, String)>,
+        selection: usize,
+        error: Option<String>,
+    },
+    /// Choosing which idle onboard Manny builds the selected Manny recipe.
+    PickBuilder {
+        recipe_id: String,
+        recipe_name: String,
+        mannies: Vec<(String, String)>, // (id, name)
         selection: usize,
         error: Option<String>,
     },
@@ -279,18 +305,6 @@ pub enum RemoteMineInput {
         resources: [bool; 4],
         amount: f64,
         containers: Vec<(String, String)>,
-        selection: usize,
-        error: Option<String>,
-    },
-}
-
-#[derive(Default)]
-pub enum CraftInput {
-    #[default]
-    Inactive,
-    PickRecipe {
-        manny_id: String,
-        manny_name: String,
         selection: usize,
         error: Option<String>,
     },

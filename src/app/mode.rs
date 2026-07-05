@@ -11,7 +11,8 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuAction {
     Mine,
-    Craft,
+    /// Open the unified fabrication catalog (atomic printer + Manny craft).
+    Fabricate,
     Repair,
     Salvage,
     Inspect,
@@ -23,7 +24,6 @@ pub enum MenuAction {
     Rename,
     // Inventory pane
     Jettison,
-    AtomicCraft,
     MoveStock,
     // Probe pane
     MindSnapshot,
@@ -239,14 +239,14 @@ impl super::AppState {
 
     fn inventory_context_menu(&self) -> ContextMenu {
         let has_row = self.selected_inventory_row().is_some();
-        let has_printer = self.has_atomic_printer();
+        let has_recipes = !self.recipes.is_empty();
         let idle_manny = !self.collect_idle_onboard_mannies().is_empty();
         let items = vec![
             MenuItem {
-                action: MenuAction::AtomicCraft,
-                label: "Atomic craft…".into(),
-                enabled: has_printer,
-                disabled_reason: (!has_printer).then(|| "no atomic printer".to_string()),
+                action: MenuAction::Fabricate,
+                label: "Fabricate…".into(),
+                enabled: has_recipes,
+                disabled_reason: (!has_recipes).then(|| "recipes loading".to_string()),
             },
             MenuItem {
                 action: MenuAction::MoveStock,
@@ -292,7 +292,7 @@ impl super::AppState {
                 enabled: can || remote_minable,
                 disabled_reason: (!can && !remote_minable).then(|| "busy".to_string()),
             },
-            orders(MenuAction::Craft, "Craft…"),
+            orders(MenuAction::Fabricate, "Fabricate…"),
             orders(MenuAction::Repair, "Repair"),
             orders(MenuAction::Salvage, "Salvage…"),
             orders(MenuAction::Inspect, "Inspect…"),

@@ -75,15 +75,12 @@ impl AppState {
         }
     }
 
-    pub fn set_craft_error(&mut self, msg: String) {
-        if let CraftInput::PickRecipe { ref mut error, .. } = self.craft {
-            *error = Some(msg);
-        }
-    }
-
-    pub fn set_atomic_printer_craft_error(&mut self, msg: String) {
-        if let AtomicPrinterCraftInput::PickRecipe { ref mut error, .. } = self.atomic_printer_craft {
-            *error = Some(msg);
+    /// Surface a craft failure on whichever fabrication step is active.
+    pub fn set_fabrication_error(&mut self, msg: String) {
+        match self.fabrication {
+            FabricationInput::PickRecipe { ref mut error, .. } => *error = Some(msg),
+            FabricationInput::PickBuilder { ref mut error, .. } => *error = Some(msg),
+            FabricationInput::Inactive => {}
         }
     }
 

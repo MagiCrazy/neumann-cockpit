@@ -21,7 +21,7 @@ pub(crate) mod waypoints;
 
 pub(crate) use alerts::render_alerts_overlay;
 pub(crate) use containers::{render_container_rules_overlay, render_rename_container_overlay};
-pub(crate) use craft::{render_atomic_printer_craft_overlay, render_craft_overlay};
+pub(crate) use craft::render_fabrication_overlay;
 pub(crate) use drop_container::render_drop_container_overlay;
 pub(crate) use help::{help_row_count, render_help_overlay};
 pub(crate) use inventory_detail::render_inventory_detail_overlay;
@@ -46,7 +46,7 @@ pub(crate) use travel::render_travel_overlay;
 pub(crate) use waypoints::render_waypoints_overlay;
 
 use crate::app::{
-    AlertsInput, AppState, AtomicPrinterCraftInput, ContainerRulesInput, CraftInput, DeployInput,
+    AlertsInput, AppState, ContainerRulesInput, FabricationInput, DeployInput,
     DetachInput, DropCargoInput, DropStorageContainerInput, GotoVisitedInput, InspectInput,
     JettisonInput, MessagesInput, MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput,
     RecallInput, RecoverInput, RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput,
@@ -79,8 +79,7 @@ const WIZARD_OVERLAYS: &[(OverlayGuard, OverlayRender)] = &[
     (|s| !matches!(s.mine, MineInput::Inactive), render_mine_overlay),
     (|s| !matches!(s.remote_mine, RemoteMineInput::Inactive), render_remote_mine_overlay),
     (|s| !matches!(s.jettison, JettisonInput::Inactive), render_jettison_overlay),
-    (|s| !matches!(s.craft, CraftInput::Inactive), render_craft_overlay),
-    (|s| !matches!(s.atomic_printer_craft, AtomicPrinterCraftInput::Inactive), render_atomic_printer_craft_overlay),
+    (|s| !matches!(s.fabrication, FabricationInput::Inactive), render_fabrication_overlay),
     (|s| !matches!(s.salvage, SalvageInput::Inactive), render_salvage_overlay),
     (|s| !matches!(s.recall, RecallInput::Inactive), render_recall_overlay),
     (|s| !matches!(s.refuel, RefuelInput::Inactive), render_refuel_overlay),
@@ -290,5 +289,29 @@ mod tests {
         let mut state = AppState::default();
         state.travel = TravelInput::Typing(String::new());
         assert!(rendered_text(&state).contains("TRAVEL"), "active travel wizard renders its frame");
+    }
+
+    #[test]
+    fn fabrication_catalog_renders_both_sections() {
+        use crate::app::FabricationInput;
+        let mut state = AppState::default();
+        state.recipes = vec![
+            serde_json::from_str(r#"{"id":"integrated_circuit","name":"Integrated circuit","craftableBy":["atomic_3d_printer"],
+                "ingredients":[{"type":"micro_conductor","quantity":2,"unit":"item"}],"durationSeconds":1200,
+                "output":{"type":"integrated_circuit","name":"Integrated circuit","containerSpace":0.001,"containerSpaceUnit":"ECE","capacityBonus":null}}"#).unwrap(),
+            serde_json::from_str(r#"{"id":"steel_plate","name":"Steel plate","craftableBy":["manny"],
+                "ingredients":[],"durationSeconds":300,
+                "output":{"type":"steel_plate","name":"Steel plate","containerSpace":0.01,"containerSpaceUnit":"ECE","capacityBonus":null}}"#).unwrap(),
+        ];
+        state.fabrication = FabricationInput::PickRecipe { prefilled_manny: None, selection: 0, error: None };
+        let text = rendered_text(&state);
+        assert!(text.contains("FABRICATION"), "unified title renders");
+        assert!(text.contains("ATOMIC PRINTER"), "atomic section header renders");
+        assert!(text.contains("MANNY FABRICATION"), "manny section header renders");
+        assert!(text.contains("Integrated circuit") && text.contains("Steel plate"), "both recipes listed");
+        // Regression: the detail panel must always show the selected recipe's
+        // ingredient breakdown (have/need), no matter how long the catalog gets.
+        assert!(text.contains("INGREDIENTS"), "detail panel shows the ingredients header");
+        assert!(text.contains("micro_conductor"), "selected recipe's ingredient is listed");
     }
 }

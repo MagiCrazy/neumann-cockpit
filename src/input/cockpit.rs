@@ -16,7 +16,7 @@ use crate::api::tasks::{
 };
 use crate::api::types::{MannyTask, MannyTaskVisibility};
 use crate::app::{
-    ApiMessage, AppState, AtomicPrinterCraftInput, CraftInput, DetachInput, DropCargoInput,
+    ApiMessage, AppState, FabricationInput, DetachInput, DropCargoInput,
     CommandLine, DropStorageContainerInput, DrillLevel, InputMode, InspectInput, MenuAction,
     MessagesInput,
     MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput, Pane, RecallInput, RecoverInput,
@@ -226,13 +226,17 @@ fn fire_menu_action(
             }
             return;
         }
-        MenuAction::AtomicCraft => {
-            if !state.has_atomic_printer() {
-                state.error = Some("no atomic printer in inventory".into());
-            } else if state.atomic_printer_recipes().is_empty() {
+        // The Inventory pane opens the catalog with no builder pre-chosen; the
+        // Mannies-pane variant (with a builder) is handled further down.
+        MenuAction::Fabricate if state.active_pane == Pane::Inventory => {
+            if state.fabrication_recipes().is_empty() {
                 state.error = Some("recipes not loaded yet — F5 to refresh".into());
             } else {
-                state.atomic_printer_craft = AtomicPrinterCraftInput::PickRecipe { selection: 0, error: None };
+                state.fabrication = FabricationInput::PickRecipe {
+                    prefilled_manny: None,
+                    selection: 0,
+                    error: None,
+                };
             }
             return;
         }
@@ -354,11 +358,15 @@ fn fire_menu_action(
         MenuAction::Repair if can => {
             state.repair = RepairInput::Typing { manny_id: id, manny_name: name, buf: String::new(), error: None };
         }
-        MenuAction::Craft if can => {
-            if state.manny_craft_recipes().is_empty() {
+        MenuAction::Fabricate if can => {
+            if state.fabrication_recipes().is_empty() {
                 state.error = Some("recipes not loaded yet — F5 to refresh".into());
             } else {
-                state.craft = CraftInput::PickRecipe { manny_id: id, manny_name: name, selection: 0, error: None };
+                state.fabrication = FabricationInput::PickRecipe {
+                    prefilled_manny: Some((id, name)),
+                    selection: 0,
+                    error: None,
+                };
             }
         }
         MenuAction::Mine => {

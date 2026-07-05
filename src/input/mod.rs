@@ -4,8 +4,8 @@ use tokio::sync::mpsc;
 use crate::api::client::ApiClient;
 use crate::api::tasks::fetch_sector;
 use crate::app::{
-    AlertsInput, ApiMessage, AppState, AtomicPrinterCraftInput, ContainerRulesInput,
-    CraftInput, DeployInput, DetachInput, DropCargoInput,
+    AlertsInput, ApiMessage, AppState, ContainerRulesInput,
+    FabricationInput, DeployInput, DetachInput, DropCargoInput,
     DropStorageContainerInput, InspectInput, JettisonInput, MindSnapshotInput, MineInput,
     MessagesInput, MissionsInput, ObjectActionInput, RecallInput, RecoverInput, RefuelInput,
     RemoteMineInput, RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode,
@@ -34,7 +34,7 @@ use cockpit::handle_cockpit_event;
 use containers::{
     handle_container_rules_event, handle_rename_container_event,
 };
-use craft::{handle_atomic_printer_craft_event, handle_craft_event};
+use craft::handle_fabrication_event;
 use geometry::face_d2;
 use jettison::handle_jettison_event;
 use command::handle_command_event;
@@ -68,8 +68,7 @@ type WizardHandler = fn(KeyCode, &mut AppState, &ApiClient, &mpsc::Sender<ApiMes
 #[allow(clippy::type_complexity)]
 const WIZARD_INPUTS: &[(WizardGuard, WizardHandler)] = &[
     (|s| !matches!(s.jettison, JettisonInput::Inactive), handle_jettison_event),
-    (|s| !matches!(s.craft, CraftInput::Inactive), handle_craft_event),
-    (|s| !matches!(s.atomic_printer_craft, AtomicPrinterCraftInput::Inactive), handle_atomic_printer_craft_event),
+    (|s| !matches!(s.fabrication, FabricationInput::Inactive), handle_fabrication_event),
     (|s| !matches!(s.salvage, SalvageInput::Inactive), handle_salvage_event),
     (|s| !matches!(s.recall, RecallInput::Inactive), handle_recall_event),
     (|s| !matches!(s.refuel, RefuelInput::Inactive), handle_refuel_event),
@@ -343,5 +342,54 @@ mod tests {
         }
         press(&mut state, KeyCode::Esc);
         assert!(matches!(state.salvage, SalvageInput::Inactive), "Esc closes the picker");
+    }
+
+    fn idle_onboard_manny(id: &str) -> crate::api::types::Manny {
+        serde_json::from_str(&format!(r#"{{
+            "id": "{id}", "name": "{id}",
+            "location": {{"type": "probe", "sector": null}},
+            "currentTask": null, "taskProgressPercent": 0.0,
+            "cargo": {{"capacity": 0.3, "deuterium": 0.0, "metals": 0.0, "ice": 0.0, "organicCompounds": 0.0}},
+            "canReceiveOrders": true, "taskEstimatedEndTime": null
+        }}"#)).unwrap()
+    }
+
+    fn manny_recipe(id: &str) -> crate::api::types::CraftingRecipe {
+        serde_json::from_str(&format!(r#"{{"id":"{id}","name":"{id}","craftableBy":["manny"],
+            "ingredients":[],"durationSeconds":60,
+            "output":{{"type":"x","name":"X","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}}}"#)).unwrap()
+    }
+
+    #[tokio::test]
+    async fn fabricate_manny_recipe_advances_to_builder_pick_when_several_idle() {
+        use crate::app::FabricationInput;
+        let mut state = AppState::default();
+        state.recipes = vec![manny_recipe("solar_panel")];
+        state.mannies = Some(vec![idle_onboard_manny("m1"), idle_onboard_manny("m2")]);
+        state.fabrication = FabricationInput::PickRecipe { prefilled_manny: None, selection: 0, error: None };
+        press(&mut state, KeyCode::Enter);
+        match &state.fabrication {
+            FabricationInput::PickBuilder { recipe_id, mannies, .. } => {
+                assert_eq!(recipe_id, "solar_panel");
+                assert_eq!(mannies.len(), 2, "both idle mannies offered as builders");
+            }
+            _ => panic!("manny recipe with 2 idle mannies must open the builder picker"),
+        }
+    }
+
+    #[tokio::test]
+    async fn fabricate_manny_recipe_errors_when_no_idle_manny() {
+        use crate::app::FabricationInput;
+        let mut state = AppState::default();
+        state.recipes = vec![manny_recipe("solar_panel")];
+        state.mannies = Some(vec![]);
+        state.fabrication = FabricationInput::PickRecipe { prefilled_manny: None, selection: 0, error: None };
+        press(&mut state, KeyCode::Enter);
+        match &state.fabrication {
+            FabricationInput::PickRecipe { error, .. } => {
+                assert!(error.as_deref().unwrap_or("").contains("no idle Manny"), "surfaces the no-manny error");
+            }
+            _ => panic!("stays on the recipe step with an error"),
+        }
     }
 }
