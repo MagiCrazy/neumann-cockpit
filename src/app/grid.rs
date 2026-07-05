@@ -358,6 +358,7 @@ impl super::AppState {
         parts.push("z zoom");
         parts.push("ertdfgcvb pane");
         parts.push("F1 hints");
+        parts.push("? help");
         parts.join(" · ")
     }
 
@@ -493,9 +494,11 @@ mod tests {
     fn pane_hints_are_contextual() {
         let mut s = crate::app::AppState::default();
 
-        // Probe has no list → no movement hint.
+        // Probe has no list → no movement hint. Help is always advertised.
         s.active_pane = Pane::Probe;
-        assert!(!s.pane_hints().contains("jk move"));
+        let probe_h = s.pane_hints();
+        assert!(!probe_h.contains("jk move"));
+        assert!(probe_h.contains("? help"), "the help key is always shown");
 
         // Missions at root offers drill-in, not "back".
         s.active_pane = Pane::Missions;
