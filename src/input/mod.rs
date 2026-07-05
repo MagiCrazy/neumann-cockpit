@@ -392,4 +392,40 @@ mod tests {
             _ => panic!("stays on the recipe step with an error"),
         }
     }
+
+    #[tokio::test]
+    async fn scut_inspect_from_probe_menu_opens_picker() {
+        use crate::app::{Pane, ScutNetworkInput};
+        let mut state = AppState::default();
+        state.active_pane = Pane::Probe;
+        // Two SCUT networks cover the current sector (first scan, no probe sector).
+        state.scan_history = vec![serde_json::from_str(r#"{
+            "relativeCoordinates":{"x":0,"y":0,"z":0},"distance":0,
+            "knowledgeLevel":"detailed","confidence":1.0,
+            "scutNetworks":[{"id":1,"name":"Alpha"},{"id":2,"name":"Beta"}],
+            "scan":{"currentSectorResidenceSeconds":60,"requiredResidenceSeconds":60,"scanQuality":1.0}
+        }"#).unwrap()];
+        press(&mut state, KeyCode::Enter); // open the Probe context menu
+        press(&mut state, KeyCode::Enter); // fire the first enabled item (Inspect SCUT network…)
+        match &state.scut_network {
+            ScutNetworkInput::Picking { networks, .. } => assert_eq!(networks.len(), 2, "both networks offered"),
+            _ => panic!("two networks should open the picker"),
+        }
+    }
+
+    #[tokio::test]
+    async fn scut_inspect_single_network_goes_straight_to_view() {
+        use crate::app::{Pane, ScutNetworkInput};
+        let mut state = AppState::default();
+        state.active_pane = Pane::Probe;
+        state.scan_history = vec![serde_json::from_str(r#"{
+            "relativeCoordinates":{"x":0,"y":0,"z":0},"distance":0,
+            "knowledgeLevel":"detailed","confidence":1.0,
+            "scutNetworks":[{"id":7,"name":"Solo"}],
+            "scan":{"currentSectorResidenceSeconds":60,"requiredResidenceSeconds":60,"scanQuality":1.0}
+        }"#).unwrap()];
+        press(&mut state, KeyCode::Enter);
+        press(&mut state, KeyCode::Enter);
+        assert!(matches!(state.scut_network, ScutNetworkInput::Viewing { .. }), "a single network views directly");
+    }
 }

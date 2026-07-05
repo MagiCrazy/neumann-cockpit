@@ -123,18 +123,18 @@ The four reused panels (Probe / Inventory / Scanner / Mannies) keep their intern
 
 **Overlays** (wizards, rendered on top of the grid; launched from the contextual menu or the reused panels):
 - **Mannies pane menu** (`Enter`) — Fabricate, Mine, Repair, Salvage, Inspect, Recover/Detach container, Refill deuterium, Drop cargo, Recall/Abandon, Rename. Each launches its wizard (`*Input`). Fabricate opens the unified catalog with the selected Manny pre-chosen as builder. Remote mine (SCUT-reachable manny) fetches the manny's sector first, then picks asteroid → resources/amount → mandatory detached container. Recall on a SCUT-remote manny is labelled **abandon**.
-- **Inventory pane menu** (`Enter`) — Fabricate, Jettison, Move stock. Fabricate opens the unified catalog with no builder pre-chosen.
+- **Inventory pane menu** (`Enter`) — Fabricate, Move stock, Jettison, and **Deploy waypoint…** (only when a `waypoint_bookmark` is held; picks the installing Manny → sector target → name, firing `install-bookmark`). Fabricate opens the unified catalog with no builder pre-chosen.
 - **Missions pane** (`Enter`) — active-mission list with steps/status; abandon (confirmation).
 - **Comms pane** (`Enter`) — messaging inbox/sent (mark read, compose to a probe/planet recipient); alerts + damage-warnings live in the same pane.
 - **Storage pane** (`Enter`) — container browser with capacity bars; content view, rename, routing-rules editor (none → priority → exclusion → strict).
 - **Sector pane** (`Enter` on an object) — object-action picker (mine / inspect / salvage / recover / deploy waypoint); an inactive `scut_relay` offers **turn on relay** (needs a star + integrated_circuit) and salvage.
 - **Map pane** — compact summary; `z` opens the full isometric map (pan `hjkl`, `g` travel to the centred sector, `c` coordinate center). `Enter` menu: open map, **Travel to coordinates…**, **Jump to visited sector…** (picker over `visited_sectors`), **Waypoints…** (picker over bookmarks/stars/mineable targets). Scanner `Enter` also offers **Travel here** to the selected observation.
 - **Travel** wizard — coordinate input (absolute, or relative with a leading `+`), live parity check, fuel/ETA preview + confirmation. Launched from Map/Scanner or `:travel`.
-- **Mind-snapshot reassign** — only when the probe is dead or trapped by a black hole (`probe.alert`); reassigns the snapshot to a fresh probe (Probe pane `Enter`).
+- **Probe pane menu** (`Enter`) — **Inspect SCUT network…** (enabled when a SCUT relay covers the current sector; auto-views the sole network or picks among several via `scut-network/{id}`), plus **Reassign mind snapshot** only when the probe is dead or trapped by a black hole (`probe.alert`); reassigns the snapshot to a fresh probe.
 - **Command mode** (`:`) — `focus <pane>` · `travel <x y z|+dx dy dz>` · `goto <x y z>` · `filter <all|objects|minable|danger>` · `craft` · `refresh` · `theme <mode>` · `zoom` · `help` · `q`. `Tab` completes the verb; verbs live in `AppState::run_command` (`app/command.rs`).
 - Shared bits: `EndpointId` is an untagged int|string (probe id | planet object id). `Manny.taskVisibility` (`local` / `scut_network` / `too_far`) drives remote display (`≣ via SCUT` / `too far`).
 
-**Remaining follow-ups** (wizards that exist but still have no cockpit launcher): SCUT-network inspect and deploy-waypoint from Inventory. Everything else — Travel, the full isometric Map (`z` on the Map pane), Waypoints, mind-snapshot reassign, drop-storage-container, and command mode (`:`) — is wired.
+**All wizards are now wired to a cockpit launcher** — Travel, the full isometric Map (`z` on the Map pane), Waypoints, mind-snapshot reassign, drop-storage-container, SCUT-network inspect (Probe pane), deploy-waypoint (Inventory pane), and command mode (`:`).
 
 ## Implemented API endpoints
 

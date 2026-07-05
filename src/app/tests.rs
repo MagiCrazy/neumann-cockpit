@@ -1352,8 +1352,22 @@ fn mannies_context_menu_reflects_manny_state() {
 #[test]
 fn context_menu_none_for_pane_without_actions() {
     let mut state = AppState::default();
-    state.active_pane = Pane::Probe;
+    // Comms uses its own rich overlay (inbox), not the contextual popup menu.
+    state.active_pane = Pane::Comms;
     assert!(state.build_context_menu().is_none());
+}
+
+#[test]
+fn probe_menu_offers_scut_inspect_disabled_without_coverage() {
+    let mut state = AppState::default();
+    state.active_pane = Pane::Probe;
+    let menu = state.build_context_menu().expect("probe menu now always present");
+    let item = menu
+        .items
+        .iter()
+        .find(|i| i.action == MenuAction::ScutInspect)
+        .expect("SCUT inspect offered");
+    assert!(!item.enabled && item.disabled_reason.is_some(), "no coverage → disabled with a reason");
 }
 
 #[test]
@@ -1364,6 +1378,28 @@ fn inventory_context_menu_present_but_disabled_when_empty() {
     assert_eq!(menu.items.len(), 3);
     // Nothing loaded → every action disabled with a reason.
     assert!(menu.items.iter().all(|i| !i.enabled && i.disabled_reason.is_some()));
+    // No bookmark held → no deploy-waypoint entry.
+    assert!(!menu.items.iter().any(|i| i.action == MenuAction::Deploy));
+}
+
+#[test]
+fn inventory_menu_offers_deploy_only_with_a_held_bookmark() {
+    let mut state = AppState::default();
+    state.active_pane = Pane::Inventory;
+    state.probe = Some(serde_json::from_str(r#"{
+        "id": 1, "name": "t", "status": "idle",
+        "fuel": {"deuterium": null}, "sensorMode": "normal",
+        "sector": null, "movement": null, "systems": null,
+        "inventory": {"capacity": 10.0, "usedCapacity": 1.0, "freeCapacity": 9.0,
+            "resourceStocks": [], "externalTanks": [], "containers": [],
+            "items": [{"id": "wp-1", "type": "waypoint_bookmark", "name": "Waypoint bookmark",
+                "containerSpace": 0.01, "currentTask": null, "taskProgressPercent": 0.0,
+                "location": {"type": "probe", "sector": null}, "cargo": null, "container": null}]}
+    }"#).unwrap());
+    let menu = state.build_context_menu().expect("inventory menu");
+    let deploy = menu.items.iter().find(|i| i.action == MenuAction::Deploy).expect("deploy offered");
+    // No idle manny / no sector target here → offered but disabled with a reason.
+    assert!(!deploy.enabled && deploy.disabled_reason.is_some());
 }
 
 // ── periodic auto-refresh gating ──────────────────────────────────────────

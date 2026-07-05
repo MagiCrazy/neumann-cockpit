@@ -25,8 +25,12 @@ pub enum MenuAction {
     // Inventory pane
     Jettison,
     MoveStock,
+    /// Deploy a waypoint bookmark from inventory onto a sector object.
+    Deploy,
     // Probe pane
     MindSnapshot,
+    /// Inspect the SCUT relay network covering the current sector.
+    ScutInspect,
     // Mannies pane (extra)
     DropStorageContainer,
     // Storage pane
@@ -223,25 +227,31 @@ impl super::AppState {
     }
 
     fn probe_context_menu(&self) -> Option<ContextMenu> {
-        // The only probe action is recovery, and only for a dead/trapped probe.
-        self.probe_terminal_alert()?;
-        Some(ContextMenu {
-            title: "PROBE".into(),
-            items: vec![MenuItem {
+        let has_scut = !self.scut_coverage().is_empty();
+        let mut items = vec![MenuItem {
+            action: MenuAction::ScutInspect,
+            label: "Inspect SCUT network…".into(),
+            enabled: has_scut,
+            disabled_reason: (!has_scut).then(|| "no SCUT network here".to_string()),
+        }];
+        // Mind-snapshot recovery only applies to a dead/trapped probe.
+        if self.probe_terminal_alert().is_some() {
+            items.push(MenuItem {
                 action: MenuAction::MindSnapshot,
                 label: "Reassign mind snapshot".into(),
                 enabled: true,
                 disabled_reason: None,
-            }],
-            cursor: 0,
-        })
+            });
+        }
+        let cursor = items.iter().position(|i| i.enabled).unwrap_or(0);
+        Some(ContextMenu { title: "PROBE".into(), items, cursor })
     }
 
     fn inventory_context_menu(&self) -> ContextMenu {
         let has_row = self.selected_inventory_row().is_some();
         let has_recipes = !self.recipes.is_empty();
         let idle_manny = !self.collect_idle_onboard_mannies().is_empty();
-        let items = vec![
+        let mut items = vec![
             MenuItem {
                 action: MenuAction::Fabricate,
                 label: "Fabricate…".into(),
@@ -261,6 +271,23 @@ impl super::AppState {
                 disabled_reason: (!has_row).then(|| "no item selected".to_string()),
             },
         ];
+        // Deploy waypoint — only when a bookmark is actually held; it needs an
+        // idle Manny to install it and a target object in the current sector.
+        if self.inventory_waypoint_bookmark_id().is_some() {
+            let has_target = !self.collect_deploy_candidates().is_empty();
+            items.push(MenuItem {
+                action: MenuAction::Deploy,
+                label: "Deploy waypoint…".into(),
+                enabled: idle_manny && has_target,
+                disabled_reason: if !idle_manny {
+                    Some("no idle manny".to_string())
+                } else if !has_target {
+                    Some("no target in sector".to_string())
+                } else {
+                    None
+                },
+            });
+        }
         let cursor = items.iter().position(|i| i.enabled).unwrap_or(0);
         ContextMenu { title: "INVENTORY".into(), items, cursor }
     }
