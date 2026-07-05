@@ -10,7 +10,6 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io;
 use tokio::sync::mpsc;
 
-use neumann_cockpit::api::client::ApiClient;
 use neumann_cockpit::api::tasks::{
     fetch_all, fetch_api_version, fetch_crafting_recipes, fetch_mannies, fetch_messages,
     fetch_missions, fetch_sent_messages,
@@ -25,8 +24,8 @@ use neumann_cockpit::app::{
     RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScutNetworkInput,
     ScutRelayInput, StorageMoveInput,
 };
-use neumann_cockpit::config;
 use neumann_cockpit::input::handle_event;
+use neumann_cockpit::preflight;
 use neumann_cockpit::store;
 use neumann_cockpit::ui;
 
@@ -40,12 +39,11 @@ fn restore_terminal() -> io::Result<()> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let cfg = config::Config::load()?;
-    let hints = cfg.hints;
-    let boot = cfg.boot;
-    let color_mode = cfg.color_mode();
-    let client = ApiClient::new(cfg.base_url, cfg.api_key)?;
-
+    // Enter the alternate screen FIRST — before any fallible startup. A missing
+    // or keyless config used to error out of `main` before the terminal was set
+    // up, which on a double-clicked Windows binary flashed a console and
+    // vanished. Now the preflight screen is up first and every failure (and the
+    // first-run key onboarding) has an in-TUI outcome.
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     // No mouse capture: the cockpit handles no mouse events, and capturing would
@@ -65,7 +63,21 @@ async fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let result = run(&client, &mut terminal, hints, boot, color_mode).await;
+    // Preflight: config check + first-run onboarding, local archive migration,
+    // and the remote link check — all drawn in-screen.
+    let ready = match preflight::run(&mut terminal, ColorMode::default()).await {
+        Ok(preflight::Outcome::Ready(r)) => *r,
+        Ok(preflight::Outcome::Quit) => {
+            restore_terminal()?;
+            return Ok(());
+        }
+        Err(e) => {
+            restore_terminal()?;
+            return Err(e);
+        }
+    };
+
+    let result = run(&mut terminal, ready).await;
 
     restore_terminal()?;
 
@@ -73,30 +85,27 @@ async fn main() -> Result<()> {
 }
 
 async fn run(
-    client: &ApiClient,
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
-    hints: bool,
-    boot: bool,
-    color_mode: ColorMode,
+    ready: preflight::Ready,
 ) -> Result<()> {
+    let preflight::Ready { config, client, conn, scan_history, api_version, link_ok } = ready;
     let (tx, mut rx) = mpsc::channel::<ApiMessage>(32);
     let mut state = AppState {
-        hints_visible: hints,
-        color_mode,
-        booting: boot,
+        hints_visible: config.hints,
+        color_mode: config.color_mode(),
+        booting: config.boot,
+        scan_history,
+        api_version,
         ..Default::default()
     };
-    // Local SQLite store: load the scan history and get a writer handle. On any
-    // DB error we start with an empty history (like the old corrupt-JSON path)
-    // and simply don't persist.
-    let persist_tx = match store::open(&config::db_path()) {
-        Ok(mut conn) => {
-            let _ = store::migrate_legacy_json(&mut conn, &config::history_path());
-            state.scan_history = store::load_observations(&conn);
-            Some(store::spawn_writer(conn))
-        }
-        Err(_) => None,
-    };
+    // The remote link was already probed in the preflight; surface a down link
+    // straight away so the pilot sees why data is missing (F5 retries).
+    if !link_ok {
+        state.set_error("remote link down — press F5 to retry".into());
+    }
+    // The persistence writer takes the connection opened during preflight; on a
+    // DB error there we run without persistence (history already empty).
+    let persist_tx = conn.map(store::spawn_writer);
     let mut events = EventStream::new();
 
     // Short-lived tick that drives the boot assembly; runs only while booting.
@@ -122,7 +131,7 @@ async fn run(
 
         tokio::select! {
             Some(event) = events.next() => {
-                handle_event(event?, &mut state, client, &tx);
+                handle_event(event?, &mut state, &client, &tx);
             }
 
             _ = boot_tick.tick(), if state.booting => {

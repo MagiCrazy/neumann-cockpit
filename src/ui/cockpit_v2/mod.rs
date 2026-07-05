@@ -7,7 +7,7 @@
 //! colours until they get cockpit-native renderers); the five promoted panes
 //! use the compact renderers in [`panes`].
 
-mod grid;
+pub(crate) mod grid;
 mod menu;
 mod panes;
 
@@ -249,8 +249,11 @@ fn render_status_line(frame: &mut Frame, area: Rect, state: &AppState, p: Palett
         }
     }
     // An error takes over the line until dismissed; otherwise a success toast.
+    // Keep the leading gap in a plain span — `crit_style()` is REVERSED in the
+    // mono palettes, which would otherwise highlight the spaces before the mark.
     if let Some(err) = &state.error {
-        left.push(Span::styled(format!("  ✗ {err}"), p.crit_style()));
+        left.push(Span::styled("  ", Style::default()));
+        left.push(Span::styled(format!("✗ {err}"), p.crit_style()));
     } else if let Some(toast) = state.active_toast() {
         left.push(Span::styled(format!("  ✓ {toast}"), Style::default().fg(p.good)));
     }

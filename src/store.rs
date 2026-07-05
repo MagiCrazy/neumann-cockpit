@@ -46,6 +46,17 @@ pub enum PersistMsg {
     UpsertObservation(SectorObservation),
 }
 
+/// What `migrate_legacy_json` did, so the boot preflight can report it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MigrationOutcome {
+    /// The table already had rows — no import, JSON left untouched.
+    AlreadyMigrated,
+    /// No legacy `scan_history.json` to import (fresh install or already gone).
+    NoLegacyFile,
+    /// Imported N observations from the JSON, then removed the file.
+    Imported(usize),
+}
+
 /// Open (creating if needed) the cockpit database and ensure the schema.
 pub fn open(path: &Path) -> rusqlite::Result<Connection> {
     if let Some(parent) = path.parent() {
@@ -129,16 +140,16 @@ pub fn load_observations(conn: &Connection) -> Vec<SectorObservation> {
 /// TEMPORARY: legacy migration, scheduled for removal — see issue #134.
 /// The `legacy_migration_removal_reminder` test fails the build after
 /// 2027-01-01 so this can't be forgotten.
-pub fn migrate_legacy_json(conn: &mut Connection, json_path: &Path) -> rusqlite::Result<()> {
+pub fn migrate_legacy_json(conn: &mut Connection, json_path: &Path) -> rusqlite::Result<MigrationOutcome> {
     let count: i64 = conn
         .query_row("SELECT COUNT(*) FROM sector_observations", [], |r| r.get(0))
         .unwrap_or(0);
     if count > 0 {
-        return Ok(());
+        return Ok(MigrationOutcome::AlreadyMigrated);
     }
-    let Ok(data) = std::fs::read(json_path) else { return Ok(()) };
+    let Ok(data) = std::fs::read(json_path) else { return Ok(MigrationOutcome::NoLegacyFile) };
     let Ok(history) = serde_json::from_slice::<Vec<SectorObservation>>(&data) else {
-        return Ok(());
+        return Ok(MigrationOutcome::NoLegacyFile);
     };
     let tx = conn.transaction()?;
     for obs in &history {
@@ -148,7 +159,7 @@ pub fn migrate_legacy_json(conn: &mut Connection, json_path: &Path) -> rusqlite:
     // Import committed — retire the legacy file. Failure to remove is harmless
     // (next launch sees a non-empty table and skips).
     let _ = std::fs::remove_file(json_path);
-    Ok(())
+    Ok(MigrationOutcome::Imported(history.len()))
 }
 
 /// Spawn the writer thread, taking ownership of the connection, and return the
@@ -237,7 +248,7 @@ mod tests {
         let path = std::env::temp_dir().join("nc_migrate_import_test.json");
         let history = vec![obs(1.0, 1.0, 1.0), obs(2.0, 2.0, 2.0)];
         std::fs::write(&path, serde_json::to_vec(&history).unwrap()).unwrap();
-        migrate_legacy_json(&mut conn, &path).unwrap();
+        assert_eq!(migrate_legacy_json(&mut conn, &path).unwrap(), MigrationOutcome::Imported(2));
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM sector_observations", [], |r| r.get(0))
             .unwrap();
@@ -251,7 +262,7 @@ mod tests {
         upsert_observation(&conn, &obs(9.0, 9.0, 9.0)).unwrap();
         let path = std::env::temp_dir().join("nc_migrate_skip_test.json");
         std::fs::write(&path, serde_json::to_vec(&vec![obs(1.0, 1.0, 1.0)]).unwrap()).unwrap();
-        migrate_legacy_json(&mut conn, &path).unwrap();
+        assert_eq!(migrate_legacy_json(&mut conn, &path).unwrap(), MigrationOutcome::AlreadyMigrated);
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM sector_observations", [], |r| r.get(0))
             .unwrap();
