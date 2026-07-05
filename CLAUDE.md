@@ -130,7 +130,7 @@ The four reused panels (Probe / Inventory / Scanner / Mannies) keep their intern
 - **Sector pane** (`Enter` on an object) — object-action picker (mine / inspect / salvage / recover / deploy waypoint); an inactive `scut_relay` offers **turn on relay** (needs a star + integrated_circuit) and salvage.
 - **Map pane** — compact summary; `z` opens the full isometric map (pan `hjkl`, `g` travel to the centred sector, `c` coordinate center). `Enter` menu: open map, **Travel to coordinates…**, **Jump to visited sector…** (picker over `visited_sectors`), **Waypoints…** (picker over bookmarks/stars/mineable targets). Scanner `Enter` also offers **Travel here** to the selected observation.
 - **Travel** wizard — coordinate input (absolute, or relative with a leading `+`), live parity check, fuel/ETA preview + confirmation. Launched from Map/Scanner or `:travel`.
-- **Probe pane menu** (`Enter`) — **Inspect SCUT network…** (enabled when a SCUT relay covers the current sector; auto-views the sole network or picks among several via `scut-network/{id}`), plus **Reassign mind snapshot** only when the probe is dead or trapped by a black hole (`probe.alert`); reassigns the snapshot to a fresh probe.
+- **Probe pane menu** (`Enter`) — **Inspect SCUT network…** (enabled when a SCUT relay covers the current sector; auto-views the sole network or picks among several via `scut-network/{id}`), **Improve probe…** (enabled when an unlocked, not-yet-done improvement exists; two-panel catalog → resolve the installing Manny → `improve-probe`), plus **Reassign mind snapshot** only when the probe is dead or trapped by a black hole (`probe.alert`); reassigns the snapshot to a fresh probe. Improvements are fetched in `fetch_all` (`ProbeImprovement`).
 - **Command mode** (`:`) — `focus <pane>` · `travel <x y z|+dx dy dz>` · `goto <x y z>` · `filter <all|objects|minable|danger>` · `craft` · `refresh` · `theme <mode>` · `zoom` · `help` · `q`. `Tab` completes the verb; verbs live in `AppState::run_command` (`app/command.rs`).
 - Shared bits: `EndpointId` is an untagged int|string (probe id | planet object id). `Manny.taskVisibility` (`local` / `scut_network` / `too_far`) drives remote display (`≣ via SCUT` / `too far`).
 
@@ -153,6 +153,8 @@ The four reused panels (Probe / Inventory / Scanner / Mannies) keep their intern
 | `/api/probe/mannies/{id}/repair` | POST | ✓ |
 | `/api/probe/mannies/{id}/mine` | POST | ✓ |
 | `/api/probe/mannies/{id}/craft` | POST | ✓ |
+| `/api/probe/mannies/{id}/improve-probe` | POST | ✓ |
+| `/api/probe/probe-improvements-available` | GET | ✓ |
 | `/api/probe/mannies/{id}/salvage` | POST | ✓ |
 | `/api/probe/mannies/{id}/recall` | POST | ✓ |
 | `/api/probe/mannies/{id}` | PATCH | ✓ (rename) |

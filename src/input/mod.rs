@@ -9,8 +9,8 @@ use crate::app::{
     DropStorageContainerInput, InspectInput, JettisonInput, MindSnapshotInput, MineInput,
     MessagesInput, MissionsInput, ObjectActionInput, RecallInput, RecoverInput, RefuelInput,
     RemoteMineInput, RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode,
-    GotoVisitedInput, InputMode, ScutNetworkInput, ScutRelayInput, StorageMoveInput, TravelInput,
-    WaypointsInput,
+    GotoVisitedInput, ImproveInput, InputMode, ScutNetworkInput, ScutRelayInput, StorageMoveInput,
+    TravelInput, WaypointsInput,
 };
 mod alerts;
 mod cockpit;
@@ -18,6 +18,7 @@ mod command;
 mod containers;
 mod craft;
 mod geometry;
+mod improve;
 mod jettison;
 mod map;
 mod messages;
@@ -36,6 +37,7 @@ use containers::{
 };
 use craft::handle_fabrication_event;
 use geometry::face_d2;
+use improve::handle_improve_event;
 use jettison::handle_jettison_event;
 use command::handle_command_event;
 use map::{handle_goto_visited_event, handle_map_event};
@@ -69,6 +71,7 @@ type WizardHandler = fn(KeyCode, &mut AppState, &ApiClient, &mpsc::Sender<ApiMes
 const WIZARD_INPUTS: &[(WizardGuard, WizardHandler)] = &[
     (|s| !matches!(s.jettison, JettisonInput::Inactive), handle_jettison_event),
     (|s| !matches!(s.fabrication, FabricationInput::Inactive), handle_fabrication_event),
+    (|s| !matches!(s.improve, ImproveInput::Inactive), handle_improve_event),
     (|s| !matches!(s.salvage, SalvageInput::Inactive), handle_salvage_event),
     (|s| !matches!(s.recall, RecallInput::Inactive), handle_recall_event),
     (|s| !matches!(s.refuel, RefuelInput::Inactive), handle_refuel_event),
@@ -427,5 +430,22 @@ mod tests {
         press(&mut state, KeyCode::Enter);
         press(&mut state, KeyCode::Enter);
         assert!(matches!(state.scut_network, ScutNetworkInput::Viewing { .. }), "a single network views directly");
+    }
+
+    #[tokio::test]
+    async fn improve_from_probe_menu_opens_the_picker() {
+        use crate::app::{ImproveInput, Pane};
+        let mut state = AppState::default();
+        state.active_pane = Pane::Probe;
+        state.probe_improvements = vec![serde_json::from_str(
+            r#"{"id":"deuterium_compression","name":"Deuterium compression","description":"d",
+                "available":true,"done":false,"durationSeconds":300,"ingredients":[],"effects":null}"#,
+        ).unwrap()];
+        press(&mut state, KeyCode::Enter); // open the Probe menu (Improve is the first enabled item)
+        press(&mut state, KeyCode::Enter); // fire it
+        assert!(
+            matches!(state.improve, ImproveInput::PickImprovement { .. }),
+            "an orderable improvement opens the picker"
+        );
     }
 }

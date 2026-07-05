@@ -212,6 +212,25 @@ pub enum Fabricator {
     Manny,
 }
 
+/// Probe-improvement wizard (API v67+): pick an improvement, then resolve which
+/// idle onboard Manny installs it (auto when a single one, else `PickBuilder`).
+#[derive(Default)]
+pub enum ImproveInput {
+    #[default]
+    Inactive,
+    PickImprovement {
+        selection: usize,
+        error: Option<String>,
+    },
+    PickBuilder {
+        improvement_id: String,
+        improvement_name: String,
+        mannies: Vec<(String, String)>, // (id, name)
+        selection: usize,
+        error: Option<String>,
+    },
+}
+
 /// Unified fabrication wizard: a single item-first catalog spanning both the
 /// atomic printer and Manny craft. `PickRecipe` lists every recipe sectioned by
 /// fabricator; selecting a Manny recipe with no pre-chosen builder advances to

@@ -2,7 +2,7 @@ use neumann_cockpit::api::types::{
     AlertPhase, AlertStatus, AlertType, ContainerInventory, CraftingRecipe, DamageWarningRule,
     DataFreshness, KnowledgeLevel, Manny, MannyLocationType, MannyTask, Mission, MissionStatus,
     EndpointId, MannyTaskVisibility, MessageStatus, MissionStepStatus, MovementPhase, Probe,
-    ProbeMessage, ScutNetwork, ScutRelayStatus, SectorObject,
+    ProbeImprovement, ProbeMessage, ScutNetwork, ScutRelayStatus, SectorObject,
     ProbeAlert, ProbeInventory, ProbeMovement, ProbeStatus, SectorObjectType, SectorObservation,
     SensorMode, StorageContainer,
 };
@@ -794,4 +794,25 @@ fn alert_manny_report_with_payload() {
     assert_eq!(a.phase, AlertPhase::MannyReport);
     let report = a.report.expect("report payload");
     assert_eq!(report.object_id.as_deref(), Some("dc-1"));
+}
+
+// ── ProbeImprovement (API v67+) ────────────────────────────────────────────────
+
+#[test]
+fn probe_improvement_deserializes() {
+    let imp: ProbeImprovement = deser(
+        r#"{"id":"deuterium_compression","name":"Deuterium compression",
+            "description":"Compresses the tank to hold 200% fuel.",
+            "available":true,"done":false,"durationSeconds":300,
+            "ingredients":[
+                {"type":"electric_motor","quantity":1,"unit":"item","kind":"item"},
+                {"type":"steel_bar","quantity":2,"unit":"item","kind":"item"}],
+            "effects":{"maxDeuteriumPercent":200}}"#,
+    );
+    assert_eq!(imp.id, "deuterium_compression");
+    assert!(imp.available && !imp.done);
+    assert_eq!(imp.duration_seconds, 300);
+    assert_eq!(imp.ingredients.len(), 2);
+    assert_eq!(imp.ingredients[0].ingredient_type, "electric_motor");
+    assert!(imp.effects.is_some());
 }

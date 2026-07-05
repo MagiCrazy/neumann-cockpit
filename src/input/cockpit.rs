@@ -16,7 +16,7 @@ use crate::api::tasks::{
 };
 use crate::api::types::{MannyTask, MannyTaskVisibility};
 use crate::app::{
-    ApiMessage, AppState, DeployInput, FabricationInput, DetachInput, DropCargoInput,
+    ApiMessage, AppState, DeployInput, FabricationInput, ImproveInput, DetachInput, DropCargoInput,
     CommandLine, DropStorageContainerInput, DrillLevel, InputMode, InspectInput, MenuAction,
     MessagesInput,
     MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput, Pane, RecallInput, RecoverInput,
@@ -280,6 +280,14 @@ fn fire_menu_action(
                     fetch_scut_network(nets[0].0, client.clone(), tx.clone());
                 }
                 _ => state.scut_network = ScutNetworkInput::Picking { networks: nets, selection: 0 },
+            }
+            return;
+        }
+        MenuAction::Improve => {
+            if state.has_orderable_improvement() {
+                state.improve = ImproveInput::PickImprovement { selection: 0, error: None };
+            } else {
+                state.error = Some("no probe improvement available".into());
             }
             return;
         }

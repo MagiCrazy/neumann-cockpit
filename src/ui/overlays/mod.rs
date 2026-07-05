@@ -3,6 +3,7 @@ pub(crate) mod containers;
 pub(crate) mod craft;
 pub(crate) mod drop_container;
 pub(crate) mod help;
+pub(crate) mod improve;
 pub(crate) mod inventory_detail;
 pub(crate) mod jettison;
 pub(crate) mod map;
@@ -22,6 +23,7 @@ pub(crate) mod waypoints;
 pub(crate) use alerts::render_alerts_overlay;
 pub(crate) use containers::{render_container_rules_overlay, render_rename_container_overlay};
 pub(crate) use craft::render_fabrication_overlay;
+pub(crate) use improve::render_improve_overlay;
 pub(crate) use drop_container::render_drop_container_overlay;
 pub(crate) use help::{help_row_count, render_help_overlay};
 pub(crate) use inventory_detail::render_inventory_detail_overlay;
@@ -46,7 +48,7 @@ pub(crate) use travel::render_travel_overlay;
 pub(crate) use waypoints::render_waypoints_overlay;
 
 use crate::app::{
-    AlertsInput, AppState, ContainerRulesInput, FabricationInput, DeployInput,
+    AlertsInput, AppState, ContainerRulesInput, FabricationInput, ImproveInput, DeployInput,
     DetachInput, DropCargoInput, DropStorageContainerInput, GotoVisitedInput, InspectInput,
     JettisonInput, MessagesInput, MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput,
     RecallInput, RecoverInput, RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput,
@@ -80,6 +82,7 @@ const WIZARD_OVERLAYS: &[(OverlayGuard, OverlayRender)] = &[
     (|s| !matches!(s.remote_mine, RemoteMineInput::Inactive), render_remote_mine_overlay),
     (|s| !matches!(s.jettison, JettisonInput::Inactive), render_jettison_overlay),
     (|s| !matches!(s.fabrication, FabricationInput::Inactive), render_fabrication_overlay),
+    (|s| !matches!(s.improve, ImproveInput::Inactive), render_improve_overlay),
     (|s| !matches!(s.salvage, SalvageInput::Inactive), render_salvage_overlay),
     (|s| !matches!(s.recall, RecallInput::Inactive), render_recall_overlay),
     (|s| !matches!(s.refuel, RefuelInput::Inactive), render_refuel_overlay),

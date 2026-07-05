@@ -1,7 +1,7 @@
 use crate::api::types::{
     ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, Mission, Probe, ProbeAlert,
-    ProbeInventory, ProbeMessage, ProbeMovement, ProbeSentMessage, ScutNetwork, SectorObservation,
-    StorageContainer, VisitedSector,
+    ProbeImprovement, ProbeInventory, ProbeMessage, ProbeMovement, ProbeSentMessage, ScutNetwork,
+    SectorObservation, StorageContainer, VisitedSector,
 };
 
 pub enum ApiMessage {
@@ -30,6 +30,9 @@ pub enum ApiMessage {
     AtomicPrinterCraftStarted,
     AtomicPrinterCraftError(String),
     RecipesFetched(Vec<CraftingRecipe>),
+    ProbeImprovementsFetched(Vec<ProbeImprovement>),
+    ImproveProbeStarted,
+    ImproveProbeError(String),
     RenameMannyDone(Manny),
     RenameMannyError(String),
     InspectStarted,

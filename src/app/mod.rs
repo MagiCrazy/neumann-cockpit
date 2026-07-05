@@ -29,8 +29,8 @@ pub use waypoints::*;
 
 use crate::api::types::{
     ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, Mission, Probe,
-    ProbeAlert, ProbeInventory, ProbeMessage, ProbeSentMessage, ScutNetwork, SectorObservation,
-    StorageContainer, VisitedSector,
+    ProbeAlert, ProbeImprovement, ProbeInventory, ProbeMessage, ProbeSentMessage, ScutNetwork,
+    SectorObservation, StorageContainer, VisitedSector,
 };
 use chrono::{DateTime, Local, Utc};
 use tokio::time::Instant;
@@ -99,6 +99,7 @@ pub struct AppState {
     pub remote_mine: RemoteMineInput,
     pub jettison: JettisonInput,
     pub fabrication: FabricationInput,
+    pub improve: ImproveInput,
     pub salvage: SalvageInput,
     pub recall: RecallInput,
     pub refuel: RefuelInput,
@@ -119,6 +120,7 @@ pub struct AppState {
     pub map: MapView,
     pub api_version: Option<u32>,
     pub recipes: Vec<CraftingRecipe>,
+    pub probe_improvements: Vec<ProbeImprovement>,
     // ── Cockpit v2 (bloc U1) ────────────────────────────────────────────
     /// Active pane in the 3×3 grid (defaults to `Probe`, the centre).
     pub active_pane: Pane,
