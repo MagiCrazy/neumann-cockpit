@@ -62,10 +62,10 @@ const RIGHT: &[Section] = &[
     (
         "Actions per pane (Enter)",
         &[
-            ("Mannies", "mine, craft, repair, salvage,"),
+            ("Mannies", "mine, fabricate, repair, salvage,"),
             ("", "inspect, recover, detach, refuel,"),
             ("", "drop cargo, recall/abandon, rename"),
-            ("Inventory", "jettison, atomic craft, move stock"),
+            ("Inventory", "fabricate, jettison, move stock"),
             ("Missions", "browse steps, abandon"),
             ("Comms", "messages inbox/sent/compose, alerts"),
             ("Storage", "rename, rules, recover, detach, move"),
@@ -81,6 +81,7 @@ const RIGHT: &[Section] = &[
             (":travel", "<x y z | +dx dy dz>"),
             (":goto", "<x y z> — center the map"),
             (":filter", "<all|objects|minable|danger>"),
+            (":craft", "open the fabrication catalog"),
             (":theme", "<mono-green|mono-amber|…>"),
             (":refresh", "reload all data"),
             (":zoom", "toggle zoom"),

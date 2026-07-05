@@ -16,7 +16,7 @@ use neumann_cockpit::api::tasks::{
     fetch_missions, fetch_sent_messages,
 };
 use neumann_cockpit::app::{
-    ApiMessage, AppState, AtomicPrinterCraftInput, ColorMode, ContainerRulesInput, CraftInput,
+    ApiMessage, AppState, ColorMode, ContainerRulesInput, FabricationInput,
     DeployInput,
     DetachInput, DropCargoInput, DropStorageContainerInput, InspectInput, JettisonInput,
     MessagesInput, MindSnapshotInput, MineInput, MissionsInput, RecallInput, RecoverInput,
@@ -202,11 +202,11 @@ async fn run(
                     }
                     ApiMessage::JettisonError(e) => state.set_jettison_error(e),
                     ApiMessage::CraftStarted => {
-                        state.craft = CraftInput::Inactive;
+                        state.fabrication = FabricationInput::Inactive;
                         state.set_toast("craft order sent");
                         fetch_mannies(client.clone(), tx.clone());
                     }
-                    ApiMessage::CraftError(e) => state.set_craft_error(e),
+                    ApiMessage::CraftError(e) => state.set_fabrication_error(e),
                     ApiMessage::SalvageStarted => {
                         state.salvage = SalvageInput::Inactive;
                         state.set_toast("salvage order sent");
@@ -276,11 +276,11 @@ async fn run(
                     }
                     ApiMessage::DeployError(e) => state.set_deploy_error(e),
                     ApiMessage::AtomicPrinterCraftStarted => {
-                        state.atomic_printer_craft = AtomicPrinterCraftInput::Inactive;
+                        state.fabrication = FabricationInput::Inactive;
                         state.set_toast("atomic printer craft started");
                         fetch_all(client.clone(), tx.clone());
                     }
-                    ApiMessage::AtomicPrinterCraftError(e) => state.set_atomic_printer_craft_error(e),
+                    ApiMessage::AtomicPrinterCraftError(e) => state.set_fabrication_error(e),
                     ApiMessage::RecipesFetched(recipes) => state.recipes = recipes,
                     ApiMessage::InspectStarted => {
                         state.inspect = InspectInput::Inactive;

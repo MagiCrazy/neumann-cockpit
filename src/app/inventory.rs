@@ -187,6 +187,16 @@ impl AppState {
             .collect()
     }
 
+    /// The unified fabrication catalog: every recipe paired with its fabricator,
+    /// atomic-printer recipes first then Manny recipes — the display and
+    /// selection order of the fabrication wizard. A recipe craftable by both
+    /// fabricators appears once per section (either route is valid).
+    pub fn fabrication_recipes(&self) -> Vec<(Fabricator, &CraftingRecipe)> {
+        self.atomic_printer_recipes().into_iter().map(|r| (Fabricator::AtomicPrinter, r))
+            .chain(self.manny_craft_recipes().into_iter().map(|r| (Fabricator::Manny, r)))
+            .collect()
+    }
+
     /// How much of a recipe ingredient the probe inventory holds: a unit count
     /// for `item` ingredients, or the resource stock amount (ECE) otherwise.
     pub fn recipe_ingredient_have(&self, ing: &CraftingRecipeIngredient) -> f64 {
