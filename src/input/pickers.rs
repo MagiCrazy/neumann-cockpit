@@ -286,7 +286,7 @@ pub(super) fn handle_inspect_event(
     client: &ApiClient,
     tx: &mpsc::Sender<ApiMessage>,
 ) {
-    if let InspectInput::PickAsteroid { selection, candidates, .. } = &mut state.inspect {
+    if let InspectInput::PickTarget { selection, candidates, .. } = &mut state.inspect {
         if list_move(code, selection, candidates.len()) {
             return;
         }
@@ -295,7 +295,7 @@ pub(super) fn handle_inspect_event(
         KeyCode::Esc => state.inspect = InspectInput::Inactive,
         KeyCode::Enter => {
             let (manny_id, object_id) = {
-                let InspectInput::PickAsteroid { ref manny_id, ref candidates, selection, .. } = state.inspect else { return };
+                let InspectInput::PickTarget { ref manny_id, ref candidates, selection, .. } = state.inspect else { return };
                 (manny_id.clone(), candidates[selection].0.clone())
             };
             fetch_inspect(manny_id, object_id, client.clone(), tx.clone());

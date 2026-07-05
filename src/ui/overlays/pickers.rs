@@ -396,12 +396,12 @@ pub(crate) fn render_deploy_overlay(frame: &mut Frame, area: Rect, state: &AppSt
 
 pub(crate) fn render_inspect_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let InspectInput::PickAsteroid { ref manny_name, ref candidates, selection, ref error, .. } = state.inspect else { return };
+    let InspectInput::PickTarget { ref manny_name, ref candidates, selection, ref error, .. } = state.inspect else { return };
     let names: Vec<&str> = candidates.iter().map(|(_, n)| n.as_str()).collect();
     let error_lines = if error.is_some() { 2u16 } else { 0 };
     let height = (candidates.len() as u16 + 6 + error_lines).min(18);
     render_pick_list(frame, area, p, &format!(" INSPECT — {manny_name} "), 52, height,
-        Some("Select asteroid to inspect:"), &names, selection, error.as_deref(), "INSPECT");
+        Some("Select object to inspect:"), &names, selection, error.as_deref(), "INSPECT");
 }
 
 pub(crate) fn render_recover_overlay(frame: &mut Frame, area: Rect, state: &AppState) {

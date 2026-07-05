@@ -509,7 +509,7 @@ pub enum JettisonInput {
 pub enum InspectInput {
     #[default]
     Inactive,
-    PickAsteroid {
+    PickTarget {
         manny_id: String,
         manny_name: String,
         candidates: Vec<(String, String)>,

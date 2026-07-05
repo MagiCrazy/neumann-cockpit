@@ -1156,8 +1156,28 @@ fn actions_for_object_by_kind() {
     assert_eq!(state.actions_for_object(&entries[1]), vec![ObjectAction::Mine]);
     // manny wreck: salvage
     assert_eq!(state.actions_for_object(&entries[2]), vec![ObjectAction::Salvage]);
-    // detached container: recover
-    assert_eq!(state.actions_for_object(&entries[3]), vec![ObjectAction::Recover]);
+    // detached container: recover + inspect (API v65 lets a Manny inspect it)
+    assert_eq!(state.actions_for_object(&entries[3]), vec![ObjectAction::Recover, ObjectAction::Inspect]);
+}
+
+#[test]
+fn dormant_construct_offers_inspect() {
+    let mut state = AppState::default();
+    state.probe = Some(probe_at(0., 0., 0.));
+    state.scan_history = vec![make_sector_with_objects(0., 0., 0., r#"[
+        {"id": "dc-1", "type": "dormant_construct", "name": "Relic",
+         "estimated": null, "summary": null, "mass": null, "massUnit": null,
+         "radius": null, "radiusUnit": null, "dangerLevel": null, "salvageable": null,
+         "mannyState": null, "mannyUid": null, "cargo": null, "itemType": null,
+         "quantity": null, "containerSpace": null, "mode": null, "targetObjectId": null,
+         "capacity": null, "capacityUnit": null,
+         "minableTargets": null, "waypointBookmarks": [], "bookmarkTargets": []}
+    ]"#)];
+    let entries = state.scanner_objects();
+    assert_eq!(state.actions_for_object(&entries[0]), vec![ObjectAction::Inspect]);
+    // …and it shows up as an inspectable candidate for the Mannies-pane flow.
+    let cands = state.collect_inspectable_candidates();
+    assert!(cands.iter().any(|(id, _)| id == "dc-1"), "dormant construct is inspectable");
 }
 
 #[test]
