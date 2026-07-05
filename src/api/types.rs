@@ -66,6 +66,8 @@ pub enum MannyTask {
     InstallingWaypointBookmark,
     DetachingStorageContainer,
     InspectingAsteroid,
+    InspectingSectorObject,
+    ImprovingProbe,
     Returning,
     WaitingForSpace,
     MovingStockage,
@@ -166,6 +168,7 @@ pub struct ResourceStockContainerLine {
 #[serde(rename_all = "camelCase")]
 pub struct MannyCargo {
     pub capacity: f64,
+    pub capacity_unit: Option<String>,
     pub deuterium: f64,
     pub metals: f64,
     pub ice: f64,
@@ -285,6 +288,7 @@ pub enum AlertType {
     IntelligentLife,
     SectorObjectDetected,
     AnomalyDetected,
+    MannyReport,
     #[serde(other)]
     Unknown,
 }
@@ -305,6 +309,7 @@ pub enum AlertPhase {
     DecelerationStart,
     Arrival,
     Detection,
+    MannyReport,
     #[serde(other)]
     Unknown,
 }
@@ -343,6 +348,16 @@ pub struct AlertObjectRef {
     pub resource_types: Vec<String>,
 }
 
+/// A Manny inspection report attached to a `manny_report` warning (API v70).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AlertReportRef {
+    pub title: Option<String>,
+    pub object_id: Option<String>,
+    pub object_type: Option<String>,
+    pub object_label: Option<String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AlertSector {
@@ -364,6 +379,8 @@ pub struct ProbeAlert {
     pub risk: Option<AlertRisk>,
     pub planet: Option<AlertPlanetRef>,
     pub object: Option<AlertObjectRef>,
+    /// Manny report payload (API v70 `manny_report` warnings).
+    pub report: Option<AlertReportRef>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
     pub read_at: Option<DateTime<Utc>>,
@@ -531,8 +548,11 @@ pub struct ProbeMessage {
     pub recipient: ProbeMessageEndpoint,
     pub body: String,
     pub status: MessageStatus,
+    /// Relative sector the message was emitted from (API v71).
+    pub sector: Option<ProbeSector>,
     pub read_at: Option<String>,
     pub created_at: String,
+    pub updated_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -542,7 +562,10 @@ pub struct ProbeSentMessage {
     pub sender: ProbeMessageEndpoint,
     pub recipient: ProbeMessageEndpoint,
     pub body: String,
+    /// Relative sector the message was emitted from (API v71).
+    pub sector: Option<ProbeSector>,
     pub created_at: String,
+    pub updated_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -650,6 +673,7 @@ pub enum SectorObjectType {
     DetachedContainer,
     DeuteriumRefuelStation,
     ScutRelay,
+    DormantConstruct,
     #[serde(other)]
     Unknown,
 }
@@ -768,9 +792,17 @@ pub struct SectorObject {
     pub capacity: Option<f64>,
     pub capacity_unit: Option<String>,
     pub minable_targets: Option<Vec<MinableTarget>>,
+    /// Home planet of a deuterium refuel station (API v71).
+    pub planet_id: Option<String>,
+    pub planet_name: Option<String>,
+    /// Dormant-construct descriptors, revealed by inspection (API v64/v70).
+    pub apparent_origin: Option<String>,
+    pub activity_status: Option<String>,
+    pub known_function: Option<String>,
     // SCUT relay objects (present only when object_type == ScutRelay).
     pub status: Option<ScutRelayStatus>,
     pub coverage_radius_sectors: Option<i64>,
+    pub created_by_probe_id: Option<i64>,
     pub created_by_probe_name: Option<String>,
     pub activated_at: Option<String>,
     pub network: Option<ScutNetworkReference>,

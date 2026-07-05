@@ -758,3 +758,40 @@ fn mission_with_steps_deserializes() {
     assert_eq!(m.steps[0].status, MissionStepStatus::Pending);
     assert_eq!(m.steps[1].status, MissionStepStatus::Completed);
 }
+
+// ── API v71 drift: new enum variants must not fall back to Unknown ─────────────
+
+#[test]
+fn manny_task_v71_variants() {
+    let improving = MANNY_MINING_JSON.replace("\"mining\"", "\"improving_probe\"");
+    assert_eq!(deser::<Manny>(&improving).current_task, Some(MannyTask::ImprovingProbe));
+    let inspecting = MANNY_MINING_JSON.replace("\"mining\"", "\"inspecting_sector_object\"");
+    assert_eq!(
+        deser::<Manny>(&inspecting).current_task,
+        Some(MannyTask::InspectingSectorObject)
+    );
+}
+
+#[test]
+fn sector_object_dormant_construct() {
+    let o: SectorObject = deser(
+        r#"{"id":"dc-1","type":"dormant_construct","name":"Relic",
+            "apparentOrigin":"unknown","activityStatus":"dormant","knownFunction":null}"#,
+    );
+    assert_eq!(o.object_type, SectorObjectType::DormantConstruct);
+    assert_eq!(o.apparent_origin.as_deref(), Some("unknown"));
+    assert_eq!(o.activity_status.as_deref(), Some("dormant"));
+}
+
+#[test]
+fn alert_manny_report_with_payload() {
+    let a: ProbeAlert = deser(
+        r#"{"id":7,"type":"manny_report","status":"unread","message":"Report in.",
+            "phase":"manny_report","scheduledAt":null,
+            "report":{"title":"Manny report","objectId":"dc-1","objectType":"dormant_construct","objectLabel":null}}"#,
+    );
+    assert_eq!(a.alert_type, AlertType::MannyReport);
+    assert_eq!(a.phase, AlertPhase::MannyReport);
+    let report = a.report.expect("report payload");
+    assert_eq!(report.object_id.as_deref(), Some("dc-1"));
+}
