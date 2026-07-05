@@ -142,8 +142,19 @@ impl AppState {
     /// carbon_compounds). Looks up a top-level object or a nested mining target
     /// by id. `None` when the object isn't in the current sector scan.
     pub fn minable_target_reserves(&self, object_id: &str) -> Option<([bool; 4], [f64; 4])> {
+        Self::reserves_in(self.current_sector()?, object_id)
+    }
+
+    /// Same lookup as [`minable_target_reserves`] but against the probe's actual
+    /// current sector rather than the displayed history entry — used by the mine
+    /// wizard, which targets the probe's sector regardless of what's on screen.
+    pub fn probe_minable_reserves(&self, object_id: &str) -> Option<([bool; 4], [f64; 4])> {
+        Self::reserves_in(self.probe_current_sector_scan()?, object_id)
+    }
+
+    fn reserves_in(sector: &SectorObservation, object_id: &str) -> Option<([bool; 4], [f64; 4])> {
         use crate::api::types::ResourceShares;
-        let objs = self.current_sector()?.objects.as_ref()?;
+        let objs = sector.objects.as_ref()?;
         let build = |types: &[String], amt: Option<&ResourceShares>| {
             let has = |t: &str| types.iter().any(|x| x == t);
             let flags = [has("deuterium"), has("metals"), has("ice"), has("carbon_compounds")];

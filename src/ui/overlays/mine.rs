@@ -9,6 +9,29 @@ use ratatui::{
 
 use crate::ui::theme::{format_duration, palette};
 use super::{centered_rect, render_footer, render_pick_list, FooterKey, KeyTone};
+/// A mining-target picker row: `#n [name]  metals 1.20  ice 0.55 …`, listing
+/// each present resource (by its full label) with its remaining reserve when
+/// known.
+fn asteroid_label(state: &AppState, index: usize, id: &str, name: &str) -> String {
+    let mut label = format!("#{}", index + 1);
+    if name != "unnamed" {
+        label.push_str(&format!(" {name}"));
+    }
+    if let Some((flags, res)) = state.probe_minable_reserves(id) {
+        for (k, &res_label) in RESOURCE_LABELS.iter().enumerate() {
+            if !flags[k] {
+                continue;
+            }
+            if res[k] > 0.0 {
+                label.push_str(&format!("  {res_label} {:.2}", res[k]));
+            } else {
+                label.push_str(&format!("  {res_label}"));
+            }
+        }
+    }
+    label
+}
+
 pub(crate) fn estimate_mine_duration(target_amount: f64) -> (i64, i64) {
     const CARGO_CAP: f64 = 0.30;
     const TRAVEL_SECS: i64 = 1800; // 900s each way
@@ -30,9 +53,16 @@ pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppStat
     let p = palette(state.color_mode);
     match &state.mine {
         MineInput::PickAsteroid { manny_name, candidates, selection, .. } => {
-            let names: Vec<&str> = candidates.iter().map(|(_, n)| n.as_str()).collect();
+            // Asteroids are usually unnamed, so label each by index + its known
+            // resource content (like the Sector pane) instead of a bare name.
+            let labels: Vec<String> = candidates
+                .iter()
+                .enumerate()
+                .map(|(i, (id, name))| asteroid_label(state, i, id, name))
+                .collect();
+            let names: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
             let height = (candidates.len() as u16 + 6).min(16);
-            render_pick_list(frame, area, palette(state.color_mode), &format!(" MINE — {manny_name} "), 50, height,
+            render_pick_list(frame, area, palette(state.color_mode), &format!(" MINE — {manny_name} "), 62, height,
                 Some("Select mining target:"), &names, *selection, None, "confirm");
         }
 
@@ -186,3 +216,42 @@ pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppStat
     }
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::AppState;
+
+    fn state_with_targets() -> AppState {
+        let mut state = AppState::default();
+        state.probe = Some(serde_json::from_str(r#"{
+            "id":1,"name":"t","status":"idle","fuel":{"deuterium":null},"sensorMode":"normal",
+            "sector":{"relative":{"x":2,"y":0,"z":-2}},"movement":null,"systems":null,
+            "inventory":{"capacity":10.0,"usedCapacity":1.0,"freeCapacity":9.0,"resourceStocks":[],"externalTanks":[],"containers":[],"items":[]}
+        }"#).unwrap());
+        state.scan_history = vec![serde_json::from_str(r#"{
+            "relativeCoordinates":{"x":2,"y":0,"z":-2},"distance":0,"knowledgeLevel":"detailed","confidence":1.0,
+            "objects":[{"id":"planet-1","type":"planet","name":"P1","minableTargets":[
+                {"id":"ast-1","type":"asteroid","name":null,"resourceTypes":["deuterium","metals"],"resourceAmounts":{"deuterium":0.42,"metals":1.20,"ice":0.0,"carbonCompounds":0.0}},
+                {"id":"ast-3","type":"asteroid","name":"Big Rock","resourceTypes":["metals"],"resourceAmounts":null}
+            ]}],
+            "scan":{"currentSectorResidenceSeconds":60,"requiredResidenceSeconds":60,"scanQuality":1.0}
+        }"#).unwrap()];
+        state
+    }
+
+    #[test]
+    fn unnamed_asteroid_labelled_by_index_and_reserves() {
+        let state = state_with_targets();
+        let label = asteroid_label(&state, 0, "ast-1", "unnamed");
+        assert_eq!(label, "#1  deuterium 0.42  metals 1.20", "index + named per-resource reserves, no 'unnamed'");
+    }
+
+    #[test]
+    fn named_asteroid_keeps_its_name_and_lists_present_resources() {
+        let state = state_with_targets();
+        // No reserve amounts known → just the resource label.
+        let label = asteroid_label(&state, 2, "ast-3", "Big Rock");
+        assert_eq!(label, "#3 Big Rock  metals");
+    }
+}
