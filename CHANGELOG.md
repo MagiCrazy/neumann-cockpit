@@ -1,5 +1,13 @@
 # Changelog
 
+## [63.4.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v63.3.1...neumann-cockpit-v63.4.0) (2026-07-05)
+
+
+### Features
+
+* **boot:** in-TUI preflight with first-run API-key onboarding ([#156](https://github.com/MagiCrazy/neumann-cockpit/issues/156)) ([45f0f4b](https://github.com/MagiCrazy/neumann-cockpit/commit/45f0f4ba45af1fac67142eefa8546a1e1414a2fd))
+* **craft:** unify atomic printer and manny craft into one catalog ([#154](https://github.com/MagiCrazy/neumann-cockpit/issues/154)) ([b2b94c1](https://github.com/MagiCrazy/neumann-cockpit/commit/b2b94c181532ea931ac32970ce142434b8b756e6))
+
 ## [63.3.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v63.3.0...neumann-cockpit-v63.3.1) (2026-07-03)
 
 
