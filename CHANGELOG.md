@@ -1,5 +1,14 @@
 # Changelog
 
+## [63.5.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v63.4.0...neumann-cockpit-v63.5.0) (2026-07-05)
+
+
+### Features
+
+* **cockpit:** wire SCUT-network inspect and deploy-waypoint launchers ([#157](https://github.com/MagiCrazy/neumann-cockpit/issues/157)) ([e83fc59](https://github.com/MagiCrazy/neumann-cockpit/commit/e83fc59f53cbec86d979cfeceeed00a04130c882))
+* **hints:** advertise the ? help key in the hints line ([#159](https://github.com/MagiCrazy/neumann-cockpit/issues/159)) ([c2d391b](https://github.com/MagiCrazy/neumann-cockpit/commit/c2d391be86cb0ade874c8aea44b80caeeadac379))
+* **mine:** label asteroid picker by index and resource content ([#158](https://github.com/MagiCrazy/neumann-cockpit/issues/158)) ([fd0f66b](https://github.com/MagiCrazy/neumann-cockpit/commit/fd0f66b0e1590cf6d5d532ddfbb21e9de9eaa182))
+
 ## [63.4.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v63.3.1...neumann-cockpit-v63.4.0) (2026-07-05)
 
 
