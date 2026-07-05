@@ -1370,6 +1370,35 @@ fn probe_menu_offers_scut_inspect_disabled_without_coverage() {
     assert!(!item.enabled && item.disabled_reason.is_some(), "no coverage → disabled with a reason");
 }
 
+fn improvement(id: &str, available: bool, done: bool) -> crate::api::types::ProbeImprovement {
+    serde_json::from_str(&format!(
+        r#"{{"id":"{id}","name":"{id}","description":"d","available":{available},"done":{done},
+            "durationSeconds":300,"ingredients":[],"effects":null}}"#
+    )).unwrap()
+}
+
+#[test]
+fn has_orderable_improvement_gates_on_available_and_not_done() {
+    let mut state = AppState::default();
+    assert!(!state.has_orderable_improvement(), "none loaded");
+    state.probe_improvements = vec![improvement("deuterium_compression", false, false)];
+    assert!(!state.has_orderable_improvement(), "locked → not orderable");
+    state.probe_improvements = vec![improvement("deuterium_compression", true, true)];
+    assert!(!state.has_orderable_improvement(), "already done → not orderable");
+    state.probe_improvements = vec![improvement("deuterium_compression", true, false)];
+    assert!(state.has_orderable_improvement(), "unlocked and not done → orderable");
+}
+
+#[test]
+fn probe_menu_improve_enabled_only_with_an_orderable_improvement() {
+    let mut state = AppState::default();
+    state.active_pane = Pane::Probe;
+    state.probe_improvements = vec![improvement("deuterium_compression", true, false)];
+    let menu = state.build_context_menu().expect("probe menu");
+    let item = menu.items.iter().find(|i| i.action == MenuAction::Improve).expect("improve offered");
+    assert!(item.enabled, "orderable improvement → enabled");
+}
+
 #[test]
 fn inventory_context_menu_present_but_disabled_when_empty() {
     let mut state = AppState::default();

@@ -47,10 +47,35 @@ pub fn fetch_all(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
         }
     });
 
-    // Alerts + damage warnings + missions: non-fatal, same pattern as mannies/sector.
+    // Alerts + damage warnings + missions + probe improvements: non-fatal, same
+    // pattern as mannies/sector.
     fetch_alerts(client.clone(), tx.clone());
     fetch_missions(client.clone(), tx.clone());
+    fetch_probe_improvements(client.clone(), tx.clone());
     fetch_damage_warnings(client, tx);
+}
+
+pub fn fetch_probe_improvements(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    tokio::spawn(async move {
+        if let Ok(improvements) = client.get_probe_improvements().await {
+            let _ = tx.send(ApiMessage::ProbeImprovementsFetched(improvements)).await;
+        }
+    });
+}
+
+pub fn fetch_improve_probe(
+    manny_id: String,
+    improvement: String,
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+) {
+    tokio::spawn(async move {
+        let msg = match client.improve_probe(&manny_id, &improvement).await {
+            Ok(_) => ApiMessage::ImproveProbeStarted,
+            Err(e) => ApiMessage::ImproveProbeError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
 }
 
 pub fn fetch_missions(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {

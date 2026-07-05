@@ -84,6 +84,15 @@ impl AppState {
         }
     }
 
+    /// Surface a probe-improvement failure on whichever step is active.
+    pub fn set_improve_error(&mut self, msg: String) {
+        match self.improve {
+            ImproveInput::PickImprovement { ref mut error, .. } => *error = Some(msg),
+            ImproveInput::PickBuilder { ref mut error, .. } => *error = Some(msg),
+            ImproveInput::Inactive => {}
+        }
+    }
+
     pub fn set_salvage_error(&mut self, msg: String) {
         if let SalvageInput::Confirm { ref mut error, .. } = self.salvage {
             *error = Some(msg);

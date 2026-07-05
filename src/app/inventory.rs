@@ -218,6 +218,17 @@ impl AppState {
         recipe.ingredients.iter().all(|ing| self.recipe_ingredient_have(ing) >= ing.quantity)
     }
 
+    /// Whether every ingredient of a probe improvement is currently on hand.
+    pub fn improvement_affordable(&self, imp: &crate::api::types::ProbeImprovement) -> bool {
+        imp.ingredients.iter().all(|ing| self.recipe_ingredient_have(ing) >= ing.quantity)
+    }
+
+    /// Whether at least one probe improvement is installable right now (unlocked
+    /// and not already done) — gates the Probe pane's "Improve probe…" action.
+    pub fn has_orderable_improvement(&self) -> bool {
+        self.probe_improvements.iter().any(|i| i.available && !i.done)
+    }
+
     pub fn inventory_waypoint_bookmark_id(&self) -> Option<String> {
         self.probe.as_ref()?.inventory.items.iter()
             .find(|i| i.item_type == "waypoint_bookmark")

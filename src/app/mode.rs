@@ -31,6 +31,8 @@ pub enum MenuAction {
     MindSnapshot,
     /// Inspect the SCUT relay network covering the current sector.
     ScutInspect,
+    /// Install a probe improvement with an idle Manny.
+    Improve,
     // Mannies pane (extra)
     DropStorageContainer,
     // Storage pane
@@ -234,6 +236,14 @@ impl super::AppState {
             enabled: has_scut,
             disabled_reason: (!has_scut).then(|| "no SCUT network here".to_string()),
         }];
+        // Probe improvements — installable when one is unlocked and not done.
+        let can_improve = self.has_orderable_improvement();
+        items.push(MenuItem {
+            action: MenuAction::Improve,
+            label: "Improve probe…".into(),
+            enabled: can_improve,
+            disabled_reason: (!can_improve).then(|| "no improvement available".to_string()),
+        });
         // Mind-snapshot recovery only applies to a dead/trapped probe.
         if self.probe_terminal_alert().is_some() {
             items.push(MenuItem {

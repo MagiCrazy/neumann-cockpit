@@ -624,6 +624,26 @@ pub struct CraftingRecipe {
     pub output: CraftingRecipeOutput,
 }
 
+// ── Probe improvements (API v67+) ──────────────────────────────────────────────
+
+/// An installable probe upgrade (e.g. `deuterium_compression`). Built by an idle
+/// onboard Manny; `available` gates whether it is unlocked, `done` whether it is
+/// already installed. Ingredient shape matches `CraftingRecipeIngredient`.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeImprovement {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub available: bool,
+    pub done: bool,
+    pub duration_seconds: i64,
+    pub ingredients: Vec<CraftingRecipeIngredient>,
+    /// Free-form effect descriptors (e.g. `maxDeuteriumPercent`); the
+    /// description already summarizes them for display.
+    pub effects: Option<serde_json::Value>,
+}
+
 // ── Sector ────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

@@ -15,7 +15,7 @@ use neumann_cockpit::api::tasks::{
     fetch_missions, fetch_sent_messages,
 };
 use neumann_cockpit::app::{
-    ApiMessage, AppState, ColorMode, ContainerRulesInput, FabricationInput,
+    ApiMessage, AppState, ColorMode, ContainerRulesInput, FabricationInput, ImproveInput,
     DeployInput,
     DetachInput, DropCargoInput, DropStorageContainerInput, InspectInput, JettisonInput,
     MessagesInput, MindSnapshotInput, MineInput, MissionsInput, RecallInput, RecoverInput,
@@ -291,6 +291,15 @@ async fn run(
                     }
                     ApiMessage::AtomicPrinterCraftError(e) => state.set_fabrication_error(e),
                     ApiMessage::RecipesFetched(recipes) => state.recipes = recipes,
+                    ApiMessage::ProbeImprovementsFetched(improvements) => {
+                        state.probe_improvements = improvements;
+                    }
+                    ApiMessage::ImproveProbeStarted => {
+                        state.improve = ImproveInput::Inactive;
+                        state.set_toast("probe improvement started");
+                        fetch_all(client.clone(), tx.clone());
+                    }
+                    ApiMessage::ImproveProbeError(e) => state.set_improve_error(e),
                     ApiMessage::InspectStarted => {
                         state.inspect = InspectInput::Inactive;
                         state.set_toast("inspect order sent");

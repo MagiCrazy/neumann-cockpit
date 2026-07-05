@@ -1,7 +1,7 @@
 use super::types::{
     ContainerInventory, CraftingRecipe, DamageWarningRule, EndpointId, Manny, Mission, Pagination,
-    Probe, ProbeAlert, ProbeInventory, ProbeMessage, ProbeMovement, ProbeSentMessage, ScutNetwork,
-    SectorObservation, StorageContainer, VisitedSector,
+    Probe, ProbeAlert, ProbeImprovement, ProbeInventory, ProbeMessage, ProbeMovement,
+    ProbeSentMessage, ScutNetwork, SectorObservation, StorageContainer, VisitedSector,
 };
 use anyhow::{Context, Result};
 use reqwest::{Client, StatusCode, Url};
@@ -209,6 +209,21 @@ impl ApiClient {
         struct Resp { manny: Manny }
         let path = format!("/api/probe/mannies/{manny_id}/craft");
         Ok(self.post::<Resp, _>(&path, &Body { recipe }).await?.manny)
+    }
+
+    pub async fn get_probe_improvements(&self) -> Result<Vec<ProbeImprovement>> {
+        #[derive(Deserialize)]
+        struct Resp { improvements: Vec<ProbeImprovement> }
+        Ok(self.get::<Resp>("/api/probe/probe-improvements-available").await?.improvements)
+    }
+
+    pub async fn improve_probe(&self, manny_id: &str, improvement: &str) -> Result<Manny> {
+        #[derive(Serialize)]
+        struct Body<'a> { improvement: &'a str }
+        #[derive(Deserialize)]
+        struct Resp { manny: Manny }
+        let path = format!("/api/probe/mannies/{manny_id}/improve-probe");
+        Ok(self.post::<Resp, _>(&path, &Body { improvement }).await?.manny)
     }
 
     pub async fn get_sector(&self, x: i32, y: i32, z: i32) -> Result<SectorObservation> {
