@@ -190,6 +190,7 @@ pub(crate) fn object_color(t: &SectorObjectType, p: Palette) -> Color {
         SectorObjectType::BlackHole => p.crit,
         SectorObjectType::Manny | SectorObjectType::DeuteriumRefuelStation => p.good,
         SectorObjectType::DetachedContainer | SectorObjectType::ScutRelay => p.accent,
+        SectorObjectType::DormantConstruct => p.warn,
         SectorObjectType::Unknown => p.dim,
     }
 }
@@ -209,6 +210,7 @@ pub(crate) fn object_type_label(t: &SectorObjectType) -> &'static str {
         SectorObjectType::DetachedContainer => "container",
         SectorObjectType::DeuteriumRefuelStation => "fuel station",
         SectorObjectType::ScutRelay => "SCUT relay",
+        SectorObjectType::DormantConstruct => "dormant construct",
         SectorObjectType::Unknown => "object",
     }
 }
@@ -226,6 +228,7 @@ pub(crate) fn object_icon(t: &SectorObjectType) -> (&'static str, Color) {
         SectorObjectType::DetachedContainer => ("□", Color::Cyan),
         SectorObjectType::DeuteriumRefuelStation => ("⛽", Color::Green),
         SectorObjectType::ScutRelay => ("≣", Color::LightBlue),
+        SectorObjectType::DormantConstruct => ("⍟", Color::Yellow),
         SectorObjectType::Unknown => ("?", Color::DarkGray),
     }
 }

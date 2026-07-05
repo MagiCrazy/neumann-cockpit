@@ -17,6 +17,7 @@ fn alert_type_label(t: &AlertType) -> &'static str {
         AlertType::IntelligentLife => "intelligent life",
         AlertType::SectorObjectDetected => "object detected",
         AlertType::AnomalyDetected => "anomaly detected",
+        AlertType::MannyReport => "manny report",
         AlertType::Unknown => "alert",
     }
 }
@@ -28,6 +29,7 @@ fn type_color(t: &AlertType, p: Palette) -> Color {
         AlertType::IntelligentLife => p.accent,
         AlertType::SectorObjectDetected => p.warn,
         AlertType::AnomalyDetected => p.crit,
+        AlertType::MannyReport => p.good,
         AlertType::Unknown => p.text,
     }
 }

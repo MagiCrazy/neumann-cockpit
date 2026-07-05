@@ -66,6 +66,8 @@ pub(crate) fn manny_task_label(task: Option<&MannyTask>) -> &'static str {
         Some(MannyTask::InstallingWaypointBookmark) => "installing waypoint",
         Some(MannyTask::DetachingStorageContainer) => "detaching container",
         Some(MannyTask::InspectingAsteroid) => "inspecting",
+        Some(MannyTask::InspectingSectorObject) => "inspecting",
+        Some(MannyTask::ImprovingProbe) => "improving probe",
         Some(MannyTask::Returning) => "returning",
         Some(MannyTask::WaitingForSpace) => "waiting for space",
         Some(MannyTask::MovingStockage) => "moving cargo",
