@@ -624,6 +624,20 @@ pub struct CraftingRecipe {
     pub output: CraftingRecipeOutput,
 }
 
+/// A hidden artificial object revealed while a Manny mines an asteroid
+/// (API v46+). Currently always a detached storage container concealed on the
+/// asteroid; `object_id` is the recoverable container. Carried in the mining
+/// task payload as `artificialObjectDetected`.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtificialObjectDetection {
+    #[serde(rename = "type")]
+    pub object_type: String,
+    pub detection: String,
+    pub object_id: Option<String>,
+    pub target_object_id: Option<String>,
+}
+
 // ── Probe improvements (API v67+) ──────────────────────────────────────────────
 
 /// An installable probe upgrade (e.g. `deuterium_compression`). Built by an idle

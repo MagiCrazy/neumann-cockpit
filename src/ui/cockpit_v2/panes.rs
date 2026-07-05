@@ -12,7 +12,7 @@ use crate::api::types::{
 };
 use crate::app::{AppState, DrillLevel, Pane};
 use crate::ui::panels::mannies::{
-    manny_mining_detail, manny_task_eta, manny_task_label, manny_task_progress,
+    manny_artificial_detection, manny_mining_detail, manny_task_eta, manny_task_label, manny_task_progress,
 };
 use crate::ui::panels::scanner::{resource_shares_line, sector_object_lines};
 use crate::ui::theme::{
@@ -154,13 +154,20 @@ fn render_message_detail(frame: &mut Frame, area: Rect, state: &AppState, id: &s
         frame.render_widget(Paragraph::new(Line::styled("message not found", dim)), inner);
         return;
     };
-    let lines = vec![
+    let mut lines = vec![
         Line::from(vec![Span::styled("from ", dim), Span::styled(m.sender.name.clone(), Style::default().fg(p.text))]),
         Line::from(vec![Span::styled("to   ", dim), Span::styled(m.recipient.name.clone(), Style::default().fg(p.text))]),
-        Line::styled(m.created_at.clone(), dim),
-        Line::raw(""),
-        Line::styled(m.body.clone(), Style::default().fg(p.text)),
     ];
+    // Emission sector, when the API reports it (API v71).
+    if let Some(v) = m.sector.as_ref().and_then(|s| s.relative.as_ref()) {
+        lines.push(Line::from(vec![
+            Span::styled("at   ", dim),
+            Span::styled(format!("({}, {}, {})", v.x as i32, v.y as i32, v.z as i32), Style::default().fg(p.text)),
+        ]));
+    }
+    lines.push(Line::styled(m.created_at.clone(), dim));
+    lines.push(Line::raw(""));
+    lines.push(Line::styled(m.body.clone(), Style::default().fg(p.text)));
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
 }
 
@@ -629,6 +636,13 @@ fn manny_detail_lines(state: &AppState, m: &Manny, p: Palette) -> Vec<Line<'stat
             Span::styled(d.destination, text),
         ]));
     }
+    // A hidden container turned up by mining — flag it (recoverable).
+    if manny_artificial_detection(m).is_some() {
+        lines.push(Line::from(Span::styled(
+            "⚠ hidden container found",
+            Style::default().fg(p.warn).add_modifier(Modifier::BOLD),
+        )));
+    }
     match state.manny_sector_coords(m) {
         Some((x, y, z)) => lines.push(Line::from(vec![
             Span::styled("sector ", dim),
@@ -727,6 +741,12 @@ pub fn render_mannies_overview(frame: &mut Frame, area: Rect, state: &AppState, 
             }
             s.push_str(&format!(" → {}", d.destination));
             lines.push(Line::styled(s, dim));
+        }
+        if manny_artificial_detection(m).is_some() {
+            lines.push(Line::from(Span::styled(
+                "    ⚠ hidden container found",
+                Style::default().fg(p.warn),
+            )));
         }
 
         // Indented detail: cargo gauge, cargo breakdown, location.
