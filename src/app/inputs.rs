@@ -404,6 +404,8 @@ pub enum MessagesInput {
     Inactive,
     /// Browsing inbox (sent_tab=false) or sent (true); entries in AppState.
     Browsing { sent_tab: bool, selection: usize },
+    /// Reading one message full-screen (its full body + emission sector).
+    Reading { id: i64, sent_tab: bool },
     /// Picking a recipient for a new message (probes + planets in sector).
     PickRecipient {
         recipients: Vec<(String, EndpointId, String)>, // (kind, id, name)

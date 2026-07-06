@@ -11,12 +11,13 @@ use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
 use crate::api::tasks::{
-    fetch_all, fetch_inspect, fetch_messages, fetch_recover, fetch_scut_network, fetch_sector,
+    fetch_ack_alert, fetch_ack_damage_warning, fetch_alerts, fetch_all, fetch_damage_warnings,
+    fetch_inspect, fetch_messages, fetch_recover, fetch_scut_network, fetch_sector,
     fetch_sent_messages, fetch_storage_container_detail,
 };
 use crate::api::types::{MannyTask, MannyTaskVisibility};
 use crate::app::{
-    ApiMessage, AppState, DeployInput, FabricationInput, ImproveInput, DetachInput, DropCargoInput,
+    ApiMessage, AppState, CommsCategory, DeployInput, FabricationInput, ImproveInput, DetachInput, DropCargoInput,
     CommandLine, DropStorageContainerInput, DrillLevel, InputMode, InspectInput, MenuAction,
     MessagesInput,
     MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput, Pane, RecallInput, RecoverInput,
@@ -108,18 +109,55 @@ fn open_actions(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiM
                 state.missions_input = MissionsInput::Browsing { selection };
             }
         }
-        Pane::Comms => {
-            state.messages_input = MessagesInput::Browsing { sent_tab: false, selection: 0 };
-            fetch_messages(client.clone(), tx.clone());
-            fetch_sent_messages(client.clone(), tx.clone());
-        }
+        Pane::Comms => comms_activate(state, client, tx),
         Pane::Sector => open_sector_object_actions(state),
+    }
+}
+
+/// Comms activation, shared by `Enter` and `l`: at the root, pick a category
+/// (Messages opens its overlay; Alerts/Warnings drill into an in-pane list);
+/// inside Alerts/Warnings, acknowledge the selected entry.
+fn comms_activate(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
+    let cursor = state.pane_nav[Pane::Comms.index()].cursor;
+    match state.comms_drill() {
+        None => match CommsCategory::ALL.get(cursor) {
+            Some(CommsCategory::Messages) => {
+                state.messages_input = MessagesInput::Browsing { sent_tab: false, selection: 0 };
+                fetch_messages(client.clone(), tx.clone());
+                fetch_sent_messages(client.clone(), tx.clone());
+            }
+            Some(CommsCategory::Alerts) => {
+                state.comms_enter_category(CommsCategory::Alerts);
+                fetch_alerts(client.clone(), tx.clone());
+            }
+            Some(CommsCategory::Warnings) => {
+                state.comms_enter_category(CommsCategory::Warnings);
+                fetch_damage_warnings(client.clone(), tx.clone());
+            }
+            None => {}
+        },
+        Some(CommsCategory::Alerts) => {
+            if let Some(id) = state.alerts.get(cursor).map(|a| a.id) {
+                fetch_ack_alert(id, client.clone(), tx.clone());
+            }
+        }
+        Some(CommsCategory::Warnings) => {
+            if let Some(id) = state.damage_warnings.get(cursor).map(|w| w.id) {
+                fetch_ack_damage_warning(id, client.clone(), tx.clone());
+            }
+        }
+        Some(CommsCategory::Messages) => {}
     }
 }
 
 /// Drill into the selected element. For Storage, this fetches the container's
 /// contents so they can be rendered inline (no legacy content modal).
 fn drill_in(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
+    // Comms drives its own drill (categories → in-pane alert/warning lists).
+    if state.active_pane == Pane::Comms {
+        comms_activate(state, client, tx);
+        return;
+    }
     state.pane_drill_in();
     if state.active_pane == Pane::Storage {
         if let Some(DrillLevel::Container(id)) =

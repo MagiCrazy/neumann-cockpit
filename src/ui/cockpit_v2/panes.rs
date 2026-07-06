@@ -10,7 +10,7 @@ use crate::api::types::{
     Manny, MannyLocationType, MannyTaskVisibility, MissionStatus, MissionStepStatus, SectorObject,
     SectorObjectType,
 };
-use crate::app::{AppState, DrillLevel, Pane};
+use crate::app::{AppState, CommsCategory, DrillLevel, Pane};
 use crate::ui::panels::mannies::{
     manny_artificial_detection, manny_mining_detail, manny_task_eta, manny_task_label, manny_task_progress,
 };
@@ -105,70 +105,81 @@ pub fn render_map(frame: &mut Frame, area: Rect, state: &AppState, active: bool,
 }
 
 pub fn render_comms(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {
-    if let Some(DrillLevel::MessageThread(id)) = state.pane_nav[Pane::Comms.index()].drill.last() {
-        return render_message_detail(frame, area, state, id, active, p);
+    match state.comms_drill() {
+        Some(CommsCategory::Alerts) => {
+            render_comms_feed(frame, area, state, active, p, "ALERTS", &state.alerts);
+        }
+        Some(CommsCategory::Warnings) => {
+            render_comms_feed(frame, area, state, active, p, "WARNINGS", &state.damage_warnings);
+        }
+        _ => render_comms_root(frame, area, state, active, p),
     }
+}
+
+/// Comms root: the three categories with their totals + unread counts.
+fn render_comms_root(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {
     let dim = Style::default().fg(p.dim);
     let text = Style::default().fg(p.text);
-    let unread_alerts = state.unread_alert_count();
-    let unread_msgs = state.unread_message_count();
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled(format!("alerts {} ", state.alerts.len()), text),
-            Span::styled(format!("({unread_alerts} unread)"), dim),
-            Span::styled(format!("  warn {}", state.damage_warnings.len()), text),
-        ]),
-        Line::from(vec![
-            Span::styled(format!("messages {} ", state.messages.len()), text),
-            Span::styled(format!("({unread_msgs} unread)"), dim),
-        ]),
-        Line::raw(""),
-    ];
     let cur = cursor(state, Pane::Comms);
+    let rows = [
+        ("Messages", state.messages.len(), state.unread_message_count()),
+        ("Alerts", state.alerts.len(), state.unread_alert_count()),
+        ("Warnings", state.damage_warnings.len(), state.damage_warnings.iter().filter(|w| w.is_unread()).count()),
+    ];
+    let mut lines = Vec::new();
     let mut sel_line = None;
-    if state.messages.is_empty() {
-        lines.push(Line::styled("no messages", dim));
-    } else {
-        for (i, m) in state.messages.iter().enumerate() {
-            let unread = m.status == crate::api::types::MessageStatus::Unread;
-            let mark = if unread { "✉" } else { "·" };
-            let body: String = m.body.chars().take(18).collect();
-            if i == cur {
-                sel_line = Some(lines.len());
-            }
-            lines.push(Line::from(Span::styled(
-                format!("{mark} {}: {}", m.sender.name, body),
-                row_style(active, i == cur).patch(text),
-            )));
+    for (i, (label, total, unread)) in rows.iter().enumerate() {
+        if i == cur {
+            sel_line = Some(lines.len());
         }
+        let mut spans = vec![
+            Span::styled(format!("{label:<9} "), row_style(active, i == cur).patch(text)),
+            Span::styled(format!("{total}"), dim),
+        ];
+        if *unread > 0 {
+            spans.push(Span::styled(format!("  ({unread} unread)"), Style::default().fg(p.accent)));
+        }
+        lines.push(Line::from(spans));
     }
     render_body(frame, area, " COMMS ", active, p, lines, sel_line);
 }
 
-fn render_message_detail(frame: &mut Frame, area: Rect, state: &AppState, id: &str, active: bool, p: Palette) {
-    let block = pane_block(" MESSAGE ", active, p);
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+/// A drilled-in Comms feed (alerts or damage warnings): one compact row each,
+/// unread marked, scrolled to the cursor. `Enter` acknowledges the selected one.
+fn render_comms_feed(
+    frame: &mut Frame,
+    area: Rect,
+    state: &AppState,
+    active: bool,
+    p: Palette,
+    label: &str,
+    entries: &[crate::api::types::ProbeAlert],
+) {
     let dim = Style::default().fg(p.dim);
-    let Some(m) = state.messages.iter().find(|m| m.id.to_string() == id) else {
-        frame.render_widget(Paragraph::new(Line::styled("message not found", dim)), inner);
-        return;
-    };
-    let mut lines = vec![
-        Line::from(vec![Span::styled("from ", dim), Span::styled(m.sender.name.clone(), Style::default().fg(p.text))]),
-        Line::from(vec![Span::styled("to   ", dim), Span::styled(m.recipient.name.clone(), Style::default().fg(p.text))]),
-    ];
-    // Emission sector, when the API reports it (API v71).
-    if let Some(v) = m.sector.as_ref().and_then(|s| s.relative.as_ref()) {
+    let text = Style::default().fg(p.text);
+    let cur = cursor(state, Pane::Comms);
+    let mut lines = Vec::new();
+    let mut sel_line = None;
+    if entries.is_empty() {
+        lines.push(Line::styled(format!("no {}", label.to_lowercase()), dim));
+    }
+    for (i, a) in entries.iter().enumerate() {
+        if i == cur {
+            sel_line = Some(lines.len());
+        }
+        let unread = a.is_unread();
+        let (mark, mark_style) = if unread {
+            ("● ", Style::default().fg(p.accent))
+        } else {
+            ("○ ", dim)
+        };
+        let body_style = if unread { text } else { dim };
         lines.push(Line::from(vec![
-            Span::styled("at   ", dim),
-            Span::styled(format!("({}, {}, {})", v.x as i32, v.y as i32, v.z as i32), Style::default().fg(p.text)),
+            Span::styled(mark, mark_style),
+            Span::styled(a.message.clone(), row_style(active, i == cur).patch(body_style)),
         ]));
     }
-    lines.push(Line::styled(m.created_at.clone(), dim));
-    lines.push(Line::raw(""));
-    lines.push(Line::styled(m.body.clone(), Style::default().fg(p.text)));
-    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+    render_body(frame, area, &format!(" COMMS › {label} "), active, p, lines, sel_line);
 }
 
 pub fn render_sector(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {
@@ -909,3 +920,4 @@ mod tests {
         assert_eq!(scroll_offset(5, 10, 0), 0);
     }
 }
+

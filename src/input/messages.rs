@@ -30,11 +30,19 @@ pub(super) fn handle_messages_event(
                         state.messages_input = MessagesInput::Browsing { sent_tab, selection: new_sel };
                     }
                 }
-                KeyCode::Enter if !sent_tab => {
-                    if let Some(m) = state.messages.get(selection) {
-                        if m.status == crate::api::types::MessageStatus::Unread {
-                            fetch_mark_message_read(m.id, client.clone(), tx.clone());
-                        }
+                KeyCode::Enter => {
+                    let id = if sent_tab {
+                        state.sent_messages.get(selection).map(|m| m.id)
+                    } else {
+                        state.messages.get(selection).map(|m| {
+                            if m.status == crate::api::types::MessageStatus::Unread {
+                                fetch_mark_message_read(m.id, client.clone(), tx.clone());
+                            }
+                            m.id
+                        })
+                    };
+                    if let Some(id) = id {
+                        state.messages_input = MessagesInput::Reading { id, sent_tab };
                     }
                 }
                 KeyCode::Char('c') => {
@@ -46,6 +54,12 @@ pub(super) fn handle_messages_event(
                     }
                 }
                 _ => {}
+            }
+        }
+        MessagesInput::Reading { sent_tab, .. } => {
+            let sent_tab = *sent_tab;
+            if matches!(code, KeyCode::Esc | KeyCode::Char('h') | KeyCode::Left | KeyCode::Char('q')) {
+                state.messages_input = MessagesInput::Browsing { sent_tab, selection: 0 };
             }
         }
         MessagesInput::PickRecipient { recipients, selection } => {

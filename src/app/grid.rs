@@ -124,7 +124,30 @@ pub enum DrillLevel {
     ItemGroup(String),
     Manny(String),
     SectorObject(usize),
-    MessageThread(String),
+    /// Which category the Comms pane is drilled into.
+    CommsCat(CommsCategory),
+}
+
+/// The three sub-lists of the Comms pane, selectable at its root.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommsCategory {
+    Messages,
+    Alerts,
+    Warnings,
+}
+
+impl CommsCategory {
+    pub fn label(self) -> &'static str {
+        match self {
+            CommsCategory::Messages => "Messages",
+            CommsCategory::Alerts => "Alerts",
+            CommsCategory::Warnings => "Warnings",
+        }
+    }
+
+    /// Root-row order in the Comms pane.
+    pub const ALL: [CommsCategory; 3] =
+        [CommsCategory::Messages, CommsCategory::Alerts, CommsCategory::Warnings];
 }
 
 /// Per-pane navigation state: the cursor at the current level plus the
@@ -158,10 +181,13 @@ impl super::AppState {
     pub fn pane_item_count(&self, pane: Pane) -> usize {
         let drill = self.pane_nav[pane.index()].drill.last();
         match pane {
-            // Inside a message thread there is no list to move through.
+            // Root: three categories. Drilled into Alerts/Warnings: that list.
+            // (Messages open their own overlay, so no in-pane list there.)
             Pane::Comms => match drill {
-                Some(DrillLevel::MessageThread(_)) => 0,
-                _ => self.messages.len(),
+                None => CommsCategory::ALL.len(),
+                Some(DrillLevel::CommsCat(CommsCategory::Alerts)) => self.alerts.len(),
+                Some(DrillLevel::CommsCat(CommsCategory::Warnings)) => self.damage_warnings.len(),
+                _ => 0,
             },
             Pane::Sector => self.scanner_objects().len(),
             // Drilled into a mission, the cursor moves over its steps.
@@ -287,10 +313,7 @@ impl super::AppState {
         let cursor = self.pane_nav[idx].cursor;
         let level = match self.active_pane {
             Pane::Missions => self.missions.get(cursor).map(|m| DrillLevel::Mission(m.id.clone())),
-            Pane::Comms => self
-                .messages
-                .get(cursor)
-                .map(|m| DrillLevel::MessageThread(m.id.to_string())),
+            // Comms drives its own drill (categories) via `comms_activate`.
             Pane::Storage => self
                 .probe
                 .as_ref()
@@ -309,6 +332,22 @@ impl super::AppState {
             nav.drill.push(level);
             nav.cursor = 0;
         }
+    }
+
+    /// The Comms category currently drilled into, if any.
+    pub fn comms_drill(&self) -> Option<CommsCategory> {
+        match self.pane_nav[Pane::Comms.index()].drill.last() {
+            Some(DrillLevel::CommsCat(c)) => Some(*c),
+            _ => None,
+        }
+    }
+
+    /// Drill the Comms pane into a category (Alerts/Warnings render in-pane).
+    pub fn comms_enter_category(&mut self, cat: CommsCategory) {
+        let nav = &mut self.pane_nav[Pane::Comms.index()];
+        nav.drill.clear();
+        nav.drill.push(DrillLevel::CommsCat(cat));
+        nav.cursor = 0;
     }
 
     /// Ascend one drill level in the active pane. Returns true if a level was
@@ -372,11 +411,7 @@ impl super::AppState {
                     .iter()
                     .find(|m| &m.id == id)
                     .map_or_else(|| "mission".to_string(), |m| m.title.clone()),
-                DrillLevel::MessageThread(id) => self
-                    .messages
-                    .iter()
-                    .find(|m| m.id.to_string() == *id)
-                    .map_or_else(|| format!("msg {id}"), |m| m.sender.name.clone()),
+                DrillLevel::CommsCat(cat) => cat.label().to_string(),
                 DrillLevel::Container(id) => self
                     .storage_container(id)
                     .map_or_else(|| id.clone(), |c| c.label.clone()),
