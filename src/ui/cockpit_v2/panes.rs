@@ -116,19 +116,27 @@ pub fn render_comms(frame: &mut Frame, area: Rect, state: &AppState, active: boo
     }
 }
 
-/// Comms root: the three categories with their totals + unread counts.
+/// Comms root: each category shows its totals + unread count, plus a one-line
+/// preview of its most recent entry. Only the category header rows are
+/// selectable (the cursor drills the category); previews are decorative.
 fn render_comms_root(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {
     let dim = Style::default().fg(p.dim);
     let text = Style::default().fg(p.text);
     let cur = cursor(state, Pane::Comms);
+    let latest_msg = state.messages.first().map(|m| {
+        let icon = if m.status == crate::api::types::MessageStatus::Unread { "✉" } else { "·" };
+        format!("{icon} {}: {}", m.sender.name, comms_preview(&m.body))
+    });
+    let latest_alert = state.alerts.first().map(|a| format!("✱ {}", comms_preview(&a.message)));
+    let latest_warn = state.damage_warnings.first().map(|w| format!("⚠ {}", comms_preview(&w.message)));
     let rows = [
-        ("Messages", state.messages.len(), state.unread_message_count()),
-        ("Alerts", state.alerts.len(), state.unread_alert_count()),
-        ("Warnings", state.damage_warnings.len(), state.damage_warnings.iter().filter(|w| w.is_unread()).count()),
+        ("Messages", state.messages.len(), state.unread_message_count(), latest_msg),
+        ("Alerts", state.alerts.len(), state.unread_alert_count(), latest_alert),
+        ("Warnings", state.damage_warnings.len(), state.damage_warnings.iter().filter(|w| w.is_unread()).count(), latest_warn),
     ];
     let mut lines = Vec::new();
     let mut sel_line = None;
-    for (i, (label, total, unread)) in rows.iter().enumerate() {
+    for (i, (label, total, unread, preview)) in rows.iter().enumerate() {
         if i == cur {
             sel_line = Some(lines.len());
         }
@@ -140,8 +148,21 @@ fn render_comms_root(frame: &mut Frame, area: Rect, state: &AppState, active: bo
             spans.push(Span::styled(format!("  ({unread} unread)"), Style::default().fg(p.accent)));
         }
         lines.push(Line::from(spans));
+        // Preview of the most recent entry (dash when the category is empty).
+        let preview = preview.clone().unwrap_or_else(|| "—".to_string());
+        lines.push(Line::from(Span::styled(format!("  {preview}"), dim)));
     }
     render_body(frame, area, " COMMS ", active, p, lines, sel_line);
+}
+
+/// One-line preview: newlines flattened, truncated with an ellipsis.
+fn comms_preview(body: &str) -> String {
+    let one = body.replace('\n', " ");
+    if one.chars().count() > 28 {
+        format!("{}…", one.chars().take(28).collect::<String>())
+    } else {
+        one
+    }
 }
 
 /// A drilled-in Comms feed (alerts or damage warnings): one compact row each,
@@ -920,4 +941,5 @@ mod tests {
         assert_eq!(scroll_offset(5, 10, 0), 0);
     }
 }
+
 
