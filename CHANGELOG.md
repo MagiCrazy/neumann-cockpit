@@ -1,5 +1,18 @@
 # Changelog
 
+## [71.1.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v71.0.0...neumann-cockpit-v71.1.0) (2026-07-06)
+
+
+### Features
+
+* **comms:** view alerts & warnings inside the Comms pane ([#176](https://github.com/MagiCrazy/neumann-cockpit/issues/176)) ([bfd6ec8](https://github.com/MagiCrazy/neumann-cockpit/commit/bfd6ec83f822e84ff893f955947b54b50a5949d7))
+
+
+### Bug Fixes
+
+* **deps:** update rust crate directories to v6 ([#173](https://github.com/MagiCrazy/neumann-cockpit/issues/173)) ([7bc16d7](https://github.com/MagiCrazy/neumann-cockpit/commit/7bc16d7640a5ed519422b154cf3eddbbca375f59))
+* **deps:** update rust crate toml to v1 ([#174](https://github.com/MagiCrazy/neumann-cockpit/issues/174)) ([5902f5a](https://github.com/MagiCrazy/neumann-cockpit/commit/5902f5a94dbdc27baa1b08520e464675fc77276b))
+
 ## [71.0.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v63.5.0...neumann-cockpit-v71.0.0) (2026-07-05)
 
 
