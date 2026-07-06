@@ -433,6 +433,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn comms_root_enters_alerts_category_in_pane() {
+        use crate::app::{CommsCategory, Pane};
+        let mut state = AppState::default();
+        state.active_pane = Pane::Comms;
+        state.pane_nav[Pane::Comms.index()].cursor = 1; // Alerts row
+        press(&mut state, KeyCode::Enter);
+        assert_eq!(state.comms_drill(), Some(CommsCategory::Alerts), "drills into the Alerts list in-pane");
+        // `h` backs out to the category root.
+        press(&mut state, KeyCode::Char('h'));
+        assert_eq!(state.comms_drill(), None, "back to the Comms root");
+    }
+
+    #[tokio::test]
+    async fn comms_root_messages_opens_the_overlay() {
+        use crate::app::{MessagesInput, Pane};
+        let mut state = AppState::default();
+        state.active_pane = Pane::Comms;
+        state.pane_nav[Pane::Comms.index()].cursor = 0; // Messages row
+        press(&mut state, KeyCode::Enter);
+        assert!(matches!(state.messages_input, MessagesInput::Browsing { .. }), "Messages opens its overlay");
+    }
+
+    #[tokio::test]
     async fn improve_from_probe_menu_opens_the_picker() {
         use crate::app::{ImproveInput, Pane};
         let mut state = AppState::default();

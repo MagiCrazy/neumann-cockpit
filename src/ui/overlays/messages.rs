@@ -91,6 +91,47 @@ pub(crate) fn render_messages_overlay(frame: &mut Frame, area: Rect, state: &App
             ]);
         }
 
+        MessagesInput::Reading { id, sent_tab } => {
+            let msg = if *sent_tab {
+                state.sent_messages.iter().find(|m| m.id == *id).map(|m| (&m.sender, &m.recipient, &m.body, &m.sector, &m.created_at))
+            } else {
+                state.messages.iter().find(|m| m.id == *id).map(|m| (&m.sender, &m.recipient, &m.body, &m.sector, &m.created_at))
+            };
+            let popup = centered_rect(64, 16, area);
+            frame.render_widget(Clear, popup);
+            let block = Block::default()
+                .title(" MESSAGE ")
+                .title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(p.text));
+            let inner = block.inner(popup);
+            frame.render_widget(block, popup);
+            let rows = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(1), Constraint::Length(1)])
+                .split(inner);
+            let dim = Style::default().fg(p.dim);
+            let text = Style::default().fg(p.text);
+            let mut lines = Vec::new();
+            if let Some((sender, recipient, body, sector, created)) = msg {
+                lines.push(Line::from(vec![Span::styled("from ", dim), Span::styled(sender.name.clone(), text)]));
+                lines.push(Line::from(vec![Span::styled("to   ", dim), Span::styled(recipient.name.clone(), text)]));
+                if let Some(v) = sector.as_ref().and_then(|s| s.relative.as_ref()) {
+                    lines.push(Line::from(vec![
+                        Span::styled("at   ", dim),
+                        Span::styled(format!("({}, {}, {})", v.x as i32, v.y as i32, v.z as i32), text),
+                    ]));
+                }
+                lines.push(Line::styled(created.clone(), dim));
+                lines.push(Line::default());
+                lines.push(Line::styled(body.clone(), text));
+            } else {
+                lines.push(Line::styled("message not found", dim));
+            }
+            frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), rows[0]);
+            render_footer(frame, rows[1], p, &[FooterKey::nav("[Esc]", "back")]);
+        }
+
         MessagesInput::PickRecipient { recipients, selection } => {
             let names: Vec<String> = recipients.iter()
                 .map(|(kind, _, name)| format!("{name}  ({kind})"))

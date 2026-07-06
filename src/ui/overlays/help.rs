@@ -67,7 +67,7 @@ const RIGHT: &[Section] = &[
             ("", "drop cargo, recall/abandon, rename"),
             ("Inventory", "fabricate, jettison, move stock"),
             ("Missions", "browse steps, abandon"),
-            ("Comms", "messages inbox/sent/compose, alerts"),
+            ("Comms", "categories: messages, alerts, warnings"),
             ("Storage", "rename, rules, recover, detach, move"),
             ("Sector", "object actions: mine, inspect,"),
             ("", "salvage, recover, deploy, relay"),
