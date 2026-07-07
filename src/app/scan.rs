@@ -1,6 +1,10 @@
-use crate::api::types::{ScutRelayStatus, SectorObjectType, SectorObservation};
+use crate::api::types::{DangerLevel, ScutRelayStatus, SectorObjectType, SectorObservation};
 use chrono::Utc;
 use super::*;
+
+/// Reserves (presence flags + amounts, indexed as [`RESOURCE_TYPES`]) paired
+/// with the danger level for a sector object — the inputs a pick-row label needs.
+pub type ObjectPickInfo = (Option<([bool; 4], [f64; 4])>, Option<DangerLevel>);
 
 /// Cyclic filter applied to the scan history list ([f] in the scanner).
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
@@ -173,6 +177,40 @@ impl AppState {
             }
         }
         None
+    }
+
+    /// Danger level for an object in `sector`, matched by top-level id or by a
+    /// nested mining-target id (which inherits its parent object's danger).
+    /// `None` when the object is absent from the scan or carries no danger.
+    fn danger_in(sector: &SectorObservation, object_id: &str) -> Option<DangerLevel> {
+        let objs = sector.objects.as_ref()?;
+        for o in objs {
+            if o.id.as_deref() == Some(object_id)
+                || o.minable_targets.iter().flatten().any(|t| t.id == object_id)
+            {
+                return o.danger_level.clone();
+            }
+        }
+        None
+    }
+
+    /// Reserves + danger for an object id in the probe's current sector scan,
+    /// used by the shared pick-row label. `(None, None)` when not scanned.
+    pub fn probe_object_pick_info(&self, object_id: &str) -> ObjectPickInfo {
+        match self.probe_current_sector_scan() {
+            Some(s) => (Self::reserves_in(s, object_id), Self::danger_in(s, object_id)),
+            None => (None, None),
+        }
+    }
+
+    /// Same as [`probe_object_pick_info`] but for a specific sector by
+    /// coordinates — used by the remote-mine picker (asteroid in a SCUT-reachable
+    /// sector, not the probe's own).
+    pub fn sector_object_pick_info(&self, x: i32, y: i32, z: i32, object_id: &str) -> ObjectPickInfo {
+        match self.sector_observation_at(x, y, z) {
+            Some(s) => (Self::reserves_in(s, object_id), Self::danger_in(s, object_id)),
+            None => (None, None),
+        }
     }
 
     /// Max sensible mining amount for the selected resources: the sum of their

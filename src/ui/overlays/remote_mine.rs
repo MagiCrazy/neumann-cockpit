@@ -38,8 +38,10 @@ pub(crate) fn render_remote_mine_overlay(frame: &mut Frame, area: Rect, state: &
             render_footer(frame, rows[1], p, &[FooterKey::nav("[Esc]", "cancel")]);
         }
 
-        RemoteMineInput::PickAsteroid { manny_name, candidates, selection, .. } => {
-            let names: Vec<&str> = candidates.iter().map(|(_, n)| n.as_str()).collect();
+        RemoteMineInput::PickAsteroid { manny_name, candidates, selection, x, y, z, .. } => {
+            let labels: Vec<String> = candidates.iter().enumerate()
+                .map(|(i, (id, n))| super::sector_object_label(state, *x, *y, *z, i, id, n)).collect();
+            let names: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
             let height = (candidates.len() as u16 + 6).min(16);
             render_pick_list(
                 frame, area, palette(state.color_mode), &format!(" REMOTE MINE — {manny_name} "), 52, height,
