@@ -1,5 +1,12 @@
 # Changelog
 
+## [71.1.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v71.1.0...neumann-cockpit-v71.1.1) (2026-07-07)
+
+
+### Bug Fixes
+
+* **pickers:** show numbered asteroid rows with reserves and danger ([#177](https://github.com/MagiCrazy/neumann-cockpit/issues/177)) ([2163e80](https://github.com/MagiCrazy/neumann-cockpit/commit/2163e80f311f361bf6bc03a3e70836fc5ca9ab85))
+
 ## [71.1.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v71.0.0...neumann-cockpit-v71.1.0) (2026-07-06)
 
 
