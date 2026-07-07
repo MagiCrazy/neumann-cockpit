@@ -347,7 +347,9 @@ pub(crate) fn render_deploy_overlay(frame: &mut Frame, area: Rect, state: &AppSt
         }
 
         DeployInput::PickObject { candidates, selection, .. } => {
-            let names: Vec<&str> = candidates.iter().map(|(_, n)| n.as_str()).collect();
+            let labels: Vec<String> = candidates.iter().enumerate()
+                .map(|(i, (id, n))| super::probe_object_label(state, i, id, n)).collect();
+            let names: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
             let height = (candidates.len() as u16 + 6).min(18);
             render_pick_list(frame, area, p, " DEPLOY WAYPOINT ", 52, height,
                 None, &names, *selection, None, "confirm");
@@ -397,7 +399,9 @@ pub(crate) fn render_deploy_overlay(frame: &mut Frame, area: Rect, state: &AppSt
 pub(crate) fn render_inspect_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
     let InspectInput::PickTarget { ref manny_name, ref candidates, selection, ref error, .. } = state.inspect else { return };
-    let names: Vec<&str> = candidates.iter().map(|(_, n)| n.as_str()).collect();
+    let labels: Vec<String> = candidates.iter().enumerate()
+        .map(|(i, (id, n))| super::probe_object_label(state, i, id, n)).collect();
+    let names: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
     let error_lines = if error.is_some() { 2u16 } else { 0 };
     let height = (candidates.len() as u16 + 6 + error_lines).min(18);
     render_pick_list(frame, area, p, &format!(" INSPECT — {manny_name} "), 52, height,
@@ -432,7 +436,9 @@ pub(crate) fn render_detach_overlay(frame: &mut Frame, area: Rect, state: &AppSt
         }
 
         DetachInput::PickAsteroid { manny_name, container_name, asteroids, selection, error, .. } => {
-            let names: Vec<&str> = asteroids.iter().map(|(_, n)| n.as_str()).collect();
+            let labels: Vec<String> = asteroids.iter().enumerate()
+                .map(|(i, (id, n))| super::probe_object_label(state, i, id, n)).collect();
+            let names: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
             let height = (asteroids.len() as u16 + 8).min(18);
             let prompt = format!("Attach to asteroid  (manny: {manny_name})");
             render_pick_list(frame, area, p, &format!(" DETACH — hide {container_name} "), 52, height,

@@ -53,8 +53,9 @@ use crate::app::{
     JettisonInput, MessagesInput, MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput,
     RecallInput, RecoverInput, RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput,
     RepairInput, SalvageInput, ScanMode, ScutNetworkInput, ScutRelayInput, StorageMoveInput,
-    TravelInput, WaypointsInput,
+    TravelInput, WaypointsInput, RESOURCE_LABELS,
 };
+use crate::api::types::DangerLevel;
 use crate::ui::theme::{palette, Palette};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -193,6 +194,63 @@ pub(crate) fn render_footer(frame: &mut Frame, area: Rect, p: Palette, keys: &[F
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
+/// Format a sector-object pick row shared by every asteroid/object picker:
+/// `#n [name][ ⚠/☠]  metals 1.20  ice 0.55 …`. The name is dropped when it is a
+/// bare "unnamed" placeholder; danger and per-resource reserves are appended
+/// when known. Mirrors the Sector-pane object line so pickers read the same.
+pub(crate) fn object_pick_label(
+    index: usize,
+    name: &str,
+    reserves: Option<([bool; 4], [f64; 4])>,
+    danger: Option<&DangerLevel>,
+) -> String {
+    let mut label = format!("#{}", index + 1);
+    let name = name.trim();
+    if !name.is_empty() && name != "unnamed" {
+        label.push_str(&format!(" {name}"));
+    }
+    match danger {
+        Some(DangerLevel::Moderate) => label.push_str(" ⚠"),
+        Some(DangerLevel::Extreme) => label.push_str(" ☠"),
+        _ => {}
+    }
+    if let Some((flags, res)) = reserves {
+        for (k, &res_label) in RESOURCE_LABELS.iter().enumerate() {
+            if !flags[k] {
+                continue;
+            }
+            if res[k] > 0.0 {
+                label.push_str(&format!("  {res_label} {:.2}", res[k]));
+            } else {
+                label.push_str(&format!("  {res_label}"));
+            }
+        }
+    }
+    label
+}
+
+/// `object_pick_label` resolving reserves + danger from the probe's current
+/// sector — for pickers targeting objects here (mine, detach, inspect, deploy).
+pub(crate) fn probe_object_label(state: &AppState, index: usize, id: &str, name: &str) -> String {
+    let (reserves, danger) = state.probe_object_pick_info(id);
+    object_pick_label(index, name, reserves, danger.as_ref())
+}
+
+/// `object_pick_label` resolving from a specific sector by coordinates — for the
+/// remote-mine picker, whose asteroid lives in a SCUT-reachable sector.
+pub(crate) fn sector_object_label(
+    state: &AppState,
+    x: i32,
+    y: i32,
+    z: i32,
+    index: usize,
+    id: &str,
+    name: &str,
+) -> String {
+    let (reserves, danger) = state.sector_object_pick_info(x, y, z, id);
+    object_pick_label(index, name, reserves, danger.as_ref())
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn render_pick_list(
     frame: &mut Frame,
@@ -260,9 +318,29 @@ pub(crate) fn render_pick_list(
 
 #[cfg(test)]
 mod tests {
-    use super::render_active_overlays;
+    use super::{object_pick_label, render_active_overlays, DangerLevel};
     use crate::app::{AppState, TravelInput};
     use ratatui::{backend::TestBackend, Terminal};
+
+    #[test]
+    fn object_pick_label_drops_placeholder_and_appends_danger_then_reserves() {
+        // Unnamed asteroid, extreme danger, deuterium + metals reserves.
+        let reserves = Some(([true, true, false, false], [0.42, 1.20, 0.0, 0.0]));
+        assert_eq!(
+            object_pick_label(0, "unnamed", reserves, Some(&DangerLevel::Extreme)),
+            "#1 ☠  deuterium 0.42  metals 1.20",
+        );
+        // Named target, moderate danger, present resource with unknown amount.
+        let reserves = Some(([false, true, false, false], [0.0; 4]));
+        assert_eq!(
+            object_pick_label(1, "Big Rock", reserves, Some(&DangerLevel::Moderate)),
+            "#2 Big Rock ⚠  metals",
+        );
+        // Non-asteroid (no reserves), no danger → bare numbered name.
+        assert_eq!(object_pick_label(2, "dormant construct", None, None), "#3 dormant construct");
+        // Low/Unknown danger adds no glyph.
+        assert_eq!(object_pick_label(0, "", None, Some(&DangerLevel::Low)), "#1");
+    }
 
     /// Render the overlays over a blank terminal and return all cell text.
     fn rendered_text(state: &AppState) -> String {

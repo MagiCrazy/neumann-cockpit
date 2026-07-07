@@ -9,27 +9,11 @@ use ratatui::{
 
 use crate::ui::theme::{format_duration, palette};
 use super::{centered_rect, render_footer, render_pick_list, FooterKey, KeyTone};
-/// A mining-target picker row: `#n [name]  metals 1.20  ice 0.55 …`, listing
-/// each present resource (by its full label) with its remaining reserve when
-/// known.
+/// A mining-target picker row: `#n [name][ danger]  metals 1.20  ice 0.55 …`.
+/// Thin wrapper over the shared [`super::probe_object_label`] so every
+/// asteroid/object picker renders identically.
 fn asteroid_label(state: &AppState, index: usize, id: &str, name: &str) -> String {
-    let mut label = format!("#{}", index + 1);
-    if name != "unnamed" {
-        label.push_str(&format!(" {name}"));
-    }
-    if let Some((flags, res)) = state.probe_minable_reserves(id) {
-        for (k, &res_label) in RESOURCE_LABELS.iter().enumerate() {
-            if !flags[k] {
-                continue;
-            }
-            if res[k] > 0.0 {
-                label.push_str(&format!("  {res_label} {:.2}", res[k]));
-            } else {
-                label.push_str(&format!("  {res_label}"));
-            }
-        }
-    }
-    label
+    super::probe_object_label(state, index, id, name)
 }
 
 pub(crate) fn estimate_mine_duration(target_amount: f64) -> (i64, i64) {
