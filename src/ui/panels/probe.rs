@@ -42,7 +42,19 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
     let mut lines: Vec<Line> = Vec::new();
 
     // ── Identity ──
-    lines.push(Line::styled(probe.name.clone(), text.add_modifier(Modifier::BOLD)));
+    // On a multi-probe fleet, flag when the cockpit is piloting a non-default
+    // drone so the name never silently misleads (▸ accent); the default probe
+    // shows plain.
+    let piloting_drone = state.fleet.len() > 1 && state.active_probe_id.is_some();
+    let name_line = if piloting_drone {
+        Line::from(vec![
+            Span::styled("▸ ", Style::default().fg(p.accent)),
+            Span::styled(probe.name.clone(), Style::default().fg(p.accent).add_modifier(Modifier::BOLD)),
+        ])
+    } else {
+        Line::styled(probe.name.clone(), text.add_modifier(Modifier::BOLD))
+    };
+    lines.push(name_line);
     lines.push(Line::from(vec![
         label("status"),
         Span::styled(probe_status_label(&probe.status), probe_status_style(&probe.status)),
@@ -57,6 +69,33 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
         label("sensor"),
         Span::styled(sensor_txt, Style::default().fg(sensor_col)),
     ]));
+
+    // ── Fleet (multi-probe, API v81) ──
+    // Compact cue in the grid cell; the full roster unfolds when zoomed (`z`),
+    // turning the centre pane into a fleet cockpit.
+    if state.fleet.len() > 1 {
+        let piloting = if state.active_probe_id.is_none() { "★ default" } else { "▸ drone" };
+        let pilot_col = if state.active_probe_id.is_none() { p.dim } else { p.accent };
+        lines.push(Line::from(vec![
+            label("fleet"),
+            Span::styled(format!("{} probes  ", state.fleet.len()), text),
+            Span::styled(piloting, Style::default().fg(pilot_col)),
+        ]));
+        if state.zoomed {
+            for pr in &state.fleet {
+                let is_active = Some(pr.id) == state.active_probe_id
+                    || (pr.is_default && state.active_probe_id.is_none());
+                let mark = if pr.is_default { "★" } else if is_active { "▸" } else { " " };
+                let reach = if pr.is_reachable { "" } else { "  ⚠ far" };
+                let st = if is_active { Style::default().fg(p.accent) } else { dim };
+                lines.push(Line::styled(
+                    format!("  {mark} {}  {}{reach}", pr.name, probe_status_label(&pr.status)),
+                    st,
+                ));
+            }
+            lines.push(Line::styled("  Enter → switch · :probe <id|name>", dim));
+        }
+    }
 
     // ── Badges ──
     if state.probe_terminal_alert().is_some() {
