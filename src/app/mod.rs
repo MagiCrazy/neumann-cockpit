@@ -95,6 +95,7 @@ pub struct AppState {
     pub travel: TravelInput,
     pub goto_visited: GotoVisitedInput,
     pub probe_switch: ProbeSwitchInput,
+    pub assemble_probe: AssembleProbeInput,
     pub repair: RepairInput,
     pub mine: MineInput,
     pub remote_mine: RemoteMineInput,
@@ -267,6 +268,12 @@ impl AppState {
 
     pub fn set_drop_cargo_error(&mut self, msg: String) {
         if let DropCargoInput::Confirm { ref mut error, .. } = self.drop_cargo {
+            *error = Some(msg);
+        }
+    }
+
+    pub fn set_assemble_probe_error(&mut self, msg: String) {
+        if let AssembleProbeInput::PickContainers { ref mut error, .. } = self.assemble_probe {
             *error = Some(msg);
         }
     }

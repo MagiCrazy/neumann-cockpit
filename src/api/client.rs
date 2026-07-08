@@ -250,6 +250,25 @@ impl ApiClient {
             .manny)
     }
 
+    /// Start a Manny task that assembles a new drone probe from two empty
+    /// additional containers plus fixed components (`POST
+    /// /api/probe/mannies/{id}/assemble-probe`, API v81). Returns the updated
+    /// Manny and probe inventory (the containers + components are consumed).
+    pub async fn assemble_probe(
+        &self,
+        manny_id: &str,
+        container_ids: &[String],
+    ) -> Result<(Manny, ProbeInventory)> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Body<'a> { container_ids: &'a [String] }
+        #[derive(Deserialize)]
+        struct Resp { manny: Manny, inventory: ProbeInventory }
+        let path = self.probe_path(&format!("/mannies/{manny_id}/assemble-probe"));
+        let r = self.post::<Resp, _>(&path, &Body { container_ids }).await?;
+        Ok((r.manny, r.inventory))
+    }
+
     pub async fn jettison_inventory(&self, item_id: &str, amount: Option<f64>) -> Result<ProbeInventory> {
         #[derive(Serialize)]
         struct Body {

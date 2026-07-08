@@ -17,7 +17,7 @@ use crate::api::tasks::{
 };
 use crate::api::types::{MannyTask, MannyTaskVisibility};
 use crate::app::{
-    ApiMessage, AppState, CommsCategory, DeployInput, FabricationInput, ImproveInput, DetachInput, DropCargoInput,
+    ApiMessage, AppState, AssembleProbeInput, CommsCategory, DeployInput, FabricationInput, ImproveInput, DetachInput, DropCargoInput,
     CommandLine, DropStorageContainerInput, DrillLevel, InputMode, InspectInput, MenuAction,
     MessagesInput,
     MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput, Pane, RecallInput, RecoverInput,
@@ -460,6 +460,21 @@ fn fire_menu_action(
                 state.fabrication = FabricationInput::PickRecipe {
                     prefilled_manny: Some((id, name)),
                     selection: 0,
+                    error: None,
+                };
+            }
+        }
+        MenuAction::AssembleProbe if can => {
+            let containers = state.collect_empty_containers();
+            if containers.len() < 2 {
+                state.error = Some("need two empty additional containers".into());
+            } else {
+                state.assemble_probe = AssembleProbeInput::PickContainers {
+                    manny_id: id,
+                    manny_name: name,
+                    containers,
+                    selected: Vec::new(),
+                    cursor: 0,
                     error: None,
                 };
             }

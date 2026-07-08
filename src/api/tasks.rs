@@ -444,6 +444,21 @@ pub fn fetch_drop_storage_container(
     });
 }
 
+pub fn fetch_assemble_probe(
+    manny_id: String,
+    container_ids: Vec<String>,
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+) {
+    tokio::spawn(async move {
+        let msg = match client.assemble_probe(&manny_id, &container_ids).await {
+            Ok((m, inv)) => ApiMessage::AssembleProbeStarted(m, inv),
+            Err(e) => ApiMessage::AssembleProbeError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
 pub fn fetch_drop_manny_cargo(manny_id: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     tokio::spawn(async move {
         let msg = match client.drop_manny_cargo(&manny_id).await {

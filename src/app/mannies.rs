@@ -373,6 +373,20 @@ impl AppState {
             .unwrap_or_default()
     }
 
+    /// Empty additional containers, eligible as probe-assembly ingredients
+    /// (API v81 `assemble-probe` consumes two of them). Excludes the probe's
+    /// own container and any that still hold cargo.
+    pub fn collect_empty_containers(&self) -> Vec<(String, String)> {
+        self.probe.as_ref()
+            .map(|p| {
+                p.inventory.containers.iter()
+                    .filter(|c| c.kind != "probe" && c.used_capacity == 0.0)
+                    .map(|c| (c.id.clone(), c.label.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     pub fn collect_detached_containers(&self) -> Vec<(String, String)> {
         match self.probe_current_sector_scan() {
             Some(s) => self.collect_detached_containers_in(s),

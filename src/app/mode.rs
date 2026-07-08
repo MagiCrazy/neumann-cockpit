@@ -37,6 +37,8 @@ pub enum MenuAction {
     SwitchProbe,
     /// Promote the active probe to the player's default (PATCH isDefault).
     SetDefaultProbe,
+    /// Assemble a new drone probe with the selected Manny (API v81).
+    AssembleProbe,
     // Mannies pane (extra)
     DropStorageContainer,
     // Storage pane
@@ -397,6 +399,21 @@ impl super::AppState {
                 label: "Drop cargo".into(),
                 enabled: waiting_space,
                 disabled_reason: (!waiting_space).then(|| "not waiting".to_string()),
+            },
+            {
+                // Assemble a drone (API v81): needs an orderable Manny and two
+                // empty additional containers to consume.
+                let empties = self.collect_empty_containers().len();
+                MenuItem {
+                    action: MenuAction::AssembleProbe,
+                    label: "Assemble probe…".into(),
+                    enabled: can && empties >= 2,
+                    disabled_reason: if !can {
+                        Some("busy".to_string())
+                    } else {
+                        (empties < 2).then(|| "need 2 empty containers".to_string())
+                    },
+                }
             },
             MenuItem {
                 action: MenuAction::Recall,

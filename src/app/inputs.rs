@@ -60,6 +60,26 @@ pub enum ProbeSwitchInput {
     },
 }
 
+/// Assemble-a-drone wizard (API v81): a chosen Manny plus exactly two empty
+/// additional containers. Single step — the container multi-select and the
+/// (always-visible) ingredient bill live together; `Enter` with two selected
+/// fires the 3-hour task.
+#[derive(Default)]
+pub enum AssembleProbeInput {
+    #[default]
+    Inactive,
+    PickContainers {
+        manny_id: String,
+        manny_name: String,
+        /// Empty additional containers, `(id, label)`.
+        containers: Vec<(String, String)>,
+        /// Indices into `containers` currently ticked (at most two).
+        selected: Vec<usize>,
+        cursor: usize,
+        error: Option<String>,
+    },
+}
+
 pub const RESOURCE_TYPES: [&str; 4] = ["deuterium", "metals", "ice", "carbon_compounds"];
 
 pub const RESOURCE_LABELS: [&str; 4] = ["deuterium", "metals", "ice", "carbon"];

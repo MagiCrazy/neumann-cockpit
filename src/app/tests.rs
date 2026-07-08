@@ -1030,6 +1030,32 @@ fn collect_detachable_containers_excludes_probe_container() {
     assert_eq!(result[0].1, "Ext Container");
 }
 
+#[test]
+fn collect_empty_containers_excludes_probe_and_non_empty() {
+    let mut state = AppState::default();
+    state.probe = Some(serde_json::from_str(r#"{
+        "id": 1, "name": "t", "status": "idle",
+        "fuel": {"deuterium": null}, "sensorMode": "normal",
+        "sector": null, "movement": null, "systems": null,
+        "inventory": {"capacity": 10.0, "usedCapacity": 0.0, "freeCapacity": 10.0,
+            "items": [], "resourceStocks": [], "externalTanks": [],
+            "containers": [
+                {"id": "c-probe", "kind": "probe", "label": "Main Hold", "sortOrder": 0,
+                 "capacity": 5.0, "usedCapacity": 0.0, "freeCapacity": 5.0,
+                 "rules": {"priority": [], "exclusion": [], "strictExclusion": []}},
+                {"id": "c-empty", "kind": "additional_container", "label": "Empty A", "sortOrder": 1,
+                 "capacity": 2.0, "usedCapacity": 0.0, "freeCapacity": 2.0,
+                 "rules": {"priority": [], "exclusion": [], "strictExclusion": []}},
+                {"id": "c-full", "kind": "additional_container", "label": "Full B", "sortOrder": 2,
+                 "capacity": 2.0, "usedCapacity": 1.5, "freeCapacity": 0.5,
+                 "rules": {"priority": [], "exclusion": [], "strictExclusion": []}}
+            ]}
+    }"#).unwrap());
+    let result = state.collect_empty_containers();
+    assert_eq!(result.len(), 1, "only the empty additional container");
+    assert_eq!(result[0].0, "c-empty");
+}
+
 // ── collect_detached_containers ───────────────────────────────────────────
 
 #[test]

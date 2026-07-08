@@ -15,7 +15,8 @@ use neumann_cockpit::api::tasks::{
     fetch_missions, fetch_sent_messages,
 };
 use neumann_cockpit::app::{
-    ApiMessage, AppState, ColorMode, ContainerRulesInput, FabricationInput, ImproveInput,
+    ApiMessage, AppState, AssembleProbeInput, ColorMode, ContainerRulesInput, FabricationInput,
+    ImproveInput,
     DeployInput,
     DetachInput, DropCargoInput, DropStorageContainerInput, InspectInput, JettisonInput,
     MessagesInput, MindSnapshotInput, MineInput, MissionsInput, RecallInput, RecoverInput,
@@ -382,6 +383,19 @@ async fn run(
                         state.set_toast("storage move order sent");
                     }
                     ApiMessage::StorageMoveError(e) => state.set_storage_move_error(e),
+                    ApiMessage::AssembleProbeStarted(manny, inv) => {
+                        if let Some(ref mut mannies) = state.mannies {
+                            if let Some(m) = mannies.iter_mut().find(|m| m.id == manny.id) {
+                                *m = manny;
+                            }
+                        }
+                        state.update_inventory(inv);
+                        state.assemble_probe = AssembleProbeInput::Inactive;
+                        state.set_toast("drone assembly started (~3h)");
+                        // The new drone appears in the roster once assembled.
+                        fetch_all(client.clone(), tx.clone());
+                    }
+                    ApiMessage::AssembleProbeError(e) => state.set_assemble_probe_error(e),
                     ApiMessage::DropMannyCargoStarted(manny) => {
                         if let Some(ref mut mannies) = state.mannies {
                             if let Some(m) = mannies.iter_mut().find(|m| m.id == manny.id) {

@@ -61,6 +61,10 @@ pub enum ApiMessage {
     UpdateContainerRulesError(String),
     StorageMoveDone(Manny, ProbeInventory),
     StorageMoveError(String),
+    /// A drone-assembly task started (API v81): the updated builder Manny and
+    /// probe inventory (two containers + components consumed).
+    AssembleProbeStarted(Manny, ProbeInventory),
+    AssembleProbeError(String),
     DropMannyCargoStarted(Manny),
     DropMannyCargoError(String),
     DeuteriumRefuelStarted,

@@ -1,4 +1,5 @@
 pub(crate) mod alerts;
+pub(crate) mod assemble;
 pub(crate) mod containers;
 pub(crate) mod craft;
 pub(crate) mod drop_container;
@@ -22,6 +23,7 @@ pub(crate) mod travel;
 pub(crate) mod waypoints;
 
 pub(crate) use alerts::render_alerts_overlay;
+pub(crate) use assemble::render_assemble_probe_overlay;
 pub(crate) use containers::{render_container_rules_overlay, render_rename_container_overlay};
 pub(crate) use craft::render_fabrication_overlay;
 pub(crate) use improve::render_improve_overlay;
@@ -50,7 +52,7 @@ pub(crate) use travel::render_travel_overlay;
 pub(crate) use waypoints::render_waypoints_overlay;
 
 use crate::app::{
-    AlertsInput, AppState, ContainerRulesInput, FabricationInput, ImproveInput, DeployInput,
+    AlertsInput, AppState, AssembleProbeInput, ContainerRulesInput, FabricationInput, ImproveInput, DeployInput,
     DetachInput, DropCargoInput, DropStorageContainerInput, GotoVisitedInput, InspectInput,
     JettisonInput, MessagesInput, MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput,
     ProbeSwitchInput,
@@ -79,6 +81,7 @@ type OverlayRender = fn(&mut Frame, Rect, &AppState);
 /// matching the state), so the caller must gate them.
 #[allow(clippy::type_complexity)]
 const WIZARD_OVERLAYS: &[(OverlayGuard, OverlayRender)] = &[
+    (|s| !matches!(s.assemble_probe, AssembleProbeInput::Inactive), render_assemble_probe_overlay),
     (|s| !matches!(s.alerts_input, AlertsInput::Inactive), render_alerts_overlay),
     (|s| !matches!(s.travel, TravelInput::Inactive), render_travel_overlay),
     (|s| !matches!(s.repair, RepairInput::Inactive), render_repair_overlay),

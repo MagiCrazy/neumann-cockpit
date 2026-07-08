@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 use crate::api::client::ApiClient;
 use crate::api::tasks::fetch_sector;
 use crate::app::{
-    AlertsInput, ApiMessage, AppState, ContainerRulesInput,
+    AlertsInput, ApiMessage, AppState, AssembleProbeInput, ContainerRulesInput,
     FabricationInput, DeployInput, DetachInput, DropCargoInput,
     DropStorageContainerInput, InspectInput, JettisonInput, MindSnapshotInput, MineInput,
     MessagesInput, MissionsInput, ObjectActionInput, RecallInput, RecoverInput, RefuelInput,
@@ -13,6 +13,7 @@ use crate::app::{
     StorageMoveInput, TravelInput, WaypointsInput,
 };
 mod alerts;
+mod assemble;
 mod cockpit;
 mod command;
 mod containers;
@@ -32,6 +33,7 @@ mod storage_move;
 mod travel;
 
 use alerts::handle_alerts_event;
+use assemble::handle_assemble_probe_event;
 use cockpit::handle_cockpit_event;
 use containers::{
     handle_container_rules_event, handle_rename_container_event,
@@ -71,6 +73,7 @@ type WizardHandler = fn(KeyCode, &mut AppState, &ApiClient, &mpsc::Sender<ApiMes
 /// (which ignores client/tx) is wrapped to match.
 #[allow(clippy::type_complexity)]
 const WIZARD_INPUTS: &[(WizardGuard, WizardHandler)] = &[
+    (|s| !matches!(s.assemble_probe, AssembleProbeInput::Inactive), handle_assemble_probe_event),
     (|s| !matches!(s.jettison, JettisonInput::Inactive), handle_jettison_event),
     (|s| !matches!(s.fabrication, FabricationInput::Inactive), handle_fabrication_event),
     (|s| !matches!(s.improve, ImproveInput::Inactive), handle_improve_event),
