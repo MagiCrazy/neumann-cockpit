@@ -89,6 +89,9 @@ async fn run(
     ready: preflight::Ready,
 ) -> Result<()> {
     let preflight::Ready { config, client, conn, scan_history, api_version, link_ok } = ready;
+    // Mutable so a probe switch can retarget every subsequent call (auto-refresh
+    // + actions) at the newly-active probe — see the reconcile after handle_event.
+    let mut client = client;
     let (tx, mut rx) = mpsc::channel::<ApiMessage>(32);
     let mut state = AppState {
         hints_visible: config.hints,
@@ -132,6 +135,17 @@ async fn run(
         tokio::select! {
             Some(event) = events.next() => {
                 handle_event(event?, &mut state, &client, &tx);
+                // A probe switch only sets `state.active_probe_id`; reconcile the
+                // client so all later calls target it, then pull fresh data for
+                // the new probe. Source of truth is the state; the client's
+                // wired target trails it.
+                if client.active_probe_id() != state.active_probe_id {
+                    client = client.with_active_probe(state.active_probe_id);
+                    if !state.loading {
+                        fetch_all(client.clone(), tx.clone());
+                        state.loading = true;
+                    }
+                }
             }
 
             _ = boot_tick.tick(), if state.booting => {
@@ -153,6 +167,10 @@ async fn run(
                 match msg {
                     ApiMessage::ProbeUpdated(probe) => state.update_probe(probe),
                     ApiMessage::FleetFetched(list) => state.update_fleet(list),
+                    ApiMessage::DefaultProbeSet(list, name) => {
+                        state.update_fleet(list);
+                        state.set_toast(format!("{name} is now the default probe"));
+                    }
                     ApiMessage::ManniesUpdated(mannies) => state.update_mannies(mannies),
                     ApiMessage::SectorUpdated(sector) => {
                         let (sx, sy, sz) = (

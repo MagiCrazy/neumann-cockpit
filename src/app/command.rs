@@ -2,11 +2,30 @@ use super::*;
 
 /// Command verbs recognised by `:` mode. Kept as a table so the input layer can
 /// offer Tab-completion and a `:help`-style listing.
-pub const COMMANDS: [&str; 10] =
-    ["focus", "travel", "goto", "filter", "refresh", "theme", "zoom", "craft", "help", "quit"];
+pub const COMMANDS: [&str; 11] = [
+    "focus", "travel", "goto", "filter", "refresh", "theme", "zoom", "craft", "probe", "help",
+    "quit",
+];
 
 fn pane_from_name(name: &str) -> Option<Pane> {
     Pane::ALL.into_iter().find(|p| p.label().eq_ignore_ascii_case(name))
+}
+
+/// Resolve a `:probe` argument to a fleet probe id: an exact id, then a
+/// case-insensitive exact name, then a case-insensitive substring match.
+fn fleet_probe_id(state: &AppState, args: &[&str]) -> Option<u64> {
+    let first = args.first()?;
+    if let Ok(id) = first.parse::<u64>() {
+        if state.fleet.iter().any(|p| p.id == id) {
+            return Some(id);
+        }
+    }
+    let q = args.join(" ");
+    if let Some(p) = state.fleet.iter().find(|p| p.name.eq_ignore_ascii_case(&q)) {
+        return Some(p.id);
+    }
+    let ql = q.to_lowercase();
+    state.fleet.iter().find(|p| p.name.to_lowercase().contains(&ql)).map(|p| p.id)
 }
 
 fn color_from_name(name: &str) -> Option<ColorMode> {
@@ -87,6 +106,21 @@ impl AppState {
                 None => self.set_toast("usage: theme <mono-green|mono-amber|phosphor-semantic|modern-16>"),
             },
             "zoom" => self.toggle_zoom(),
+            "probe" => match fleet_probe_id(self, &args) {
+                // Only sets the active probe; the event loop reconciles the
+                // ApiClient and refetches (so no `return true` here).
+                Some(id) => {
+                    if let Some(p) = self.fleet.iter().find(|p| p.id == id) {
+                        let (name, reachable) = (p.name.clone(), p.is_reachable);
+                        if !reachable {
+                            self.set_toast(format!("{name} is out of SCUT range — cannot pilot"));
+                        } else if self.set_active_probe(id) {
+                            self.set_toast(format!("piloting {name}"));
+                        }
+                    }
+                }
+                None => self.set_toast("usage: probe <id|name>"),
+            },
             "craft" => {
                 if self.recipes.is_empty() {
                     self.set_toast("recipes loading — F5 to refresh");

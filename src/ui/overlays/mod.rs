@@ -2,6 +2,7 @@ pub(crate) mod alerts;
 pub(crate) mod containers;
 pub(crate) mod craft;
 pub(crate) mod drop_container;
+pub(crate) mod fleet;
 pub(crate) mod help;
 pub(crate) mod improve;
 pub(crate) mod inventory_detail;
@@ -25,6 +26,7 @@ pub(crate) use containers::{render_container_rules_overlay, render_rename_contai
 pub(crate) use craft::render_fabrication_overlay;
 pub(crate) use improve::render_improve_overlay;
 pub(crate) use drop_container::render_drop_container_overlay;
+pub(crate) use fleet::render_probe_switch_overlay;
 pub(crate) use help::{help_row_count, render_help_overlay};
 pub(crate) use inventory_detail::render_inventory_detail_overlay;
 pub(crate) use jettison::render_jettison_overlay;
@@ -51,6 +53,7 @@ use crate::app::{
     AlertsInput, AppState, ContainerRulesInput, FabricationInput, ImproveInput, DeployInput,
     DetachInput, DropCargoInput, DropStorageContainerInput, GotoVisitedInput, InspectInput,
     JettisonInput, MessagesInput, MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput,
+    ProbeSwitchInput,
     RecallInput, RecoverInput, RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput,
     RepairInput, SalvageInput, ScanMode, ScutNetworkInput, ScutRelayInput, StorageMoveInput,
     TravelInput, WaypointsInput, RESOURCE_LABELS,
@@ -117,6 +120,9 @@ pub(crate) fn render_active_overlays(frame: &mut Frame, area: Rect, state: &AppS
     // distinct enum) stay explicit. `help` is topmost, so it renders last.
     if state.map.open {
         render_map_overlay(frame, area, state);
+    }
+    if matches!(state.probe_switch, ProbeSwitchInput::Picking { .. }) {
+        render_probe_switch_overlay(frame, area, state);
     }
     if matches!(state.goto_visited, GotoVisitedInput::Picking { .. }) {
         render_goto_visited_overlay(frame, area, state);

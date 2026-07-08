@@ -94,6 +94,7 @@ pub struct AppState {
     pub visited_sectors: Vec<VisitedSector>,
     pub travel: TravelInput,
     pub goto_visited: GotoVisitedInput,
+    pub probe_switch: ProbeSwitchInput,
     pub repair: RepairInput,
     pub mine: MineInput,
     pub remote_mine: RemoteMineInput,
@@ -177,6 +178,19 @@ impl AppState {
     pub fn active_probe_summary(&self) -> Option<&ProbeSummary> {
         let target = self.active_probe_id.or(self.default_probe_id)?;
         self.fleet.iter().find(|p| p.id == target)
+    }
+
+    /// Switch the piloted probe to `id`. Records the new active id (and clears
+    /// it back to `None` when `id` is the server default, so the client falls
+    /// back to the pre-v81 `/api/probe` paths). The event loop reconciles the
+    /// `ApiClient` and refetches. Returns whether the active probe changed.
+    pub fn set_active_probe(&mut self, id: u64) -> bool {
+        let new = (Some(id) != self.default_probe_id).then_some(id);
+        if new == self.active_probe_id {
+            return false;
+        }
+        self.active_probe_id = new;
+        true
     }
 
     pub fn update_mannies(&mut self, mut mannies: Vec<Manny>) {

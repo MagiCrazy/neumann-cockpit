@@ -33,6 +33,10 @@ pub enum MenuAction {
     ScutInspect,
     /// Install a probe improvement with an idle Manny.
     Improve,
+    /// Open the fleet picker to switch the piloted probe (API v81).
+    SwitchProbe,
+    /// Promote the active probe to the player's default (PATCH isDefault).
+    SetDefaultProbe,
     // Mannies pane (extra)
     DropStorageContainer,
     // Storage pane
@@ -229,13 +233,35 @@ impl super::AppState {
     }
 
     fn probe_context_menu(&self) -> Option<ContextMenu> {
+        let mut items = vec![];
+        // Fleet switching (API v81) — only meaningful with more than one probe.
+        let multi = self.fleet.len() > 1;
+        items.push(MenuItem {
+            action: MenuAction::SwitchProbe,
+            label: "Switch probe…".into(),
+            enabled: multi,
+            disabled_reason: (!multi).then(|| "single probe".to_string()),
+        });
+        // Promote the active probe to default — only when it isn't already, and
+        // only when it is reachable (the server refuses an out-of-reach target).
+        if let Some(active) = self.active_probe_summary() {
+            if !active.is_default {
+                items.push(MenuItem {
+                    action: MenuAction::SetDefaultProbe,
+                    label: "Set as default probe".into(),
+                    enabled: active.is_reachable,
+                    disabled_reason: (!active.is_reachable)
+                        .then(|| "out of SCUT range".to_string()),
+                });
+            }
+        }
         let has_scut = !self.scut_coverage().is_empty();
-        let mut items = vec![MenuItem {
+        items.push(MenuItem {
             action: MenuAction::ScutInspect,
             label: "Inspect SCUT network…".into(),
             enabled: has_scut,
             disabled_reason: (!has_scut).then(|| "no SCUT network here".to_string()),
-        }];
+        });
         // Probe improvements — installable when one is unlocked and not done.
         let can_improve = self.has_orderable_improvement();
         items.push(MenuItem {

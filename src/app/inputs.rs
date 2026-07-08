@@ -48,6 +48,18 @@ pub enum GotoVisitedInput {
     },
 }
 
+/// Picker over the player's fleet (API v81 multi-probe). Selecting a reachable
+/// probe switches the cockpit's active probe (client-side, no server change);
+/// an unreachable one is refused with a toast.
+#[derive(Default)]
+pub enum ProbeSwitchInput {
+    #[default]
+    Inactive,
+    Picking {
+        selection: usize,
+    },
+}
+
 pub const RESOURCE_TYPES: [&str; 4] = ["deuterium", "metals", "ice", "carbon_compounds"];
 
 pub const RESOURCE_LABELS: [&str; 4] = ["deuterium", "metals", "ice", "carbon"];

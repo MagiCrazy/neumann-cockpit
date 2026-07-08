@@ -490,6 +490,23 @@ pub fn fetch_turn_on_relay(
     });
 }
 
+/// Promote a probe to the player's default (`PATCH /api/probe/{id}`). The
+/// server refuses an out-of-reach target with 422, surfaced as `ActionError`.
+pub fn fetch_set_default_probe(
+    probe_id: u64,
+    name: String,
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+) {
+    tokio::spawn(async move {
+        let msg = match client.patch_probe(probe_id, None, Some(true)).await {
+            Ok(list) => ApiMessage::DefaultProbeSet(list, name),
+            Err(e) => ApiMessage::ActionError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
 pub fn fetch_reassign_mind_snapshot(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     tokio::spawn(async move {
         let msg = match client.reassign_mind_snapshot().await {

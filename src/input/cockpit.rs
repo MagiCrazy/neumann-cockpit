@@ -13,7 +13,7 @@ use crate::api::client::ApiClient;
 use crate::api::tasks::{
     fetch_ack_alert, fetch_ack_damage_warning, fetch_alerts, fetch_all, fetch_damage_warnings,
     fetch_inspect, fetch_messages, fetch_recover, fetch_scut_network, fetch_sector,
-    fetch_sent_messages, fetch_storage_container_detail,
+    fetch_sent_messages, fetch_set_default_probe, fetch_storage_container_detail,
 };
 use crate::api::types::{MannyTask, MannyTaskVisibility};
 use crate::app::{
@@ -21,7 +21,7 @@ use crate::app::{
     CommandLine, DropStorageContainerInput, DrillLevel, InputMode, InspectInput, MenuAction,
     MessagesInput,
     MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput, Pane, RecallInput, RecoverInput,
-    GotoVisitedInput, RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput,
+    GotoVisitedInput, ProbeSwitchInput, RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput,
     RepairInput, SalvageInput, ScanMode, ScutNetworkInput, StorageMoveInput, TravelInput,
     WaypointsInput,
 };
@@ -409,6 +409,28 @@ fn fire_menu_action(
             let entries = state.collect_waypoints();
             if !entries.is_empty() {
                 state.waypoints = WaypointsInput::Browsing { entries, selection: 0 };
+            }
+            return;
+        }
+        MenuAction::SwitchProbe => {
+            if state.fleet.len() > 1 {
+                // Open the picker on the currently active probe.
+                let active = state.active_probe_id.or(state.default_probe_id);
+                let selection = state
+                    .fleet
+                    .iter()
+                    .position(|p| Some(p.id) == active)
+                    .unwrap_or(0);
+                state.probe_switch = ProbeSwitchInput::Picking { selection };
+            }
+            return;
+        }
+        MenuAction::SetDefaultProbe => {
+            if let Some(active) = state.active_probe_summary() {
+                if !active.is_default && active.is_reachable {
+                    let (id, name) = (active.id, active.name.clone());
+                    fetch_set_default_probe(id, name, client.clone(), tx.clone());
+                }
             }
             return;
         }

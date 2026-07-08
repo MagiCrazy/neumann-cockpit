@@ -9,6 +9,10 @@ pub enum ApiMessage {
     /// The player's fleet roster (`GET /api/probes`), fetched in `fetch_all`.
     /// Non-fatal. Drives the probe switcher; never resets the active probe.
     FleetFetched(ProbeListResponse),
+    /// A `PATCH /api/probe/{id}` promoted a probe to default; carries the
+    /// refreshed roster and the probe name for the toast. Failure (e.g. the
+    /// 422 out-of-reach) arrives as `ActionError`.
+    DefaultProbeSet(ProbeListResponse, String),
     ManniesUpdated(Vec<Manny>),
     SectorUpdated(SectorObservation),
     ScanError(String),
