@@ -152,6 +152,7 @@ async fn run(
                 state.loading = false;
                 match msg {
                     ApiMessage::ProbeUpdated(probe) => state.update_probe(probe),
+                    ApiMessage::FleetFetched(list) => state.update_fleet(list),
                     ApiMessage::ManniesUpdated(mannies) => state.update_mannies(mannies),
                     ApiMessage::SectorUpdated(sector) => {
                         let (sx, sy, sz) = (

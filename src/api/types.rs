@@ -461,6 +461,29 @@ pub struct Probe {
     pub alert: Option<ProbeTerminalAlert>,
 }
 
+/// One probe in the player's fleet (`GET /api/probes`, API v81). This is the
+/// roster/switcher view; full detail comes from `GET /api/probe/{id}`.
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeSummary {
+    pub id: u64,
+    pub name: String,
+    pub status: ProbeStatus,
+    pub is_default: bool,
+    /// True when the probe is the default, in the default's sector, or inside
+    /// shared active SCUT coverage — i.e. fully pilotable via its `{id}`
+    /// endpoints. False → the probe returns only limited telemetry (read-only).
+    pub is_reachable: bool,
+}
+
+/// Response of `GET /api/probes`: the fleet plus which probe is the default.
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeListResponse {
+    pub default_probe_id: Option<u64>,
+    pub probes: Vec<ProbeSummary>,
+}
+
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ProbeTerminalAlert {

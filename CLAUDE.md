@@ -81,6 +81,7 @@ All other API calls (move, repair, mine, craft, storage container CRUD, storage 
 
 - `types.rs` — all OpenAPI types. Structs use `#[serde(rename_all = "camelCase")]`; enums use `#[serde(rename_all = "snake_case")]` with `#[serde(other)] Unknown` fallbacks. `#![allow(dead_code)]` suppresses warnings on fields not yet consumed by the UI.
 - `client.rs` — `ApiClient` (cloneable, wraps `reqwest::Client`). Each endpoint has a typed wrapper with an inline `struct Resp` that deserializes the envelope and returns the inner value. HTTP errors extract `error.message` from the JSON body; 401 produces a specific "check your api_key" message.
+  - **Multi-probe seam (API v81)**: `ApiClient` carries an `active_probe_id: Option<u64>`; per-probe wrappers build their path via `probe_path(suffix)` — `None` → `/api/probe{suffix}` (default probe, pre-v81 behaviour), `Some(id)` → `/api/probe/{id}{suffix}` (the `{probeId}` mirrors). `with_active_probe(id)` returns a retargeted clone (used by the cockpit to switch probes without touching the server default). Player-level endpoints (`/api/version`, `/api/sector`, `/api/crafting-recipes`, `/api/probes`, `/api/probe/missions*`, `/api/probe/messages/sent`, `/api/probe/mind-snapshot/reassign`) have **no** `{probeId}` mirror and stay literal.
 
 ### Theme & colours (`src/ui/theme.rs`)
 
@@ -145,7 +146,9 @@ The four reused panels (Probe / Inventory / Scanner / Mannies) keep their intern
 | Endpoint | Method | Status |
 |---|---|---|
 | `/api/version` | GET | ✓ |
+| `/api/probes` | GET | ✓ (fleet roster, API v81) |
 | `/api/probe` | GET | ✓ |
+| `/api/probe/{probeId}` | PATCH | ✓ (rename / set default, API v81) |
 | `/api/probe/mannies` | GET | ✓ |
 | `/api/probe/sector` | GET | ✓ |
 | `/api/probe/mind-snapshot/reassign` | POST | ✓ |

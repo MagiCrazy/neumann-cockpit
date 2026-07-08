@@ -47,6 +47,15 @@ pub fn fetch_all(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
         }
     });
 
+    // Fleet roster (API v81 multi-probe): non-fatal, drives the probe switcher.
+    let cf = client.clone();
+    let txf = tx.clone();
+    tokio::spawn(async move {
+        if let Ok(list) = cf.get_probes().await {
+            let _ = txf.send(ApiMessage::FleetFetched(list)).await;
+        }
+    });
+
     // Alerts + damage warnings + missions + probe improvements: non-fatal, same
     // pattern as mannies/sector.
     fetch_alerts(client.clone(), tx.clone());

@@ -1,11 +1,14 @@
 use crate::api::types::{
     ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, Mission, Probe, ProbeAlert,
-    ProbeImprovement, ProbeInventory, ProbeMessage, ProbeMovement, ProbeSentMessage, ScutNetwork,
-    SectorObservation, StorageContainer, VisitedSector,
+    ProbeImprovement, ProbeInventory, ProbeListResponse, ProbeMessage, ProbeMovement,
+    ProbeSentMessage, ScutNetwork, SectorObservation, StorageContainer, VisitedSector,
 };
 
 pub enum ApiMessage {
     ProbeUpdated(Probe),
+    /// The player's fleet roster (`GET /api/probes`), fetched in `fetch_all`.
+    /// Non-fatal. Drives the probe switcher; never resets the active probe.
+    FleetFetched(ProbeListResponse),
     ManniesUpdated(Vec<Manny>),
     SectorUpdated(SectorObservation),
     ScanError(String),
