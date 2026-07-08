@@ -954,4 +954,11 @@ pub struct SectorObservation {
     /// field — stamped client-side and persisted in scan_history.json).
     #[serde(default)]
     pub scanned_at: Option<DateTime<Utc>>,
+    /// Id of the probe that produced this observation (not an API field —
+    /// stamped client-side from the active probe, API v81 multi-probe). The
+    /// scan history is a unified fleet-wide store (SCUT shares sector knowledge
+    /// across probes), so this is provenance only. Serde-defaulted, so older
+    /// history rows load as `None`.
+    #[serde(default)]
+    pub observed_by: Option<u64>,
 }
