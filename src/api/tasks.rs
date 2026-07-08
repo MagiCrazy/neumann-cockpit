@@ -522,6 +522,22 @@ pub fn fetch_set_default_probe(
     });
 }
 
+/// Rename a probe (`PATCH /api/probe/{id}` with `name`, API v81).
+pub fn fetch_rename_probe(
+    probe_id: u64,
+    name: String,
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+) {
+    tokio::spawn(async move {
+        let msg = match client.patch_probe(probe_id, Some(&name), None).await {
+            Ok(list) => ApiMessage::ProbeRenamed(list, name),
+            Err(e) => ApiMessage::RenameProbeError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
 pub fn fetch_reassign_mind_snapshot(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     tokio::spawn(async move {
         let msg = match client.reassign_mind_snapshot().await {

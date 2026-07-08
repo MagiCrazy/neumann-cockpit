@@ -60,6 +60,20 @@ pub enum ProbeSwitchInput {
     },
 }
 
+/// Rename-probe wizard (API v81): text entry that renames the piloted probe
+/// via `PATCH /api/probe/{id}`.
+#[derive(Default)]
+pub enum RenameProbeInput {
+    #[default]
+    Inactive,
+    Typing {
+        probe_id: u64,
+        current_name: String,
+        buf: String,
+        error: Option<String>,
+    },
+}
+
 /// Assemble-a-drone wizard (API v81): a chosen Manny plus exactly two empty
 /// additional containers. Single step — the container multi-select and the
 /// (always-visible) ingredient bill live together; `Enter` with two selected

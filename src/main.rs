@@ -22,8 +22,8 @@ use neumann_cockpit::app::{
     MessagesInput, MindSnapshotInput, MineInput, MissionsInput, RecallInput, RecoverInput,
     RefuelInput,
     RemoteMineInput,
-    RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScutNetworkInput,
-    ScutRelayInput, StorageMoveInput,
+    RenameContainerInput, RenameMannyInput, RenameProbeInput, RepairInput, SalvageInput,
+    ScutNetworkInput, ScutRelayInput, StorageMoveInput,
 };
 use neumann_cockpit::input::handle_event;
 use neumann_cockpit::preflight;
@@ -172,6 +172,14 @@ async fn run(
                         state.update_fleet(list);
                         state.set_toast(format!("{name} is now the default probe"));
                     }
+                    ApiMessage::ProbeRenamed(list, name) => {
+                        state.update_fleet(list);
+                        state.rename_probe = RenameProbeInput::Inactive;
+                        state.set_toast(format!("probe renamed to {name}"));
+                        // Refresh so the Probe pane identity picks up the new name.
+                        fetch_all(client.clone(), tx.clone());
+                    }
+                    ApiMessage::RenameProbeError(e) => state.set_rename_probe_error(e),
                     ApiMessage::ManniesUpdated(mannies) => state.update_mannies(mannies),
                     ApiMessage::SectorUpdated(sector) => {
                         let (sx, sy, sz) = (

@@ -13,6 +13,10 @@ pub enum ApiMessage {
     /// refreshed roster and the probe name for the toast. Failure (e.g. the
     /// 422 out-of-reach) arrives as `ActionError`.
     DefaultProbeSet(ProbeListResponse, String),
+    /// A `PATCH /api/probe/{id}` renamed a probe; carries the refreshed roster
+    /// and the new name for the toast. Failure arrives as `RenameProbeError`.
+    ProbeRenamed(ProbeListResponse, String),
+    RenameProbeError(String),
     ManniesUpdated(Vec<Manny>),
     SectorUpdated(SectorObservation),
     ScanError(String),

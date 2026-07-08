@@ -22,6 +22,7 @@ use crate::app::{
     MessagesInput,
     MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput, Pane, RecallInput, RecoverInput,
     GotoVisitedInput, ProbeSwitchInput, RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput,
+    RenameProbeInput,
     RepairInput, SalvageInput, ScanMode, ScutNetworkInput, StorageMoveInput, TravelInput,
     WaypointsInput,
 };
@@ -431,6 +432,17 @@ fn fire_menu_action(
                     let (id, name) = (active.id, active.name.clone());
                     fetch_set_default_probe(id, name, client.clone(), tx.clone());
                 }
+            }
+            return;
+        }
+        MenuAction::RenameProbe => {
+            if let Some((id, name)) = state.active_probe_identity() {
+                state.rename_probe = RenameProbeInput::Typing {
+                    probe_id: id,
+                    current_name: name,
+                    buf: String::new(),
+                    error: None,
+                };
             }
             return;
         }

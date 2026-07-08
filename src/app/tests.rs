@@ -1852,6 +1852,21 @@ fn command_probe_refuses_unreachable() {
 }
 
 #[test]
+fn probe_menu_offers_rename_with_active_identity() {
+    let mut state = fleet_state();
+    state.active_pane = Pane::Probe;
+    // Default probe active → identity resolves to it.
+    assert_eq!(state.active_probe_identity(), Some((5, "Sonde de Magic".to_string())));
+    let menu = state.build_context_menu().expect("probe menu");
+    let rename = menu
+        .items
+        .iter()
+        .find(|i| i.label.contains("Rename probe"))
+        .expect("rename item");
+    assert!(rename.enabled);
+}
+
+#[test]
 fn probe_menu_offers_switch_and_default_when_multi() {
     let mut state = fleet_state();
     state.active_pane = Pane::Probe;

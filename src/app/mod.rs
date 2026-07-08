@@ -96,6 +96,7 @@ pub struct AppState {
     pub goto_visited: GotoVisitedInput,
     pub probe_switch: ProbeSwitchInput,
     pub assemble_probe: AssembleProbeInput,
+    pub rename_probe: RenameProbeInput,
     pub repair: RepairInput,
     pub mine: MineInput,
     pub remote_mine: RemoteMineInput,
@@ -179,6 +180,21 @@ impl AppState {
     pub fn active_probe_summary(&self) -> Option<&ProbeSummary> {
         let target = self.active_probe_id.or(self.default_probe_id)?;
         self.fleet.iter().find(|p| p.id == target)
+    }
+
+    /// `(id, name)` of the piloted probe — from the roster, falling back to the
+    /// full probe struct so rename works even before the fleet has loaded.
+    pub fn active_probe_identity(&self) -> Option<(u64, String)> {
+        if let Some(s) = self.active_probe_summary() {
+            return Some((s.id, s.name.clone()));
+        }
+        self.probe.as_ref().map(|p| (p.id as u64, p.name.clone()))
+    }
+
+    pub fn set_rename_probe_error(&mut self, msg: String) {
+        if let RenameProbeInput::Typing { ref mut error, .. } = self.rename_probe {
+            *error = Some(msg);
+        }
     }
 
     /// Switch the piloted probe to `id`. Records the new active id (and clears

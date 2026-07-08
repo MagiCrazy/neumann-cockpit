@@ -39,6 +39,8 @@ pub enum MenuAction {
     SetDefaultProbe,
     /// Assemble a new drone probe with the selected Manny (API v81).
     AssembleProbe,
+    /// Rename the piloted probe (`PATCH /api/probe/{id}` name, API v81).
+    RenameProbe,
     // Mannies pane (extra)
     DropStorageContainer,
     // Storage pane
@@ -257,6 +259,14 @@ impl super::AppState {
                 });
             }
         }
+        // Rename the piloted probe — available whenever we know its id.
+        let can_rename = self.active_probe_identity().is_some();
+        items.push(MenuItem {
+            action: MenuAction::RenameProbe,
+            label: "Rename probe…".into(),
+            enabled: can_rename,
+            disabled_reason: (!can_rename).then(|| "no probe".to_string()),
+        });
         let has_scut = !self.scut_coverage().is_empty();
         items.push(MenuItem {
             action: MenuAction::ScutInspect,

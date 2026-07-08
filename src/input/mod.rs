@@ -9,8 +9,8 @@ use crate::app::{
     DropStorageContainerInput, InspectInput, JettisonInput, MindSnapshotInput, MineInput,
     MessagesInput, MissionsInput, ObjectActionInput, RecallInput, RecoverInput, RefuelInput,
     RemoteMineInput, RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode,
-    GotoVisitedInput, ImproveInput, InputMode, ProbeSwitchInput, ScutNetworkInput, ScutRelayInput,
-    StorageMoveInput, TravelInput, WaypointsInput,
+    GotoVisitedInput, ImproveInput, InputMode, ProbeSwitchInput, RenameProbeInput, ScutNetworkInput,
+    ScutRelayInput, StorageMoveInput, TravelInput, WaypointsInput,
 };
 mod alerts;
 mod assemble;
@@ -39,7 +39,7 @@ use containers::{
     handle_container_rules_event, handle_rename_container_event,
 };
 use craft::handle_fabrication_event;
-use fleet::handle_probe_switch_event;
+use fleet::{handle_probe_switch_event, handle_rename_probe_event};
 use geometry::face_d2;
 use improve::handle_improve_event;
 use jettison::handle_jettison_event;
@@ -74,6 +74,7 @@ type WizardHandler = fn(KeyCode, &mut AppState, &ApiClient, &mpsc::Sender<ApiMes
 #[allow(clippy::type_complexity)]
 const WIZARD_INPUTS: &[(WizardGuard, WizardHandler)] = &[
     (|s| !matches!(s.assemble_probe, AssembleProbeInput::Inactive), handle_assemble_probe_event),
+    (|s| !matches!(s.rename_probe, RenameProbeInput::Inactive), handle_rename_probe_event),
     (|s| !matches!(s.jettison, JettisonInput::Inactive), handle_jettison_event),
     (|s| !matches!(s.fabrication, FabricationInput::Inactive), handle_fabrication_event),
     (|s| !matches!(s.improve, ImproveInput::Inactive), handle_improve_event),
