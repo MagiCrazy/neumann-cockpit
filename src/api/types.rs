@@ -461,6 +461,29 @@ pub struct Probe {
     pub alert: Option<ProbeTerminalAlert>,
 }
 
+/// One probe in the player's fleet (`GET /api/probes`, API v81). This is the
+/// roster/switcher view; full detail comes from `GET /api/probe/{id}`.
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeSummary {
+    pub id: u64,
+    pub name: String,
+    pub status: ProbeStatus,
+    pub is_default: bool,
+    /// True when the probe is the default, in the default's sector, or inside
+    /// shared active SCUT coverage — i.e. fully pilotable via its `{id}`
+    /// endpoints. False → the probe returns only limited telemetry (read-only).
+    pub is_reachable: bool,
+}
+
+/// Response of `GET /api/probes`: the fleet plus which probe is the default.
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeListResponse {
+    pub default_probe_id: Option<u64>,
+    pub probes: Vec<ProbeSummary>,
+}
+
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ProbeTerminalAlert {
@@ -931,4 +954,11 @@ pub struct SectorObservation {
     /// field — stamped client-side and persisted in scan_history.json).
     #[serde(default)]
     pub scanned_at: Option<DateTime<Utc>>,
+    /// Id of the probe that produced this observation (not an API field —
+    /// stamped client-side from the active probe, API v81 multi-probe). The
+    /// scan history is a unified fleet-wide store (SCUT shares sector knowledge
+    /// across probes), so this is provenance only. Serde-defaulted, so older
+    /// history rows load as `None`.
+    #[serde(default)]
+    pub observed_by: Option<u64>,
 }

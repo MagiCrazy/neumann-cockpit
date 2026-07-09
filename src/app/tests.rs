@@ -1054,6 +1054,32 @@ fn collect_detachable_containers_excludes_probe_container() {
     assert_eq!(result[0].1, "Ext Container");
 }
 
+#[test]
+fn collect_empty_containers_excludes_probe_and_non_empty() {
+    let mut state = AppState::default();
+    state.probe = Some(serde_json::from_str(r#"{
+        "id": 1, "name": "t", "status": "idle",
+        "fuel": {"deuterium": null}, "sensorMode": "normal",
+        "sector": null, "movement": null, "systems": null,
+        "inventory": {"capacity": 10.0, "usedCapacity": 0.0, "freeCapacity": 10.0,
+            "items": [], "resourceStocks": [], "externalTanks": [],
+            "containers": [
+                {"id": "c-probe", "kind": "probe", "label": "Main Hold", "sortOrder": 0,
+                 "capacity": 5.0, "usedCapacity": 0.0, "freeCapacity": 5.0,
+                 "rules": {"priority": [], "exclusion": [], "strictExclusion": []}},
+                {"id": "c-empty", "kind": "additional_container", "label": "Empty A", "sortOrder": 1,
+                 "capacity": 2.0, "usedCapacity": 0.0, "freeCapacity": 2.0,
+                 "rules": {"priority": [], "exclusion": [], "strictExclusion": []}},
+                {"id": "c-full", "kind": "additional_container", "label": "Full B", "sortOrder": 2,
+                 "capacity": 2.0, "usedCapacity": 1.5, "freeCapacity": 0.5,
+                 "rules": {"priority": [], "exclusion": [], "strictExclusion": []}}
+            ]}
+    }"#).unwrap());
+    let result = state.collect_empty_containers();
+    assert_eq!(result.len(), 1, "only the empty additional container");
+    assert_eq!(result[0].0, "c-empty");
+}
+
 // ── collect_detached_containers ───────────────────────────────────────────
 
 #[test]
@@ -1786,4 +1812,97 @@ fn pane_paging_terminates_on_empty_panes() {
     state.pane_cursor_top();
     state.pane_cursor_page_up();
     assert_eq!(state.pane_nav[Pane::Missions.index()].cursor, 0);
+}
+
+// ── Multi-probe fleet (API v81) ─────────────────────────────────────────
+
+fn fleet_state() -> AppState {
+    // Default probe 5 (reachable), a reachable drone 6, an out-of-range drone 7.
+    let list: crate::api::types::ProbeListResponse = serde_json::from_str(
+        r#"{"defaultProbeId": 5, "probes": [
+            {"id": 5, "name": "Sonde de Magic", "status": "idle", "isDefault": true, "isReachable": true},
+            {"id": 6, "name": "Drone Beta", "status": "cruising", "isDefault": false, "isReachable": true},
+            {"id": 7, "name": "Drone Gamma", "status": "idle", "isDefault": false, "isReachable": false}
+        ]}"#,
+    )
+    .unwrap();
+    let mut state = AppState::default();
+    state.update_fleet(list);
+    state
+}
+
+#[test]
+fn set_active_probe_maps_default_to_none() {
+    let mut state = fleet_state();
+    // Switching to a drone records its id.
+    assert!(state.set_active_probe(6));
+    assert_eq!(state.active_probe_id, Some(6));
+    // Switching to the default clears back to None (pre-v81 /api/probe paths).
+    assert!(state.set_active_probe(5));
+    assert_eq!(state.active_probe_id, None);
+    // Re-selecting the current target is a no-op.
+    assert!(!state.set_active_probe(5));
+}
+
+#[test]
+fn update_fleet_never_resets_active_probe() {
+    let mut state = fleet_state();
+    state.set_active_probe(6);
+    // A later roster refresh must not yank the pilot back to the default.
+    let probes = state.fleet.clone();
+    state.update_fleet(crate::api::types::ProbeListResponse {
+        default_probe_id: Some(5),
+        probes,
+    });
+    assert_eq!(state.active_probe_id, Some(6));
+}
+
+#[test]
+fn command_probe_switches_by_id_and_name() {
+    let mut state = fleet_state();
+    assert!(!state.run_command("probe 6"));
+    assert_eq!(state.active_probe_id, Some(6));
+    // Case-insensitive substring by name resolving to the default → None.
+    state.run_command("probe magic");
+    assert_eq!(state.active_probe_id, None, "matched the default → None");
+}
+
+#[test]
+fn command_probe_refuses_unreachable() {
+    let mut state = fleet_state();
+    state.run_command("probe 7"); // out of SCUT range
+    assert_eq!(state.active_probe_id, None, "unreachable probe not piloted");
+    assert!(state.active_toast().unwrap().contains("out of SCUT range"));
+}
+
+#[test]
+fn probe_menu_offers_rename_with_active_identity() {
+    let mut state = fleet_state();
+    state.active_pane = Pane::Probe;
+    // Default probe active → identity resolves to it.
+    assert_eq!(state.active_probe_identity(), Some((5, "Sonde de Magic".to_string())));
+    let menu = state.build_context_menu().expect("probe menu");
+    let rename = menu
+        .items
+        .iter()
+        .find(|i| i.label.contains("Rename probe"))
+        .expect("rename item");
+    assert!(rename.enabled);
+}
+
+#[test]
+fn probe_menu_offers_switch_and_default_when_multi() {
+    let mut state = fleet_state();
+    state.active_pane = Pane::Probe;
+    state.set_active_probe(6); // pilot the reachable drone
+    let menu = state.build_context_menu().expect("probe menu");
+    let labels: Vec<&str> = menu.items.iter().map(|i| i.label.as_str()).collect();
+    assert!(labels.iter().any(|l| l.contains("Switch probe")));
+    // Active drone (6) is reachable and not default → "Set as default" enabled.
+    let set_default = menu
+        .items
+        .iter()
+        .find(|i| i.label.contains("Set as default"))
+        .expect("set-default item");
+    assert!(set_default.enabled);
 }

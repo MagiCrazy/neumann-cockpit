@@ -1,7 +1,9 @@
 pub(crate) mod alerts;
+pub(crate) mod assemble;
 pub(crate) mod containers;
 pub(crate) mod craft;
 pub(crate) mod drop_container;
+pub(crate) mod fleet;
 pub(crate) mod help;
 pub(crate) mod improve;
 pub(crate) mod inventory_detail;
@@ -21,10 +23,12 @@ pub(crate) mod travel;
 pub(crate) mod waypoints;
 
 pub(crate) use alerts::render_alerts_overlay;
+pub(crate) use assemble::render_assemble_probe_overlay;
 pub(crate) use containers::{render_container_rules_overlay, render_rename_container_overlay};
 pub(crate) use craft::render_fabrication_overlay;
 pub(crate) use improve::render_improve_overlay;
 pub(crate) use drop_container::render_drop_container_overlay;
+pub(crate) use fleet::{render_probe_switch_overlay, render_rename_probe_overlay};
 pub(crate) use help::{help_row_count, render_help_overlay};
 pub(crate) use inventory_detail::render_inventory_detail_overlay;
 pub(crate) use jettison::render_jettison_overlay;
@@ -48,9 +52,10 @@ pub(crate) use travel::render_travel_overlay;
 pub(crate) use waypoints::render_waypoints_overlay;
 
 use crate::app::{
-    AlertsInput, AppState, ContainerRulesInput, FabricationInput, ImproveInput, DeployInput,
+    AlertsInput, AppState, AssembleProbeInput, ContainerRulesInput, FabricationInput, ImproveInput, DeployInput,
     DetachInput, DropCargoInput, DropStorageContainerInput, GotoVisitedInput, InspectInput,
     JettisonInput, MessagesInput, MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput,
+    ProbeSwitchInput, RenameProbeInput,
     RecallInput, RecoverInput, RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput,
     RepairInput, SalvageInput, ScanMode, ScutNetworkInput, ScutRelayInput, StorageMoveInput,
     TravelInput, WaypointsInput, RESOURCE_LABELS,
@@ -76,6 +81,8 @@ type OverlayRender = fn(&mut Frame, Rect, &AppState);
 /// matching the state), so the caller must gate them.
 #[allow(clippy::type_complexity)]
 const WIZARD_OVERLAYS: &[(OverlayGuard, OverlayRender)] = &[
+    (|s| !matches!(s.assemble_probe, AssembleProbeInput::Inactive), render_assemble_probe_overlay),
+    (|s| !matches!(s.rename_probe, RenameProbeInput::Inactive), render_rename_probe_overlay),
     (|s| !matches!(s.alerts_input, AlertsInput::Inactive), render_alerts_overlay),
     (|s| !matches!(s.travel, TravelInput::Inactive), render_travel_overlay),
     (|s| !matches!(s.repair, RepairInput::Inactive), render_repair_overlay),
@@ -117,6 +124,9 @@ pub(crate) fn render_active_overlays(frame: &mut Frame, area: Rect, state: &AppS
     // distinct enum) stay explicit. `help` is topmost, so it renders last.
     if state.map.open {
         render_map_overlay(frame, area, state);
+    }
+    if matches!(state.probe_switch, ProbeSwitchInput::Picking { .. }) {
+        render_probe_switch_overlay(frame, area, state);
     }
     if matches!(state.goto_visited, GotoVisitedInput::Picking { .. }) {
         render_goto_visited_overlay(frame, area, state);

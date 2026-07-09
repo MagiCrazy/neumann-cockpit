@@ -4,19 +4,21 @@ use tokio::sync::mpsc;
 use crate::api::client::ApiClient;
 use crate::api::tasks::fetch_sector;
 use crate::app::{
-    AlertsInput, ApiMessage, AppState, ContainerRulesInput,
+    AlertsInput, ApiMessage, AppState, AssembleProbeInput, ContainerRulesInput,
     FabricationInput, DeployInput, DetachInput, DropCargoInput,
     DropStorageContainerInput, InspectInput, JettisonInput, MindSnapshotInput, MineInput,
     MessagesInput, MissionsInput, ObjectActionInput, RecallInput, RecoverInput, RefuelInput,
     RemoteMineInput, RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode,
-    GotoVisitedInput, ImproveInput, InputMode, ScutNetworkInput, ScutRelayInput, StorageMoveInput,
-    TravelInput, WaypointsInput,
+    GotoVisitedInput, ImproveInput, InputMode, ProbeSwitchInput, RenameProbeInput, ScutNetworkInput,
+    ScutRelayInput, StorageMoveInput, TravelInput, WaypointsInput,
 };
 mod alerts;
+mod assemble;
 mod cockpit;
 mod command;
 mod containers;
 mod craft;
+mod fleet;
 mod geometry;
 mod improve;
 mod jettison;
@@ -31,11 +33,13 @@ mod storage_move;
 mod travel;
 
 use alerts::handle_alerts_event;
+use assemble::handle_assemble_probe_event;
 use cockpit::handle_cockpit_event;
 use containers::{
     handle_container_rules_event, handle_rename_container_event,
 };
 use craft::handle_fabrication_event;
+use fleet::{handle_probe_switch_event, handle_rename_probe_event};
 use geometry::face_d2;
 use improve::handle_improve_event;
 use jettison::handle_jettison_event;
@@ -69,6 +73,8 @@ type WizardHandler = fn(KeyCode, &mut AppState, &ApiClient, &mpsc::Sender<ApiMes
 /// (which ignores client/tx) is wrapped to match.
 #[allow(clippy::type_complexity)]
 const WIZARD_INPUTS: &[(WizardGuard, WizardHandler)] = &[
+    (|s| !matches!(s.assemble_probe, AssembleProbeInput::Inactive), handle_assemble_probe_event),
+    (|s| !matches!(s.rename_probe, RenameProbeInput::Inactive), handle_rename_probe_event),
     (|s| !matches!(s.jettison, JettisonInput::Inactive), handle_jettison_event),
     (|s| !matches!(s.fabrication, FabricationInput::Inactive), handle_fabrication_event),
     (|s| !matches!(s.improve, ImproveInput::Inactive), handle_improve_event),
@@ -190,6 +196,11 @@ pub fn handle_event(
 
     if matches!(state.goto_visited, GotoVisitedInput::Picking { .. }) {
         handle_goto_visited_event(k.code, state);
+        return;
+    }
+
+    if matches!(state.probe_switch, ProbeSwitchInput::Picking { .. }) {
+        handle_probe_switch_event(k.code, state);
         return;
     }
 

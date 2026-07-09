@@ -269,6 +269,17 @@ fn render_status_line(frame: &mut Frame, area: Rect, state: &AppState, p: Palett
         let label = if age < 60 { format!("⟳ {age}s") } else { format!("⟳ {}m", age / 60) };
         meta.push((label, dim));
     }
+    // Active probe (multi-probe, API v81): shown only when the fleet has more
+    // than one probe, or the pilot is on a non-default probe — single-probe
+    // setups stay uncluttered. A non-default active probe is accented to flag
+    // that the cockpit is off the default; an unreachable one is marked.
+    if let Some(active) = state.active_probe_summary() {
+        if state.fleet.len() > 1 || !active.is_default {
+            let icon = if active.is_reachable { "⏻" } else { "⚠" };
+            let style = if active.is_default { dim } else { accent };
+            meta.push((format!("{icon} {}", active.name), style));
+        }
+    }
     if !state.scut_coverage().is_empty() {
         meta.push(("≣ SCUT".to_string(), accent));
     }

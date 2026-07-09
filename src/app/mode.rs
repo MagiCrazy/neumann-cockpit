@@ -33,6 +33,14 @@ pub enum MenuAction {
     ScutInspect,
     /// Install a probe improvement with an idle Manny.
     Improve,
+    /// Open the fleet picker to switch the piloted probe (API v81).
+    SwitchProbe,
+    /// Promote the active probe to the player's default (PATCH isDefault).
+    SetDefaultProbe,
+    /// Assemble a new drone probe with the selected Manny (API v81).
+    AssembleProbe,
+    /// Rename the piloted probe (`PATCH /api/probe/{id}` name, API v81).
+    RenameProbe,
     // Mannies pane (extra)
     DropStorageContainer,
     // Storage pane
@@ -229,13 +237,43 @@ impl super::AppState {
     }
 
     fn probe_context_menu(&self) -> Option<ContextMenu> {
+        let mut items = vec![];
+        // Fleet switching (API v81) — only meaningful with more than one probe.
+        let multi = self.fleet.len() > 1;
+        items.push(MenuItem {
+            action: MenuAction::SwitchProbe,
+            label: "Switch probe…".into(),
+            enabled: multi,
+            disabled_reason: (!multi).then(|| "single probe".to_string()),
+        });
+        // Promote the active probe to default — only when it isn't already, and
+        // only when it is reachable (the server refuses an out-of-reach target).
+        if let Some(active) = self.active_probe_summary() {
+            if !active.is_default {
+                items.push(MenuItem {
+                    action: MenuAction::SetDefaultProbe,
+                    label: "Set as default probe".into(),
+                    enabled: active.is_reachable,
+                    disabled_reason: (!active.is_reachable)
+                        .then(|| "out of SCUT range".to_string()),
+                });
+            }
+        }
+        // Rename the piloted probe — available whenever we know its id.
+        let can_rename = self.active_probe_identity().is_some();
+        items.push(MenuItem {
+            action: MenuAction::RenameProbe,
+            label: "Rename probe…".into(),
+            enabled: can_rename,
+            disabled_reason: (!can_rename).then(|| "no probe".to_string()),
+        });
         let has_scut = !self.scut_coverage().is_empty();
-        let mut items = vec![MenuItem {
+        items.push(MenuItem {
             action: MenuAction::ScutInspect,
             label: "Inspect SCUT network…".into(),
             enabled: has_scut,
             disabled_reason: (!has_scut).then(|| "no SCUT network here".to_string()),
-        }];
+        });
         // Probe improvements — installable when one is unlocked and not done.
         let can_improve = self.has_orderable_improvement();
         items.push(MenuItem {
@@ -371,6 +409,21 @@ impl super::AppState {
                 label: "Drop cargo".into(),
                 enabled: waiting_space,
                 disabled_reason: (!waiting_space).then(|| "not waiting".to_string()),
+            },
+            {
+                // Assemble a drone (API v81): needs an orderable Manny and two
+                // empty additional containers to consume.
+                let empties = self.collect_empty_containers().len();
+                MenuItem {
+                    action: MenuAction::AssembleProbe,
+                    label: "Assemble probe…".into(),
+                    enabled: can && empties >= 2,
+                    disabled_reason: if !can {
+                        Some("busy".to_string())
+                    } else {
+                        (empties < 2).then(|| "need 2 empty containers".to_string())
+                    },
+                }
             },
             MenuItem {
                 action: MenuAction::Recall,

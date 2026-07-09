@@ -29,8 +29,8 @@ pub use waypoints::*;
 
 use crate::api::types::{
     ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, Mission, Probe,
-    ProbeAlert, ProbeImprovement, ProbeInventory, ProbeMessage, ProbeSentMessage, ScutNetwork,
-    SectorObservation, StorageContainer, VisitedSector,
+    ProbeAlert, ProbeImprovement, ProbeInventory, ProbeMessage, ProbeSentMessage, ProbeSummary,
+    ScutNetwork, SectorObservation, StorageContainer, VisitedSector,
 };
 use chrono::{DateTime, Local, Utc};
 use tokio::time::Instant;
@@ -94,6 +94,9 @@ pub struct AppState {
     pub visited_sectors: Vec<VisitedSector>,
     pub travel: TravelInput,
     pub goto_visited: GotoVisitedInput,
+    pub probe_switch: ProbeSwitchInput,
+    pub assemble_probe: AssembleProbeInput,
+    pub rename_probe: RenameProbeInput,
     pub repair: RepairInput,
     pub mine: MineInput,
     pub remote_mine: RemoteMineInput,
@@ -121,6 +124,15 @@ pub struct AppState {
     pub api_version: Option<u32>,
     pub recipes: Vec<CraftingRecipe>,
     pub probe_improvements: Vec<ProbeImprovement>,
+    // ── Multi-probe fleet (API v81) ─────────────────────────────────────
+    /// The player's probes (`GET /api/probes`), refreshed every `fetch_all`.
+    pub fleet: Vec<ProbeSummary>,
+    /// Server-side default probe id (the one `/api/probe` targets).
+    pub default_probe_id: Option<u64>,
+    /// Probe the cockpit currently pilots. `None` = the default probe and the
+    /// pre-v81 endpoints; `Some(id)` retargets every per-probe call to that
+    /// probe. Set only by an explicit switch, never reset by a refresh.
+    pub active_probe_id: Option<u64>,
     // ── Cockpit v2 (bloc U1) ────────────────────────────────────────────
     /// Active pane in the 3×3 grid (defaults to `Probe`, the centre).
     pub active_pane: Pane,
@@ -153,6 +165,49 @@ impl AppState {
         self.consecutive_failures = 0;
         self.error = None;
         self.clamp_inventory_selection();
+    }
+
+    /// Apply a fleet roster refresh. Records the roster and default id, but
+    /// deliberately leaves `active_probe_id` alone so a periodic refresh never
+    /// yanks the pilot back to the default — the active probe changes only via
+    /// an explicit switch (`set_active_probe`).
+    pub fn update_fleet(&mut self, list: crate::api::types::ProbeListResponse) {
+        self.default_probe_id = list.default_probe_id;
+        self.fleet = list.probes;
+    }
+
+    /// The probe the cockpit is piloting, if it is present in the roster.
+    pub fn active_probe_summary(&self) -> Option<&ProbeSummary> {
+        let target = self.active_probe_id.or(self.default_probe_id)?;
+        self.fleet.iter().find(|p| p.id == target)
+    }
+
+    /// `(id, name)` of the piloted probe — from the roster, falling back to the
+    /// full probe struct so rename works even before the fleet has loaded.
+    pub fn active_probe_identity(&self) -> Option<(u64, String)> {
+        if let Some(s) = self.active_probe_summary() {
+            return Some((s.id, s.name.clone()));
+        }
+        self.probe.as_ref().map(|p| (p.id as u64, p.name.clone()))
+    }
+
+    pub fn set_rename_probe_error(&mut self, msg: String) {
+        if let RenameProbeInput::Typing { ref mut error, .. } = self.rename_probe {
+            *error = Some(msg);
+        }
+    }
+
+    /// Switch the piloted probe to `id`. Records the new active id (and clears
+    /// it back to `None` when `id` is the server default, so the client falls
+    /// back to the pre-v81 `/api/probe` paths). The event loop reconciles the
+    /// `ApiClient` and refetches. Returns whether the active probe changed.
+    pub fn set_active_probe(&mut self, id: u64) -> bool {
+        let new = (Some(id) != self.default_probe_id).then_some(id);
+        if new == self.active_probe_id {
+            return false;
+        }
+        self.active_probe_id = new;
+        true
     }
 
     pub fn update_mannies(&mut self, mut mannies: Vec<Manny>) {
@@ -229,6 +284,12 @@ impl AppState {
 
     pub fn set_drop_cargo_error(&mut self, msg: String) {
         if let DropCargoInput::Confirm { ref mut error, .. } = self.drop_cargo {
+            *error = Some(msg);
+        }
+    }
+
+    pub fn set_assemble_probe_error(&mut self, msg: String) {
+        if let AssembleProbeInput::PickContainers { ref mut error, .. } = self.assemble_probe {
             *error = Some(msg);
         }
     }

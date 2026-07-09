@@ -13,15 +13,16 @@ use crate::api::client::ApiClient;
 use crate::api::tasks::{
     fetch_ack_alert, fetch_ack_damage_warning, fetch_alerts, fetch_all, fetch_damage_warnings,
     fetch_inspect, fetch_messages, fetch_recover, fetch_scut_network, fetch_sector,
-    fetch_sent_messages, fetch_storage_container_detail,
+    fetch_sent_messages, fetch_set_default_probe, fetch_storage_container_detail,
 };
 use crate::api::types::{MannyTask, MannyTaskVisibility};
 use crate::app::{
-    ApiMessage, AppState, CommsCategory, DeployInput, FabricationInput, ImproveInput, DetachInput, DropCargoInput,
+    ApiMessage, AppState, AssembleProbeInput, CommsCategory, DeployInput, FabricationInput, ImproveInput, DetachInput, DropCargoInput,
     CommandLine, DropStorageContainerInput, DrillLevel, InputMode, InspectInput, MenuAction,
     MessagesInput,
     MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput, Pane, RecallInput, RecoverInput,
-    GotoVisitedInput, RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput,
+    GotoVisitedInput, ProbeSwitchInput, RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput,
+    RenameProbeInput,
     RepairInput, SalvageInput, ScanMode, ScutNetworkInput, StorageMoveInput, TravelInput,
     WaypointsInput,
 };
@@ -412,6 +413,39 @@ fn fire_menu_action(
             }
             return;
         }
+        MenuAction::SwitchProbe => {
+            if state.fleet.len() > 1 {
+                // Open the picker on the currently active probe.
+                let active = state.active_probe_id.or(state.default_probe_id);
+                let selection = state
+                    .fleet
+                    .iter()
+                    .position(|p| Some(p.id) == active)
+                    .unwrap_or(0);
+                state.probe_switch = ProbeSwitchInput::Picking { selection };
+            }
+            return;
+        }
+        MenuAction::SetDefaultProbe => {
+            if let Some(active) = state.active_probe_summary() {
+                if !active.is_default && active.is_reachable {
+                    let (id, name) = (active.id, active.name.clone());
+                    fetch_set_default_probe(id, name, client.clone(), tx.clone());
+                }
+            }
+            return;
+        }
+        MenuAction::RenameProbe => {
+            if let Some((id, name)) = state.active_probe_identity() {
+                state.rename_probe = RenameProbeInput::Typing {
+                    probe_id: id,
+                    current_name: name,
+                    buf: String::new(),
+                    error: None,
+                };
+            }
+            return;
+        }
         _ => {}
     }
 
@@ -438,6 +472,21 @@ fn fire_menu_action(
                 state.fabrication = FabricationInput::PickRecipe {
                     prefilled_manny: Some((id, name)),
                     selection: 0,
+                    error: None,
+                };
+            }
+        }
+        MenuAction::AssembleProbe if can => {
+            let containers = state.collect_empty_containers();
+            if containers.len() < 2 {
+                state.error = Some("need two empty additional containers".into());
+            } else {
+                state.assemble_probe = AssembleProbeInput::PickContainers {
+                    manny_id: id,
+                    manny_name: name,
+                    containers,
+                    selected: Vec::new(),
+                    cursor: 0,
                     error: None,
                 };
             }

@@ -47,6 +47,15 @@ pub fn fetch_all(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
         }
     });
 
+    // Fleet roster (API v81 multi-probe): non-fatal, drives the probe switcher.
+    let cf = client.clone();
+    let txf = tx.clone();
+    tokio::spawn(async move {
+        if let Ok(list) = cf.get_probes().await {
+            let _ = txf.send(ApiMessage::FleetFetched(list)).await;
+        }
+    });
+
     // Alerts + damage warnings + missions + probe improvements: non-fatal, same
     // pattern as mannies/sector.
     fetch_alerts(client.clone(), tx.clone());
@@ -435,6 +444,21 @@ pub fn fetch_drop_storage_container(
     });
 }
 
+pub fn fetch_assemble_probe(
+    manny_id: String,
+    container_ids: Vec<String>,
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+) {
+    tokio::spawn(async move {
+        let msg = match client.assemble_probe(&manny_id, &container_ids).await {
+            Ok((m, inv)) => ApiMessage::AssembleProbeStarted(m, inv),
+            Err(e) => ApiMessage::AssembleProbeError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
 pub fn fetch_drop_manny_cargo(manny_id: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     tokio::spawn(async move {
         let msg = match client.drop_manny_cargo(&manny_id).await {
@@ -476,6 +500,39 @@ pub fn fetch_turn_on_relay(
         let msg = match client.turn_on_relay(&manny_id, relay_id, network_name.as_deref()).await {
             Ok(_) => ApiMessage::ScutRelayTurnedOn,
             Err(e) => ApiMessage::ScutRelayTurnOnError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
+/// Promote a probe to the player's default (`PATCH /api/probe/{id}`). The
+/// server refuses an out-of-reach target with 422, surfaced as `ActionError`.
+pub fn fetch_set_default_probe(
+    probe_id: u64,
+    name: String,
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+) {
+    tokio::spawn(async move {
+        let msg = match client.patch_probe(probe_id, None, Some(true)).await {
+            Ok(list) => ApiMessage::DefaultProbeSet(list, name),
+            Err(e) => ApiMessage::ActionError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
+/// Rename a probe (`PATCH /api/probe/{id}` with `name`, API v81).
+pub fn fetch_rename_probe(
+    probe_id: u64,
+    name: String,
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+) {
+    tokio::spawn(async move {
+        let msg = match client.patch_probe(probe_id, Some(&name), None).await {
+            Ok(list) => ApiMessage::ProbeRenamed(list, name),
+            Err(e) => ApiMessage::RenameProbeError(e.to_string()),
         };
         let _ = tx.send(msg).await;
     });

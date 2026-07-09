@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS sector_observations (
     navigational_risk TEXT,
     message           TEXT,
     object_count      INTEGER,
+    observed_by       INTEGER,
     scanned_at        TEXT,
     data              TEXT NOT NULL,
     PRIMARY KEY (x, y, z)
@@ -39,6 +40,16 @@ CREATE TABLE IF NOT EXISTS sector_observations (
 CREATE INDEX IF NOT EXISTS idx_sector_scanned_at
     ON sector_observations (scanned_at);
 ";
+
+/// Additive column migrations for databases that predate a column. `CREATE
+/// TABLE IF NOT EXISTS` never alters an existing table, so a new promoted
+/// column must be back-filled with `ALTER TABLE ADD COLUMN`. Each ALTER is
+/// best-effort: it errors with "duplicate column" once the column exists
+/// (fresh DBs get it from `SCHEMA`), which we deliberately ignore.
+fn ensure_columns(conn: &Connection) {
+    // observed_by — scan provenance (API v81 multi-probe).
+    let _ = conn.execute("ALTER TABLE sector_observations ADD COLUMN observed_by INTEGER", []);
+}
 
 /// Messages accepted by the persistence writer thread.
 pub enum PersistMsg {
@@ -66,6 +77,7 @@ pub fn open(path: &Path) -> rusqlite::Result<Connection> {
     // WAL keeps the single-writer / startup-reader pair snappy and durable.
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.execute_batch(SCHEMA)?;
+    ensure_columns(&conn);
     Ok(conn)
 }
 
@@ -92,8 +104,8 @@ pub fn upsert_observation(conn: &Connection, obs: &SectorObservation) -> rusqlit
     conn.execute(
         "INSERT OR REPLACE INTO sector_observations
             (x, y, z, distance, knowledge_level, confidence,
-             navigational_risk, message, object_count, scanned_at, data)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+             navigational_risk, message, object_count, observed_by, scanned_at, data)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
         rusqlite::params![
             x,
             y,
@@ -104,6 +116,7 @@ pub fn upsert_observation(conn: &Connection, obs: &SectorObservation) -> rusqlit
             &obs.navigational_risk,
             &obs.message,
             obs.objects.as_ref().map(|o| o.len() as i64),
+            obs.observed_by.map(|v| v as i64),
             obs.scanned_at.map(|t| t.to_rfc3339()),
             data,
         ],
@@ -226,6 +239,46 @@ mod tests {
         assert_eq!(dist, 1);
         assert_eq!(level, "detailed", "enum stored as clean text, not JSON");
         assert!((conf - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn observed_by_persists_in_column_and_payload() {
+        let conn = mem();
+        let mut o = obs(1.0, 2.0, 3.0);
+        o.observed_by = Some(5);
+        upsert_observation(&conn, &o).unwrap();
+        // Promoted column populated…
+        let col: Option<i64> = conn
+            .query_row("SELECT observed_by FROM sector_observations", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(col, Some(5));
+        // …and it round-trips through the JSON payload on load.
+        assert_eq!(load_observations(&conn)[0].observed_by, Some(5));
+    }
+
+    #[test]
+    fn ensure_columns_backfills_a_legacy_db() {
+        // Simulate a pre-v81 DB: create the table without `observed_by`.
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE sector_observations (
+                x INTEGER NOT NULL, y INTEGER NOT NULL, z INTEGER NOT NULL,
+                distance INTEGER, knowledge_level TEXT, confidence REAL,
+                navigational_risk TEXT, message TEXT, object_count INTEGER,
+                scanned_at TEXT, data TEXT NOT NULL, PRIMARY KEY (x, y, z));",
+        )
+        .unwrap();
+        ensure_columns(&conn); // adds observed_by
+        // A second call must not fail (column already present).
+        ensure_columns(&conn);
+        // The new column is now writable via the normal upsert.
+        let mut o = obs(1.0, 1.0, 1.0);
+        o.observed_by = Some(7);
+        upsert_observation(&conn, &o).unwrap();
+        let col: Option<i64> = conn
+            .query_row("SELECT observed_by FROM sector_observations", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(col, Some(7));
     }
 
     #[test]

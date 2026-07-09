@@ -101,6 +101,9 @@ pub struct ScannerObjectEntry {
 impl AppState {
     pub fn update_sector(&mut self, mut sector: SectorObservation) {
         sector.scanned_at = Some(Utc::now());
+        // Provenance: which probe produced this scan (fleet knowledge is
+        // shared, so the history stays a single store — see store.rs).
+        sector.observed_by = self.active_probe_id.or(self.default_probe_id);
         let key = (
             sector.relative_coordinates.x as i64,
             sector.relative_coordinates.y as i64,

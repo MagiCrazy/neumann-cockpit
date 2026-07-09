@@ -48,6 +48,52 @@ pub enum GotoVisitedInput {
     },
 }
 
+/// Picker over the player's fleet (API v81 multi-probe). Selecting a reachable
+/// probe switches the cockpit's active probe (client-side, no server change);
+/// an unreachable one is refused with a toast.
+#[derive(Default)]
+pub enum ProbeSwitchInput {
+    #[default]
+    Inactive,
+    Picking {
+        selection: usize,
+    },
+}
+
+/// Rename-probe wizard (API v81): text entry that renames the piloted probe
+/// via `PATCH /api/probe/{id}`.
+#[derive(Default)]
+pub enum RenameProbeInput {
+    #[default]
+    Inactive,
+    Typing {
+        probe_id: u64,
+        current_name: String,
+        buf: String,
+        error: Option<String>,
+    },
+}
+
+/// Assemble-a-drone wizard (API v81): a chosen Manny plus exactly two empty
+/// additional containers. Single step — the container multi-select and the
+/// (always-visible) ingredient bill live together; `Enter` with two selected
+/// fires the 3-hour task.
+#[derive(Default)]
+pub enum AssembleProbeInput {
+    #[default]
+    Inactive,
+    PickContainers {
+        manny_id: String,
+        manny_name: String,
+        /// Empty additional containers, `(id, label)`.
+        containers: Vec<(String, String)>,
+        /// Indices into `containers` currently ticked (at most two).
+        selected: Vec<usize>,
+        cursor: usize,
+        error: Option<String>,
+    },
+}
+
 pub const RESOURCE_TYPES: [&str; 4] = ["deuterium", "metals", "ice", "carbon_compounds"];
 
 pub const RESOURCE_LABELS: [&str; 4] = ["deuterium", "metals", "ice", "carbon"];

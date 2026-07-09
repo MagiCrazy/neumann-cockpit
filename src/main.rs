@@ -15,14 +15,15 @@ use neumann_cockpit::api::tasks::{
     fetch_missions, fetch_sent_messages,
 };
 use neumann_cockpit::app::{
-    ApiMessage, AppState, ColorMode, ContainerRulesInput, FabricationInput, ImproveInput,
+    ApiMessage, AppState, AssembleProbeInput, ColorMode, ContainerRulesInput, FabricationInput,
+    ImproveInput,
     DeployInput,
     DetachInput, DropCargoInput, DropStorageContainerInput, InspectInput, JettisonInput,
     MessagesInput, MindSnapshotInput, MineInput, MissionsInput, RecallInput, RecoverInput,
     RefuelInput,
     RemoteMineInput,
-    RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScutNetworkInput,
-    ScutRelayInput, StorageMoveInput,
+    RenameContainerInput, RenameMannyInput, RenameProbeInput, RepairInput, SalvageInput,
+    ScutNetworkInput, ScutRelayInput, StorageMoveInput,
 };
 use neumann_cockpit::input::handle_event;
 use neumann_cockpit::preflight;
@@ -89,6 +90,9 @@ async fn run(
     ready: preflight::Ready,
 ) -> Result<()> {
     let preflight::Ready { config, client, conn, scan_history, api_version, link_ok } = ready;
+    // Mutable so a probe switch can retarget every subsequent call (auto-refresh
+    // + actions) at the newly-active probe — see the reconcile after handle_event.
+    let mut client = client;
     let (tx, mut rx) = mpsc::channel::<ApiMessage>(32);
     let mut state = AppState {
         hints_visible: config.hints,
@@ -132,6 +136,17 @@ async fn run(
         tokio::select! {
             Some(event) = events.next() => {
                 handle_event(event?, &mut state, &client, &tx);
+                // A probe switch only sets `state.active_probe_id`; reconcile the
+                // client so all later calls target it, then pull fresh data for
+                // the new probe. Source of truth is the state; the client's
+                // wired target trails it.
+                if client.active_probe_id() != state.active_probe_id {
+                    client = client.with_active_probe(state.active_probe_id);
+                    if !state.loading {
+                        fetch_all(client.clone(), tx.clone());
+                        state.loading = true;
+                    }
+                }
             }
 
             _ = boot_tick.tick(), if state.booting => {
@@ -152,6 +167,19 @@ async fn run(
                 state.loading = false;
                 match msg {
                     ApiMessage::ProbeUpdated(probe) => state.update_probe(probe),
+                    ApiMessage::FleetFetched(list) => state.update_fleet(list),
+                    ApiMessage::DefaultProbeSet(list, name) => {
+                        state.update_fleet(list);
+                        state.set_toast(format!("{name} is now the default probe"));
+                    }
+                    ApiMessage::ProbeRenamed(list, name) => {
+                        state.update_fleet(list);
+                        state.rename_probe = RenameProbeInput::Inactive;
+                        state.set_toast(format!("probe renamed to {name}"));
+                        // Refresh so the Probe pane identity picks up the new name.
+                        fetch_all(client.clone(), tx.clone());
+                    }
+                    ApiMessage::RenameProbeError(e) => state.set_rename_probe_error(e),
                     ApiMessage::ManniesUpdated(mannies) => state.update_mannies(mannies),
                     ApiMessage::SectorUpdated(sector) => {
                         let (sx, sy, sz) = (
@@ -363,6 +391,19 @@ async fn run(
                         state.set_toast("storage move order sent");
                     }
                     ApiMessage::StorageMoveError(e) => state.set_storage_move_error(e),
+                    ApiMessage::AssembleProbeStarted(manny, inv) => {
+                        if let Some(ref mut mannies) = state.mannies {
+                            if let Some(m) = mannies.iter_mut().find(|m| m.id == manny.id) {
+                                *m = manny;
+                            }
+                        }
+                        state.update_inventory(inv);
+                        state.assemble_probe = AssembleProbeInput::Inactive;
+                        state.set_toast("drone assembly started (~3h)");
+                        // The new drone appears in the roster once assembled.
+                        fetch_all(client.clone(), tx.clone());
+                    }
+                    ApiMessage::AssembleProbeError(e) => state.set_assemble_probe_error(e),
                     ApiMessage::DropMannyCargoStarted(manny) => {
                         if let Some(ref mut mannies) = state.mannies {
                             if let Some(m) = mannies.iter_mut().find(|m| m.id == manny.id) {
