@@ -1802,6 +1802,55 @@ fn run_command_unknown_sets_toast() {
 }
 
 #[test]
+fn completions_verb_prefix_and_ambiguity() {
+    let state = AppState::default();
+    // Unique prefix.
+    let (start, cands) = state.command_completions("got", 3).unwrap();
+    assert_eq!(start, 0);
+    assert_eq!(cands, vec!["goto".to_string()]);
+    // Ambiguous prefix returns every match, in table order.
+    let (_, cands) = state.command_completions("t", 1).unwrap();
+    assert_eq!(cands, vec!["travel".to_string(), "theme".to_string()]);
+    // No match at all.
+    assert!(state.command_completions("zzz", 3).is_none());
+}
+
+#[test]
+fn completions_arguments_are_slot_specific() {
+    let state = AppState::default();
+    // filter values, case-insensitive stem, token starts after the verb+space.
+    let (start, cands) = state.command_completions("filter mi", 9).unwrap();
+    assert_eq!(start, 7);
+    assert_eq!(cands, vec!["minable".to_string()]);
+    // Empty stem lists all values for the slot.
+    let (_, cands) = state.command_completions("theme ", 6).unwrap();
+    assert_eq!(cands.len(), 4);
+    assert!(cands.contains(&"phosphor-semantic".to_string()));
+    // Free-form (coordinate) args have no completion.
+    assert!(state.command_completions("travel 1", 8).is_none());
+}
+
+#[test]
+fn completions_probe_names_from_fleet() {
+    let state = fleet_state();
+    // Substring stem matches a fleet probe name (spaces allowed in the token).
+    let (_, cands) = state.command_completions("probe Drone ", 12).unwrap();
+    assert_eq!(cands, vec!["Drone Beta".to_string(), "Drone Gamma".to_string()]);
+}
+
+#[test]
+fn run_command_records_history_deduping_repeats() {
+    let mut state = AppState::default();
+    state.run_command("zoom");
+    state.run_command("zoom"); // consecutive duplicate is not re-pushed
+    state.run_command("filter all");
+    assert_eq!(state.command_history, vec!["zoom".to_string(), "filter all".to_string()]);
+    // Blank lines are never recorded.
+    state.run_command("   ");
+    assert_eq!(state.command_history.len(), 2);
+}
+
+#[test]
 fn pane_paging_terminates_on_empty_panes() {
     // The top/bottom jump steps until the cursor stops moving; on an empty pane
     // it must terminate immediately (no infinite loop) and leave the cursor put.

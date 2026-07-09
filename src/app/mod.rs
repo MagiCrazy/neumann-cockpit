@@ -17,7 +17,7 @@ mod tests;
 
 pub use boot::{BOOT_CHARS_PER_FRAME, BOOT_LINE_STRIDE};
 pub use color::*;
-pub use command::COMMANDS;
+pub use command::{command_usage, COMMANDS};
 pub use grid::*;
 pub use inputs::*;
 pub use inventory::*;
@@ -150,6 +150,9 @@ pub struct AppState {
     pub booting: bool,
     /// Frame counter for the boot trace, advanced by the boot tick.
     pub boot_frame: u64,
+    /// Ring of previously-run `:` command lines, most-recent last. Browsed with
+    /// ↑/↓ while the command line is open (`app/command.rs`). Session-only.
+    pub command_history: Vec<String>,
 }
 
 impl AppState {

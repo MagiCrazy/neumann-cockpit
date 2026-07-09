@@ -7,6 +7,20 @@ pub const COMMANDS: [&str; 11] = [
     "quit",
 ];
 
+/// One-line argument usage for a verb, shown as inline ghost-text while typing
+/// (`None` for verbs that take no argument).
+pub fn command_usage(verb: &str) -> Option<&'static str> {
+    Some(match verb {
+        "focus" => "<pane>",
+        "travel" => "<x y z | +dx dy dz>",
+        "goto" => "<x y z>",
+        "filter" => "<all|objects|minable|danger>",
+        "theme" => "<mono-green|mono-amber|phosphor-semantic|modern-16>",
+        "probe" => "<id|name>",
+        _ => return None,
+    })
+}
+
 fn pane_from_name(name: &str) -> Option<Pane> {
     Pane::ALL.into_iter().find(|p| p.label().eq_ignore_ascii_case(name))
 }
@@ -61,11 +75,73 @@ fn parse_coords(args: &[&str]) -> Option<(i32, i32, i32)> {
 }
 
 impl AppState {
+    /// Enumerable argument values for a verb, used by Tab-completion. Empty for
+    /// verbs whose argument is free-form (coordinates) or absent.
+    fn arg_candidates(&self, verb: &str) -> Vec<String> {
+        match verb {
+            "focus" => Pane::ALL.iter().map(|p| p.label().to_lowercase()).collect(),
+            "filter" => ["all", "objects", "minable", "danger"].iter().map(|s| s.to_string()).collect(),
+            "theme" => [
+                ColorMode::MonoGreen,
+                ColorMode::MonoAmber,
+                ColorMode::PhosphorSemantic,
+                ColorMode::Modern16,
+            ]
+            .iter()
+            .map(|m| m.label().to_string())
+            .collect(),
+            "probe" => self.fleet.iter().map(|p| p.name.clone()).collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// Compute Tab-completion candidates for the token under the caret. Returns
+    /// `(token_start_byte, candidates)` where `token_start_byte` is the byte
+    /// offset in `input` where the completed token begins, and candidates match
+    /// the stem case-insensitively (an empty stem yields every candidate for the
+    /// slot). Returns `None` when nothing is completable here.
+    pub fn command_completions(&self, input: &str, cursor: usize) -> Option<(usize, Vec<String>)> {
+        // Caret byte offset (`cursor` is a char index).
+        let cbyte = input.char_indices().nth(cursor).map_or(input.len(), |(b, _)| b);
+        let head = &input[..cbyte];
+        let lead = head.len() - head.trim_start().len();
+
+        match head[lead..].find(char::is_whitespace) {
+            // Still on the first token → complete the verb.
+            None => {
+                let stem = head[lead..].to_lowercase();
+                let cands: Vec<String> =
+                    COMMANDS.iter().filter(|c| c.starts_with(&stem)).map(|c| c.to_string()).collect();
+                (!cands.is_empty()).then_some((lead, cands))
+            }
+            // Verb typed → complete its (single) argument. The token spans the
+            // whole arg region so names containing spaces still match.
+            Some(verb_len) => {
+                let verb = &head[lead..lead + verb_len];
+                let all = self.arg_candidates(verb);
+                if all.is_empty() {
+                    return None;
+                }
+                let after_verb = lead + verb_len;
+                let region = &head[after_verb..];
+                let ts = after_verb + (region.len() - region.trim_start().len());
+                let stem = input[ts..cbyte].to_lowercase();
+                let cands: Vec<String> =
+                    all.into_iter().filter(|c| c.to_lowercase().starts_with(&stem)).collect();
+                (!cands.is_empty()).then_some((ts, cands))
+            }
+        }
+    }
+
     /// Parse and execute a `:` command line. Returns `true` when the caller
     /// should trigger a full data refresh (`fetch_all`) — the one effect this
     /// method can't perform itself. Unknown or malformed commands set a toast.
     pub fn run_command(&mut self, line: &str) -> bool {
         let line = line.trim();
+        // Record in history (dedup consecutive repeats) for ↑/↓ recall.
+        if !line.is_empty() && self.command_history.last().map(String::as_str) != Some(line) {
+            self.command_history.push(line.to_string());
+        }
         let mut parts = line.split_whitespace();
         let Some(verb) = parts.next() else { return false };
         let args: Vec<&str> = parts.collect();
