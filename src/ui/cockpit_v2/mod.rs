@@ -210,6 +210,30 @@ fn render_status(frame: &mut Frame, area: Rect, state: &AppState, p: Palette, vi
             } else {
                 spans.push(Span::styled("█", accent));
             }
+            // Trailing helper: the active Tab-completion candidate list (when
+            // cycling more than one), else the recognised verb's argument usage
+            // as dim ghost-text.
+            if let Some(comp) = cmd.completion.as_ref().filter(|c| c.candidates.len() > 1) {
+                spans.push(Span::styled("   ", Style::default()));
+                for (i, cand) in comp.candidates.iter().enumerate() {
+                    if i > 0 {
+                        spans.push(Span::styled(" ", Style::default().fg(p.dim)));
+                    }
+                    let style = if i == comp.index {
+                        accent.add_modifier(Modifier::REVERSED)
+                    } else {
+                        Style::default().fg(p.dim)
+                    };
+                    spans.push(Span::styled(cand.clone(), style));
+                }
+            } else if let Some(usage) = cmd
+                .input
+                .split_whitespace()
+                .next()
+                .and_then(crate::app::command_usage)
+            {
+                spans.push(Span::styled(format!("   {usage}"), Style::default().fg(p.dim)));
+            }
             Line::from(spans)
         } else {
             Line::from(Span::styled(format!(" {}", state.pane_hints()), Style::default().fg(p.dim)))

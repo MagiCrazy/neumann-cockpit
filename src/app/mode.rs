@@ -84,6 +84,24 @@ pub struct CommandLine {
     pub input: String,
     /// Caret position within `input`.
     pub cursor: usize,
+    /// Tab-completion cycling state. `None` until the first `Tab`; reset to
+    /// `None` on any edit so the next `Tab` recomputes candidates from scratch.
+    pub completion: Option<CompletionState>,
+    /// History browse position: `None` while editing the live line, `Some(i)`
+    /// while stepping through `AppState::command_history` with the arrow keys.
+    pub history_idx: Option<usize>,
+}
+
+/// Tab-completion cycling state for the command line: the candidate list for the
+/// token under the caret and which one is currently applied.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CompletionState {
+    /// Candidates matching the token, in stable order.
+    pub candidates: Vec<String>,
+    /// Index of the candidate currently written into `input`.
+    pub index: usize,
+    /// Byte offset in `input` where the completed token starts.
+    pub token_start: usize,
 }
 
 /// Top-level interaction mode. The input router dispatches on this.

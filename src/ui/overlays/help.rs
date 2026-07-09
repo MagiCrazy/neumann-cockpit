@@ -76,12 +76,15 @@ const RIGHT: &[Section] = &[
     (
         "Command mode  ( : )",
         &[
-            ("Tab", "complete the verb"),
+            ("Tab", "complete / cycle verb + argument"),
+            ("↑ ↓", "browse command history"),
             (":focus", "<pane> — zoom that pane"),
             (":travel", "<x y z | +dx dy dz>"),
             (":goto", "<x y z> — center the map"),
             (":filter", "<all|objects|minable|danger>"),
-            (":craft", "open the fabrication catalog"),
+            (":probe", "<id|name> — pilot a fleet probe"),
+            (":craft", "[recipe] — wizard, or fire a recipe"),
+            (":mine", "[res] [amt] [by/at/to …] — wizard or fire"),
             (":theme", "<mono-green|mono-amber|…>"),
             (":refresh", "reload all data"),
             (":zoom", "toggle zoom"),
