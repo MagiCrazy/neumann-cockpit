@@ -120,6 +120,50 @@ pub(crate) fn render_jettison_overlay(frame: &mut Frame, area: Rect, state: &App
             }
             frame.render_widget(Paragraph::new(lines), rows[0]);
             render_footer(frame, rows[1], p, &[
+                FooterKey::nav("[Enter]", "review"),
+                FooterKey::nav("[Esc]", "cancel"),
+            ]);
+        }
+
+        JettisonInput::Confirm { item_name, amount, error, .. } => {
+            let popup = centered_rect(50, 8, area);
+            frame.render_widget(Clear, popup);
+            let block = Block::default()
+                .title(format!(" JETTISON — {item_name} "))
+                .title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(p.crit));
+            let inner = block.inner(popup);
+            frame.render_widget(block, popup);
+
+            let rows = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(1), Constraint::Length(1)])
+                .split(inner);
+
+            let qty = match amount {
+                Some(v) => format!("{v:.3} ECE"),
+                None => "all stock".to_string(),
+            };
+            let mut lines = vec![
+                Line::from(Span::styled(
+                    format!("Jettison {qty} of {item_name}?"),
+                    Style::default().fg(p.crit),
+                )),
+                Line::from(Span::styled(
+                    "Discarded stock is lost.",
+                    Style::default().fg(p.dim),
+                )),
+            ];
+            if let Some(err) = error {
+                lines.push(Line::default());
+                lines.push(Line::from(Span::styled(
+                    format!("✗ {err}"),
+                    Style::default().fg(p.crit),
+                )));
+            }
+            frame.render_widget(Paragraph::new(lines), rows[0]);
+            render_footer(frame, rows[1], p, &[
                 FooterKey::danger("[Enter]", "JETTISON"),
                 FooterKey::nav("[Esc]", "cancel"),
             ]);

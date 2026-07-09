@@ -551,6 +551,13 @@ pub enum JettisonInput {
         buf: String,
         error: Option<String>,
     },
+    /// Confirmation for the irreversible resource jettison (stock is lost).
+    Confirm {
+        item_id: String,
+        item_name: String,
+        amount: Option<f64>,
+        error: Option<String>,
+    },
 }
 
 #[derive(Default)]
