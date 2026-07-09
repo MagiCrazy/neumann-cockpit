@@ -115,7 +115,8 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
 
     // ── Vital gauges ──
     lines.push(Line::raw(""));
-    let fuel = probe.fuel.deuterium.map(|d| (d / 100.0).clamp(0.0, 1.0)).unwrap_or(0.0);
+    let max_deuterium = probe.fuel.max_deuterium.unwrap_or(100.0);
+    let fuel = probe.fuel.deuterium.map(|d| (d / max_deuterium).clamp(0.0, 1.0)).unwrap_or(0.0);
     lines.push(block_gauge_line("FUEL", fuel, &format!("{:.0}%", fuel * 100.0), ratio_color(fuel, p), p));
     if let Some(sys) = &probe.systems {
         let integ = (sys.integrity_percent.unwrap_or(100.0) / 100.0).clamp(0.0, 1.0);

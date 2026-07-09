@@ -16,8 +16,16 @@ fn asteroid_label(state: &AppState, index: usize, id: &str, name: &str) -> Strin
     super::probe_object_label(state, index, id, name)
 }
 
-pub(crate) fn estimate_mine_duration(target_amount: f64) -> (i64, i64) {
-    const CARGO_CAP: f64 = 0.30;
+/// A rough pre-launch estimate of a mining job: round-trip count and a ballpark
+/// duration. Indicative only — the authoritative ETA comes from the server as
+/// `task_estimated_end_time` once the task starts (rendered in the Mannies pane
+/// via `manny_task_eta`). When `travel_deducted` is true the destination is a
+/// container hidden on the very asteroid being mined, so the server charges no
+/// per-trip travel (miningTravelSeconds = 0); otherwise a fixed travel estimate
+/// applies per trip (the real distance isn't known client-side). The per-trip
+/// cargo capacity is fixed at 0.05 ECE (per the API).
+pub(crate) fn estimate_mine_duration(target_amount: f64, travel_deducted: bool) -> (i64, i64) {
+    const CARGO_CAP: f64 = 0.05; // Manny cargo capacity per trip (ECE)
     const TRAVEL_SECS: i64 = 1800; // 900s each way
     const TICK_AMOUNT: f64 = 0.01;
     const TICK_SECS: i64 = 300;
@@ -27,7 +35,10 @@ pub(crate) fn estimate_mine_duration(target_amount: f64) -> (i64, i64) {
     for _ in 0..trips {
         let trip = remaining.min(CARGO_CAP);
         let ticks = (trip / TICK_AMOUNT).ceil() as i64;
-        total_secs += TRAVEL_SECS + ticks * TICK_SECS;
+        total_secs += ticks * TICK_SECS;
+        if !travel_deducted {
+            total_secs += TRAVEL_SECS;
+        }
         remaining -= trip;
     }
     (trips, total_secs)
@@ -132,13 +143,23 @@ pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppStat
                 ]));
             }
 
-            // Time estimate
+            // Time estimate. Travel is deducted when mining into a container
+            // hidden on this very asteroid (no round trips); mining to the probe
+            // or a container elsewhere keeps travel.
             if let Ok(amount) = amount_buf.parse::<f64>() {
                 if amount > 0.0 {
-                    let (trips, secs) = estimate_mine_duration(amount);
+                    let travel_deducted = target_container
+                        .as_ref()
+                        .is_some_and(|(cid, _)| state.mining_travel_deducted(object_id, cid));
+                    let (trips, secs) = estimate_mine_duration(amount, travel_deducted);
+                    let dest = if travel_deducted { "on-site" } else { "+ travel" };
                     lines.push(Line::from(vec![
                         Span::styled(
-                            format!("{trips} trip{}  •  ~{}", if trips == 1 { "" } else { "s" }, format_duration(secs)),
+                            format!(
+                                "≈ {trips} trip{} · ~{} ({dest})",
+                                if trips == 1 { "" } else { "s" },
+                                format_duration(secs),
+                            ),
                             Style::default().fg(p.dim),
                         ),
                     ]));

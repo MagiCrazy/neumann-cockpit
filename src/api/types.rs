@@ -435,6 +435,9 @@ pub struct ProbeSystems {
 #[serde(rename_all = "camelCase")]
 pub struct ProbeFuel {
     pub deuterium: Option<f64>,
+    /// Current effective deuterium tank maximum; 100 by default, higher after
+    /// probe improvements. Used to scale the FUEL gauge instead of a hardcoded 100.
+    pub max_deuterium: Option<f64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

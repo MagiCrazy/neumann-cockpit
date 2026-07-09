@@ -45,9 +45,11 @@ pub(super) fn handle_jettison_event(
                 KeyCode::Backspace => state.jettison_backspace(),
                 KeyCode::Char('m') | KeyCode::Char('M') => state.jettison_fill_max(),
                 KeyCode::Char(c) => state.jettison_type_char(c),
+                // Amount entered → move to an explicit confirmation before the
+                // irreversible drop, rather than firing straight away.
                 KeyCode::Enter => {
-                    let (item_id, amount) = {
-                        let JettisonInput::EnterAmount { ref item_id, ref buf, .. } = state.jettison else { return };
+                    let next = {
+                        let JettisonInput::EnterAmount { ref item_id, ref item_name, ref buf, .. } = state.jettison else { return };
                         let amount = if buf.is_empty() {
                             None
                         } else {
@@ -55,6 +57,24 @@ pub(super) fn handle_jettison_event(
                             if v <= 0.0 { return }
                             Some(v)
                         };
+                        JettisonInput::Confirm {
+                            item_id: item_id.clone(),
+                            item_name: item_name.clone(),
+                            amount,
+                            error: None,
+                        }
+                    };
+                    state.jettison = next;
+                }
+                _ => {}
+            }
+        }
+        JettisonInput::Confirm { .. } => {
+            match code {
+                KeyCode::Esc => state.jettison = JettisonInput::Inactive,
+                KeyCode::Enter => {
+                    let (item_id, amount) = {
+                        let JettisonInput::Confirm { ref item_id, amount, .. } = state.jettison else { return };
                         (item_id.clone(), amount)
                     };
                     fetch_jettison(item_id, amount, client.clone(), tx.clone());

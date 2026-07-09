@@ -1194,6 +1194,69 @@ fn scanner_objects_order_top_level_then_nested() {
 }
 
 #[test]
+fn scanner_objects_nest_hidden_containers_under_host() {
+    // A container hidden on ast-1 surfaces right after ast-1 even though it
+    // appears later in scan order; a drifting container sinks to the bottom.
+    let tmpl = |id: &str, ty: &str, name: &str, mode: &str, target: &str| {
+        format!(
+            r#"{{"id": "{id}", "type": "{ty}", "name": "{name}",
+            "estimated": null, "summary": null, "mass": null, "massUnit": null,
+            "radius": null, "radiusUnit": null, "dangerLevel": null, "salvageable": null,
+            "mannyState": null, "mannyUid": null, "cargo": null, "itemType": null,
+            "quantity": null, "containerSpace": null, "mode": {mode}, "targetObjectId": {target},
+            "capacity": null, "capacityUnit": null, "minableTargets": null,
+            "waypointBookmarks": [], "bookmarkTargets": []}}"#
+        )
+    };
+    let objects = format!(
+        "[{},{},{},{}]",
+        tmpl("ast-1", "asteroid", "Rock A", "null", "null"),
+        tmpl("c-drift", "detached_container", "Floater", "\"drifting\"", "null"),
+        tmpl("c-hidden", "detached_container", "Cache", "\"hidden_on_asteroid\"", "\"ast-1\""),
+        tmpl("ast-2", "asteroid", "Rock B", "null", "null"),
+    );
+    let mut state = AppState::default();
+    state.probe = Some(probe_at(0., 0., 0.));
+    state.scan_history = vec![make_sector_with_objects(0., 0., 0., &objects)];
+    let entries = state.scanner_objects();
+    let ids: Vec<&str> = entries.iter().map(|e| e.id.as_str()).collect();
+    assert_eq!(ids, vec!["ast-1", "c-hidden", "ast-2", "c-drift"]);
+    let attached: Vec<bool> = entries.iter().map(|e| e.attached).collect();
+    assert_eq!(attached, vec![false, true, false, false]);
+}
+
+#[test]
+fn mining_travel_deducted_only_for_on_asteroid_container() {
+    let tmpl = |id: &str, ty: &str, mode: &str, target: &str| {
+        format!(
+            r#"{{"id": "{id}", "type": "{ty}", "name": "{id}",
+            "estimated": null, "summary": null, "mass": null, "massUnit": null,
+            "radius": null, "radiusUnit": null, "dangerLevel": null, "salvageable": null,
+            "mannyState": null, "mannyUid": null, "cargo": null, "itemType": null,
+            "quantity": null, "containerSpace": null, "mode": {mode}, "targetObjectId": {target},
+            "capacity": null, "capacityUnit": null, "minableTargets": null,
+            "waypointBookmarks": [], "bookmarkTargets": []}}"#
+        )
+    };
+    let objects = format!(
+        "[{},{},{},{}]",
+        tmpl("ast-1", "asteroid", "null", "null"),
+        tmpl("ast-2", "asteroid", "null", "null"),
+        tmpl("c-hidden", "detached_container", "\"hidden_on_asteroid\"", "\"ast-1\""),
+        tmpl("c-drift", "detached_container", "\"drifting\"", "null"),
+    );
+    let mut state = AppState::default();
+    state.probe = Some(probe_at(0., 0., 0.));
+    state.scan_history = vec![make_sector_with_objects(0., 0., 0., &objects)];
+    // Hidden on the mined asteroid → travel deducted.
+    assert!(state.mining_travel_deducted("ast-1", "c-hidden"));
+    // Hidden on a different asteroid → not deducted.
+    assert!(!state.mining_travel_deducted("ast-2", "c-hidden"));
+    // Drifting container → not deducted.
+    assert!(!state.mining_travel_deducted("ast-1", "c-drift"));
+}
+
+#[test]
 fn actions_for_object_by_kind() {
     let mut state = AppState::default();
     state.probe = Some(probe_at(0., 0., 0.));
