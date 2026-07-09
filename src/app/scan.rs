@@ -235,6 +235,23 @@ impl AppState {
         }
     }
 
+    /// Whether a mining job's per-trip travel is deducted: true only when the
+    /// destination container is hidden on the very asteroid being mined (the
+    /// server charges miningTravelSeconds = 0). Mining to the probe or to a
+    /// container elsewhere keeps normal travel.
+    pub fn mining_travel_deducted(&self, asteroid_id: &str, container_id: &str) -> bool {
+        self.current_sector()
+            .and_then(|s| s.objects.as_ref())
+            .is_some_and(|objs| {
+                objs.iter().any(|o| {
+                    o.id.as_deref() == Some(container_id)
+                        && matches!(o.object_type, SectorObjectType::DetachedContainer)
+                        && o.mode.as_deref() == Some("hidden_on_asteroid")
+                        && o.target_object_id.as_deref() == Some(asteroid_id)
+                })
+            })
+    }
+
     pub fn scanner_objects(&self) -> Vec<ScannerObjectEntry> {
         if !self.viewing_probe_sector() {
             return vec![];
