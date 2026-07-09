@@ -204,14 +204,11 @@ impl AppState {
         if ing.unit == "item" {
             probe.inventory.items.iter().filter(|it| it.item_type == ing.ingredient_type).count() as f64
         } else if ing.ingredient_type == "deuterium" {
-            // Deuterium lives in the fuel tank, not in resource_stocks, so a stock
-            // lookup always yields 0 (the recipe reads as unaffordable). Pragmatic
-            // stopgap: report the tank level so the ingredient shows as satisfied
-            // while the tank holds fuel. Note the unit mismatch — recipe cost is in
-            // ECE, the tank level is in tank units (0..max_deuterium) — and the
-            // ECE<->tank conversion isn't exposed by the API. Pending a question to
-            // the game author for an exact readout.
-            probe.fuel.deuterium.unwrap_or(0.0)
+            // Deuterium lives in the fuel tank, not in resource_stocks. The tank
+            // level is a percentage (0..max_deuterium) where 100% of a size-1 tank
+            // holds 1.0 ECE, so divide by 100 to get the ECE amount the recipe is
+            // costed in (scales with tank upgrades, since max_deuterium grows).
+            probe.fuel.deuterium.unwrap_or(0.0) / 100.0
         } else {
             probe
                 .inventory
