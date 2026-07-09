@@ -1,5 +1,12 @@
 # Changelog
 
+## [81.0.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v71.1.2...neumann-cockpit-v81.0.0) (2026-07-09)
+
+
+### Features
+
+* multi-probe fleet support (API v81) ([#180](https://github.com/MagiCrazy/neumann-cockpit/issues/180)) ([de5b647](https://github.com/MagiCrazy/neumann-cockpit/commit/de5b647efa7e4963d54b5209e3a7bab89dbc5702))
+
 ## [71.1.2](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v71.1.1...neumann-cockpit-v71.1.2) (2026-07-09)
 
 
