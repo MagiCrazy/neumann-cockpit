@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 use crate::api::client::ApiClient;
 use crate::api::tasks::fetch_mine;
 use crate::app::{
-    ApiMessage, AppState, MineInput, RemoteMineInput, RESOURCE_TYPES,
+    ApiMessage, AppState, LogEvent, MineInput, RemoteMineInput, RESOURCE_TYPES,
 };
 use super::geometry::list_nav;
 
@@ -155,7 +155,7 @@ pub(super) fn handle_mine_event(
                     }
                 }
                 KeyCode::Enter => {
-                    let (manny_id, object_id, selected_resources, amount, container_id) = {
+                    let (manny_id, object_id, selected_resources, amount, container_id, destination) = {
                         let MineInput::Configure { ref manny_id, ref object_id, resources, ref amount_buf, ref target_container, .. } = state.mine else { return };
                         let selected: Vec<String> = RESOURCE_TYPES.iter().enumerate()
                             .filter(|(i, _)| resources[*i])
@@ -164,9 +164,15 @@ pub(super) fn handle_mine_event(
                         if selected.is_empty() { return }
                         let Ok(amount) = amount_buf.parse::<f64>() else { return };
                         if amount <= 0.0 { return }
-                        (manny_id.clone(), object_id.clone(), selected, amount, target_container.as_ref().map(|(id, _)| id.clone()))
+                        let destination = target_container
+                            .as_ref()
+                            .map(|(_, n)| n.clone())
+                            .unwrap_or_else(|| "the probe".to_string());
+                        (manny_id.clone(), object_id.clone(), selected, amount, target_container.as_ref().map(|(id, _)| id.clone()), destination)
                     };
+                    let resources_label = selected_resources.join(", ");
                     fetch_mine(manny_id, object_id, selected_resources, amount, container_id, client.clone(), tx.clone());
+                    state.log_event(LogEvent::mine(&resources_label, amount, &destination, state.active_probe_id));
                 }
                 _ => {}
             }

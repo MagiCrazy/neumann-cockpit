@@ -9,7 +9,7 @@ use crate::api::tasks::{
 };
 use crate::app::{
     ApiMessage, AppState, DeployInput, DetachInput, DropCargoInput, DropStorageContainerInput,
-    InspectInput, MindSnapshotInput, RecallInput, RefuelInput,
+    InspectInput, LogEvent, MindSnapshotInput, RecallInput, RefuelInput,
     RecoverInput, RenameMannyInput, SalvageInput, DETACH_MODES,
 };
 use super::geometry::list_move;
@@ -153,13 +153,20 @@ pub(super) fn handle_drop_container_event(
         DropStorageContainerInput::PickPlanet { .. } => match code {
             KeyCode::Esc => state.drop_container = DropStorageContainerInput::Inactive,
             KeyCode::Enter => {
-                let (manny_id, container_id, planet_id) = {
+                let (manny_id, container_id, planet_id, container_name, planet_name) = {
                     let DropStorageContainerInput::PickPlanet {
-                        manny_id, container_id, planets, selection, ..
+                        manny_id, container_id, container_name, planets, selection, ..
                     } = &state.drop_container else { return };
-                    (manny_id.clone(), container_id.clone(), planets[*selection].0.clone())
+                    (
+                        manny_id.clone(),
+                        container_id.clone(),
+                        planets[*selection].0.clone(),
+                        container_name.clone(),
+                        planets[*selection].1.clone(),
+                    )
                 };
                 fetch_drop_storage_container(manny_id, container_id, planet_id, client.clone(), tx.clone());
+                state.log_event(LogEvent::drop_container(&container_name, &planet_name, state.active_probe_id));
             }
             _ => {}
         },
@@ -250,7 +257,9 @@ pub(super) fn handle_deploy_event(
                     if name_buf.is_empty() { return }
                     (manny_id.clone(), object_id.clone(), name_buf.clone())
                 };
+                let waypoint_name = name.clone();
                 fetch_deploy(manny_id, object_id, name, client.clone(), tx.clone());
+                state.log_event(LogEvent::deploy_waypoint(&waypoint_name, state.active_probe_id));
             }
             _ => {}
         },
@@ -382,6 +391,7 @@ pub(super) fn handle_detach_event(
                     }
                 } else {
                     fetch_detach(manny_id, container_id, "drifting".into(), None, client.clone(), tx.clone());
+                    state.log_event(LogEvent::detach_container(&container_name, false, state.active_probe_id));
                 }
             }
             _ => {}
@@ -389,11 +399,12 @@ pub(super) fn handle_detach_event(
         DetachInput::PickAsteroid { .. } => match code {
             KeyCode::Esc => state.detach = DetachInput::Inactive,
             KeyCode::Enter => {
-                let (manny_id, container_id, object_id) = {
-                    let DetachInput::PickAsteroid { ref manny_id, ref container_id, ref asteroids, selection, .. } = state.detach else { return };
-                    (manny_id.clone(), container_id.clone(), asteroids[selection].0.clone())
+                let (manny_id, container_id, object_id, container_name) = {
+                    let DetachInput::PickAsteroid { ref manny_id, ref container_id, ref container_name, ref asteroids, selection, .. } = state.detach else { return };
+                    (manny_id.clone(), container_id.clone(), asteroids[selection].0.clone(), container_name.clone())
                 };
                 fetch_detach(manny_id, container_id, "hidden_on_asteroid".into(), Some(object_id), client.clone(), tx.clone());
+                state.log_event(LogEvent::detach_container(&container_name, true, state.active_probe_id));
             }
             _ => {}
         },
