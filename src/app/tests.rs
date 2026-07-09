@@ -1850,6 +1850,144 @@ fn run_command_records_history_deduping_repeats() {
     assert_eq!(state.command_history.len(), 2);
 }
 
+// ── one-shot :mine / :craft ─────────────────────────────────────────────────
+
+/// Probe at origin with one idle onboard Manny and a single mineable asteroid
+/// ("Ceres") in the current sector.
+fn mineable_state() -> AppState {
+    let mut state = AppState::default();
+    state.probe = Some(probe_at(0., 0., 0.));
+    state.mannies = Some(vec![make_manny("m1", "probe", true, None)]);
+    state.scan_history = vec![make_sector_with_objects(
+        0.,
+        0.,
+        0.,
+        r#"[
+        {"id":"ast-1","type":"asteroid","name":"Ceres",
+         "estimated":false,"summary":null,"mass":null,"massUnit":null,
+         "radius":null,"radiusUnit":null,"dangerLevel":null,"salvageable":null,
+         "mannyState":null,"mannyUid":null,"cargo":null,"itemType":null,
+         "quantity":null,"containerSpace":null,"mode":null,"targetObjectId":null,
+         "capacity":null,"capacityUnit":null,"mannyMineable":true,
+         "minableTargets":null,"waypointBookmarks":[],"bookmarkTargets":[]}
+    ]"#,
+    )];
+    state
+}
+
+#[test]
+fn mine_bare_opens_configure_from_context() {
+    let mut state = mineable_state();
+    assert!(!state.run_command("mine"));
+    assert!(
+        matches!(state.mine, MineInput::Configure { ref object_id, ref manny_id, .. }
+            if object_id == "ast-1" && manny_id == "m1"),
+        "bare :mine opens the wizard on the sole manny + asteroid"
+    );
+    assert!(state.pending_fire.is_none(), "the wizard does not fire yet");
+}
+
+#[test]
+fn mine_one_shot_stages_fire_with_defaults() {
+    let mut state = mineable_state();
+    // Only an amount given → resources default to metals, destination = probe.
+    state.run_command("mine 0.5");
+    match state.pending_fire.take() {
+        Some(CommandFire::Mine { manny_id, object_id, resources, amount, container_id }) => {
+            assert_eq!(manny_id, "m1");
+            assert_eq!(object_id, "ast-1");
+            assert_eq!(resources, vec!["metals".to_string()]);
+            assert_eq!(amount, 0.5);
+            assert_eq!(container_id, None);
+        }
+        other => panic!("expected a staged Mine fire, got {other:?}"),
+    }
+}
+
+#[test]
+fn mine_one_shot_multi_resource_alias_and_default_amount() {
+    let mut state = mineable_state();
+    state.run_command("mine ice,carbon");
+    match state.pending_fire.take() {
+        Some(CommandFire::Mine { resources, amount, .. }) => {
+            assert_eq!(resources, vec!["ice".to_string(), "carbon_compounds".to_string()]);
+            assert_eq!(amount, 0.30, "amount defaults when omitted");
+        }
+        other => panic!("expected a staged Mine fire, got {other:?}"),
+    }
+}
+
+#[test]
+fn mine_one_shot_to_probe_is_explicit_none() {
+    let mut state = mineable_state();
+    state.run_command("mine metals to probe");
+    assert!(matches!(
+        state.pending_fire,
+        Some(CommandFire::Mine { container_id: None, .. })
+    ));
+}
+
+#[test]
+fn mine_one_shot_unknown_resource_toasts_without_firing() {
+    let mut state = mineable_state();
+    state.run_command("mine plutonium");
+    assert!(state.pending_fire.is_none());
+    assert!(state.active_toast().is_some());
+}
+
+#[test]
+fn mine_one_shot_at_no_match_toasts_without_firing() {
+    let mut state = mineable_state();
+    state.run_command("mine metals at Vesta");
+    assert!(state.pending_fire.is_none());
+    assert!(state.active_toast().is_some());
+}
+
+#[test]
+fn craft_one_shot_stages_manny_fire() {
+    let mut state = AppState::default();
+    state.recipes = vec![serde_json::from_str(
+        r#"{"id":"r1","name":"Widget","craftableBy":["manny"],
+            "ingredients":[],"durationSeconds":60,
+            "output":{"type":"x","name":"X","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}"#,
+    )
+    .unwrap()];
+    state.mannies = Some(vec![make_manny("m1", "probe", true, None)]);
+    state.run_command("craft widget"); // case-insensitive
+    assert_eq!(
+        state.pending_fire,
+        Some(CommandFire::MannyCraft { manny_id: "m1".into(), recipe_id: "r1".into() })
+    );
+}
+
+#[test]
+fn craft_one_shot_unknown_recipe_toasts() {
+    let mut state = AppState::default();
+    state.recipes = vec![serde_json::from_str(
+        r#"{"id":"r1","name":"Widget","craftableBy":["manny"],
+            "ingredients":[],"durationSeconds":60,
+            "output":{"type":"x","name":"X","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}"#,
+    )
+    .unwrap()];
+    state.run_command("craft Gizmo");
+    assert!(state.pending_fire.is_none());
+    assert!(state.active_toast().is_some());
+}
+
+#[test]
+fn craft_bare_still_opens_wizard() {
+    let mut state = AppState::default();
+    state.recipes = vec![serde_json::from_str(
+        r#"{"id":"r1","name":"Widget","craftableBy":["manny"],
+            "ingredients":[],"durationSeconds":60,
+            "output":{"type":"x","name":"X","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}"#,
+    )
+    .unwrap()];
+    state.run_command("craft");
+    assert!(matches!(state.fabrication, FabricationInput::PickRecipe { .. }));
+    assert!(state.pending_fire.is_none());
+}
+
 #[test]
 fn pane_paging_terminates_on_empty_panes() {
     // The top/bottom jump steps until the cursor stops moving; on an empty pane

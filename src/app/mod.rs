@@ -17,7 +17,7 @@ mod tests;
 
 pub use boot::{BOOT_CHARS_PER_FRAME, BOOT_LINE_STRIDE};
 pub use color::*;
-pub use command::{command_usage, COMMANDS};
+pub use command::{command_usage, CommandFire, COMMANDS};
 pub use grid::*;
 pub use inputs::*;
 pub use inventory::*;
@@ -153,6 +153,9 @@ pub struct AppState {
     /// Ring of previously-run `:` command lines, most-recent last. Browsed with
     /// ↑/↓ while the command line is open (`app/command.rs`). Session-only.
     pub command_history: Vec<String>,
+    /// A task a `:` command staged but cannot spawn itself (no client/sender in
+    /// `run_command`); the input layer drains it after running the command.
+    pub pending_fire: Option<CommandFire>,
 }
 
 impl AppState {

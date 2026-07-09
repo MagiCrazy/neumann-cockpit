@@ -2,9 +2,9 @@ use crossterm::event::KeyCode;
 use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
-use crate::api::tasks::fetch_all;
+use crate::api::tasks::{fetch_all, fetch_atomic_printer_craft, fetch_craft, fetch_mine};
 use crate::app::{
-    command_usage, ApiMessage, AppState, CompletionState, InputMode,
+    command_usage, ApiMessage, AppState, CommandFire, CompletionState, InputMode,
 };
 
 /// Route a key while the `:` command line is open. Typed characters are literal
@@ -26,6 +26,28 @@ pub(super) fn handle_command_event(
                 state.clear_error();
                 state.loading = true;
                 fetch_all(client.clone(), tx.clone());
+            }
+            // Drain any task the command staged but could not spawn itself.
+            if let Some(fire) = state.pending_fire.take() {
+                match fire {
+                    CommandFire::AtomicCraft { recipe_id } => {
+                        fetch_atomic_printer_craft(recipe_id, client.clone(), tx.clone());
+                    }
+                    CommandFire::MannyCraft { manny_id, recipe_id } => {
+                        fetch_craft(manny_id, recipe_id, client.clone(), tx.clone());
+                    }
+                    CommandFire::Mine { manny_id, object_id, resources, amount, container_id } => {
+                        fetch_mine(
+                            manny_id,
+                            object_id,
+                            resources,
+                            amount,
+                            container_id,
+                            client.clone(),
+                            tx.clone(),
+                        );
+                    }
+                }
             }
         }
         KeyCode::Tab => cycle_completion(state),
