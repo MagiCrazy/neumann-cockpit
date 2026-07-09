@@ -1,5 +1,12 @@
 # Changelog
 
+## [81.1.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v81.1.0...neumann-cockpit-v81.1.1) (2026-07-09)
+
+
+### Bug Fixes
+
+* cockpit Phase 0 — deuterium, container hierarchy, mining ETA, jettison guard ([#186](https://github.com/MagiCrazy/neumann-cockpit/issues/186)) ([99358bc](https://github.com/MagiCrazy/neumann-cockpit/commit/99358bcba7441a86ec7cdfca079a6e8b5084f319))
+
 ## [81.1.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v81.0.0...neumann-cockpit-v81.1.0) (2026-07-09)
 
 
