@@ -790,6 +790,30 @@ fn collect_mineable_candidates_returns_asteroid_targets() {
 }
 
 #[test]
+fn collect_mineable_candidates_includes_top_level_asteroid() {
+    // A wandering asteroid is a standalone top-level object (type asteroid, no
+    // parent minableTargets) — it must still reach the mine picker.
+    let mut state = AppState::default();
+    state.probe = Some(probe_at(0., 0., 0.));
+    state.scan_history = vec![make_sector_with_objects(0., 0., 0., r#"[
+        {
+            "id": "deuterium-asteroid-abc", "type": "asteroid",
+            "name": "Astéroïde contenant du Deutérium",
+            "estimated": false, "summary": "Wandering asteroid body.", "mass": null, "massUnit": null,
+            "radius": null, "radiusUnit": null, "dangerLevel": "low", "salvageable": null,
+            "mannyState": null, "mannyUid": null, "cargo": null, "itemType": null,
+            "quantity": null, "containerSpace": null, "mode": null, "targetObjectId": null,
+            "capacity": null, "capacityUnit": null, "mannyMineable": true,
+            "minableTargets": null, "waypointBookmarks": [], "bookmarkTargets": []
+        }
+    ]"#)];
+    let candidates = state.collect_mineable_candidates();
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].0, "deuterium-asteroid-abc");
+    assert_eq!(candidates[0].1, "Astéroïde contenant du Deutérium");
+}
+
+#[test]
 fn deuterium_station_detected_in_current_sector() {
     let mut state = AppState::default();
     state.probe = Some(probe_at(2., 0., -2.));

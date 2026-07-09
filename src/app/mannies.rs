@@ -182,17 +182,30 @@ impl AppState {
     }
 
     pub fn collect_mineable_candidates(&self) -> Vec<(String, String)> {
-        let sector = self.probe_current_sector_scan();
-        sector
-            .and_then(|s| s.objects.as_ref())
-            .map(|objects| {
-                objects.iter()
-                    .flat_map(|o| o.minable_targets.iter().flatten())
-                    .filter(|t| matches!(t.object_type, SectorObjectType::Asteroid))
-                    .map(|t| (t.id.clone(), t.name.clone().unwrap_or_else(|| "unnamed".into())))
-                    .collect()
-            })
-            .unwrap_or_default()
+        let Some(sector) = self.probe_current_sector_scan() else { return Vec::new() };
+        let Some(objects) = sector.objects.as_ref() else { return Vec::new() };
+        let mut out: Vec<(String, String)> = Vec::new();
+        for o in objects {
+            // Asteroids nested under a parent object (e.g. a solar system).
+            for t in o.minable_targets.iter().flatten() {
+                if matches!(t.object_type, SectorObjectType::Asteroid)
+                    && !out.iter().any(|(id, _)| id == &t.id)
+                {
+                    out.push((t.id.clone(), t.name.clone().unwrap_or_else(|| "unnamed".into())));
+                }
+            }
+            // Standalone top-level asteroids (e.g. a wandering asteroid) carry no
+            // parent minableTargets, so they must be collected directly or they
+            // never reach the mine picker.
+            if matches!(o.object_type, SectorObjectType::Asteroid) {
+                if let Some(id) = &o.id {
+                    if !out.iter().any(|(i, _)| i == id) {
+                        out.push((id.clone(), o.name.clone().unwrap_or_else(|| "unnamed".into())));
+                    }
+                }
+            }
+        }
+        out
     }
 
     pub fn collect_asteroid_candidates(&self) -> Vec<(String, String)> {
