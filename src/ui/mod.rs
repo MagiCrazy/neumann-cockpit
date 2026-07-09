@@ -2,6 +2,7 @@ pub mod cockpit_v2;
 pub(crate) mod overlays;
 pub(crate) mod panels;
 pub(crate) mod preflight;
+pub(crate) mod sigil;
 pub(crate) mod theme;
 
 use crate::app::AppState;

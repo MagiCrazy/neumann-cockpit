@@ -89,7 +89,9 @@ One unified phosphor theme (there is no classic/retro split any more). `theme.rs
 
 ### UI (`src/ui/`)
 
-`ui::render` → `cockpit_v2::render(frame, state)` is the single render entry point. Module layout: `cockpit_v2/` (`mod.rs` entry point — grid layout, status bar, boot screen; `grid.rs` responsive window; `panes.rs` compact renderers for the five promoted panes; `menu.rs` contextual-menu popup), `panels/` (the four original panel renderers, reused by the grid: `probe`, `inventory`, `scanner`, `mannies`), `overlays/` (one file per wizard overlay; `pickers.rs` groups the manny pick-list/confirm ones, `containers.rs` the storage-container ones, plus `alerts.rs` / `storage_move.rs`; `mod.rs` hosts `centered_rect` + `render_pick_list`), `theme.rs`.
+`ui::render` → `cockpit_v2::render(frame, state)` is the single render entry point. Module layout: `cockpit_v2/` (`mod.rs` entry point — grid layout, status bar, boot screen; `grid.rs` responsive window; `panes.rs` compact renderers for the five promoted panes; `menu.rs` contextual-menu popup), `panels/` (the four original panel renderers, reused by the grid: `probe`, `inventory`, `scanner`, `mannies`), `overlays/` (one file per wizard overlay; `pickers.rs` groups the manny pick-list/confirm ones, `containers.rs` the storage-container ones, plus `alerts.rs` / `storage_move.rs`; `mod.rs` hosts `centered_rect` + `render_pick_list`), `theme.rs`, `sigil.rs`.
+
+**Probe sigil** (`src/ui/sigil.rs`, API v81) — `probe_sigil(id)` builds a deterministic 7×7 mirror-symmetric identicon (FNV-1a over the id, stable across runs — **not** the randomized default hasher; 7×4 = 28 free bits ≈ 268M patterns). `sigil_lines(id, palette, indent)` renders it as 4 half-block (`▀▄█`) lines in the accent colour. The Probe pane pins the **active probe's** sigil to its top-right corner, always visible in every mode/theme, so probes/drones are told apart at a glance (`panels/probe.rs`).
 
 **The grid** — a 3×3 tiling dashboard of nine panes, each addressable by a key in the `e r t / d f g / c v b` square (identical on AZERTY and QWERTY; centre `f` = Probe). Model: *navigate then act*.
 
