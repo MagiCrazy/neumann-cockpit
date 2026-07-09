@@ -247,7 +247,14 @@ pub fn render_sector(frame: &mut Frame, area: Rect, state: &AppState, active: bo
     for (i, e) in objs.iter().enumerate() {
         let color = object_color(&e.object_type, p);
         let icon = object_icon(&e.object_type).0;
-        let name: String = e.name.chars().take(16).collect();
+        // Keep the compact row width bounded, but mark a cut name with an
+        // ellipsis so a long label (e.g. "Astéroïde contenant du Deutérium")
+        // reads as truncated rather than broken mid-word.
+        let name: String = if e.name.chars().count() > 16 {
+            e.name.chars().take(15).chain(std::iter::once('…')).collect()
+        } else {
+            e.name.clone()
+        };
         let mut spans = vec![
             Span::styled(format!("{icon} "), Style::default().fg(color)),
             Span::styled(name, row_style(active, i == cur).patch(text)),
