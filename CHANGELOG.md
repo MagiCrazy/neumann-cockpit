@@ -1,5 +1,13 @@
 # Changelog
 
+## [71.1.2](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v71.1.1...neumann-cockpit-v71.1.2) (2026-07-09)
+
+
+### Bug Fixes
+
+* **deps:** update rust dependencies ([#171](https://github.com/MagiCrazy/neumann-cockpit/issues/171)) ([62bb3ba](https://github.com/MagiCrazy/neumann-cockpit/commit/62bb3ba9b9be21919e2b986e9197f6e60b2653ed))
+* **sector:** mine top-level asteroids and stop truncating names mid-word ([#181](https://github.com/MagiCrazy/neumann-cockpit/issues/181)) ([1345d0e](https://github.com/MagiCrazy/neumann-cockpit/commit/1345d0eb78986c35dc6f8ee175455c554cb609ba))
+
 ## [71.1.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v71.1.0...neumann-cockpit-v71.1.1) (2026-07-07)
 
 

@@ -1262,7 +1262,7 @@ dependencies = [
 
 [[package]]
 name = "neumann-cockpit"
-version = "71.1.1"
+version = "71.1.2"
 dependencies = [
  "anyhow",
  "chrono",
