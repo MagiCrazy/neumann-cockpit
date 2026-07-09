@@ -9,6 +9,7 @@ use ratatui::{
     Frame,
 };
 
+use crate::ui::sigil::sigil_lines;
 use crate::ui::theme::{
     block_gauge_line, format_duration, movement_phase_label, palette, pane_block, probe_status_label,
     probe_status_style, ratio_color,
@@ -189,4 +190,21 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
     ]));
 
     frame.render_widget(Paragraph::new(lines), content);
+
+    // ── Sigil (API v81) ──
+    // The active probe's unique signature, pinned to the pane's top-right so you
+    // can tell probes apart at a glance — always visible, every mode/theme.
+    // Drawn last so it sits over the (short) identity lines; the top-right
+    // corner is otherwise free. Skipped only when the pane is too narrow/short.
+    const SIGIL_W: u16 = 7; // 7 cells wide
+    const SIGIL_H: u16 = 4; // 7 rows packed into 4 half-block lines
+    if content.width >= SIGIL_W + 10 && content.height >= SIGIL_H {
+        let corner = Rect {
+            x: content.x + content.width - SIGIL_W,
+            y: content.y,
+            width: SIGIL_W,
+            height: SIGIL_H,
+        };
+        frame.render_widget(Paragraph::new(sigil_lines(probe.id as u64, p, "")), corner);
+    }
 }
