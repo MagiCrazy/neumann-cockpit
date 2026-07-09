@@ -17,7 +17,7 @@ use crate::api::tasks::{
 };
 use crate::api::types::{MannyTask, MannyTaskVisibility};
 use crate::app::{
-    ApiMessage, AppState, AssembleProbeInput, CommsCategory, DeployInput, FabricationInput, ImproveInput, DetachInput, DropCargoInput,
+    ApiMessage, AppState, AssembleProbeInput, CommsCategory, MissionsCategory, DeployInput, FabricationInput, ImproveInput, DetachInput, DropCargoInput,
     CommandLine, DropStorageContainerInput, DrillLevel, InputMode, InspectInput, MenuAction,
     MessagesInput,
     MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput, Pane, RecallInput, RecoverInput,
@@ -102,14 +102,25 @@ fn open_actions(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiM
                 _ => state.set_toast("no actions here"),
             }
         }
-        Pane::Missions => {
-            if state.missions.is_empty() {
-                state.set_toast("no missions");
-            } else {
-                let selection = state.pane_nav[Pane::Missions.index()].cursor;
-                state.missions_input = MissionsInput::Browsing { selection };
+        Pane::Missions => match state.missions_category() {
+            // Root: Enter enters the selected category, like `l`.
+            None => missions_activate(state),
+            Some(MissionsCategory::ShipsLog) => state.set_toast("ship's log — read only"),
+            Some(MissionsCategory::Missions) => {
+                let in_detail = matches!(
+                    state.pane_nav[Pane::Missions.index()].drill.last(),
+                    Some(DrillLevel::Mission(_))
+                );
+                if in_detail {
+                    // Viewing a mission's steps — no extra action.
+                } else if state.missions.is_empty() {
+                    state.set_toast("no missions");
+                } else {
+                    let selection = state.pane_nav[Pane::Missions.index()].cursor;
+                    state.missions_input = MissionsInput::Browsing { selection };
+                }
             }
-        }
+        },
         Pane::Comms => comms_activate(state, client, tx),
         Pane::Sector => open_sector_object_actions(state),
     }
@@ -151,12 +162,43 @@ fn comms_activate(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<Ap
     }
 }
 
+/// Missions activation for `l` (and root `Enter`): at the root, enter the
+/// selected category (missions list / ship's log); in the missions list, drill
+/// into the selected mission's steps. The ship's log is read-only.
+fn missions_activate(state: &mut AppState) {
+    let cursor = state.pane_nav[Pane::Missions.index()].cursor;
+    match state.missions_category() {
+        None => {
+            if let Some(&cat) = MissionsCategory::ALL.get(cursor) {
+                state.missions_enter_category(cat);
+            }
+        }
+        Some(MissionsCategory::Missions) => {
+            let drilled = matches!(
+                state.pane_nav[Pane::Missions.index()].drill.last(),
+                Some(DrillLevel::Mission(_))
+            );
+            if !drilled {
+                if let Some(id) = state.missions.get(cursor).map(|m| m.id.clone()) {
+                    state.missions_drill_into(id);
+                }
+            }
+        }
+        Some(MissionsCategory::ShipsLog) => {}
+    }
+}
+
 /// Drill into the selected element. For Storage, this fetches the container's
 /// contents so they can be rendered inline (no legacy content modal).
 fn drill_in(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
     // Comms drives its own drill (categories → in-pane alert/warning lists).
     if state.active_pane == Pane::Comms {
         comms_activate(state, client, tx);
+        return;
+    }
+    // Missions likewise (categories → missions list → steps, or ship's log).
+    if state.active_pane == Pane::Missions {
+        missions_activate(state);
         return;
     }
     state.pane_drill_in();

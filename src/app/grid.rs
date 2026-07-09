@@ -126,6 +126,8 @@ pub enum DrillLevel {
     SectorObject(usize),
     /// Which category the Comms pane is drilled into.
     CommsCat(CommsCategory),
+    /// Which category the Missions pane is drilled into (Missions / Ship's log).
+    MissionsCat(MissionsCategory),
 }
 
 /// The three sub-lists of the Comms pane, selectable at its root.
@@ -148,6 +150,26 @@ impl CommsCategory {
     /// Root-row order in the Comms pane.
     pub const ALL: [CommsCategory; 3] =
         [CommsCategory::Messages, CommsCategory::Alerts, CommsCategory::Warnings];
+}
+
+/// The two sub-views of the Missions pane, selectable at its root: the active
+/// missions list and the ship's log (parked here until it earns its own pane).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MissionsCategory {
+    Missions,
+    ShipsLog,
+}
+
+impl MissionsCategory {
+    pub fn label(self) -> &'static str {
+        match self {
+            MissionsCategory::Missions => "Missions",
+            MissionsCategory::ShipsLog => "Ship's log",
+        }
+    }
+
+    /// Root-row order in the Missions pane.
+    pub const ALL: [MissionsCategory; 2] = [MissionsCategory::Missions, MissionsCategory::ShipsLog];
 }
 
 /// Per-pane navigation state: the cursor at the current level plus the
@@ -190,8 +212,11 @@ impl super::AppState {
                 _ => 0,
             },
             Pane::Sector => self.scanner_objects().len(),
-            // Drilled into a mission, the cursor moves over its steps.
+            // Root: two categories. Ship's log: the journal. Drilled into a
+            // mission: its steps. Otherwise (Missions category): the list.
             Pane::Missions => match drill {
+                None => MissionsCategory::ALL.len(),
+                Some(DrillLevel::MissionsCat(MissionsCategory::ShipsLog)) => self.journal.len(),
                 Some(DrillLevel::Mission(id)) => self
                     .missions
                     .iter()
@@ -312,8 +337,8 @@ impl super::AppState {
         }
         let cursor = self.pane_nav[idx].cursor;
         let level = match self.active_pane {
-            Pane::Missions => self.missions.get(cursor).map(|m| DrillLevel::Mission(m.id.clone())),
-            // Comms drives its own drill (categories) via `comms_activate`.
+            // Missions and Comms drive their own drill (categories) via
+            // `missions_activate` / `comms_activate`.
             Pane::Storage => self
                 .probe
                 .as_ref()
@@ -347,6 +372,30 @@ impl super::AppState {
         let nav = &mut self.pane_nav[Pane::Comms.index()];
         nav.drill.clear();
         nav.drill.push(DrillLevel::CommsCat(cat));
+        nav.cursor = 0;
+    }
+
+    /// The Missions category currently drilled into, if any — found anywhere in
+    /// the stack, so it holds while drilled deeper into a mission's steps.
+    pub fn missions_category(&self) -> Option<MissionsCategory> {
+        self.pane_nav[Pane::Missions.index()].drill.iter().find_map(|l| match l {
+            DrillLevel::MissionsCat(c) => Some(*c),
+            _ => None,
+        })
+    }
+
+    /// Enter a Missions category from the root (missions list / ship's log).
+    pub fn missions_enter_category(&mut self, cat: MissionsCategory) {
+        let nav = &mut self.pane_nav[Pane::Missions.index()];
+        nav.drill.clear();
+        nav.drill.push(DrillLevel::MissionsCat(cat));
+        nav.cursor = 0;
+    }
+
+    /// Drill from the missions list into the selected mission's steps.
+    pub fn missions_drill_into(&mut self, id: String) {
+        let nav = &mut self.pane_nav[Pane::Missions.index()];
+        nav.drill.push(DrillLevel::Mission(id));
         nav.cursor = 0;
     }
 
@@ -412,6 +461,7 @@ impl super::AppState {
                     .find(|m| &m.id == id)
                     .map_or_else(|| "mission".to_string(), |m| m.title.clone()),
                 DrillLevel::CommsCat(cat) => cat.label().to_string(),
+                DrillLevel::MissionsCat(cat) => cat.label().to_string(),
                 DrillLevel::Container(id) => self
                     .storage_container(id)
                     .map_or_else(|| id.clone(), |c| c.label.clone()),
@@ -512,17 +562,40 @@ mod tests {
         }];
         s.active_pane = Pane::Missions;
 
-        s.pane_drill_in();
+        // Root → enter the Missions category → drill into the mission's steps.
+        s.missions_enter_category(crate::app::MissionsCategory::Missions);
+        assert_eq!(s.breadcrumb(), vec!["COCKPIT", "MISSIONS", "Missions"]);
+        s.missions_drill_into("m1".into());
         assert_eq!(
             s.breadcrumb(),
-            vec!["COCKPIT", "MISSIONS", "Survey the rim"]
+            vec!["COCKPIT", "MISSIONS", "Missions", "Survey the rim"]
         );
-        // One level deep only: a second drill-in is a no-op.
-        s.pane_drill_in();
-        assert_eq!(s.pane_nav[Pane::Missions.index()].drill.len(), 1);
+        // The category holds while drilled into a mission's steps.
+        assert_eq!(s.missions_category(), Some(crate::app::MissionsCategory::Missions));
 
+        // Drill out step by step: mission → category → root.
+        assert!(s.pane_drill_out());
+        assert_eq!(s.breadcrumb(), vec!["COCKPIT", "MISSIONS", "Missions"]);
         assert!(s.pane_drill_out());
         assert_eq!(s.breadcrumb(), vec!["COCKPIT", "MISSIONS"]);
+    }
+
+    #[test]
+    fn missions_root_categories_and_ship_log_counts_journal() {
+        use crate::app::{LogEvent, MissionsCategory};
+        let mut s = crate::app::AppState::default();
+        s.active_pane = Pane::Missions;
+        // Root exposes the two categories.
+        assert_eq!(s.pane_item_count(Pane::Missions), MissionsCategory::ALL.len());
+        // The Ship's log category lists the journal entries.
+        s.journal = vec![
+            LogEvent::action("test", "a", None),
+            LogEvent::action("test", "b", None),
+        ];
+        s.missions_enter_category(MissionsCategory::ShipsLog);
+        assert_eq!(s.missions_category(), Some(MissionsCategory::ShipsLog));
+        assert_eq!(s.pane_item_count(Pane::Missions), 2);
+        assert_eq!(s.breadcrumb(), vec!["COCKPIT", "MISSIONS", "Ship's log"]);
     }
 
     #[test]
