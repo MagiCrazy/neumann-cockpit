@@ -1,5 +1,13 @@
 # Changelog
 
+## [81.1.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v81.0.0...neumann-cockpit-v81.1.0) (2026-07-09)
+
+
+### Features
+
+* **cockpit:** unique per-probe sigil (identicon) in the Probe pane ([#183](https://github.com/MagiCrazy/neumann-cockpit/issues/183)) ([d26395b](https://github.com/MagiCrazy/neumann-cockpit/commit/d26395b7dafb51c55c6659d5f755fad742744e50))
+* **command:** argument completion, Tab cycling, usage ghost-text and history ([#185](https://github.com/MagiCrazy/neumann-cockpit/issues/185)) ([bc33993](https://github.com/MagiCrazy/neumann-cockpit/commit/bc33993a8bf66b39c343ca9d8d6e5f0d27105cb7))
+
 ## [81.0.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v71.1.2...neumann-cockpit-v81.0.0) (2026-07-09)
 
 
