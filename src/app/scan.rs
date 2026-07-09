@@ -96,6 +96,9 @@ pub struct ScannerObjectEntry {
     pub name: String,
     pub object_type: SectorObjectType,
     pub provenance: ObjectProvenance,
+    /// True for a detached container hidden on a listed asteroid: the Sector
+    /// pane renders it indented under its host (set during hierarchy ordering).
+    pub attached: bool,
 }
 
 impl AppState {
@@ -252,6 +255,7 @@ impl AppState {
                     name: o.name.clone().unwrap_or_default(),
                     object_type: o.object_type.clone(),
                     provenance: ObjectProvenance::TopLevel,
+                    attached: false,
                 });
             }
             for t in o.minable_targets.iter().flatten() {
@@ -260,6 +264,7 @@ impl AppState {
                     name: t.name.clone().unwrap_or_default(),
                     object_type: t.object_type.clone(),
                     provenance: ObjectProvenance::MinableTarget,
+                    attached: false,
                 });
             }
             for t in &o.bookmark_targets {
@@ -269,6 +274,7 @@ impl AppState {
                         name: t.name.clone().unwrap_or_default(),
                         object_type: t.object_type.clone(),
                         provenance: ObjectProvenance::BookmarkTarget,
+                        attached: false,
                     });
                 }
             }
@@ -284,7 +290,60 @@ impl AppState {
                 e.name = format!("{label} #{n}");
             }
         }
-        out
+
+        // Reorder into an asteroid→hosted-container hierarchy: each host keeps
+        // its scan order and is immediately followed by the detached containers
+        // hidden on it; drifting containers (and any whose host isn't listed)
+        // sink to the bottom. `attached` marks the ones the pane indents.
+        let listed: std::collections::HashSet<String> = out.iter().map(|e| e.id.clone()).collect();
+        let host_of = |id: &str| -> Option<String> {
+            objects
+                .iter()
+                .find(|o| {
+                    o.id.as_deref() == Some(id)
+                        && matches!(o.object_type, SectorObjectType::DetachedContainer)
+                        && o.mode.as_deref() == Some("hidden_on_asteroid")
+                })
+                .and_then(|o| o.target_object_id.clone())
+        };
+        let is_container = |id: &str| -> bool {
+            objects.iter().any(|o| {
+                o.id.as_deref() == Some(id)
+                    && matches!(o.object_type, SectorObjectType::DetachedContainer)
+            })
+        };
+        let mut hosts: Vec<ScannerObjectEntry> = Vec::new();
+        let mut hosted: std::collections::HashMap<String, Vec<ScannerObjectEntry>> =
+            std::collections::HashMap::new();
+        let mut drifting: Vec<ScannerObjectEntry> = Vec::new();
+        for mut e in out.into_iter() {
+            match host_of(&e.id) {
+                Some(h) if listed.contains(&h) => {
+                    e.attached = true;
+                    hosted.entry(h).or_default().push(e);
+                }
+                // Hidden on an asteroid that isn't in this sector list, or a
+                // free-floating container: both go to the bottom.
+                Some(_) => drifting.push(e),
+                None if is_container(&e.id) => drifting.push(e),
+                None => hosts.push(e),
+            }
+        }
+        let mut ordered: Vec<ScannerObjectEntry> = Vec::with_capacity(listed.len());
+        for h in hosts {
+            let kids = hosted.remove(&h.id);
+            ordered.push(h);
+            if let Some(kids) = kids {
+                ordered.extend(kids);
+            }
+        }
+        // Safety net for hosted entries whose host slipped past the guard, then
+        // the drifting containers, all pinned to the bottom.
+        for (_, kids) in hosted {
+            ordered.extend(kids);
+        }
+        ordered.extend(drifting);
+        ordered
     }
 
     /// Actions available for an entry, mirroring the manny-first candidate

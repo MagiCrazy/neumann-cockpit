@@ -255,10 +255,14 @@ pub fn render_sector(frame: &mut Frame, area: Rect, state: &AppState, active: bo
         } else {
             e.name.clone()
         };
-        let mut spans = vec![
-            Span::styled(format!("{icon} "), Style::default().fg(color)),
-            Span::styled(name, row_style(active, i == cur).patch(text)),
-        ];
+        let mut spans: Vec<Span<'static>> = Vec::new();
+        // Detached containers hidden on an asteroid render indented under their
+        // host (see scanner_objects hierarchy ordering).
+        if e.attached {
+            spans.push(Span::styled("  └ ".to_string(), Style::default().fg(p.dim)));
+        }
+        spans.push(Span::styled(format!("{icon} "), Style::default().fg(color)));
+        spans.push(Span::styled(name, row_style(active, i == cur).patch(text)));
         spans.extend(sector_entry_tags(state, &e.id, p));
         if i == cur {
             sel_line = Some(lines.len());
@@ -308,6 +312,13 @@ fn sector_entry_tags(state: &AppState, id: &str, p: Palette) -> Vec<Span<'static
                 }
                 if let Some(c) = &o.category {
                     out.push(Span::styled(format!(" {c}"), dim));
+                }
+            }
+            SectorObjectType::DetachedContainer => {
+                // Containers hidden on an asteroid are shown indented under their
+                // host (scanner_objects hierarchy); only flag free-floating ones.
+                if o.mode.as_deref() == Some("drifting") {
+                    out.push(Span::styled("  drifting".to_string(), dim));
                 }
             }
             _ => {
