@@ -60,6 +60,15 @@ type WizardHandler = fn(KeyCode, &mut AppState, &ApiClient, &mpsc::Sender<ApiMes
 #[allow(clippy::type_complexity)]
 #[rustfmt::skip]
 const WIZARD_INPUTS: &[(WizardGuard, WizardHandler)] = &[
+    // Toggle/picker overlays kept outside `ActiveWizard` (bool flags or their own
+    // enums), routed here for one uniform dispatch. They precede the wizards,
+    // matching their former hand-wired position; in practice they are mutually
+    // exclusive with an open wizard, so the ordering is precedence insurance.
+    (|s| s.help_open, |c, s, _, _| handle_help_event(c, s)),
+    (|s| s.inventory_detail_open, |c, s, _, _| handle_inventory_detail_event(c, s)),
+    (|s| s.map.open, |c, s, _, _| handle_map_event(c, s)),
+    (|s| matches!(s.goto_visited, GotoVisitedInput::Picking { .. }), |c, s, _, _| handle_goto_visited_event(c, s)),
+    (|s| matches!(s.probe_switch, ProbeSwitchInput::Picking { .. }), |c, s, _, _| handle_probe_switch_event(c, s)),
     (|s| matches!(s.active_wizard, ActiveWizard::AssembleProbe(_)), handle_assemble_probe_event),
     (|s| matches!(s.active_wizard, ActiveWizard::RenameProbe(_)), handle_rename_probe_event),
     (|s| matches!(s.active_wizard, ActiveWizard::Jettison(_)), handle_jettison_event),
@@ -104,6 +113,40 @@ fn dispatch_wizard_key(code: KeyCode, state: &mut AppState, client: &ApiClient, 
     false
 }
 
+/// Scroll/close handler for the full-screen help overlay (`state.help_open`).
+fn handle_help_event(code: KeyCode, state: &mut AppState) {
+    // Clamp against the same body height the renderer uses (near-fullscreen
+    // minus a 2-row margin, 2 borders and the footer).
+    let (_, term_h) = crossterm::terminal::size().unwrap_or((80, 24));
+    let max = (crate::ui::overlays::help_row_count() as u16).saturating_sub(term_h.saturating_sub(5));
+    match code {
+        KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q') => {
+            state.help_open = false;
+            state.help_scroll = 0;
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            state.help_scroll = state.help_scroll.saturating_add(1).min(max);
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            state.help_scroll = state.help_scroll.saturating_sub(1);
+        }
+        KeyCode::PageDown | KeyCode::Char(' ') => {
+            state.help_scroll = state.help_scroll.saturating_add(10).min(max);
+        }
+        KeyCode::PageUp => state.help_scroll = state.help_scroll.saturating_sub(10),
+        KeyCode::Char('g') | KeyCode::Home => state.help_scroll = 0,
+        KeyCode::Char('G') | KeyCode::End => state.help_scroll = max,
+        _ => {}
+    }
+}
+
+/// Close handler for the read-only inventory-detail popup.
+fn handle_inventory_detail_event(code: KeyCode, state: &mut AppState) {
+    if matches!(code, KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q')) {
+        state.inventory_detail_open = false;
+    }
+}
+
 pub fn handle_event(event: Event, state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
     let Event::Key(k) = event else { return };
     if k.kind != KeyEventKind::Press {
@@ -131,55 +174,6 @@ pub fn handle_event(event: Event, state: &mut AppState, client: &ApiClient, tx: 
         // F2 cycles the cockpit color mode.
         state.color_mode = state.color_mode.cycle();
         state.set_toast(format!("color mode: {}", state.color_mode.label()));
-        return;
-    }
-
-    if state.help_open {
-        // Clamp against the same body height the renderer uses (near-fullscreen
-        // minus a 2-row margin, 2 borders and the footer).
-        let (_, term_h) = crossterm::terminal::size().unwrap_or((80, 24));
-        let max = (crate::ui::overlays::help_row_count() as u16).saturating_sub(term_h.saturating_sub(5));
-        match k.code {
-            KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q') => {
-                state.help_open = false;
-                state.help_scroll = 0;
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                state.help_scroll = state.help_scroll.saturating_add(1).min(max);
-            }
-            KeyCode::Up | KeyCode::Char('k') => {
-                state.help_scroll = state.help_scroll.saturating_sub(1);
-            }
-            KeyCode::PageDown | KeyCode::Char(' ') => {
-                state.help_scroll = state.help_scroll.saturating_add(10).min(max);
-            }
-            KeyCode::PageUp => state.help_scroll = state.help_scroll.saturating_sub(10),
-            KeyCode::Char('g') | KeyCode::Home => state.help_scroll = 0,
-            KeyCode::Char('G') | KeyCode::End => state.help_scroll = max,
-            _ => {}
-        }
-        return;
-    }
-
-    if state.inventory_detail_open {
-        if matches!(k.code, KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q')) {
-            state.inventory_detail_open = false;
-        }
-        return;
-    }
-
-    if state.map.open {
-        handle_map_event(k.code, state);
-        return;
-    }
-
-    if matches!(state.goto_visited, GotoVisitedInput::Picking { .. }) {
-        handle_goto_visited_event(k.code, state);
-        return;
-    }
-
-    if matches!(state.probe_switch, ProbeSwitchInput::Picking { .. }) {
-        handle_probe_switch_event(k.code, state);
         return;
     }
 
@@ -240,7 +234,7 @@ mod tests {
     //! an open wizard captures keys before the cockpit grid, and Esc closes it.
     //! These pin behavior ahead of the wizard-registry refactor.
     use super::*;
-    use crate::app::{AlertsInput, Pane, TravelInput};
+    use crate::app::{AlertsInput, GotoVisitedInput, Pane, ProbeSwitchInput, TravelInput};
     use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 
     fn dummy_client() -> ApiClient {
@@ -323,6 +317,59 @@ mod tests {
         assert!(
             matches!(state.active_wizard, ActiveWizard::None),
             "Esc closes the travel wizard"
+        );
+    }
+
+    #[tokio::test]
+    async fn help_overlay_captures_keys_and_closes_on_esc() {
+        // The 5 toggle/picker overlays now route through WIZARD_INPUTS instead of
+        // hand-wired guards; they must still swallow keys before the cockpit.
+        let mut state = AppState::default();
+        state.help_open = true;
+        press(&mut state, KeyCode::Char('e'));
+        assert_eq!(state.active_pane, Pane::Probe, "help swallows the pane key");
+        assert!(state.help_open, "still open after a scroll/no-op key");
+        press(&mut state, KeyCode::Esc);
+        assert!(!state.help_open, "Esc closes help");
+    }
+
+    #[tokio::test]
+    async fn inventory_detail_overlay_closes_on_esc() {
+        let mut state = AppState::default();
+        state.inventory_detail_open = true;
+        press(&mut state, KeyCode::Char('e'));
+        assert_eq!(state.active_pane, Pane::Probe, "detail popup swallows the pane key");
+        assert!(state.inventory_detail_open, "a non-close key leaves it open");
+        press(&mut state, KeyCode::Esc);
+        assert!(!state.inventory_detail_open, "Esc closes the detail popup");
+    }
+
+    #[tokio::test]
+    async fn map_overlay_captures_keys_before_cockpit() {
+        let mut state = AppState::default();
+        state.map.open = true;
+        press(&mut state, KeyCode::Char('e'));
+        assert_eq!(state.active_pane, Pane::Probe, "map swallows the pane key");
+    }
+
+    #[tokio::test]
+    async fn picker_overlays_capture_keys_before_cockpit() {
+        let mut state = AppState::default();
+        state.goto_visited = GotoVisitedInput::Picking { selection: 0 };
+        press(&mut state, KeyCode::Char('e'));
+        assert_eq!(
+            state.active_pane,
+            Pane::Probe,
+            "goto-visited picker swallows the pane key"
+        );
+
+        let mut state = AppState::default();
+        state.probe_switch = ProbeSwitchInput::Picking { selection: 0 };
+        press(&mut state, KeyCode::Char('e'));
+        assert_eq!(
+            state.active_pane,
+            Pane::Probe,
+            "probe-switch picker swallows the pane key"
         );
     }
 
