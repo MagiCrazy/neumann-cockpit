@@ -191,7 +191,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         // Refresh so the Probe pane identity picks up the new name.
                         state.finish_action(format!("probe renamed to {name}"), Refetch::All);
                     }
-                    ApiMessage::RenameProbeError(e) => state.set_rename_probe_error(e),
+                    ApiMessage::RenameProbeError(e) => state.set_wizard_error(e),
                     ApiMessage::ManniesUpdated(mannies) => state.update_mannies(mannies),
                     ApiMessage::SectorUpdated(sector) => {
                         let (sx, sy, sz) = (
@@ -229,15 +229,14 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         state.close_wizard();
                         state.finish_action("repair order sent", Refetch::Mannies);
                     }
-                    ApiMessage::RepairError(e) => state.set_repair_error(e),
+                    ApiMessage::RepairError(e) => state.set_wizard_error(e),
                     ApiMessage::MineStarted => {
                         state.close_wizard();
                         state.finish_action("mining order sent", Refetch::Mannies);
                     }
-                    ApiMessage::MineError(e) => {
-                        state.set_mine_error(e.clone());
-                        state.set_remote_mine_error(e);
-                    }
+                    // Either the local or remote-mine wizard is open; the single
+                    // set_wizard_error targets whichever it is.
+                    ApiMessage::MineError(e) => state.set_wizard_error(e),
                     ApiMessage::JettisonDone(inv) => {
                         state.update_inventory(inv);
                         state.close_wizard();
@@ -245,49 +244,49 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         // drifting item, or deployed SCUT relay) — refresh everything.
                         state.finish_action("jettisoned", Refetch::All);
                     }
-                    ApiMessage::JettisonError(e) => state.set_jettison_error(e),
+                    ApiMessage::JettisonError(e) => state.set_wizard_error(e),
                     ApiMessage::CraftStarted => {
                         state.close_wizard();
                         state.finish_action("craft order sent", Refetch::Mannies);
                     }
-                    ApiMessage::CraftError(e) => state.set_fabrication_error(e),
+                    ApiMessage::CraftError(e) => state.set_wizard_error(e),
                     ApiMessage::SalvageStarted => {
                         state.close_wizard();
                         state.finish_action("salvage order sent", Refetch::Mannies);
                     }
-                    ApiMessage::SalvageError(e) => state.set_salvage_error(e),
+                    ApiMessage::SalvageError(e) => state.set_wizard_error(e),
                     ApiMessage::RecallStarted => {
                         state.close_wizard();
                         state.finish_action("recall order sent", Refetch::Mannies);
                     }
-                    ApiMessage::RecallError(e) => state.set_recall_error(e),
+                    ApiMessage::RecallError(e) => state.set_wizard_error(e),
                     ApiMessage::DeuteriumRefuelStarted => {
                         state.close_wizard();
                         state.finish_action("refuel order sent", Refetch::All);
                     }
-                    ApiMessage::DeuteriumRefuelError(e) => state.set_refuel_error(e),
+                    ApiMessage::DeuteriumRefuelError(e) => state.set_wizard_error(e),
                     ApiMessage::DeuteriumTransferStarted => {
                         state.close_wizard();
                         state.finish_action("deuterium transfer order sent", Refetch::All);
                     }
-                    ApiMessage::DeuteriumTransferError(e) => state.set_transfer_deuterium_error(e),
+                    ApiMessage::DeuteriumTransferError(e) => state.set_wizard_error(e),
                     ApiMessage::MindSnapshotReassigned(probe) => {
                         state.close_wizard();
                         state.update_probe(probe);
                         state.finish_action("mind snapshot reassigned", Refetch::All);
                     }
-                    ApiMessage::MindSnapshotReassignError(e) => state.set_mind_snapshot_error(e),
+                    ApiMessage::MindSnapshotReassignError(e) => state.set_wizard_error(e),
                     ApiMessage::MissionsFetched(missions) => state.missions = missions,
                     ApiMessage::MissionAbandoned(_) => {
                         state.active_wizard = ActiveWizard::Missions(MissionsInput::Browsing { selection: 0 });
                         state.finish_action("mission abandoned", Refetch::Missions);
                     }
-                    ApiMessage::MissionAbandonError(e) => state.set_mission_abandon_error(e),
+                    ApiMessage::MissionAbandonError(e) => state.set_wizard_error(e),
                     ApiMessage::ScutRelayTurnedOn => {
                         state.close_wizard();
                         state.finish_action("relay turn-on order sent", Refetch::All);
                     }
-                    ApiMessage::ScutRelayTurnOnError(e) => state.set_scut_relay_error(e),
+                    ApiMessage::ScutRelayTurnOnError(e) => state.set_wizard_error(e),
                     ApiMessage::ScutNetworkFetched(network) => {
                         if matches!(state.active_wizard, ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { .. })) {
                             state.scut_network_view = Some(network);
@@ -299,7 +298,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         state.active_wizard = ActiveWizard::Messages(MessagesInput::Browsing { sent_tab: false, selection: 0 });
                         state.finish_action("message sent", Refetch::Messages);
                     }
-                    ApiMessage::MessageSendError(e) => state.set_message_send_error(e),
+                    ApiMessage::MessageSendError(e) => state.set_wizard_error(e),
                     ApiMessage::MessageMarkedRead(m) => {
                         if let Some(slot) = state.messages.iter_mut().find(|x| x.id == m.id) {
                             *slot = m;
@@ -314,12 +313,12 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         state.close_wizard();
                         state.finish_action("waypoint deploy order sent", Refetch::All);
                     }
-                    ApiMessage::DeployError(e) => state.set_deploy_error(e),
+                    ApiMessage::DeployError(e) => state.set_wizard_error(e),
                     ApiMessage::AtomicPrinterCraftStarted => {
                         state.close_wizard();
                         state.finish_action("atomic printer craft started", Refetch::All);
                     }
-                    ApiMessage::AtomicPrinterCraftError(e) => state.set_fabrication_error(e),
+                    ApiMessage::AtomicPrinterCraftError(e) => state.set_wizard_error(e),
                     ApiMessage::RecipesFetched(recipes) => state.recipes = recipes,
                     ApiMessage::ProbeImprovementsFetched(improvements) => {
                         state.probe_improvements = improvements;
@@ -328,7 +327,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         state.close_wizard();
                         state.finish_action("probe improvement started", Refetch::All);
                     }
-                    ApiMessage::ImproveProbeError(e) => state.set_improve_error(e),
+                    ApiMessage::ImproveProbeError(e) => state.set_wizard_error(e),
                     ApiMessage::InspectStarted => {
                         state.close_wizard();
                         state.finish_action("inspect order sent", Refetch::Mannies);
@@ -343,7 +342,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         state.close_wizard();
                         state.finish_action("detach order sent", Refetch::All);
                     }
-                    ApiMessage::DetachError(e) => state.set_detach_error(e),
+                    ApiMessage::DetachError(e) => state.set_wizard_error(e),
                     ApiMessage::AlertsFetched(a) => state.alerts = a,
                     ApiMessage::DamageWarningsFetched(w, rule) => {
                         state.damage_warnings = w;
@@ -371,13 +370,13 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         state.close_wizard();
                         state.set_toast("container renamed");
                     }
-                    ApiMessage::RenameContainerError(e) => state.set_rename_container_error(e),
+                    ApiMessage::RenameContainerError(e) => state.set_wizard_error(e),
                     ApiMessage::UpdateContainerRulesDone(c, inv) => {
                         state.apply_container_update(c, inv);
                         state.close_wizard();
                         state.set_toast("routing rules updated");
                     }
-                    ApiMessage::UpdateContainerRulesError(e) => state.set_container_rules_error(e),
+                    ApiMessage::UpdateContainerRulesError(e) => state.set_wizard_error(e),
                     ApiMessage::StorageMoveDone(manny, inv) => {
                         if let Some(ref mut mannies) = state.mannies {
                             if let Some(m) = mannies.iter_mut().find(|m| m.id == manny.id) {
@@ -388,7 +387,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         state.close_wizard();
                         state.set_toast("storage move order sent");
                     }
-                    ApiMessage::StorageMoveError(e) => state.set_storage_move_error(e),
+                    ApiMessage::StorageMoveError(e) => state.set_wizard_error(e),
                     ApiMessage::AssembleProbeStarted(manny, inv) => {
                         if let Some(ref mut mannies) = state.mannies {
                             if let Some(m) = mannies.iter_mut().find(|m| m.id == manny.id) {
@@ -400,7 +399,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         // The new drone appears in the roster once assembled.
                         state.finish_action("drone assembly started (~3h)", Refetch::All);
                     }
-                    ApiMessage::AssembleProbeError(e) => state.set_assemble_probe_error(e),
+                    ApiMessage::AssembleProbeError(e) => state.set_wizard_error(e),
                     ApiMessage::DropMannyCargoStarted(manny) => {
                         if let Some(ref mut mannies) = state.mannies {
                             if let Some(m) = mannies.iter_mut().find(|m| m.id == manny.id) {
@@ -411,7 +410,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         // Recoverable objects may reappear in the sector.
                         state.finish_action("cargo dropped", Refetch::All);
                     }
-                    ApiMessage::DropMannyCargoError(e) => state.set_drop_cargo_error(e),
+                    ApiMessage::DropMannyCargoError(e) => state.set_wizard_error(e),
                     ApiMessage::DropStorageContainerStarted(manny) => {
                         if let Some(ref mut mannies) = state.mannies {
                             if let Some(m) = mannies.iter_mut().find(|m| m.id == manny.id) {
@@ -422,7 +421,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         // Container + drop kit leave the inventory.
                         state.finish_action("drop container order sent", Refetch::All);
                     }
-                    ApiMessage::DropStorageContainerError(e) => state.set_drop_container_error(e),
+                    ApiMessage::DropStorageContainerError(e) => state.set_wizard_error(e),
                     ApiMessage::RenameMannyDone(manny) => {
                         if let Some(ref mut mannies) = state.mannies {
                             if let Some(m) = mannies.iter_mut().find(|m| m.id == manny.id) {
@@ -432,7 +431,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         state.close_wizard();
                         state.set_toast("manny renamed");
                     }
-                    ApiMessage::RenameMannyError(e) => state.set_rename_manny_error(e),
+                    ApiMessage::RenameMannyError(e) => state.set_wizard_error(e),
                     ApiMessage::VersionFetched(v) => state.api_version = Some(v),
                     ApiMessage::VisitedSectorsFetched(v) => state.visited_sectors = v,
                     ApiMessage::ActionError(e) => state.set_error(e),

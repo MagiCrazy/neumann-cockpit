@@ -85,16 +85,16 @@ fn commit_improvement(selection: usize, state: &mut AppState, client: &ApiClient
         return;
     };
     if done {
-        state.set_improve_error("already installed".into());
+        state.set_wizard_error("already installed".into());
         return;
     }
     if !available {
-        state.set_improve_error("not unlocked yet".into());
+        state.set_wizard_error("not unlocked yet".into());
         return;
     }
     let mannies = state.collect_idle_onboard_mannies();
     match mannies.len() {
-        0 => state.set_improve_error("no idle Manny on board".into()),
+        0 => state.set_wizard_error("no idle Manny on board".into()),
         1 => {
             let (manny_id, _) = mannies.into_iter().next().unwrap();
             fetch_improve_probe(manny_id, id, client.clone(), tx.clone());

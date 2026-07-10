@@ -374,7 +374,7 @@ pub(super) fn handle_remote_mine_event(
                         .map(|s| state.collect_detached_containers_in(s))
                         .unwrap_or_default();
                     if containers.is_empty() {
-                        state.set_remote_mine_error("no detached container in the Manny's sector".into());
+                        state.set_wizard_error("no detached container in the Manny's sector".into());
                         return;
                     }
                     state.active_wizard = ActiveWizard::RemoteMine(RemoteMineInput::PickContainer {

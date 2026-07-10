@@ -64,6 +64,27 @@ fn finish_action_sets_toast_and_stages_refetch() {
 }
 
 #[test]
+fn set_wizard_error_targets_the_active_wizard() {
+    let mut state = AppState::default();
+    // No wizard open → no-op, no panic.
+    state.set_wizard_error("ignored".into());
+    assert!(matches!(state.active_wizard, ActiveWizard::None));
+
+    // A wizard with an error-bearing step: the message lands in its slot.
+    state.active_wizard = ActiveWizard::Repair(RepairInput::Typing {
+        manny_id: "m".into(),
+        manny_name: "M".into(),
+        buf: String::new(),
+        error: None,
+    });
+    state.set_wizard_error("bad percent".into());
+    let ActiveWizard::Repair(RepairInput::Typing { error, .. }) = &state.active_wizard else {
+        panic!("the active wizard must be unchanged");
+    };
+    assert_eq!(error.as_deref(), Some("bad percent"));
+}
+
+#[test]
 fn parse_scan_coords_valid() {
     let mut state = AppState::default();
     state.scan_mode = ScanMode::Input("2 0 -2".into());

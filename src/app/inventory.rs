@@ -183,17 +183,6 @@ impl AppState {
             .unwrap_or(false)
     }
 
-    pub fn set_jettison_error(&mut self, msg: String) {
-        if let ActiveWizard::Jettison(jettison) = &mut self.active_wizard {
-            match jettison {
-                JettisonInput::ConfirmManny { error, .. } => *error = Some(msg),
-                JettisonInput::ConfirmRelay { error, .. } => *error = Some(msg),
-                JettisonInput::EnterAmount { error, .. } => *error = Some(msg),
-                _ => {}
-            }
-        }
-    }
-
     pub fn atomic_printer_recipes(&self) -> Vec<&CraftingRecipe> {
         self.recipes
             .iter()
