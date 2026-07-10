@@ -38,6 +38,22 @@ use crate::api::types::{
 use chrono::{DateTime, Local, Utc};
 use tokio::time::Instant;
 
+/// The follow-up refresh a successful action needs. Staged into
+/// `AppState::pending_refetch` by `finish_action` and dispatched once by the
+/// event loop (which owns the `ApiClient` + sender), mirroring how `pending_fire`
+/// and `pending_journal` defer effects the state layer cannot spawn itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Refetch {
+    /// Full `fetch_all` — the action changed the probe, sector, or roster.
+    All,
+    /// Just the manny roster — the action only changed a manny's task.
+    Mannies,
+    /// The active-mission list.
+    Missions,
+    /// Both message boxes (inbox + sent).
+    Messages,
+}
+
 #[derive(Default)]
 pub struct AppState {
     pub probe: Option<Probe>,
@@ -169,6 +185,9 @@ pub struct AppState {
     /// A task a `:` command staged but cannot spawn itself (no client/sender in
     /// `run_command`); the input layer drains it after running the command.
     pub pending_fire: Option<CommandFire>,
+    /// Follow-up refresh a completed action requested via `finish_action`,
+    /// drained + dispatched by the event loop (which owns the client + sender).
+    pub pending_refetch: Option<Refetch>,
 }
 
 impl AppState {
@@ -321,6 +340,17 @@ impl AppState {
 
     pub fn set_toast(&mut self, msg: impl Into<String>) {
         self.toast = Some((msg.into(), Local::now()));
+    }
+
+    /// Common tail of a successful action: show a confirmation toast and stage
+    /// the follow-up refresh. The wizard reset stays at the call site — it varies
+    /// (some actions reset two inputs, some return to a browsing state) — but the
+    /// toast + refetch pair is uniform, and centralising the refetch here removes
+    /// the `client.clone()`/`tx.clone()` spawn scattered across every match arm.
+    /// The event loop drains `pending_refetch` and dispatches the actual fetch.
+    pub fn finish_action(&mut self, toast: impl Into<String>, refetch: Refetch) {
+        self.set_toast(toast);
+        self.pending_refetch = Some(refetch);
     }
 
     /// Stage a ship's-log entry for this tick. The event loop drains
