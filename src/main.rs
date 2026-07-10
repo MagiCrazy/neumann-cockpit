@@ -21,6 +21,7 @@ use neumann_cockpit::app::{
     DetachInput, DropCargoInput, DropStorageContainerInput, InspectInput, JettisonInput,
     MessagesInput, MindSnapshotInput, MineInput, MissionsInput, RecallInput, RecoverInput,
     RefuelInput,
+    Refetch,
     RemoteMineInput,
     RenameContainerInput, RenameMannyInput, RenameProbeInput, RepairInput, SalvageInput,
     ScutNetworkInput, ScutRelayInput, StorageMoveInput, TransferDeuteriumInput,
@@ -190,9 +191,8 @@ async fn run(
                     ApiMessage::ProbeRenamed(list, name) => {
                         state.update_fleet(list);
                         state.rename_probe = RenameProbeInput::Inactive;
-                        state.set_toast(format!("probe renamed to {name}"));
                         // Refresh so the Probe pane identity picks up the new name.
-                        fetch_all(client.clone(), tx.clone());
+                        state.finish_action(format!("probe renamed to {name}"), Refetch::All);
                     }
                     ApiMessage::RenameProbeError(e) => state.set_rename_probe_error(e),
                     ApiMessage::ManniesUpdated(mannies) => state.update_mannies(mannies),
@@ -230,15 +230,13 @@ async fn run(
                     ApiMessage::MoveError(e) => state.set_travel_error(e),
                     ApiMessage::RepairStarted => {
                         state.repair = RepairInput::Inactive;
-                        state.set_toast("repair order sent");
-                        fetch_mannies(client.clone(), tx.clone());
+                        state.finish_action("repair order sent", Refetch::Mannies);
                     }
                     ApiMessage::RepairError(e) => state.set_repair_error(e),
                     ApiMessage::MineStarted => {
                         state.mine = MineInput::Inactive;
                         state.remote_mine = RemoteMineInput::Inactive;
-                        state.set_toast("mining order sent");
-                        fetch_mannies(client.clone(), tx.clone());
+                        state.finish_action("mining order sent", Refetch::Mannies);
                     }
                     ApiMessage::MineError(e) => {
                         state.set_mine_error(e.clone());
@@ -247,60 +245,51 @@ async fn run(
                     ApiMessage::JettisonDone(inv) => {
                         state.update_inventory(inv);
                         state.jettison = JettisonInput::Inactive;
-                        state.set_toast("jettisoned");
                         // Jettison always adds an object to the sector (ejected manny,
                         // drifting item, or deployed SCUT relay) — refresh everything.
-                        fetch_all(client.clone(), tx.clone());
+                        state.finish_action("jettisoned", Refetch::All);
                     }
                     ApiMessage::JettisonError(e) => state.set_jettison_error(e),
                     ApiMessage::CraftStarted => {
                         state.fabrication = FabricationInput::Inactive;
-                        state.set_toast("craft order sent");
-                        fetch_mannies(client.clone(), tx.clone());
+                        state.finish_action("craft order sent", Refetch::Mannies);
                     }
                     ApiMessage::CraftError(e) => state.set_fabrication_error(e),
                     ApiMessage::SalvageStarted => {
                         state.salvage = SalvageInput::Inactive;
-                        state.set_toast("salvage order sent");
-                        fetch_mannies(client.clone(), tx.clone());
+                        state.finish_action("salvage order sent", Refetch::Mannies);
                     }
                     ApiMessage::SalvageError(e) => state.set_salvage_error(e),
                     ApiMessage::RecallStarted => {
                         state.recall = RecallInput::Inactive;
-                        state.set_toast("recall order sent");
-                        fetch_mannies(client.clone(), tx.clone());
+                        state.finish_action("recall order sent", Refetch::Mannies);
                     }
                     ApiMessage::RecallError(e) => state.set_recall_error(e),
                     ApiMessage::DeuteriumRefuelStarted => {
                         state.refuel = RefuelInput::Inactive;
-                        state.set_toast("refuel order sent");
-                        fetch_all(client.clone(), tx.clone());
+                        state.finish_action("refuel order sent", Refetch::All);
                     }
                     ApiMessage::DeuteriumRefuelError(e) => state.set_refuel_error(e),
                     ApiMessage::DeuteriumTransferStarted => {
                         state.transfer_deuterium = TransferDeuteriumInput::Inactive;
-                        state.set_toast("deuterium transfer order sent");
-                        fetch_all(client.clone(), tx.clone());
+                        state.finish_action("deuterium transfer order sent", Refetch::All);
                     }
                     ApiMessage::DeuteriumTransferError(e) => state.set_transfer_deuterium_error(e),
                     ApiMessage::MindSnapshotReassigned(probe) => {
                         state.mind_snapshot = MindSnapshotInput::Inactive;
                         state.update_probe(probe);
-                        state.set_toast("mind snapshot reassigned");
-                        fetch_all(client.clone(), tx.clone());
+                        state.finish_action("mind snapshot reassigned", Refetch::All);
                     }
                     ApiMessage::MindSnapshotReassignError(e) => state.set_mind_snapshot_error(e),
                     ApiMessage::MissionsFetched(missions) => state.missions = missions,
                     ApiMessage::MissionAbandoned(_) => {
                         state.missions_input = MissionsInput::Browsing { selection: 0 };
-                        state.set_toast("mission abandoned");
-                        fetch_missions(client.clone(), tx.clone());
+                        state.finish_action("mission abandoned", Refetch::Missions);
                     }
                     ApiMessage::MissionAbandonError(e) => state.set_mission_abandon_error(e),
                     ApiMessage::ScutRelayTurnedOn => {
                         state.scut_relay = ScutRelayInput::Inactive;
-                        state.set_toast("relay turn-on order sent");
-                        fetch_all(client.clone(), tx.clone());
+                        state.finish_action("relay turn-on order sent", Refetch::All);
                     }
                     ApiMessage::ScutRelayTurnOnError(e) => state.set_scut_relay_error(e),
                     ApiMessage::ScutNetworkFetched(network) => {
@@ -312,9 +301,7 @@ async fn run(
                     ApiMessage::SentMessagesFetched(m) => state.sent_messages = m,
                     ApiMessage::MessageSent(_) => {
                         state.messages_input = MessagesInput::Browsing { sent_tab: false, selection: 0 };
-                        state.set_toast("message sent");
-                        fetch_messages(client.clone(), tx.clone());
-                        fetch_sent_messages(client.clone(), tx.clone());
+                        state.finish_action("message sent", Refetch::Messages);
                     }
                     ApiMessage::MessageSendError(e) => state.set_message_send_error(e),
                     ApiMessage::MessageMarkedRead(m) => {
@@ -329,14 +316,12 @@ async fn run(
                     }
                     ApiMessage::DeployStarted => {
                         state.deploy = DeployInput::Inactive;
-                        state.set_toast("waypoint deploy order sent");
-                        fetch_all(client.clone(), tx.clone());
+                        state.finish_action("waypoint deploy order sent", Refetch::All);
                     }
                     ApiMessage::DeployError(e) => state.set_deploy_error(e),
                     ApiMessage::AtomicPrinterCraftStarted => {
                         state.fabrication = FabricationInput::Inactive;
-                        state.set_toast("atomic printer craft started");
-                        fetch_all(client.clone(), tx.clone());
+                        state.finish_action("atomic printer craft started", Refetch::All);
                     }
                     ApiMessage::AtomicPrinterCraftError(e) => state.set_fabrication_error(e),
                     ApiMessage::RecipesFetched(recipes) => state.recipes = recipes,
@@ -345,26 +330,22 @@ async fn run(
                     }
                     ApiMessage::ImproveProbeStarted => {
                         state.improve = ImproveInput::Inactive;
-                        state.set_toast("probe improvement started");
-                        fetch_all(client.clone(), tx.clone());
+                        state.finish_action("probe improvement started", Refetch::All);
                     }
                     ApiMessage::ImproveProbeError(e) => state.set_improve_error(e),
                     ApiMessage::InspectStarted => {
                         state.inspect = InspectInput::Inactive;
-                        state.set_toast("inspect order sent");
-                        fetch_mannies(client.clone(), tx.clone());
+                        state.finish_action("inspect order sent", Refetch::Mannies);
                     }
                     ApiMessage::InspectError(e) => state.set_inspect_error(e),
                     ApiMessage::RecoverStarted => {
                         state.recover = RecoverInput::Inactive;
-                        state.set_toast("recover order sent");
-                        fetch_all(client.clone(), tx.clone());
+                        state.finish_action("recover order sent", Refetch::All);
                     }
                     ApiMessage::RecoverError(e) => state.set_recover_error(e),
                     ApiMessage::DetachStarted => {
                         state.detach = DetachInput::Inactive;
-                        state.set_toast("detach order sent");
-                        fetch_all(client.clone(), tx.clone());
+                        state.finish_action("detach order sent", Refetch::All);
                     }
                     ApiMessage::DetachError(e) => state.set_detach_error(e),
                     ApiMessage::AlertsFetched(a) => state.alerts = a,
@@ -420,9 +401,8 @@ async fn run(
                         }
                         state.update_inventory(inv);
                         state.assemble_probe = AssembleProbeInput::Inactive;
-                        state.set_toast("drone assembly started (~3h)");
                         // The new drone appears in the roster once assembled.
-                        fetch_all(client.clone(), tx.clone());
+                        state.finish_action("drone assembly started (~3h)", Refetch::All);
                     }
                     ApiMessage::AssembleProbeError(e) => state.set_assemble_probe_error(e),
                     ApiMessage::DropMannyCargoStarted(manny) => {
@@ -432,9 +412,8 @@ async fn run(
                             }
                         }
                         state.drop_cargo = DropCargoInput::Inactive;
-                        state.set_toast("cargo dropped");
                         // Recoverable objects may reappear in the sector.
-                        fetch_all(client.clone(), tx.clone());
+                        state.finish_action("cargo dropped", Refetch::All);
                     }
                     ApiMessage::DropMannyCargoError(e) => state.set_drop_cargo_error(e),
                     ApiMessage::DropStorageContainerStarted(manny) => {
@@ -444,9 +423,8 @@ async fn run(
                             }
                         }
                         state.drop_container = DropStorageContainerInput::Inactive;
-                        state.set_toast("drop container order sent");
                         // Container + drop kit leave the inventory.
-                        fetch_all(client.clone(), tx.clone());
+                        state.finish_action("drop container order sent", Refetch::All);
                     }
                     ApiMessage::DropStorageContainerError(e) => state.set_drop_container_error(e),
                     ApiMessage::RenameMannyDone(manny) => {
@@ -466,6 +444,19 @@ async fn run(
                         state.note_refresh_failure();
                         state.set_error(e);
                     }
+                }
+                // A completed action stages its follow-up refresh via
+                // `finish_action`; dispatch it here — the one place that owns the
+                // client + sender — instead of recabling a fetch in every arm.
+                match state.pending_refetch.take() {
+                    Some(Refetch::All) => fetch_all(client.clone(), tx.clone()),
+                    Some(Refetch::Mannies) => fetch_mannies(client.clone(), tx.clone()),
+                    Some(Refetch::Missions) => fetch_missions(client.clone(), tx.clone()),
+                    Some(Refetch::Messages) => {
+                        fetch_messages(client.clone(), tx.clone());
+                        fetch_sent_messages(client.clone(), tx.clone());
+                    }
+                    None => {}
                 }
             }
 

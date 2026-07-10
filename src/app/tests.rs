@@ -47,6 +47,16 @@ fn make_probe(free_capacity: f64, sector_x: f64, sector_y: f64, sector_z: f64) -
 // ── parse_scan_coords ─────────────────────────────────────────────────────
 
 #[test]
+fn finish_action_sets_toast_and_stages_refetch() {
+    let mut state = AppState::default();
+    assert_eq!(state.pending_refetch, None);
+    state.finish_action("mining order sent", Refetch::Mannies);
+    assert_eq!(state.active_toast(), Some("mining order sent"));
+    // The refetch is staged, not fired here — the event loop drains it.
+    assert_eq!(state.pending_refetch, Some(Refetch::Mannies));
+}
+
+#[test]
 fn parse_scan_coords_valid() {
     let mut state = AppState::default();
     state.scan_mode = ScanMode::Input("2 0 -2".into());
