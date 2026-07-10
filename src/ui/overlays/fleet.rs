@@ -77,6 +77,7 @@ pub(crate) fn render_rename_probe_overlay(frame: &mut Frame, area: Rect, state: 
     frame.render_widget(Paragraph::new(lines), rows[0]);
     render_footer(frame, rows[1], p, &[
         FooterKey::commit("[Enter]", "RENAME"),
+        FooterKey::nav("[Tab]", "suggest"),
         FooterKey::nav("[Esc]", "cancel"),
     ]);
 }

@@ -48,6 +48,12 @@ pub(super) fn handle_rename_container_event(
     }
     match code {
         KeyCode::Esc => state.rename_container = RenameContainerInput::Inactive,
+        KeyCode::Tab => {
+            let s = state.next_name_suggestion();
+            if let RenameContainerInput::Typing { buf, .. } = &mut state.rename_container {
+                *buf = s;
+            }
+        }
         KeyCode::Backspace => {
             if let RenameContainerInput::Typing { buf, .. } = &mut state.rename_container {
                 buf.pop();

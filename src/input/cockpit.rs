@@ -383,10 +383,11 @@ fn fire_menu_action(
                 if let Some((container_id, label)) =
                     state.storage_container(&id).map(|c| (c.id.clone(), c.label.clone()))
                 {
+                    let buf = state.next_name_suggestion();
                     state.rename_container = RenameContainerInput::Typing {
                         container_id,
-                        current_label: label.clone(),
-                        buf: label,
+                        current_label: label,
+                        buf,
                         error: None,
                     };
                 }
@@ -480,10 +481,11 @@ fn fire_menu_action(
         }
         MenuAction::RenameProbe => {
             if let Some((id, name)) = state.active_probe_identity() {
+                let buf = state.next_name_suggestion();
                 state.rename_probe = RenameProbeInput::Typing {
                     probe_id: id,
                     current_name: name,
-                    buf: String::new(),
+                    buf,
                     error: None,
                 };
             }
@@ -658,7 +660,8 @@ fn fire_menu_action(
             state.recall = RecallInput::Confirm { manny_id: id, manny_name: name, remote: remote_recall, error: None };
         }
         MenuAction::Rename => {
-            state.rename_manny = RenameMannyInput::Typing { manny_id: id, manny_name: name.clone(), buf: name, error: None };
+            let buf = state.next_name_suggestion();
+            state.rename_manny = RenameMannyInput::Typing { manny_id: id, manny_name: name, buf, error: None };
         }
         // Guard mismatch (state changed since the menu was built): no-op.
         _ => {}

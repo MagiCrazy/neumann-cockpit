@@ -280,6 +280,12 @@ pub(super) fn handle_rename_manny_event(
 ) {
     match code {
         KeyCode::Esc => state.rename_manny = RenameMannyInput::Inactive,
+        KeyCode::Tab => {
+            let s = state.next_name_suggestion();
+            if let RenameMannyInput::Typing { buf, .. } = &mut state.rename_manny {
+                *buf = s;
+            }
+        }
         KeyCode::Backspace => state.rename_manny_backspace(),
         KeyCode::Char(c) => state.rename_manny_type_char(c),
         KeyCode::Enter => {
