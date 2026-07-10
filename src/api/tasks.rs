@@ -586,3 +586,58 @@ pub fn fetch_rename_manny(manny_id: String, name: String, client: ApiClient, tx:
         ApiMessage::RenameMannyError,
     );
 }
+
+#[cfg(test)]
+mod tests {
+    //! The two spawn helpers are the shared plumbing behind every fetch wrapper
+    //! (see #209). These lock the Result -> ApiMessage mapping: actions surface
+    //! both branches, fetches surface success and swallow errors.
+    use super::*;
+
+    #[tokio::test]
+    async fn spawn_action_maps_ok_to_the_success_message() {
+        let (tx, mut rx) = mpsc::channel(1);
+        spawn_action(
+            tx,
+            async { Ok::<_, anyhow::Error>(7u32) },
+            ApiMessage::VersionFetched,
+            ApiMessage::Error,
+        );
+        assert!(matches!(rx.recv().await, Some(ApiMessage::VersionFetched(7))));
+    }
+
+    #[tokio::test]
+    async fn spawn_action_maps_err_to_the_stringified_error_message() {
+        let (tx, mut rx) = mpsc::channel(1);
+        spawn_action(
+            tx,
+            async { Err::<u32, _>(anyhow::anyhow!("boom")) },
+            ApiMessage::VersionFetched,
+            ApiMessage::Error,
+        );
+        let msg = rx.recv().await;
+        assert!(
+            matches!(&msg, Some(ApiMessage::Error(e)) if e.contains("boom")),
+            "err is stringified into the Error message",
+        );
+    }
+
+    #[tokio::test]
+    async fn spawn_fetch_sends_on_ok() {
+        let (tx, mut rx) = mpsc::channel(1);
+        spawn_fetch(tx, async { Ok::<_, anyhow::Error>(9u32) }, ApiMessage::VersionFetched);
+        assert!(matches!(rx.recv().await, Some(ApiMessage::VersionFetched(9))));
+    }
+
+    #[tokio::test]
+    async fn spawn_fetch_drops_errors_silently() {
+        let (tx, mut rx) = mpsc::channel(1);
+        spawn_fetch(
+            tx,
+            async { Err::<u32, _>(anyhow::anyhow!("x")) },
+            ApiMessage::VersionFetched,
+        );
+        // No message is sent; the only sender is dropped, so the channel closes.
+        assert!(rx.recv().await.is_none(), "a non-fatal fetch swallows the error");
+    }
+}
