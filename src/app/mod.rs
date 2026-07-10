@@ -202,12 +202,6 @@ impl AppState {
         self.probe.as_ref().map(|p| (p.id as u64, p.name.clone()))
     }
 
-    pub fn set_rename_probe_error(&mut self, msg: String) {
-        if let ActiveWizard::RenameProbe(RenameProbeInput::Typing { error, .. }) = &mut self.active_wizard {
-            *error = Some(msg);
-        }
-    }
-
     /// Switch the piloted probe to `id`. Records the new active id (and clears
     /// it back to `None` when `id` is the server default, so the client falls
     /// back to the pre-v81 `/api/probe` paths). The event loop reconciles the
@@ -273,47 +267,6 @@ impl AppState {
         self.update_inventory(inventory);
     }
 
-    pub fn set_rename_container_error(&mut self, msg: String) {
-        if let ActiveWizard::RenameContainer(RenameContainerInput::Typing { error, .. }) = &mut self.active_wizard {
-            *error = Some(msg);
-        }
-    }
-
-    pub fn set_container_rules_error(&mut self, msg: String) {
-        if let ActiveWizard::ContainerRules(ContainerRulesInput::Editing { error, .. }) = &mut self.active_wizard {
-            *error = Some(msg);
-        }
-    }
-
-    pub fn set_storage_move_error(&mut self, msg: String) {
-        if let ActiveWizard::StorageMove(
-            StorageMoveInput::ConfigureResource { error, .. } | StorageMoveInput::ConfigureItem { error, .. },
-        ) = &mut self.active_wizard
-        {
-            *error = Some(msg);
-        }
-    }
-
-    pub fn set_drop_cargo_error(&mut self, msg: String) {
-        if let ActiveWizard::DropCargo(DropCargoInput::Confirm { error, .. }) = &mut self.active_wizard {
-            *error = Some(msg);
-        }
-    }
-
-    pub fn set_assemble_probe_error(&mut self, msg: String) {
-        if let ActiveWizard::AssembleProbe(AssembleProbeInput::PickContainers { error, .. }) = &mut self.active_wizard {
-            *error = Some(msg);
-        }
-    }
-
-    pub fn set_drop_container_error(&mut self, msg: String) {
-        if let ActiveWizard::DropContainer(DropStorageContainerInput::PickPlanet { error, .. }) =
-            &mut self.active_wizard
-        {
-            *error = Some(msg);
-        }
-    }
-
     pub fn set_toast(&mut self, msg: impl Into<String>) {
         self.toast = Some((msg.into(), Local::now()));
     }
@@ -323,6 +276,59 @@ impl AppState {
     /// `active_wizard` field there is now one way to close any wizard.
     pub fn close_wizard(&mut self) {
         self.active_wizard = ActiveWizard::None;
+    }
+
+    /// Set the inline error on whichever wizard step is currently open — the
+    /// active wizard is the one that just errored, since only one can be open.
+    /// Replaces the two dozen near-identical `set_<wizard>_error` setters with a
+    /// single slot-lookup. Travel, inspect and recover keep their own setters:
+    /// travel prefixes the message, and inspect/recover fall back to the status
+    /// bar when their picker step is not the active overlay.
+    pub fn set_wizard_error(&mut self, msg: String) {
+        let slot: Option<&mut Option<String>> = match &mut self.active_wizard {
+            ActiveWizard::Repair(RepairInput::Typing { error, .. }) => Some(error),
+            ActiveWizard::Mine(MineInput::Configure { error, .. }) => Some(error),
+            ActiveWizard::Fabrication(
+                FabricationInput::PickRecipe { error, .. } | FabricationInput::PickBuilder { error, .. },
+            ) => Some(error),
+            ActiveWizard::Improve(
+                ImproveInput::PickImprovement { error, .. } | ImproveInput::PickBuilder { error, .. },
+            ) => Some(error),
+            ActiveWizard::Salvage(SalvageInput::Confirm { error, .. }) => Some(error),
+            ActiveWizard::Recall(RecallInput::Confirm { error, .. }) => Some(error),
+            ActiveWizard::Refuel(RefuelInput::Confirm { error, .. }) => Some(error),
+            ActiveWizard::TransferDeuterium(TransferDeuteriumInput::EnterAmount { error, .. }) => Some(error),
+            ActiveWizard::MindSnapshot(MindSnapshotInput::Confirm { error }) => Some(error),
+            ActiveWizard::ScutRelay(ScutRelayInput::EnterNetworkName { error, .. }) => Some(error),
+            ActiveWizard::Missions(MissionsInput::ConfirmAbandon { error, .. }) => Some(error),
+            ActiveWizard::Messages(MessagesInput::Compose { error, .. }) => Some(error),
+            ActiveWizard::Deploy(DeployInput::EnterName { error, .. }) => Some(error),
+            ActiveWizard::RenameManny(RenameMannyInput::Typing { error, .. }) => Some(error),
+            ActiveWizard::Detach(DetachInput::PickMode { error, .. } | DetachInput::PickAsteroid { error, .. }) => {
+                Some(error)
+            }
+            ActiveWizard::RemoteMine(
+                RemoteMineInput::Configure { error, .. } | RemoteMineInput::PickContainer { error, .. },
+            ) => Some(error),
+            ActiveWizard::RenameProbe(RenameProbeInput::Typing { error, .. }) => Some(error),
+            ActiveWizard::RenameContainer(RenameContainerInput::Typing { error, .. }) => Some(error),
+            ActiveWizard::ContainerRules(ContainerRulesInput::Editing { error, .. }) => Some(error),
+            ActiveWizard::StorageMove(
+                StorageMoveInput::ConfigureResource { error, .. } | StorageMoveInput::ConfigureItem { error, .. },
+            ) => Some(error),
+            ActiveWizard::DropCargo(DropCargoInput::Confirm { error, .. }) => Some(error),
+            ActiveWizard::AssembleProbe(AssembleProbeInput::PickContainers { error, .. }) => Some(error),
+            ActiveWizard::DropContainer(DropStorageContainerInput::PickPlanet { error, .. }) => Some(error),
+            ActiveWizard::Jettison(
+                JettisonInput::ConfirmManny { error, .. }
+                | JettisonInput::ConfirmRelay { error, .. }
+                | JettisonInput::EnterAmount { error, .. },
+            ) => Some(error),
+            _ => None,
+        };
+        if let Some(e) = slot {
+            *e = Some(msg);
+        }
     }
 
     /// Common tail of a successful action: show a confirmation toast and stage

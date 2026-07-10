@@ -72,7 +72,7 @@ pub(super) fn handle_rename_container_event(
                 (container_id.clone(), buf.trim().to_string())
             };
             if label.is_empty() {
-                state.set_rename_container_error("label cannot be empty".into());
+                state.set_wizard_error("label cannot be empty".into());
                 return;
             }
             let new_label = label.clone();

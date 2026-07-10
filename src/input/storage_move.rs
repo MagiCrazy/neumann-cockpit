@@ -192,13 +192,13 @@ fn handle_resource(code: KeyCode, state: &mut AppState, client: &ApiClient, tx: 
         }
         KeyCode::Enter => {
             if from_sel == to_sel {
-                state.set_storage_move_error("source and destination must differ".into());
+                state.set_wizard_error("source and destination must differ".into());
                 return;
             }
             let amount: f64 = match amount_buf.trim().parse() {
                 Ok(a) if a > 0.0 => a,
                 _ => {
-                    state.set_storage_move_error("amount must be a positive number".into());
+                    state.set_wizard_error("amount must be a positive number".into());
                     return;
                 }
             };
@@ -267,7 +267,7 @@ fn handle_item(code: KeyCode, state: &mut AppState, client: &ApiClient, tx: &mps
                 .map(|(id, _, _)| id.clone())
                 .collect();
             if ids.is_empty() {
-                state.set_storage_move_error("select at least one item with Space".into());
+                state.set_wizard_error("select at least one item with Space".into());
                 return;
             }
             let actor = actor_manny_id.clone();

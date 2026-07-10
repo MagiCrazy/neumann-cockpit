@@ -64,56 +64,6 @@ impl AppState {
         }
     }
 
-    pub fn set_repair_error(&mut self, msg: String) {
-        if let ActiveWizard::Repair(RepairInput::Typing { error, .. }) = &mut self.active_wizard {
-            *error = Some(msg);
-        }
-    }
-
-    pub fn set_mine_error(&mut self, msg: String) {
-        if let ActiveWizard::Mine(MineInput::Configure { error, .. }) = &mut self.active_wizard {
-            *error = Some(msg);
-        }
-    }
-
-    /// Surface a craft failure on whichever fabrication step is active.
-    pub fn set_fabrication_error(&mut self, msg: String) {
-        if let ActiveWizard::Fabrication(fab) = &mut self.active_wizard {
-            match fab {
-                FabricationInput::PickRecipe { error, .. } => *error = Some(msg),
-                FabricationInput::PickBuilder { error, .. } => *error = Some(msg),
-            }
-        }
-    }
-
-    /// Surface a probe-improvement failure on whichever step is active.
-    pub fn set_improve_error(&mut self, msg: String) {
-        if let ActiveWizard::Improve(improve) = &mut self.active_wizard {
-            match improve {
-                ImproveInput::PickImprovement { error, .. } => *error = Some(msg),
-                ImproveInput::PickBuilder { error, .. } => *error = Some(msg),
-            }
-        }
-    }
-
-    pub fn set_salvage_error(&mut self, msg: String) {
-        if let ActiveWizard::Salvage(SalvageInput::Confirm { error, .. }) = &mut self.active_wizard {
-            *error = Some(msg);
-        }
-    }
-
-    pub fn set_recall_error(&mut self, msg: String) {
-        if let ActiveWizard::Recall(RecallInput::Confirm { error, .. }) = &mut self.active_wizard {
-            *error = Some(msg);
-        }
-    }
-
-    pub fn set_refuel_error(&mut self, msg: String) {
-        if let ActiveWizard::Refuel(RefuelInput::Confirm { error, .. }) = &mut self.active_wizard {
-            *error = Some(msg);
-        }
-    }
-
     /// Fleet probes eligible as a deuterium-transfer destination: every probe
     /// except the one currently piloted (the source). The same-sector
     /// constraint is enforced server-side, since the roster carries no
@@ -125,38 +75,6 @@ impl AppState {
             .filter(|p| Some(p.id) != source)
             .map(|p| (p.id, p.name.clone()))
             .collect()
-    }
-
-    pub fn set_transfer_deuterium_error(&mut self, msg: String) {
-        if let ActiveWizard::TransferDeuterium(TransferDeuteriumInput::EnterAmount { error, .. }) =
-            &mut self.active_wizard
-        {
-            *error = Some(msg);
-        }
-    }
-
-    pub fn set_mind_snapshot_error(&mut self, msg: String) {
-        if let ActiveWizard::MindSnapshot(MindSnapshotInput::Confirm { error }) = &mut self.active_wizard {
-            *error = Some(msg);
-        }
-    }
-
-    pub fn set_scut_relay_error(&mut self, msg: String) {
-        if let ActiveWizard::ScutRelay(ScutRelayInput::EnterNetworkName { error, .. }) = &mut self.active_wizard {
-            *error = Some(msg);
-        }
-    }
-
-    pub fn set_mission_abandon_error(&mut self, msg: String) {
-        if let ActiveWizard::Missions(MissionsInput::ConfirmAbandon { error, .. }) = &mut self.active_wizard {
-            *error = Some(msg);
-        }
-    }
-
-    pub fn set_message_send_error(&mut self, msg: String) {
-        if let ActiveWizard::Messages(MessagesInput::Compose { error, .. }) = &mut self.active_wizard {
-            *error = Some(msg);
-        }
     }
 
     pub fn unread_message_count(&self) -> usize {
@@ -317,18 +235,6 @@ impl AppState {
             .unwrap_or_default()
     }
 
-    pub fn set_deploy_error(&mut self, msg: String) {
-        if let ActiveWizard::Deploy(DeployInput::EnterName { error, .. }) = &mut self.active_wizard {
-            *error = Some(msg);
-        }
-    }
-
-    pub fn set_rename_manny_error(&mut self, msg: String) {
-        if let ActiveWizard::RenameManny(RenameMannyInput::Typing { error, .. }) = &mut self.active_wizard {
-            *error = Some(msg);
-        }
-    }
-
     pub fn rename_manny_type_char(&mut self, c: char) {
         if let ActiveWizard::RenameManny(RenameMannyInput::Typing { buf, .. }) = &mut self.active_wizard {
             if buf.len() < 40 {
@@ -441,16 +347,6 @@ impl AppState {
         }
     }
 
-    pub fn set_detach_error(&mut self, msg: String) {
-        if let ActiveWizard::Detach(detach) = &mut self.active_wizard {
-            match detach {
-                DetachInput::PickMode { error, .. } => *error = Some(msg),
-                DetachInput::PickAsteroid { error, .. } => *error = Some(msg),
-                _ => {}
-            }
-        }
-    }
-
     pub fn collect_detachable_containers(&self) -> Vec<(String, String)> {
         self.probe
             .as_ref()
@@ -540,16 +436,6 @@ impl AppState {
             candidates,
             selection: 0,
         });
-    }
-
-    pub fn set_remote_mine_error(&mut self, msg: String) {
-        if let ActiveWizard::RemoteMine(rm) = &mut self.active_wizard {
-            match rm {
-                RemoteMineInput::Configure { error, .. } => *error = Some(msg),
-                RemoteMineInput::PickContainer { error, .. } => *error = Some(msg),
-                _ => {}
-            }
-        }
     }
 
     /// True when a Manny is idle and in a remote sector reachable via a shared

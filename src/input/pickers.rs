@@ -570,7 +570,7 @@ pub(super) fn handle_detach_event(
                 if mode == "hidden_on_asteroid" {
                     let asteroids = state.collect_asteroid_candidates();
                     if asteroids.is_empty() {
-                        state.set_detach_error("no asteroids in current sector — scan first".into());
+                        state.set_wizard_error("no asteroids in current sector — scan first".into());
                     } else {
                         state.active_wizard = ActiveWizard::Detach(DetachInput::PickAsteroid {
                             manny_id,

@@ -97,7 +97,7 @@ fn commit_recipe(selection: usize, state: &mut AppState, client: &ApiClient, tx:
                 fetch_atomic_printer_craft(recipe_id, client.clone(), tx.clone());
                 state.log_event(LogEvent::craft(&recipe_name, true, state.active_probe_id));
             } else {
-                state.set_fabrication_error("no atomic printer in inventory".into());
+                state.set_wizard_error("no atomic printer in inventory".into());
             }
         }
         Fabricator::Manny => {
@@ -116,7 +116,7 @@ fn commit_recipe(selection: usize, state: &mut AppState, client: &ApiClient, tx:
             }
             let mannies = state.collect_idle_onboard_mannies();
             match mannies.len() {
-                0 => state.set_fabrication_error("no idle Manny on board".into()),
+                0 => state.set_wizard_error("no idle Manny on board".into()),
                 1 => {
                     let (manny_id, _) = mannies.into_iter().next().unwrap();
                     fetch_craft(manny_id, recipe_id, client.clone(), tx.clone());

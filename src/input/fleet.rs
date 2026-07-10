@@ -139,7 +139,7 @@ pub(super) fn handle_transfer_deuterium_event(
                     fetch_transfer_deuterium(mid, tid, amount, client.clone(), tx.clone());
                     state.log_event(LogEvent::transfer_deuterium(&tname, amount, state.active_probe_id));
                 }
-                _ => state.set_transfer_deuterium_error("enter a positive deuterium percentage".to_string()),
+                _ => state.set_wizard_error("enter a positive deuterium percentage".to_string()),
             }
         }
         _ => {}
