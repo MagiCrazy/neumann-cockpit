@@ -1,5 +1,5 @@
-use crate::ui::theme::palette;
 use crate::app::{ActiveWizard, AppState, WaypointKind, WaypointsInput};
+use crate::ui::theme::palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -11,7 +11,9 @@ use ratatui::{
 use super::{centered_rect, render_footer, FooterKey};
 pub(crate) fn render_waypoints_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let ActiveWizard::Waypoints(WaypointsInput::Browsing { entries, selection }) = &state.active_wizard else { return };
+    let ActiveWizard::Waypoints(WaypointsInput::Browsing { entries, selection }) = &state.active_wizard else {
+        return;
+    };
     let selection = *selection;
 
     let height = (entries.len() as u16 + 5).min(20);
@@ -41,10 +43,7 @@ pub(crate) fn render_waypoints_overlay(frame: &mut Frame, area: Rect, state: &Ap
             ListItem::new(Line::from(vec![
                 Span::styled(format!("{icon} "), Style::default().fg(color)),
                 Span::raw(format!("{:<28}", e.label)),
-                Span::styled(
-                    format!("({},{},{})", e.x, e.y, e.z),
-                    Style::default().fg(p.text),
-                ),
+                Span::styled(format!("({},{},{})", e.x, e.y, e.z), Style::default().fg(p.text)),
                 Span::styled(format!("  d:{}", e.distance), Style::default().fg(p.dim)),
             ]))
         })
@@ -57,10 +56,14 @@ pub(crate) fn render_waypoints_overlay(frame: &mut Frame, area: Rect, state: &Ap
     list_state.select(Some(selection));
     frame.render_stateful_widget(list, rows[0], &mut list_state);
 
-    render_footer(frame, rows[1], p, &[
-        FooterKey::nav("[↑/↓]", "select"),
-        FooterKey::commit("[Enter]", "TRAVEL"),
-        FooterKey::nav("[Esc]", "close"),
-    ]);
+    render_footer(
+        frame,
+        rows[1],
+        p,
+        &[
+            FooterKey::nav("[↑/↓]", "select"),
+            FooterKey::commit("[Enter]", "TRAVEL"),
+            FooterKey::nav("[Esc]", "close"),
+        ],
+    );
 }
-

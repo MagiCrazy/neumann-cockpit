@@ -90,7 +90,11 @@ impl LogEvent {
 
     /// "Detached container «container», {set adrift | hidden on an asteroid}."
     pub fn detach_container(container: &str, hidden_on_asteroid: bool, probe_id: Option<u64>) -> Self {
-        let placement = if hidden_on_asteroid { "hidden on an asteroid" } else { "set adrift" };
+        let placement = if hidden_on_asteroid {
+            "hidden on an asteroid"
+        } else {
+            "set adrift"
+        };
         Self::action(
             kind::CONTAINER,
             format!("Detached container «{container}», {placement}."),
@@ -100,11 +104,7 @@ impl LogEvent {
 
     /// "Installed waypoint «name»."
     pub fn deploy_waypoint(name: &str, probe_id: Option<u64>) -> Self {
-        Self::action(
-            kind::WAYPOINT,
-            format!("Installed waypoint «{name}»."),
-            probe_id,
-        )
+        Self::action(kind::WAYPOINT, format!("Installed waypoint «{name}»."), probe_id)
     }
 
     pub fn repair(pct: f64, probe_id: Option<u64>) -> Self {
@@ -113,7 +113,11 @@ impl LogEvent {
 
     /// Fabrication order, on the atomic printer or at the manny bay.
     pub fn craft(recipe: &str, atomic_printer: bool, probe_id: Option<u64>) -> Self {
-        let bay = if atomic_printer { "on the atomic printer" } else { "at the manny bay" };
+        let bay = if atomic_printer {
+            "on the atomic printer"
+        } else {
+            "at the manny bay"
+        };
         Self::action(kind::CRAFT, format!("Queued «{recipe}» {bay}."), probe_id)
     }
 
@@ -131,7 +135,11 @@ impl LogEvent {
     }
 
     pub fn recover(container: &str, probe_id: Option<u64>) -> Self {
-        Self::action(kind::RECOVER, format!("Sent a manny to recover container «{container}»."), probe_id)
+        Self::action(
+            kind::RECOVER,
+            format!("Sent a manny to recover container «{container}»."),
+            probe_id,
+        )
     }
 
     pub fn rename_manny(old: &str, new: &str, probe_id: Option<u64>) -> Self {
@@ -159,7 +167,11 @@ impl LogEvent {
     }
 
     pub fn refuel(probe_id: Option<u64>) -> Self {
-        Self::action(kind::REFUEL, "Sent a manny to refill the deuterium tank.".to_string(), probe_id)
+        Self::action(
+            kind::REFUEL,
+            "Sent a manny to refill the deuterium tank.".to_string(),
+            probe_id,
+        )
     }
 
     /// "Dispatched a manny to ferry {amount}% deuterium to «target»."
@@ -172,15 +184,27 @@ impl LogEvent {
     }
 
     pub fn assemble_probe(probe_id: Option<u64>) -> Self {
-        Self::action(kind::ASSEMBLE, "Began assembling a new drone (~3h).".to_string(), probe_id)
+        Self::action(
+            kind::ASSEMBLE,
+            "Began assembling a new drone (~3h).".to_string(),
+            probe_id,
+        )
     }
 
     pub fn drop_cargo(probe_id: Option<u64>) -> Self {
-        Self::action(kind::DROP_CARGO, "Dumped a manny's onboard cargo.".to_string(), probe_id)
+        Self::action(
+            kind::DROP_CARGO,
+            "Dumped a manny's onboard cargo.".to_string(),
+            probe_id,
+        )
     }
 
     pub fn mind_snapshot(probe_id: Option<u64>) -> Self {
-        Self::action(kind::MIND_SNAPSHOT, "Reassigned the mind snapshot to a fresh probe.".to_string(), probe_id)
+        Self::action(
+            kind::MIND_SNAPSHOT,
+            "Reassigned the mind snapshot to a fresh probe.".to_string(),
+            probe_id,
+        )
     }
 
     pub fn mission_abandon(title: &str, probe_id: Option<u64>) -> Self {
@@ -200,7 +224,11 @@ impl LogEvent {
     }
 
     pub fn container_rules(container: &str, probe_id: Option<u64>) -> Self {
-        Self::action(kind::RULES, format!("Updated routing rules for «{container}»."), probe_id)
+        Self::action(
+            kind::RULES,
+            format!("Updated routing rules for «{container}»."),
+            probe_id,
+        )
     }
 }
 

@@ -21,8 +21,7 @@ pub fn render(frame: &mut Frame, area: Rect, menu: &ContextMenu, p: Palette) {
         .iter()
         .map(|i| {
             // 3 = the " N " accelerator gutter rendered before every label.
-            3 + i.label.chars().count()
-                + i.disabled_reason.as_ref().map_or(0, |r| r.chars().count() + 3)
+            3 + i.label.chars().count() + i.disabled_reason.as_ref().map_or(0, |r| r.chars().count() + 3)
         })
         .max()
         .unwrap_or(0)
@@ -53,7 +52,11 @@ pub fn render(frame: &mut Frame, area: Rect, menu: &ContextMenu, p: Palette) {
         .map(|(i, item)| {
             // The first nine items get a 1-9 accelerator (see handle_menu_key);
             // later items align under a two-space gutter and stay j/k-only.
-            let acc = if i < 9 { format!(" {} ", i + 1) } else { "   ".to_string() };
+            let acc = if i < 9 {
+                format!(" {} ", i + 1)
+            } else {
+                "   ".to_string()
+            };
             if !item.enabled {
                 let reason = item.disabled_reason.as_deref().unwrap_or("unavailable");
                 return Line::from(vec![

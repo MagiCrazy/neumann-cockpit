@@ -114,7 +114,9 @@ fn coords(obs: &SectorObservation) -> (i64, i64, i64) {
 /// Serialize a simple serde enum to its string form (e.g. `KnowledgeLevel` →
 /// `"detailed"`), for storing in a text column.
 fn enum_text<T: serde::Serialize>(v: &T) -> Option<String> {
-    serde_json::to_value(v).ok().and_then(|j| j.as_str().map(str::to_string))
+    serde_json::to_value(v)
+        .ok()
+        .and_then(|j| j.as_str().map(str::to_string))
 }
 
 /// Insert or replace the observation for its sector (keyed by coordinates,
@@ -152,9 +154,7 @@ pub fn upsert_observation(conn: &Connection, obs: &SectorObservation) -> rusqlit
 /// Best-effort: any error yields an empty history, like the old corrupt-JSON
 /// path.
 pub fn load_observations(conn: &Connection) -> Vec<SectorObservation> {
-    let Ok(mut stmt) =
-        conn.prepare("SELECT data FROM sector_observations ORDER BY scanned_at DESC")
-    else {
+    let Ok(mut stmt) = conn.prepare("SELECT data FROM sector_observations ORDER BY scanned_at DESC") else {
         return Vec::new();
     };
     let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(0)) else {
@@ -232,7 +232,9 @@ pub fn migrate_legacy_json(conn: &mut Connection, json_path: &Path) -> rusqlite:
     if count > 0 {
         return Ok(MigrationOutcome::AlreadyMigrated);
     }
-    let Ok(data) = std::fs::read(json_path) else { return Ok(MigrationOutcome::NoLegacyFile) };
+    let Ok(data) = std::fs::read(json_path) else {
+        return Ok(MigrationOutcome::NoLegacyFile);
+    };
     let Ok(history) = serde_json::from_slice::<Vec<SectorObservation>>(&data) else {
         return Ok(MigrationOutcome::NoLegacyFile);
     };
@@ -344,7 +346,7 @@ mod tests {
         )
         .unwrap();
         ensure_columns(&conn); // adds observed_by
-        // A second call must not fail (column already present).
+                               // A second call must not fail (column already present).
         ensure_columns(&conn);
         // The new column is now writable via the normal upsert.
         let mut o = obs(1.0, 1.0, 1.0);
@@ -378,9 +380,7 @@ mod tests {
             append_event(&conn, &LogEvent::action("test", format!("entry {i}"), None)).unwrap();
         }
         // The table keeps the full history (append-only, never trimmed).
-        let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0))
-            .unwrap();
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0)).unwrap();
         assert_eq!(count as usize, n, "events are append-only, not trimmed");
         // Loading returns only the most recent window, newest first.
         let loaded = load_events(&conn);
@@ -394,7 +394,10 @@ mod tests {
         let path = std::env::temp_dir().join("nc_migrate_import_test.json");
         let history = vec![obs(1.0, 1.0, 1.0), obs(2.0, 2.0, 2.0)];
         std::fs::write(&path, serde_json::to_vec(&history).unwrap()).unwrap();
-        assert_eq!(migrate_legacy_json(&mut conn, &path).unwrap(), MigrationOutcome::Imported(2));
+        assert_eq!(
+            migrate_legacy_json(&mut conn, &path).unwrap(),
+            MigrationOutcome::Imported(2)
+        );
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM sector_observations", [], |r| r.get(0))
             .unwrap();
@@ -408,7 +411,10 @@ mod tests {
         upsert_observation(&conn, &obs(9.0, 9.0, 9.0)).unwrap();
         let path = std::env::temp_dir().join("nc_migrate_skip_test.json");
         std::fs::write(&path, serde_json::to_vec(&vec![obs(1.0, 1.0, 1.0)]).unwrap()).unwrap();
-        assert_eq!(migrate_legacy_json(&mut conn, &path).unwrap(), MigrationOutcome::AlreadyMigrated);
+        assert_eq!(
+            migrate_legacy_json(&mut conn, &path).unwrap(),
+            MigrationOutcome::AlreadyMigrated
+        );
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM sector_observations", [], |r| r.get(0))
             .unwrap();

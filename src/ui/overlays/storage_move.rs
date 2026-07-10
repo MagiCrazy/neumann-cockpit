@@ -1,5 +1,5 @@
-use crate::ui::theme::{palette, Palette};
 use crate::app::{ActiveWizard, AppState, StorageMoveInput, MOVE_RESOURCE_TYPES};
+use crate::ui::theme::{palette, Palette};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -54,40 +54,88 @@ fn field_row(p: Palette, label: &str, value: String, active: bool, editing: bool
 
 pub(crate) fn render_storage_move_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let ActiveWizard::StorageMove(storage_move) = &state.active_wizard else { return };
+    let ActiveWizard::StorageMove(storage_move) = &state.active_wizard else {
+        return;
+    };
     match storage_move {
         StorageMoveInput::PickManny { mannies, selection } => {
             let names: Vec<&str> = mannies.iter().map(|(_, n)| n.as_str()).collect();
             let height = (mannies.len() as u16 + 6).min(18);
-            render_pick_list(frame, area, p, " STORAGE MOVE — SELECT MANNY ", 52, height,
-                None, &names, *selection, None, "select");
+            render_pick_list(
+                frame,
+                area,
+                p,
+                " STORAGE MOVE — SELECT MANNY ",
+                52,
+                height,
+                None,
+                &names,
+                *selection,
+                None,
+                "select",
+            );
         }
         StorageMoveInput::PickKind { selection, .. } => {
-            render_pick_list(frame, area, p, " STORAGE MOVE — KIND ", 46, 8,
-                None, &["resource", "item"], *selection, None, "select");
+            render_pick_list(
+                frame,
+                area,
+                p,
+                " STORAGE MOVE — KIND ",
+                46,
+                8,
+                None,
+                &["resource", "item"],
+                *selection,
+                None,
+                "select",
+            );
         }
         StorageMoveInput::ConfigureResource {
-            containers, resource_idx, from_sel, to_sel, amount_buf, field, error, ..
+            containers,
+            resource_idx,
+            from_sel,
+            to_sel,
+            amount_buf,
+            field,
+            error,
+            ..
         } => {
             let [body, footer] = framed(p, " STORAGE MOVE — RESOURCE ", area, 56, 9, frame);
             let cname = |i: usize| containers.get(i).map(|(_, l)| l.clone()).unwrap_or_default();
             let lines = vec![
-                field_row(p, "Resource:", MOVE_RESOURCE_TYPES[*resource_idx].to_string(), *field == 0, false),
+                field_row(
+                    p,
+                    "Resource:",
+                    MOVE_RESOURCE_TYPES[*resource_idx].to_string(),
+                    *field == 0,
+                    false,
+                ),
                 field_row(p, "From:", cname(*from_sel), *field == 1, false),
                 field_row(p, "To:", cname(*to_sel), *field == 2, false),
                 field_row(p, "Amount:", format!("{amount_buf} ECE"), *field == 3, *field == 3),
                 error_line(p, error),
             ];
             frame.render_widget(Paragraph::new(lines), body);
-            render_footer(frame, footer, p, &[
-                FooterKey::nav("[↑/↓]", "field"),
-                FooterKey::nav("[←/→]", "change"),
-                FooterKey::commit("[Enter]", "MOVE"),
-                FooterKey::nav("[Esc]", "cancel"),
-            ]);
+            render_footer(
+                frame,
+                footer,
+                p,
+                &[
+                    FooterKey::nav("[↑/↓]", "field"),
+                    FooterKey::nav("[←/→]", "change"),
+                    FooterKey::commit("[Enter]", "MOVE"),
+                    FooterKey::nav("[Esc]", "cancel"),
+                ],
+            );
         }
         StorageMoveInput::ConfigureItem {
-            containers, items, to_sel, item_cursor, field, error, ..
+            containers,
+            items,
+            to_sel,
+            item_cursor,
+            field,
+            error,
+            ..
         } => {
             let height = (items.len() as u16 + 7).clamp(10, 22);
             let [body, footer] = framed(p, " STORAGE MOVE — ITEMS ", area, 60, height, frame);
@@ -99,7 +147,10 @@ pub(crate) fn render_storage_move_overlay(frame: &mut Frame, area: Rect, state: 
             let dest = containers.get(*to_sel).map(|(_, l)| l.clone()).unwrap_or_default();
             let mut head = vec![field_row(p, "To:", dest, *field == 1, false)];
             if let Some(err) = error {
-                head.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(p.crit))));
+                head.push(Line::from(Span::styled(
+                    format!("✗ {err}"),
+                    Style::default().fg(p.crit),
+                )));
             }
             frame.render_widget(Paragraph::new(head), rows[0]);
 
@@ -125,13 +176,18 @@ pub(crate) fn render_storage_move_overlay(frame: &mut Frame, area: Rect, state: 
                 ls.select(Some((*item_cursor).min(items.len() - 1)));
             }
             frame.render_stateful_widget(list, rows[1], &mut ls);
-            render_footer(frame, footer, p, &[
-                FooterKey::nav("[Tab]", "pane"),
-                FooterKey::nav("[Space]", "toggle"),
-                FooterKey::nav("[←/→]", "dest"),
-                FooterKey::commit("[Enter]", "MOVE"),
-                FooterKey::nav("[Esc]", "cancel"),
-            ]);
+            render_footer(
+                frame,
+                footer,
+                p,
+                &[
+                    FooterKey::nav("[Tab]", "pane"),
+                    FooterKey::nav("[Space]", "toggle"),
+                    FooterKey::nav("[←/→]", "dest"),
+                    FooterKey::commit("[Enter]", "MOVE"),
+                    FooterKey::nav("[Esc]", "cancel"),
+                ],
+            );
         }
     }
 }
@@ -142,4 +198,3 @@ fn error_line(p: Palette, error: &Option<String>) -> Line<'static> {
         None => Line::default(),
     }
 }
-

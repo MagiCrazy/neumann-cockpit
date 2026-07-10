@@ -1,6 +1,4 @@
-use crate::api::types::{
-    DangerLevel, KnowledgeLevel, MovementPhase, ProbeStatus, SectorObjectType, SectorObservation,
-};
+use crate::api::types::{DangerLevel, KnowledgeLevel, MovementPhase, ProbeStatus, SectorObjectType, SectorObservation};
 use crate::app::ColorMode;
 use ratatui::{
     style::{Color, Modifier, Style},
@@ -110,8 +108,7 @@ pub(crate) fn map_cell_symbol(s: &SectorObservation) -> (&'static str, Style) {
                 return ("!", Style::default().fg(Color::Red));
             }
             if matches!(obj.object_type, SectorObjectType::Star | SectorObjectType::SolarSystem) {
-                let has_minable = obj.minable_targets.as_ref()
-                    .is_some_and(|t| !t.is_empty());
+                let has_minable = obj.minable_targets.as_ref().is_some_and(|t| !t.is_empty());
                 return if has_minable {
                     ("★", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
                 } else {
@@ -137,7 +134,14 @@ pub(crate) fn map_cell_style(s: &SectorObservation, p: Palette) -> (&'static str
             if matches!(obj.object_type, SectorObjectType::Star | SectorObjectType::SolarSystem) {
                 let has_minable = obj.minable_targets.as_ref().is_some_and(|t| !t.is_empty());
                 let style = Style::default().fg(p.warn);
-                return ("★", if has_minable { style.add_modifier(Modifier::BOLD) } else { style });
+                return (
+                    "★",
+                    if has_minable {
+                        style.add_modifier(Modifier::BOLD)
+                    } else {
+                        style
+                    },
+                );
             }
         }
         return ("●", Style::default().fg(p.good));
@@ -152,8 +156,9 @@ pub(crate) fn item_icon(item_type: &str) -> (&'static str, Color) {
         "atomic_3d_printer" => ("⚙", Color::Magenta),
         "additional_container" => ("□", Color::Cyan),
         "waypoint_bookmark" => ("◎", Color::Cyan),
-        "micro_conductor" | "ceramic_insulator" | "crystal_substrate"
-        | "dopant_matrix" | "integrated_circuit" => ("◈", Color::Yellow),
+        "micro_conductor" | "ceramic_insulator" | "crystal_substrate" | "dopant_matrix" | "integrated_circuit" => {
+            ("◈", Color::Yellow)
+        }
         _ => ("◈", Color::White),
     }
 }
@@ -252,9 +257,7 @@ pub(crate) fn probe_status_style(s: &ProbeStatus) -> Style {
     match s {
         ProbeStatus::Idle | ProbeStatus::Orbiting => Style::default().fg(Color::White),
         ProbeStatus::Preparing | ProbeStatus::Decelerating => Style::default().fg(Color::Yellow),
-        ProbeStatus::Accelerating => {
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
-        }
+        ProbeStatus::Accelerating => Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
         ProbeStatus::Cruising => Style::default().fg(Color::Cyan),
         ProbeStatus::Disabled => Style::default().fg(Color::Red),
         ProbeStatus::Dead | ProbeStatus::TrappedByBlackHole => {
@@ -303,7 +306,6 @@ pub(crate) fn block_gauge_line(label: &str, ratio: f64, value: &str, fill: Color
         Span::styled(format!(" {value:>5}"), Style::default().fg(p.text)),
     ])
 }
-
 
 pub fn format_duration(secs: i64) -> String {
     if secs <= 0 {

@@ -28,8 +28,7 @@ pub fn visible_panes(area: Rect, active: Pane) -> Vec<(Pane, Rect)> {
     let row_rects = Layout::vertical(vec![Constraint::Ratio(1, rows as u32); rows]).split(area);
     let mut out = Vec::with_capacity(rows * cols);
     for (i, rr) in row_rects.iter().enumerate() {
-        let col_rects =
-            Layout::horizontal(vec![Constraint::Ratio(1, cols as u32); cols]).split(*rr);
+        let col_rects = Layout::horizontal(vec![Constraint::Ratio(1, cols as u32); cols]).split(*rr);
         for (j, cr) in col_rects.iter().enumerate() {
             out.push((Pane::ALL[(r0 + i) * 3 + (c0 + j)], *cr));
         }

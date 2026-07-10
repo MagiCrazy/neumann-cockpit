@@ -57,7 +57,10 @@ pub(crate) fn render(
 
     // Bottom banner — GUPPI narrating the preflight.
     frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(" GUPPI — preflight self-check", Style::default().fg(p.accent)))),
+        Paragraph::new(Line::from(Span::styled(
+            " GUPPI — preflight self-check",
+            Style::default().fg(p.accent),
+        ))),
         rows[1],
     );
 }
@@ -93,9 +96,15 @@ fn probe_lines(
 
     if let Some(buf) = entry {
         lines.push(Line::default());
-        lines.push(Line::from(Span::styled("⚠ NO API KEY", Style::default().fg(p.warn).add_modifier(Modifier::BOLD))));
+        lines.push(Line::from(Span::styled(
+            "⚠ NO API KEY",
+            Style::default().fg(p.warn).add_modifier(Modifier::BOLD),
+        )));
         lines.push(Line::from(Span::styled("get one at", dim)));
-        lines.push(Line::from(Span::styled("neumann-probe.net", Style::default().fg(p.accent))));
+        lines.push(Line::from(Span::styled(
+            "neumann-probe.net",
+            Style::default().fg(p.accent),
+        )));
         lines.push(Line::from(vec![
             Span::styled("KEY ›", Style::default().fg(p.accent)),
             Span::styled(buf.to_string(), text),
@@ -129,23 +138,36 @@ mod tests {
     fn text(steps: &[Step], entry: Option<&str>, note: Option<&str>) -> String {
         // Large enough for the 3×3 boot grid (Probe pane centre).
         let mut t = Terminal::new(TestBackend::new(100, 33)).unwrap();
-        t.draw(|f| render(f, f.area(), steps, entry, note, ColorMode::default())).unwrap();
+        t.draw(|f| render(f, f.area(), steps, entry, note, ColorMode::default()))
+            .unwrap();
         t.backend().buffer().content.iter().map(|c| c.symbol()).collect()
     }
 
     #[test]
     fn boot_grid_shows_probe_active_and_others_dark() {
-        let steps = [Step { label: "CONFIG", status: Status::Pending }];
+        let steps = [Step {
+            label: "CONFIG",
+            status: Status::Pending,
+        }];
         let out = text(&steps, None, None);
         assert!(out.contains("PROBE"), "the centre Probe pane is framed");
-        assert!(out.contains("SCANNER") && out.contains("MANNIES"), "surrounding panes are drawn too");
-        assert!(out.contains("· · ·"), "the eight subsystems sit dark until preflight clears");
+        assert!(
+            out.contains("SCANNER") && out.contains("MANNIES"),
+            "surrounding panes are drawn too"
+        );
+        assert!(
+            out.contains("· · ·"),
+            "the eight subsystems sit dark until preflight clears"
+        );
         assert!(out.contains("GUPPI"), "preflight banner");
     }
 
     #[test]
     fn onboarding_prompt_shows_where_to_get_the_key_and_the_buffer() {
-        let steps = [Step { label: "CONFIG", status: Status::Pending }];
+        let steps = [Step {
+            label: "CONFIG",
+            status: Status::Pending,
+        }];
         let out = text(&steps, Some("vng_abc123"), None);
         assert!(out.contains("NO API KEY"), "onboarding heading");
         assert!(out.contains("neumann-probe.net"), "where to get the key");
@@ -155,11 +177,27 @@ mod tests {
     #[test]
     fn link_failure_is_shown_with_actions() {
         let steps = [
-            Step { label: "CONFIG", status: Status::Ok("loaded".into()) },
-            Step { label: "REMOTE LINK", status: Status::Fail("401 unauthorized".into()) },
+            Step {
+                label: "CONFIG",
+                status: Status::Ok("loaded".into()),
+            },
+            Step {
+                label: "REMOTE LINK",
+                status: Status::Fail("401 unauthorized".into()),
+            },
         ];
-        let out = text(&steps, None, Some("[R]etry   [K] re-enter key\n[Enter] continue offline"));
-        assert!(out.contains("REMOTE LINK") && out.contains("401 unauthorized"), "the bad-key error is visible");
-        assert!(out.contains("[R]etry") && out.contains("re-enter key") && out.contains("continue offline"), "recovery actions offered");
+        let out = text(
+            &steps,
+            None,
+            Some("[R]etry   [K] re-enter key\n[Enter] continue offline"),
+        );
+        assert!(
+            out.contains("REMOTE LINK") && out.contains("401 unauthorized"),
+            "the bad-key error is visible"
+        );
+        assert!(
+            out.contains("[R]etry") && out.contains("re-enter key") && out.contains("continue offline"),
+            "recovery actions offered"
+        );
     }
 }

@@ -1,10 +1,10 @@
 use crossterm::event::KeyCode;
 use tokio::sync::mpsc;
 
+use crate::api::client::ApiClient;
 use crate::api::tasks::fetch_abandon_mission;
 use crate::api::types::MissionStatus;
 use crate::app::{ActiveWizard, ApiMessage, AppState, LogEvent, MissionsInput};
-use crate::api::client::ApiClient;
 
 use super::geometry::list_nav;
 
@@ -49,7 +49,11 @@ pub(super) fn handle_missions_event(
             }
             KeyCode::Enter | KeyCode::Char('y') => {
                 let (mission_id, mission_title) = {
-                    let ActiveWizard::Missions(MissionsInput::ConfirmAbandon { ref mission_id, ref mission_title, .. }) = state.active_wizard
+                    let ActiveWizard::Missions(MissionsInput::ConfirmAbandon {
+                        ref mission_id,
+                        ref mission_title,
+                        ..
+                    }) = state.active_wizard
                     else {
                         return;
                     };

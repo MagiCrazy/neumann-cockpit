@@ -25,7 +25,7 @@ pub(super) fn face_d2(axis: u8) -> Vec<(i32, i32, i32)> {
                 let coords = match axis {
                     b'x' => (face, u, v),
                     b'y' => (u, face, v),
-                    _    => (u, v, face),
+                    _ => (u, v, face),
                 };
                 if (coords.0 + coords.1 + coords.2) % 2 == 0 {
                     out.push(coords);

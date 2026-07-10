@@ -43,7 +43,10 @@ pub(super) fn handle_rename_container_event(
     client: &ApiClient,
     tx: &mpsc::Sender<ApiMessage>,
 ) {
-    if !matches!(state.active_wizard, ActiveWizard::RenameContainer(RenameContainerInput::Typing { .. })) {
+    if !matches!(
+        state.active_wizard,
+        ActiveWizard::RenameContainer(RenameContainerInput::Typing { .. })
+    ) {
         return;
     }
     match code {
@@ -61,7 +64,8 @@ pub(super) fn handle_rename_container_event(
         }
         KeyCode::Enter => {
             let (id, label) = {
-                let ActiveWizard::RenameContainer(RenameContainerInput::Typing { container_id, buf, .. }) = &state.active_wizard
+                let ActiveWizard::RenameContainer(RenameContainerInput::Typing { container_id, buf, .. }) =
+                    &state.active_wizard
                 else {
                     return;
                 };
@@ -76,7 +80,9 @@ pub(super) fn handle_rename_container_event(
             state.log_event(LogEvent::rename_container(&new_label, state.active_probe_id));
         }
         KeyCode::Char(c) => {
-            if let ActiveWizard::RenameContainer(RenameContainerInput::Typing { buf, error, .. }) = &mut state.active_wizard {
+            if let ActiveWizard::RenameContainer(RenameContainerInput::Typing { buf, error, .. }) =
+                &mut state.active_wizard
+            {
                 if buf.chars().count() < 80 {
                     buf.push(c);
                     *error = None;
@@ -93,7 +99,8 @@ pub(super) fn handle_container_rules_event(
     client: &ApiClient,
     tx: &mpsc::Sender<ApiMessage>,
 ) {
-    let ActiveWizard::ContainerRules(ContainerRulesInput::Editing { selection, types, .. }) = &state.active_wizard else {
+    let ActiveWizard::ContainerRules(ContainerRulesInput::Editing { selection, types, .. }) = &state.active_wizard
+    else {
         return;
     };
     let sel = *selection;
@@ -102,7 +109,9 @@ pub(super) fn handle_container_rules_event(
         KeyCode::Esc => state.close_wizard(),
         KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
             if let Some(ns) = list_nav(code, sel, count) {
-                if let ActiveWizard::ContainerRules(ContainerRulesInput::Editing { selection, .. }) = &mut state.active_wizard {
+                if let ActiveWizard::ContainerRules(ContainerRulesInput::Editing { selection, .. }) =
+                    &mut state.active_wizard
+                {
                     *selection = ns;
                 }
             }
@@ -116,7 +125,12 @@ pub(super) fn handle_container_rules_event(
         KeyCode::Delete | KeyCode::Backspace => {
             // Clear the selected type back to "none".
             if let ActiveWizard::ContainerRules(ContainerRulesInput::Editing {
-                types, priority, exclusion, strict_exclusion, selection, ..
+                types,
+                priority,
+                exclusion,
+                strict_exclusion,
+                selection,
+                ..
             }) = &mut state.active_wizard
             {
                 if let Some(ty) = types.get(*selection).cloned() {
@@ -129,7 +143,12 @@ pub(super) fn handle_container_rules_event(
         KeyCode::Enter => {
             let (id, p, e, s, label) = {
                 let ActiveWizard::ContainerRules(ContainerRulesInput::Editing {
-                    container_id, priority, exclusion, strict_exclusion, container_label, ..
+                    container_id,
+                    priority,
+                    exclusion,
+                    strict_exclusion,
+                    container_label,
+                    ..
                 }) = &state.active_wizard
                 else {
                     return;
@@ -151,7 +170,12 @@ pub(super) fn handle_container_rules_event(
 
 fn cycle_selected(state: &mut AppState, backward: bool) {
     if let ActiveWizard::ContainerRules(ContainerRulesInput::Editing {
-        types, priority, exclusion, strict_exclusion, selection, ..
+        types,
+        priority,
+        exclusion,
+        strict_exclusion,
+        selection,
+        ..
     }) = &mut state.active_wizard
     {
         if let Some(ty) = types.get(*selection).cloned() {

@@ -3,10 +3,7 @@ use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
 use crate::api::tasks::fetch_sector;
-use crate::app::{
-    ActiveWizard, ApiMessage, AppState, ScanMode,
-    GotoVisitedInput, InputMode, ProbeSwitchInput,
-};
+use crate::app::{ActiveWizard, ApiMessage, AppState, GotoVisitedInput, InputMode, ProbeSwitchInput, ScanMode};
 mod alerts;
 mod assemble;
 mod cockpit;
@@ -30,32 +27,24 @@ mod travel;
 use alerts::handle_alerts_event;
 use assemble::handle_assemble_probe_event;
 use cockpit::handle_cockpit_event;
-use containers::{
-    handle_container_rules_event, handle_rename_container_event,
-};
+use command::handle_command_event;
+use containers::{handle_container_rules_event, handle_rename_container_event};
 use craft::handle_fabrication_event;
-use fleet::{
-    handle_probe_switch_event, handle_rename_probe_event, handle_transfer_deuterium_event,
-};
+use fleet::{handle_probe_switch_event, handle_rename_probe_event, handle_transfer_deuterium_event};
 use geometry::face_d2;
 use improve::handle_improve_event;
 use jettison::handle_jettison_event;
-use command::handle_command_event;
 use map::{handle_goto_visited_event, handle_map_event};
 use messages::handle_messages_event;
 use mine::{handle_mine_event, handle_remote_mine_event};
 use missions::handle_missions_event;
 use pickers::{
-    handle_deploy_event, handle_detach_event, handle_drop_cargo_event,
-    handle_drop_container_event, handle_inspect_event, handle_mind_snapshot_event,
-    handle_recall_event, handle_recover_event, handle_refuel_event, handle_rename_manny_event,
-    handle_salvage_event,
+    handle_deploy_event, handle_detach_event, handle_drop_cargo_event, handle_drop_container_event,
+    handle_inspect_event, handle_mind_snapshot_event, handle_recall_event, handle_recover_event, handle_refuel_event,
+    handle_rename_manny_event, handle_salvage_event,
 };
 use repair::handle_repair_event;
-use scanner::{
-    handle_object_action_event, handle_scut_network_event, handle_scut_relay_event,
-    handle_waypoints_event,
-};
+use scanner::{handle_object_action_event, handle_scut_network_event, handle_scut_relay_event, handle_waypoints_event};
 use storage_move::handle_storage_move_event;
 use travel::handle_travel_event;
 
@@ -69,6 +58,7 @@ type WizardHandler = fn(KeyCode, &mut AppState, &ApiClient, &mpsc::Sender<ApiMes
 /// uniform `(KeyCode, &mut AppState, &ApiClient, &Sender)` shape; `waypoints`
 /// (which ignores client/tx) is wrapped to match.
 #[allow(clippy::type_complexity)]
+#[rustfmt::skip]
 const WIZARD_INPUTS: &[(WizardGuard, WizardHandler)] = &[
     (|s| matches!(s.active_wizard, ActiveWizard::AssembleProbe(_)), handle_assemble_probe_event),
     (|s| matches!(s.active_wizard, ActiveWizard::RenameProbe(_)), handle_rename_probe_event),
@@ -104,12 +94,7 @@ const WIZARD_INPUTS: &[(WizardGuard, WizardHandler)] = &[
 ];
 
 /// Route a key to the first active wizard. Returns `true` if one consumed it.
-fn dispatch_wizard_key(
-    code: KeyCode,
-    state: &mut AppState,
-    client: &ApiClient,
-    tx: &mpsc::Sender<ApiMessage>,
-) -> bool {
+fn dispatch_wizard_key(code: KeyCode, state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) -> bool {
     for (active, handle) in WIZARD_INPUTS {
         if active(state) {
             handle(code, state, client, tx);
@@ -119,14 +104,11 @@ fn dispatch_wizard_key(
     false
 }
 
-pub fn handle_event(
-    event: Event,
-    state: &mut AppState,
-    client: &ApiClient,
-    tx: &mpsc::Sender<ApiMessage>,
-) {
+pub fn handle_event(event: Event, state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
     let Event::Key(k) = event else { return };
-    if k.kind != KeyEventKind::Press { return };
+    if k.kind != KeyEventKind::Press {
+        return;
+    };
     // Toasts and inline errors are transient: any keypress dismisses them.
     state.toast = None;
     state.error = None;
@@ -156,8 +138,7 @@ pub fn handle_event(
         // Clamp against the same body height the renderer uses (near-fullscreen
         // minus a 2-row margin, 2 borders and the footer).
         let (_, term_h) = crossterm::terminal::size().unwrap_or((80, 24));
-        let max = (crate::ui::overlays::help_row_count() as u16)
-            .saturating_sub(term_h.saturating_sub(5));
+        let max = (crate::ui::overlays::help_row_count() as u16).saturating_sub(term_h.saturating_sub(5));
         match k.code {
             KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q') => {
                 state.help_open = false;
@@ -278,7 +259,11 @@ mod tests {
         let mut state = AppState::default();
         assert_eq!(state.active_pane, Pane::Probe, "default centre pane");
         press(&mut state, KeyCode::Char('e'));
-        assert_eq!(state.active_pane, Pane::Scanner, "no wizard → cockpit handles the pane key");
+        assert_eq!(
+            state.active_pane,
+            Pane::Scanner,
+            "no wizard → cockpit handles the pane key"
+        );
     }
 
     #[tokio::test]
@@ -304,8 +289,14 @@ mod tests {
             cursor: 0,
         });
         press(&mut state, KeyCode::Char('1'));
-        assert!(matches!(state.mode, InputMode::Normal), "digit fired and closed the menu");
-        assert!(matches!(state.active_wizard, ActiveWizard::Travel(_)), "the item's wizard launched");
+        assert!(
+            matches!(state.mode, InputMode::Normal),
+            "digit fired and closed the menu"
+        );
+        assert!(
+            matches!(state.active_wizard, ActiveWizard::Travel(_)),
+            "the item's wizard launched"
+        );
     }
 
     #[tokio::test]
@@ -313,8 +304,15 @@ mod tests {
         let mut state = AppState::default();
         state.active_wizard = ActiveWizard::Travel(TravelInput::Typing(String::new()));
         press(&mut state, KeyCode::Char('e'));
-        assert_eq!(state.active_pane, Pane::Probe, "wizard swallows the key; cockpit must not switch pane");
-        assert!(matches!(state.active_wizard, ActiveWizard::Travel(_)), "the wizard stays open");
+        assert_eq!(
+            state.active_pane,
+            Pane::Probe,
+            "wizard swallows the key; cockpit must not switch pane"
+        );
+        assert!(
+            matches!(state.active_wizard, ActiveWizard::Travel(_)),
+            "the wizard stays open"
+        );
     }
 
     #[tokio::test]
@@ -322,7 +320,10 @@ mod tests {
         let mut state = AppState::default();
         state.active_wizard = ActiveWizard::Travel(TravelInput::Typing("12".into()));
         press(&mut state, KeyCode::Esc);
-        assert!(matches!(state.active_wizard, ActiveWizard::None), "Esc closes the travel wizard");
+        assert!(
+            matches!(state.active_wizard, ActiveWizard::None),
+            "Esc closes the travel wizard"
+        );
     }
 
     #[tokio::test]
@@ -332,21 +333,36 @@ mod tests {
         // wizards can be open at once (that state is now unrepresentable).
         let mut state = AppState::default();
         state.active_wizard = ActiveWizard::Travel(TravelInput::Typing(String::new()));
-        state.active_wizard = ActiveWizard::Alerts(AlertsInput::Browsing { selection: 0, show_warnings: false });
-        assert!(matches!(state.active_wizard, ActiveWizard::Alerts(_)), "the second wizard is now active");
-        assert!(!matches!(state.active_wizard, ActiveWizard::Travel(_)), "the first was replaced, not kept alongside");
+        state.active_wizard = ActiveWizard::Alerts(AlertsInput::Browsing {
+            selection: 0,
+            show_warnings: false,
+        });
+        assert!(
+            matches!(state.active_wizard, ActiveWizard::Alerts(_)),
+            "the second wizard is now active"
+        );
+        assert!(
+            !matches!(state.active_wizard, ActiveWizard::Travel(_)),
+            "the first was replaced, not kept alongside"
+        );
     }
 
     #[tokio::test]
     async fn tabbed_wizard_also_captures_keys_and_closes_on_esc() {
         let mut state = AppState::default();
-        state.active_wizard = ActiveWizard::Alerts(AlertsInput::Browsing { selection: 0, show_warnings: false });
+        state.active_wizard = ActiveWizard::Alerts(AlertsInput::Browsing {
+            selection: 0,
+            show_warnings: false,
+        });
         // A pane key must not reach the cockpit while the alerts overlay is open.
         press(&mut state, KeyCode::Char('b'));
         assert_eq!(state.active_pane, Pane::Probe, "alerts overlay swallows the pane key");
         assert!(matches!(state.active_wizard, ActiveWizard::Alerts(_)));
         press(&mut state, KeyCode::Esc);
-        assert!(matches!(state.active_wizard, ActiveWizard::None), "Esc closes the alerts overlay");
+        assert!(
+            matches!(state.active_wizard, ActiveWizard::None),
+            "Esc closes the alerts overlay"
+        );
     }
 
     #[tokio::test]
@@ -361,27 +377,38 @@ mod tests {
         });
         press(&mut state, KeyCode::Char('j'));
         match &state.active_wizard {
-            ActiveWizard::Salvage(SalvageInput::PickTarget { selection, .. }) => assert_eq!(*selection, 1, "j moves the cursor"),
+            ActiveWizard::Salvage(SalvageInput::PickTarget { selection, .. }) => {
+                assert_eq!(*selection, 1, "j moves the cursor")
+            }
             _ => panic!("should still be picking"),
         }
         press(&mut state, KeyCode::Esc);
-        assert!(matches!(state.active_wizard, ActiveWizard::None), "Esc closes the picker");
+        assert!(
+            matches!(state.active_wizard, ActiveWizard::None),
+            "Esc closes the picker"
+        );
     }
 
     fn idle_onboard_manny(id: &str) -> crate::api::types::Manny {
-        serde_json::from_str(&format!(r#"{{
+        serde_json::from_str(&format!(
+            r#"{{
             "id": "{id}", "name": "{id}",
             "location": {{"type": "probe", "sector": null}},
             "currentTask": null, "taskProgressPercent": 0.0,
             "cargo": {{"capacity": 0.3, "deuterium": 0.0, "metals": 0.0, "ice": 0.0, "organicCompounds": 0.0}},
             "canReceiveOrders": true, "taskEstimatedEndTime": null
-        }}"#)).unwrap()
+        }}"#
+        ))
+        .unwrap()
     }
 
     fn manny_recipe(id: &str) -> crate::api::types::CraftingRecipe {
-        serde_json::from_str(&format!(r#"{{"id":"{id}","name":"{id}","craftableBy":["manny"],
+        serde_json::from_str(&format!(
+            r#"{{"id":"{id}","name":"{id}","craftableBy":["manny"],
             "ingredients":[],"durationSeconds":60,
-            "output":{{"type":"x","name":"X","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}}}"#)).unwrap()
+            "output":{{"type":"x","name":"X","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}}}"#
+        ))
+        .unwrap()
     }
 
     #[tokio::test]
@@ -390,7 +417,11 @@ mod tests {
         let mut state = AppState::default();
         state.recipes = vec![manny_recipe("solar_panel")];
         state.mannies = Some(vec![idle_onboard_manny("m1"), idle_onboard_manny("m2")]);
-        state.active_wizard = ActiveWizard::Fabrication(FabricationInput::PickRecipe { prefilled_manny: None, selection: 0, error: None });
+        state.active_wizard = ActiveWizard::Fabrication(FabricationInput::PickRecipe {
+            prefilled_manny: None,
+            selection: 0,
+            error: None,
+        });
         press(&mut state, KeyCode::Enter);
         match &state.active_wizard {
             ActiveWizard::Fabrication(FabricationInput::PickBuilder { recipe_id, mannies, .. }) => {
@@ -407,11 +438,18 @@ mod tests {
         let mut state = AppState::default();
         state.recipes = vec![manny_recipe("solar_panel")];
         state.mannies = Some(vec![]);
-        state.active_wizard = ActiveWizard::Fabrication(FabricationInput::PickRecipe { prefilled_manny: None, selection: 0, error: None });
+        state.active_wizard = ActiveWizard::Fabrication(FabricationInput::PickRecipe {
+            prefilled_manny: None,
+            selection: 0,
+            error: None,
+        });
         press(&mut state, KeyCode::Enter);
         match &state.active_wizard {
             ActiveWizard::Fabrication(FabricationInput::PickRecipe { error, .. }) => {
-                assert!(error.as_deref().unwrap_or("").contains("no idle Manny"), "surfaces the no-manny error");
+                assert!(
+                    error.as_deref().unwrap_or("").contains("no idle Manny"),
+                    "surfaces the no-manny error"
+                );
             }
             _ => panic!("stays on the recipe step with an error"),
         }
@@ -423,16 +461,21 @@ mod tests {
         let mut state = AppState::default();
         state.active_pane = Pane::Probe;
         // Two SCUT networks cover the current sector (first scan, no probe sector).
-        state.scan_history = vec![serde_json::from_str(r#"{
+        state.scan_history = vec![serde_json::from_str(
+            r#"{
             "relativeCoordinates":{"x":0,"y":0,"z":0},"distance":0,
             "knowledgeLevel":"detailed","confidence":1.0,
             "scutNetworks":[{"id":1,"name":"Alpha"},{"id":2,"name":"Beta"}],
             "scan":{"currentSectorResidenceSeconds":60,"requiredResidenceSeconds":60,"scanQuality":1.0}
-        }"#).unwrap()];
+        }"#,
+        )
+        .unwrap()];
         press(&mut state, KeyCode::Enter); // open the Probe context menu
         press(&mut state, KeyCode::Enter); // fire the first enabled item (Inspect SCUT network…)
         match &state.active_wizard {
-            ActiveWizard::ScutNetwork(ScutNetworkInput::Picking { networks, .. }) => assert_eq!(networks.len(), 2, "both networks offered"),
+            ActiveWizard::ScutNetwork(ScutNetworkInput::Picking { networks, .. }) => {
+                assert_eq!(networks.len(), 2, "both networks offered")
+            }
             _ => panic!("two networks should open the picker"),
         }
     }
@@ -442,15 +485,24 @@ mod tests {
         use crate::app::{Pane, ScutNetworkInput};
         let mut state = AppState::default();
         state.active_pane = Pane::Probe;
-        state.scan_history = vec![serde_json::from_str(r#"{
+        state.scan_history = vec![serde_json::from_str(
+            r#"{
             "relativeCoordinates":{"x":0,"y":0,"z":0},"distance":0,
             "knowledgeLevel":"detailed","confidence":1.0,
             "scutNetworks":[{"id":7,"name":"Solo"}],
             "scan":{"currentSectorResidenceSeconds":60,"requiredResidenceSeconds":60,"scanQuality":1.0}
-        }"#).unwrap()];
+        }"#,
+        )
+        .unwrap()];
         press(&mut state, KeyCode::Enter);
         press(&mut state, KeyCode::Enter);
-        assert!(matches!(state.active_wizard, ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { .. })), "a single network views directly");
+        assert!(
+            matches!(
+                state.active_wizard,
+                ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { .. })
+            ),
+            "a single network views directly"
+        );
     }
 
     #[tokio::test]
@@ -460,7 +512,11 @@ mod tests {
         state.active_pane = Pane::Comms;
         state.pane_nav[Pane::Comms.index()].cursor = 1; // Alerts row
         press(&mut state, KeyCode::Enter);
-        assert_eq!(state.comms_drill(), Some(CommsCategory::Alerts), "drills into the Alerts list in-pane");
+        assert_eq!(
+            state.comms_drill(),
+            Some(CommsCategory::Alerts),
+            "drills into the Alerts list in-pane"
+        );
         // `h` backs out to the category root.
         press(&mut state, KeyCode::Char('h'));
         assert_eq!(state.comms_drill(), None, "back to the Comms root");
@@ -473,7 +529,13 @@ mod tests {
         state.active_pane = Pane::Comms;
         state.pane_nav[Pane::Comms.index()].cursor = 0; // Messages row
         press(&mut state, KeyCode::Enter);
-        assert!(matches!(state.active_wizard, ActiveWizard::Messages(MessagesInput::Browsing { .. })), "Messages opens its overlay");
+        assert!(
+            matches!(
+                state.active_wizard,
+                ActiveWizard::Messages(MessagesInput::Browsing { .. })
+            ),
+            "Messages opens its overlay"
+        );
     }
 
     #[tokio::test]
@@ -484,11 +546,15 @@ mod tests {
         state.probe_improvements = vec![serde_json::from_str(
             r#"{"id":"deuterium_compression","name":"Deuterium compression","description":"d",
                 "available":true,"done":false,"durationSeconds":300,"ingredients":[],"effects":null}"#,
-        ).unwrap()];
+        )
+        .unwrap()];
         press(&mut state, KeyCode::Enter); // open the Probe menu (Improve is the first enabled item)
         press(&mut state, KeyCode::Enter); // fire it
         assert!(
-            matches!(state.active_wizard, ActiveWizard::Improve(ImproveInput::PickImprovement { .. })),
+            matches!(
+                state.active_wizard,
+                ActiveWizard::Improve(ImproveInput::PickImprovement { .. })
+            ),
             "an orderable improvement opens the picker"
         );
     }

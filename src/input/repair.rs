@@ -3,9 +3,7 @@ use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
 use crate::api::tasks::fetch_repair;
-use crate::app::{
-    ActiveWizard, ApiMessage, AppState, LogEvent, RepairInput,
-};
+use crate::app::{ActiveWizard, ApiMessage, AppState, LogEvent, RepairInput};
 pub(super) fn handle_repair_event(
     code: KeyCode,
     state: &mut AppState,
@@ -19,9 +17,13 @@ pub(super) fn handle_repair_event(
         KeyCode::Char(c) => state.repair_type_char(c),
         KeyCode::Enter => {
             let (manny_id, pct) = {
-                let ActiveWizard::Repair(RepairInput::Typing { manny_id, buf, .. }) = &state.active_wizard else { return };
+                let ActiveWizard::Repair(RepairInput::Typing { manny_id, buf, .. }) = &state.active_wizard else {
+                    return;
+                };
                 let Ok(pct) = buf.parse::<f64>() else { return };
-                if pct <= 0.0 { return }
+                if pct <= 0.0 {
+                    return;
+                }
                 (manny_id.clone(), pct)
             };
             fetch_repair(manny_id, pct, client.clone(), tx.clone());

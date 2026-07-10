@@ -1,8 +1,7 @@
 use super::types::{
-    ContainerInventory, CraftingRecipe, DamageWarningRule, EndpointId, Manny, Mission, Pagination,
-    Probe, ProbeAlert, ProbeImprovement, ProbeInventory, ProbeListResponse, ProbeMessage,
-    ProbeMovement, ProbeSentMessage, ScutNetwork, SectorObservation, StorageContainer,
-    VisitedSector,
+    ContainerInventory, CraftingRecipe, DamageWarningRule, EndpointId, Manny, Mission, Pagination, Probe, ProbeAlert,
+    ProbeImprovement, ProbeInventory, ProbeListResponse, ProbeMessage, ProbeMovement, ProbeSentMessage, ScutNetwork,
+    SectorObservation, StorageContainer, VisitedSector,
 };
 use anyhow::{Context, Result};
 use reqwest::{Client, StatusCode, Url};
@@ -45,7 +44,12 @@ impl ApiClient {
             .build()
             .context("Failed to build HTTP client")?;
         let base_url = Url::parse(&base_url).context("Invalid base_url in config")?;
-        Ok(Self { client, base_url, api_key, active_probe_id: None })
+        Ok(Self {
+            client,
+            base_url,
+            api_key,
+            active_probe_id: None,
+        })
     }
 
     /// Return a clone of this client that targets `id` (or the default probe
@@ -53,7 +57,10 @@ impl ApiClient {
     /// internally reference-counted. Used by the cockpit to switch the active
     /// probe without touching the server-side default.
     pub fn with_active_probe(&self, id: Option<u64>) -> Self {
-        Self { active_probe_id: id, ..self.clone() }
+        Self {
+            active_probe_id: id,
+            ..self.clone()
+        }
     }
 
     /// Which probe per-probe calls currently target (`None` = default).
@@ -104,7 +111,9 @@ impl ApiClient {
             anyhow::bail!("{msg}");
         }
 
-        resp.json::<T>().await.with_context(|| format!("Parsing {method} {path}"))
+        resp.json::<T>()
+            .await
+            .with_context(|| format!("Parsing {method} {path}"))
     }
 
     async fn post<T: for<'de> Deserialize<'de>, B: Serialize>(&self, path: &str, body: &B) -> Result<T> {
@@ -139,7 +148,9 @@ impl ApiClient {
     pub async fn get_api_version(&self) -> Result<u32> {
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase")]
-        struct Resp { api_version: u32 }
+        struct Resp {
+            api_version: u32,
+        }
         Ok(self.get::<Resp>("/api/version").await?.api_version)
     }
 
@@ -177,7 +188,8 @@ impl ApiClient {
             is_default: Option<bool>,
         }
         let path = format!("/api/probe/{probe_id}");
-        self.patch::<ProbeListResponse, _>(&path, &Body { name, is_default }).await
+        self.patch::<ProbeListResponse, _>(&path, &Body { name, is_default })
+            .await
     }
 
     pub async fn get_mannies(&self) -> Result<Vec<Manny>> {
@@ -198,13 +210,26 @@ impl ApiClient {
 
     pub async fn move_probe(&self, x: i32, y: i32, z: i32) -> Result<ProbeMovement> {
         #[derive(Serialize)]
-        struct Target { x: i32, y: i32, z: i32 }
+        struct Target {
+            x: i32,
+            y: i32,
+            z: i32,
+        }
         #[derive(Serialize)]
-        struct Body { target: Target }
+        struct Body {
+            target: Target,
+        }
         #[derive(Deserialize)]
-        struct Resp { movement: ProbeMovement }
+        struct Resp {
+            movement: ProbeMovement,
+        }
         Ok(self
-            .post::<Resp, _>(&self.probe_path("/move"), &Body { target: Target { x, y, z } })
+            .post::<Resp, _>(
+                &self.probe_path("/move"),
+                &Body {
+                    target: Target { x, y, z },
+                },
+            )
             .await?
             .movement)
     }
@@ -212,9 +237,13 @@ impl ApiClient {
     pub async fn repair_manny(&self, manny_id: &str, integrity_percent: f64) -> Result<Manny> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
-        struct Body { integrity_percent: f64 }
+        struct Body {
+            integrity_percent: f64,
+        }
         #[derive(Deserialize)]
-        struct Resp { manny: Manny }
+        struct Resp {
+            manny: Manny,
+        }
         let path = self.probe_path(&format!("/mannies/{manny_id}/repair"));
         Ok(self.post::<Resp, _>(&path, &Body { integrity_percent }).await?.manny)
     }
@@ -237,15 +266,20 @@ impl ApiClient {
             target_container_id: Option<String>,
         }
         #[derive(Deserialize)]
-        struct Resp { manny: Manny }
+        struct Resp {
+            manny: Manny,
+        }
         let path = self.probe_path(&format!("/mannies/{manny_id}/mine"));
         Ok(self
-            .post::<Resp, _>(&path, &Body {
-                object_id: object_id.to_string(),
-                resources,
-                target_amount,
-                target_container_id,
-            })
+            .post::<Resp, _>(
+                &path,
+                &Body {
+                    object_id: object_id.to_string(),
+                    resources,
+                    target_amount,
+                    target_container_id,
+                },
+            )
             .await?
             .manny)
     }
@@ -254,16 +288,17 @@ impl ApiClient {
     /// additional containers plus fixed components (`POST
     /// /api/probe/mannies/{id}/assemble-probe`, API v81). Returns the updated
     /// Manny and probe inventory (the containers + components are consumed).
-    pub async fn assemble_probe(
-        &self,
-        manny_id: &str,
-        container_ids: &[String],
-    ) -> Result<(Manny, ProbeInventory)> {
+    pub async fn assemble_probe(&self, manny_id: &str, container_ids: &[String]) -> Result<(Manny, ProbeInventory)> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
-        struct Body<'a> { container_ids: &'a [String] }
+        struct Body<'a> {
+            container_ids: &'a [String],
+        }
         #[derive(Deserialize)]
-        struct Resp { manny: Manny, inventory: ProbeInventory }
+        struct Resp {
+            manny: Manny,
+            inventory: ProbeInventory,
+        }
         let path = self.probe_path(&format!("/mannies/{manny_id}/assemble-probe"));
         let r = self.post::<Resp, _>(&path, &Body { container_ids }).await?;
         Ok((r.manny, r.inventory))
@@ -276,31 +311,46 @@ impl ApiClient {
             amount: Option<f64>,
         }
         #[derive(Deserialize)]
-        struct Resp { inventory: ProbeInventory }
+        struct Resp {
+            inventory: ProbeInventory,
+        }
         let path = self.probe_path(&format!("/inventory/{item_id}/jettison"));
         Ok(self.post::<Resp, _>(&path, &Body { amount }).await?.inventory)
     }
 
     pub async fn craft_manny(&self, manny_id: &str, recipe: &str) -> Result<Manny> {
         #[derive(Serialize)]
-        struct Body<'a> { recipe: &'a str }
+        struct Body<'a> {
+            recipe: &'a str,
+        }
         #[derive(Deserialize)]
-        struct Resp { manny: Manny }
+        struct Resp {
+            manny: Manny,
+        }
         let path = self.probe_path(&format!("/mannies/{manny_id}/craft"));
         Ok(self.post::<Resp, _>(&path, &Body { recipe }).await?.manny)
     }
 
     pub async fn get_probe_improvements(&self) -> Result<Vec<ProbeImprovement>> {
         #[derive(Deserialize)]
-        struct Resp { improvements: Vec<ProbeImprovement> }
-        Ok(self.get::<Resp>(&self.probe_path("/probe-improvements-available")).await?.improvements)
+        struct Resp {
+            improvements: Vec<ProbeImprovement>,
+        }
+        Ok(self
+            .get::<Resp>(&self.probe_path("/probe-improvements-available"))
+            .await?
+            .improvements)
     }
 
     pub async fn improve_probe(&self, manny_id: &str, improvement: &str) -> Result<Manny> {
         #[derive(Serialize)]
-        struct Body<'a> { improvement: &'a str }
+        struct Body<'a> {
+            improvement: &'a str,
+        }
         #[derive(Deserialize)]
-        struct Resp { manny: Manny }
+        struct Resp {
+            manny: Manny,
+        }
         let path = self.probe_path(&format!("/mannies/{manny_id}/improve-probe"));
         Ok(self.post::<Resp, _>(&path, &Body { improvement }).await?.manny)
     }
@@ -317,16 +367,22 @@ impl ApiClient {
     pub async fn salvage_manny(&self, manny_id: &str, object_id: &str) -> Result<Manny> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
-        struct Body<'a> { object_id: &'a str }
+        struct Body<'a> {
+            object_id: &'a str,
+        }
         #[derive(Deserialize)]
-        struct Resp { manny: Manny }
+        struct Resp {
+            manny: Manny,
+        }
         let path = self.probe_path(&format!("/mannies/{manny_id}/salvage"));
         Ok(self.post::<Resp, _>(&path, &Body { object_id }).await?.manny)
     }
 
     pub async fn recall_manny(&self, manny_id: &str) -> Result<Manny> {
         #[derive(Deserialize)]
-        struct Resp { manny: Manny }
+        struct Resp {
+            manny: Manny,
+        }
         let path = self.probe_path(&format!("/mannies/{manny_id}/recall"));
         Ok(self.post::<Resp, _>(&path, &serde_json::json!({})).await?.manny)
     }
@@ -342,11 +398,25 @@ impl ApiClient {
     ) -> Result<Manny> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
-        struct Body<'a> { container_id: &'a str, planet_id: &'a str }
+        struct Body<'a> {
+            container_id: &'a str,
+            planet_id: &'a str,
+        }
         #[derive(Deserialize)]
-        struct Resp { manny: Manny }
+        struct Resp {
+            manny: Manny,
+        }
         let path = self.probe_path(&format!("/mannies/{manny_id}/drop-storage-container"));
-        Ok(self.post::<Resp, _>(&path, &Body { container_id, planet_id }).await?.manny)
+        Ok(self
+            .post::<Resp, _>(
+                &path,
+                &Body {
+                    container_id,
+                    planet_id,
+                },
+            )
+            .await?
+            .manny)
     }
 
     /// Drop the cargo of a Manny waiting outside for storage space and retry
@@ -354,7 +424,9 @@ impl ApiClient {
     /// is lost; recoverable objects are restored to the current sector.
     pub async fn drop_manny_cargo(&self, manny_id: &str) -> Result<Manny> {
         #[derive(Deserialize)]
-        struct Resp { manny: Manny }
+        struct Resp {
+            manny: Manny,
+        }
         let path = self.probe_path(&format!("/mannies/{manny_id}/drop-manny-cargo"));
         Ok(self.post::<Resp, _>(&path, &serde_json::json!({})).await?.manny)
     }
@@ -364,7 +436,9 @@ impl ApiClient {
     /// deuterium refuel station in the current sector.
     pub async fn refill_deuterium_tank(&self, manny_id: &str) -> Result<Manny> {
         #[derive(Deserialize)]
-        struct Resp { manny: Manny }
+        struct Resp {
+            manny: Manny,
+        }
         let path = self.probe_path(&format!("/mannies/{manny_id}/refill-deuterium-tank"));
         Ok(self.post::<Resp, _>(&path, &serde_json::json!({})).await?.manny)
     }
@@ -388,10 +462,18 @@ impl ApiClient {
             amount: f64,
         }
         #[derive(Deserialize)]
-        struct Resp { manny: Manny }
+        struct Resp {
+            manny: Manny,
+        }
         let path = self.probe_path(&format!("/mannies/{manny_id}/transfer-deuterium-to-probe"));
         Ok(self
-            .post::<Resp, _>(&path, &Body { target_probe_id, amount })
+            .post::<Resp, _>(
+                &path,
+                &Body {
+                    target_probe_id,
+                    amount,
+                },
+            )
             .await?
             .manny)
     }
@@ -409,7 +491,11 @@ impl ApiClient {
     /// List received messages (`GET /api/probe/messages`, newest first).
     pub async fn get_messages(&self) -> Result<(Vec<ProbeMessage>, Pagination)> {
         #[derive(Deserialize)]
-        struct Resp { #[serde(default)] messages: Vec<ProbeMessage>, pagination: Pagination }
+        struct Resp {
+            #[serde(default)]
+            messages: Vec<ProbeMessage>,
+            pagination: Pagination,
+        }
         let r = self.get::<Resp>(&self.probe_path("/messages")).await?;
         Ok((r.messages, r.pagination))
     }
@@ -417,7 +503,11 @@ impl ApiClient {
     /// List sent messages (`GET /api/probe/messages/sent`, newest first).
     pub async fn get_sent_messages(&self) -> Result<(Vec<ProbeSentMessage>, Pagination)> {
         #[derive(Deserialize)]
-        struct Resp { #[serde(default)] messages: Vec<ProbeSentMessage>, pagination: Pagination }
+        struct Resp {
+            #[serde(default)]
+            messages: Vec<ProbeSentMessage>,
+            pagination: Pagination,
+        }
         let r = self.get::<Resp>("/api/probe/messages/sent").await?;
         Ok((r.messages, r.pagination))
     }
@@ -430,18 +520,25 @@ impl ApiClient {
         body: &str,
     ) -> Result<ProbeMessage> {
         #[derive(Deserialize)]
-        struct Resp { message: ProbeMessage }
+        struct Resp {
+            message: ProbeMessage,
+        }
         let payload = serde_json::json!({
             "recipient": { "type": recipient_type, "id": recipient_id },
             "body": body,
         });
-        Ok(self.post::<Resp, _>(&self.probe_path("/messages"), &payload).await?.message)
+        Ok(self
+            .post::<Resp, _>(&self.probe_path("/messages"), &payload)
+            .await?
+            .message)
     }
 
     /// Mark a received message as read (`PATCH /api/probe/messages/{id}/read`).
     pub async fn mark_message_read(&self, message_id: i64) -> Result<ProbeMessage> {
         #[derive(Deserialize)]
-        struct Resp { message: ProbeMessage }
+        struct Resp {
+            message: ProbeMessage,
+        }
         let path = self.probe_path(&format!("/messages/{message_id}/read"));
         Ok(self.patch::<Resp, _>(&path, &serde_json::json!({})).await?.message)
     }
@@ -449,7 +546,9 @@ impl ApiClient {
     /// Abandon an active mission (`POST /api/probe/missions/{id}/abandon`).
     pub async fn abandon_mission(&self, mission_id: &str) -> Result<Mission> {
         #[derive(Deserialize)]
-        struct Resp { mission: Mission }
+        struct Resp {
+            mission: Mission,
+        }
         let path = format!("/api/probe/missions/{mission_id}/abandon");
         Ok(self.post::<Resp, _>(&path, &serde_json::json!({})).await?.mission)
     }
@@ -458,7 +557,9 @@ impl ApiClient {
     /// (`GET /api/probe/scut-network/{id}`).
     pub async fn get_scut_network(&self, network_id: i64) -> Result<ScutNetwork> {
         #[derive(Deserialize)]
-        struct Resp { network: ScutNetwork }
+        struct Resp {
+            network: ScutNetwork,
+        }
         let path = self.probe_path(&format!("/scut-network/{network_id}"));
         Ok(self.get::<Resp>(&path).await?.network)
     }
@@ -467,12 +568,7 @@ impl ApiClient {
     /// (`POST /api/probe/mannies/{id}/turn-on-relay`). Requires a star in the
     /// sector and one integrated_circuit in inventory. `relay_id` is the
     /// relay's integer id (the sector object id parsed as an integer).
-    pub async fn turn_on_relay(
-        &self,
-        manny_id: &str,
-        relay_id: i64,
-        network_name: Option<&str>,
-    ) -> Result<Manny> {
+    pub async fn turn_on_relay(&self, manny_id: &str, relay_id: i64, network_name: Option<&str>) -> Result<Manny> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
         struct Body<'a> {
@@ -481,7 +577,9 @@ impl ApiClient {
             network_name: Option<&'a str>,
         }
         #[derive(Deserialize)]
-        struct Resp { manny: Manny }
+        struct Resp {
+            manny: Manny,
+        }
         let path = self.probe_path(&format!("/mannies/{manny_id}/turn-on-relay"));
         Ok(self
             .post::<Resp, _>(&path, &Body { relay_id, network_name })
@@ -495,7 +593,9 @@ impl ApiClient {
     /// frame to 0,0,0 and returns the new probe.
     pub async fn reassign_mind_snapshot(&self) -> Result<Probe> {
         #[derive(Deserialize)]
-        struct Resp { probe: Probe }
+        struct Resp {
+            probe: Probe,
+        }
         Ok(self
             .post::<Resp, _>("/api/probe/mind-snapshot/reassign", &serde_json::json!({}))
             .await?
@@ -504,17 +604,24 @@ impl ApiClient {
 
     pub async fn rename_manny(&self, manny_id: &str, name: &str) -> Result<Manny> {
         #[derive(Serialize)]
-        struct Body<'a> { name: &'a str }
+        struct Body<'a> {
+            name: &'a str,
+        }
         #[derive(Deserialize)]
-        struct Resp { manny: Manny }
+        struct Resp {
+            manny: Manny,
+        }
         let path = self.probe_path(&format!("/mannies/{manny_id}"));
         Ok(self.patch::<Resp, _>(&path, &Body { name }).await?.manny)
     }
 
     pub async fn craft_atomic_printer(&self, recipe: &str) -> Result<()> {
         #[derive(Serialize)]
-        struct Body<'a> { recipe: &'a str }
-        self.post::<serde_json::Value, _>(&self.probe_path("/atomic-printer/craft"), &Body { recipe }).await?;
+        struct Body<'a> {
+            recipe: &'a str,
+        }
+        self.post::<serde_json::Value, _>(&self.probe_path("/atomic-printer/craft"), &Body { recipe })
+            .await?;
         Ok(())
     }
 
@@ -534,9 +641,21 @@ impl ApiClient {
             object_id: Option<&'a str>,
         }
         #[derive(Deserialize)]
-        struct Resp { manny: Manny }
+        struct Resp {
+            manny: Manny,
+        }
         let path = self.probe_path(&format!("/mannies/{manny_id}/detach-storage-container"));
-        Ok(self.post::<Resp, _>(&path, &Body { container_id, mode, object_id }).await?.manny)
+        Ok(self
+            .post::<Resp, _>(
+                &path,
+                &Body {
+                    container_id,
+                    mode,
+                    object_id,
+                },
+            )
+            .await?
+            .manny)
     }
 
     /// Inspect a sector object (asteroid, dormant construct, or detached
@@ -544,9 +663,13 @@ impl ApiClient {
     pub async fn inspect_sector_object(&self, manny_id: &str, object_id: &str) -> Result<Manny> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
-        struct Body<'a> { object_id: &'a str }
+        struct Body<'a> {
+            object_id: &'a str,
+        }
         #[derive(Deserialize)]
-        struct Resp { manny: Manny }
+        struct Resp {
+            manny: Manny,
+        }
         let path = self.probe_path(&format!("/mannies/{manny_id}/inspect-sector-object"));
         Ok(self.post::<Resp, _>(&path, &Body { object_id }).await?.manny)
     }
@@ -554,9 +677,13 @@ impl ApiClient {
     pub async fn recover_storage_container(&self, manny_id: &str, object_id: &str) -> Result<Manny> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
-        struct Body<'a> { object_id: &'a str }
+        struct Body<'a> {
+            object_id: &'a str,
+        }
         #[derive(Deserialize)]
-        struct Resp { manny: Manny }
+        struct Resp {
+            manny: Manny,
+        }
         let path = self.probe_path(&format!("/mannies/{manny_id}/recover-storage-container"));
         Ok(self.post::<Resp, _>(&path, &Body { object_id }).await?.manny)
     }
@@ -564,22 +691,34 @@ impl ApiClient {
     pub async fn get_visited_sectors(&self) -> Result<Vec<VisitedSector>> {
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase")]
-        struct Resp { visited_sectors: Vec<VisitedSector> }
-        Ok(self.get::<Resp>(&self.probe_path("/visited-sectors")).await?.visited_sectors)
+        struct Resp {
+            visited_sectors: Vec<VisitedSector>,
+        }
+        Ok(self
+            .get::<Resp>(&self.probe_path("/visited-sectors"))
+            .await?
+            .visited_sectors)
     }
 
     pub async fn get_crafting_recipes(&self) -> Result<Vec<CraftingRecipe>> {
         #[derive(Deserialize)]
-        struct Resp { recipes: Vec<CraftingRecipe> }
+        struct Resp {
+            recipes: Vec<CraftingRecipe>,
+        }
         Ok(self.get::<Resp>("/api/crafting-recipes").await?.recipes)
     }
 
     pub async fn install_bookmark_manny(&self, manny_id: &str, object_id: &str, name: &str) -> Result<Manny> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
-        struct Body<'a> { object_id: &'a str, name: &'a str }
+        struct Body<'a> {
+            object_id: &'a str,
+            name: &'a str,
+        }
         #[derive(Deserialize)]
-        struct Resp { manny: Manny }
+        struct Resp {
+            manny: Manny,
+        }
         let path = self.probe_path(&format!("/mannies/{manny_id}/install-bookmark"));
         Ok(self.post::<Resp, _>(&path, &Body { object_id, name }).await?.manny)
     }
@@ -601,9 +740,14 @@ impl ApiClient {
     pub async fn ack_damage_warning(&self, id: i64) -> Result<ProbeAlert> {
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase")]
-        struct Resp { damage_warning: ProbeAlert }
+        struct Resp {
+            damage_warning: ProbeAlert,
+        }
         let path = self.probe_path(&format!("/damage-warnings/{id}"));
-        Ok(self.patch::<Resp, _>(&path, &serde_json::json!({})).await?.damage_warning)
+        Ok(self
+            .patch::<Resp, _>(&path, &serde_json::json!({}))
+            .await?
+            .damage_warning)
     }
 
     pub async fn get_alerts(&self) -> Result<Vec<ProbeAlert>> {
@@ -618,7 +762,9 @@ impl ApiClient {
     /// Mark an alert as read (`PATCH /api/probe/alerts/{id}`).
     pub async fn ack_alert(&self, id: i64) -> Result<ProbeAlert> {
         #[derive(Deserialize)]
-        struct Resp { alert: ProbeAlert }
+        struct Resp {
+            alert: ProbeAlert,
+        }
         let path = self.probe_path(&format!("/alerts/{id}"));
         Ok(self.patch::<Resp, _>(&path, &serde_json::json!({})).await?.alert)
     }
@@ -654,7 +800,10 @@ impl ApiClient {
             body.insert("itemIds".into(), serde_json::json!(v));
         }
         #[derive(Deserialize)]
-        struct Resp { manny: Manny, inventory: ProbeInventory }
+        struct Resp {
+            manny: Manny,
+            inventory: ProbeInventory,
+        }
         let r = self
             .post::<Resp, _>(&self.probe_path("/storage-moves"), &serde_json::Value::Object(body))
             .await?;
@@ -663,27 +812,36 @@ impl ApiClient {
 
     pub async fn get_storage_containers(&self) -> Result<Vec<StorageContainer>> {
         #[derive(Deserialize)]
-        struct Resp { containers: Vec<StorageContainer> }
-        Ok(self.get::<Resp>(&self.probe_path("/storage-containers")).await?.containers)
+        struct Resp {
+            containers: Vec<StorageContainer>,
+        }
+        Ok(self
+            .get::<Resp>(&self.probe_path("/storage-containers"))
+            .await?
+            .containers)
     }
 
     pub async fn get_storage_container(&self, id: &str) -> Result<(StorageContainer, ContainerInventory)> {
         #[derive(Deserialize)]
-        struct Resp { container: StorageContainer, inventory: ContainerInventory }
+        struct Resp {
+            container: StorageContainer,
+            inventory: ContainerInventory,
+        }
         let path = self.probe_path(&format!("/storage-containers/{id}"));
         let r = self.get::<Resp>(&path).await?;
         Ok((r.container, r.inventory))
     }
 
-    pub async fn rename_storage_container(
-        &self,
-        id: &str,
-        label: &str,
-    ) -> Result<(StorageContainer, ProbeInventory)> {
+    pub async fn rename_storage_container(&self, id: &str, label: &str) -> Result<(StorageContainer, ProbeInventory)> {
         #[derive(Serialize)]
-        struct Body<'a> { label: &'a str }
+        struct Body<'a> {
+            label: &'a str,
+        }
         #[derive(Deserialize)]
-        struct Resp { container: StorageContainer, inventory: ProbeInventory }
+        struct Resp {
+            container: StorageContainer,
+            inventory: ProbeInventory,
+        }
         let path = self.probe_path(&format!("/storage-containers/{id}"));
         let r = self.patch::<Resp, _>(&path, &Body { label }).await?;
         Ok((r.container, r.inventory))
@@ -704,10 +862,20 @@ impl ApiClient {
             strict_exclusion: Vec<String>,
         }
         #[derive(Deserialize)]
-        struct Resp { container: StorageContainer, inventory: ProbeInventory }
+        struct Resp {
+            container: StorageContainer,
+            inventory: ProbeInventory,
+        }
         let path = self.probe_path(&format!("/storage-containers/{id}/rules"));
         let r = self
-            .patch::<Resp, _>(&path, &Body { priority, exclusion, strict_exclusion })
+            .patch::<Resp, _>(
+                &path,
+                &Body {
+                    priority,
+                    exclusion,
+                    strict_exclusion,
+                },
+            )
             .await?;
         Ok((r.container, r.inventory))
     }

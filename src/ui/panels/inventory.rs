@@ -17,10 +17,7 @@ pub(crate) fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppS
     frame.render_widget(block, area);
 
     let Some(probe) = &state.probe else {
-        frame.render_widget(
-            Paragraph::new("No data").style(Style::default().fg(p.dim)),
-            inner,
-        );
+        frame.render_widget(Paragraph::new("No data").style(Style::default().fg(p.dim)), inner);
         return;
     };
 
@@ -245,8 +242,12 @@ pub(crate) fn tanks_row_count(inv: &crate::api::types::ProbeInventory, focused: 
 }
 
 pub(crate) fn items_row_count(items: &[crate::api::types::ProbeInventoryItem], expanded: bool) -> usize {
-    if items.is_empty() { return 0; }
-    if !expanded { return 1; }
+    if items.is_empty() {
+        return 0;
+    }
+    if !expanded {
+        return 1;
+    }
     let n_active = items.iter().filter(|i| is_active_item(&i.item_type)).count();
     let mut seen: Vec<&str> = Vec::new();
     for item in items.iter().filter(|i| !is_active_item(&i.item_type)) {

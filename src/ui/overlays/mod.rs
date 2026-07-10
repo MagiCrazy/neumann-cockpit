@@ -12,12 +12,12 @@ pub(crate) mod map;
 pub(crate) mod messages;
 pub(crate) mod mine;
 pub(crate) mod missions;
-pub(crate) mod remote_mine;
 pub(crate) mod object_actions;
-pub(crate) mod scut_network;
 pub(crate) mod pickers;
+pub(crate) mod remote_mine;
 pub(crate) mod repair;
 pub(crate) mod scanner;
+pub(crate) mod scut_network;
 pub(crate) mod storage_move;
 pub(crate) mod travel;
 pub(crate) mod waypoints;
@@ -26,37 +26,32 @@ pub(crate) use alerts::render_alerts_overlay;
 pub(crate) use assemble::render_assemble_probe_overlay;
 pub(crate) use containers::{render_container_rules_overlay, render_rename_container_overlay};
 pub(crate) use craft::render_fabrication_overlay;
-pub(crate) use improve::render_improve_overlay;
 pub(crate) use drop_container::render_drop_container_overlay;
-pub(crate) use fleet::{
-    render_probe_switch_overlay, render_rename_probe_overlay, render_transfer_deuterium_overlay,
-};
+pub(crate) use fleet::{render_probe_switch_overlay, render_rename_probe_overlay, render_transfer_deuterium_overlay};
 pub(crate) use help::{help_row_count, render_help_overlay};
+pub(crate) use improve::render_improve_overlay;
 pub(crate) use inventory_detail::render_inventory_detail_overlay;
 pub(crate) use jettison::render_jettison_overlay;
 pub(crate) use map::{render_goto_visited_overlay, render_map_overlay};
 pub(crate) use messages::render_messages_overlay;
 pub(crate) use mine::render_mine_overlay;
-pub(crate) use remote_mine::render_remote_mine_overlay;
 pub(crate) use missions::render_missions_overlay;
-pub(crate) use scut_network::render_scut_network_overlay;
 pub(crate) use object_actions::render_object_action_overlay;
 pub(crate) use pickers::{
     render_deploy_overlay, render_detach_overlay, render_drop_cargo_overlay, render_inspect_overlay,
-    render_mind_snapshot_overlay, render_recall_overlay, render_recover_overlay,
-    render_refuel_overlay, render_rename_manny_overlay, render_salvage_overlay,
-    render_scut_relay_overlay,
+    render_mind_snapshot_overlay, render_recall_overlay, render_recover_overlay, render_refuel_overlay,
+    render_rename_manny_overlay, render_salvage_overlay, render_scut_relay_overlay,
 };
+pub(crate) use remote_mine::render_remote_mine_overlay;
 pub(crate) use repair::render_repair_overlay;
 pub(crate) use scanner::render_scan_input_overlay;
+pub(crate) use scut_network::render_scut_network_overlay;
 pub(crate) use storage_move::render_storage_move_overlay;
 pub(crate) use travel::render_travel_overlay;
 pub(crate) use waypoints::render_waypoints_overlay;
 
-use crate::app::{
-    ActiveWizard, AppState, GotoVisitedInput, ProbeSwitchInput, ScanMode, RESOURCE_LABELS,
-};
 use crate::api::types::DangerLevel;
+use crate::app::{ActiveWizard, AppState, GotoVisitedInput, ProbeSwitchInput, ScanMode, RESOURCE_LABELS};
 use crate::ui::theme::{palette, Palette};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -76,6 +71,7 @@ type OverlayRender = fn(&mut Frame, Rect, &AppState);
 /// render fn early-returns when inactive (several draw their frame before
 /// matching the state), so the caller must gate them.
 #[allow(clippy::type_complexity)]
+#[rustfmt::skip]
 const WIZARD_OVERLAYS: &[(OverlayGuard, OverlayRender)] = &[
     (|s| matches!(s.active_wizard, ActiveWizard::AssembleProbe(_)), render_assemble_probe_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::RenameProbe(_)), render_rename_probe_overlay),
@@ -167,13 +163,25 @@ pub(crate) struct FooterKey<'a> {
 
 impl<'a> FooterKey<'a> {
     pub fn nav(key: &'a str, label: &'a str) -> Self {
-        Self { key, label, tone: KeyTone::Nav }
+        Self {
+            key,
+            label,
+            tone: KeyTone::Nav,
+        }
     }
     pub fn commit(key: &'a str, label: &'a str) -> Self {
-        Self { key, label, tone: KeyTone::Commit }
+        Self {
+            key,
+            label,
+            tone: KeyTone::Commit,
+        }
     }
     pub fn danger(key: &'a str, label: &'a str) -> Self {
-        Self { key, label, tone: KeyTone::Danger }
+        Self {
+            key,
+            label,
+            tone: KeyTone::Danger,
+        }
     }
 }
 
@@ -289,14 +297,20 @@ pub(crate) fn render_pick_list(
 
     let mut lines: Vec<Line> = Vec::new();
     if let Some(prompt) = prompt {
-        lines.push(Line::from(Span::styled(prompt.to_owned(), Style::default().fg(p.accent))));
+        lines.push(Line::from(Span::styled(
+            prompt.to_owned(),
+            Style::default().fg(p.accent),
+        )));
         lines.push(Line::default());
     }
     for (i, name) in items.iter().enumerate() {
         if i == selection {
             lines.push(Line::from(vec![
                 Span::styled("▶ ", Style::default().fg(p.accent)),
-                Span::styled(name.to_string(), Style::default().fg(p.text).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    name.to_string(),
+                    Style::default().fg(p.text).add_modifier(Modifier::BOLD),
+                ),
             ]));
         } else {
             lines.push(Line::from(vec![
@@ -307,7 +321,10 @@ pub(crate) fn render_pick_list(
     }
     if let Some(err) = error {
         lines.push(Line::default());
-        lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(p.crit))));
+        lines.push(Line::from(Span::styled(
+            format!("✗ {err}"),
+            Style::default().fg(p.crit),
+        )));
     }
     frame.render_widget(Paragraph::new(lines), rows[0]);
     render_footer(
@@ -321,7 +338,6 @@ pub(crate) fn render_pick_list(
         ],
     );
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -344,7 +360,10 @@ mod tests {
             "#2 Big Rock ⚠  metals",
         );
         // Non-asteroid (no reserves), no danger → bare numbered name.
-        assert_eq!(object_pick_label(2, "dormant construct", None, None), "#3 dormant construct");
+        assert_eq!(
+            object_pick_label(2, "dormant construct", None, None),
+            "#3 dormant construct"
+        );
         // Low/Unknown danger adds no glyph.
         assert_eq!(object_pick_label(0, "", None, Some(&DangerLevel::Low)), "#1");
     }
@@ -368,7 +387,10 @@ mod tests {
         // empty modal — e.g. a stray " TRAVEL " frame after boot. The registry
         // guard prevents it.
         let text = rendered_text(&AppState::default());
-        assert!(!text.contains("TRAVEL"), "no empty TRAVEL frame with an inactive wizard");
+        assert!(
+            !text.contains("TRAVEL"),
+            "no empty TRAVEL frame with an inactive wizard"
+        );
         assert!(!text.contains("REMOTE MINE"), "no empty overlay frames at all");
     }
 
@@ -376,7 +398,10 @@ mod tests {
     fn active_wizard_frame_renders() {
         let mut state = AppState::default();
         state.active_wizard = ActiveWizard::Travel(TravelInput::Typing(String::new()));
-        assert!(rendered_text(&state).contains("TRAVEL"), "active travel wizard renders its frame");
+        assert!(
+            rendered_text(&state).contains("TRAVEL"),
+            "active travel wizard renders its frame"
+        );
     }
 
     #[test]
@@ -391,15 +416,28 @@ mod tests {
                 "ingredients":[],"durationSeconds":300,
                 "output":{"type":"steel_plate","name":"Steel plate","containerSpace":0.01,"containerSpaceUnit":"ECE","capacityBonus":null}}"#).unwrap(),
         ];
-        state.active_wizard = ActiveWizard::Fabrication(FabricationInput::PickRecipe { prefilled_manny: None, selection: 0, error: None });
+        state.active_wizard = ActiveWizard::Fabrication(FabricationInput::PickRecipe {
+            prefilled_manny: None,
+            selection: 0,
+            error: None,
+        });
         let text = rendered_text(&state);
         assert!(text.contains("FABRICATION"), "unified title renders");
         assert!(text.contains("ATOMIC PRINTER"), "atomic section header renders");
         assert!(text.contains("MANNY FABRICATION"), "manny section header renders");
-        assert!(text.contains("Integrated circuit") && text.contains("Steel plate"), "both recipes listed");
+        assert!(
+            text.contains("Integrated circuit") && text.contains("Steel plate"),
+            "both recipes listed"
+        );
         // Regression: the detail panel must always show the selected recipe's
         // ingredient breakdown (have/need), no matter how long the catalog gets.
-        assert!(text.contains("INGREDIENTS"), "detail panel shows the ingredients header");
-        assert!(text.contains("micro_conductor"), "selected recipe's ingredient is listed");
+        assert!(
+            text.contains("INGREDIENTS"),
+            "detail panel shows the ingredients header"
+        );
+        assert!(
+            text.contains("micro_conductor"),
+            "selected recipe's ingredient is listed"
+        );
     }
 }

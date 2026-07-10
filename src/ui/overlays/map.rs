@@ -1,6 +1,4 @@
-use crate::api::types::{
-    DangerLevel, SectorObjectType, SectorObservation,
-};
+use crate::api::types::{DangerLevel, SectorObjectType, SectorObservation};
 use crate::app::AppState;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -10,8 +8,8 @@ use ratatui::{
     Frame,
 };
 
-use crate::ui::theme::{format_duration, map_cell_symbol, palette};
 use super::{centered_rect, render_footer, render_pick_list, FooterKey};
+use crate::ui::theme::{format_duration, map_cell_symbol, palette};
 
 /// Picker over visited sectors (most-recent first, as returned by the API):
 /// coordinates, distance from the probe, and visit count.
@@ -31,15 +29,28 @@ pub(crate) fn render_goto_visited_overlay(frame: &mut Frame, area: Rect, state: 
                 .map(|(px, py, pz)| (x - px).abs().max((y - py).abs()).max((z - pz).abs()))
                 .map(|d| format!("  d{d}"))
                 .unwrap_or_default();
-            let times = if v.visit_count > 1 { format!("  ×{}", v.visit_count) } else { String::new() };
+            let times = if v.visit_count > 1 {
+                format!("  ×{}", v.visit_count)
+            } else {
+                String::new()
+            };
             format!("({x}, {y}, {z}){dist}{times}")
         })
         .collect();
     let refs: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
     let height = (refs.len() as u16 + 6).clamp(8, 20);
     render_pick_list(
-        frame, area, p, " JUMP TO VISITED SECTOR ", 46, height,
-        Some("Travel to:"), &refs, selection, None, "travel",
+        frame,
+        area,
+        p,
+        " JUMP TO VISITED SECTOR ",
+        46,
+        height,
+        Some("Travel to:"),
+        &refs,
+        selection,
+        None,
+        "travel",
     );
 }
 
@@ -51,27 +62,41 @@ pub(crate) fn sector_brief(s: &SectorObservation) -> String {
         return "empty".into();
     }
     let mut parts: Vec<String> = Vec::new();
-    if objects.iter().any(|o| matches!(o.object_type, SectorObjectType::BlackHole)) {
+    if objects
+        .iter()
+        .any(|o| matches!(o.object_type, SectorObjectType::BlackHole))
+    {
         parts.push("black hole".into());
     }
-    if objects.iter().any(|o| {
-        matches!(o.object_type, SectorObjectType::Star | SectorObjectType::SolarSystem)
-    }) {
+    if objects
+        .iter()
+        .any(|o| matches!(o.object_type, SectorObjectType::Star | SectorObjectType::SolarSystem))
+    {
         parts.push("star".into());
     }
-    let planets = objects.iter().filter(|o| matches!(o.object_type, SectorObjectType::Planet)).count()
-        + objects.iter().flat_map(|o| &o.bookmark_targets)
-            .filter(|t| matches!(t.object_type, SectorObjectType::Planet)).count();
+    let planets = objects
+        .iter()
+        .filter(|o| matches!(o.object_type, SectorObjectType::Planet))
+        .count()
+        + objects
+            .iter()
+            .flat_map(|o| &o.bookmark_targets)
+            .filter(|t| matches!(t.object_type, SectorObjectType::Planet))
+            .count();
     if planets > 0 {
         parts.push(format!("{planets} planet(s)"));
     }
-    let minables: usize = objects.iter()
+    let minables: usize = objects
+        .iter()
         .map(|o| o.minable_targets.as_ref().map(|t| t.len()).unwrap_or(0))
         .sum();
     if minables > 0 {
         parts.push(format!("{minables} minable"));
     }
-    if objects.iter().any(|o| matches!(o.danger_level, Some(DangerLevel::Extreme))) {
+    if objects
+        .iter()
+        .any(|o| matches!(o.danger_level, Some(DangerLevel::Extreme)))
+    {
         parts.push("extreme danger".into());
     }
     if parts.is_empty() {
@@ -91,8 +116,7 @@ pub(crate) fn render_map_overlay(frame: &mut Frame, area: Rect, state: &AppState
         .title(Span::styled(
             format!(
                 " MAP  ({},{},{})  y:{} ",
-                state.map.center_x, state.map.y_layer, state.map.center_z,
-                state.map.y_layer,
+                state.map.center_x, state.map.y_layer, state.map.center_z, state.map.y_layer,
             ),
             Style::default().fg(p.accent),
         ))
@@ -156,17 +180,12 @@ pub(crate) fn render_map_overlay(frame: &mut Frame, area: Rect, state: &AppState
     let y = state.map.y_layer;
 
     // ── Center cell info ──
-    let mut info_spans: Vec<Span> = vec![
-        Span::styled(
-            format!("({cx},{y},{cz})"),
-            Style::default().fg(p.text).add_modifier(Modifier::BOLD),
-        ),
-    ];
+    let mut info_spans: Vec<Span> = vec![Span::styled(
+        format!("({cx},{y},{cz})"),
+        Style::default().fg(p.text).add_modifier(Modifier::BOLD),
+    )];
     if let Some(d) = state.map_center_distance() {
-        info_spans.push(Span::styled(
-            format!("  d:{d}"),
-            Style::default().fg(p.dim),
-        ));
+        info_spans.push(Span::styled(format!("  d:{d}"), Style::default().fg(p.dim)));
         if d > 0 {
             info_spans.push(Span::styled(
                 format!("  ETA ~{}", format_duration((5 + 35 * d) * 60)),
@@ -190,10 +209,7 @@ pub(crate) fn render_map_overlay(frame: &mut Frame, area: Rect, state: &AppState
                 "unscanned".into()
             }
         });
-    info_spans.push(Span::styled(
-        format!("  {brief}"),
-        Style::default().fg(p.dim),
-    ));
+    info_spans.push(Span::styled(format!("  {brief}"), Style::default().fg(p.dim)));
     frame.render_widget(Paragraph::new(Line::from(info_spans)), info_area);
 
     // ── Legend ──
@@ -235,14 +251,19 @@ pub(crate) fn render_map_overlay(frame: &mut Frame, area: Rect, state: &AppState
             hint_area,
         );
     } else {
-        render_footer(frame, hint_area, p, &[
-            FooterKey::nav("[hjkl]", "pan"),
-            FooterKey::nav("[u/d]", "y±1"),
-            FooterKey::nav("[0]", "probe"),
-            FooterKey::nav("[c]", "go to"),
-            FooterKey::commit("[g]", "TRAVEL"),
-            FooterKey::nav("[b/Esc]", "close"),
-        ]);
+        render_footer(
+            frame,
+            hint_area,
+            p,
+            &[
+                FooterKey::nav("[hjkl]", "pan"),
+                FooterKey::nav("[u/d]", "y±1"),
+                FooterKey::nav("[0]", "probe"),
+                FooterKey::nav("[c]", "go to"),
+                FooterKey::commit("[g]", "TRAVEL"),
+                FooterKey::nav("[b/Esc]", "close"),
+            ],
+        );
     }
     let w = map_area.width as i32;
     let h = map_area.height as i32;
@@ -304,4 +325,3 @@ pub(crate) fn render_map_overlay(frame: &mut Frame, area: Rect, state: &AppState
         }
     }
 }
-

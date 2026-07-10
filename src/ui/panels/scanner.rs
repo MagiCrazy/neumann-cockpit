@@ -9,8 +9,8 @@ use ratatui::{
 };
 
 use crate::ui::theme::{
-    knowledge_color, knowledge_label, map_cell_style, object_color, object_icon, object_type_label,
-    palette, pane_block, ratio_color, Palette,
+    knowledge_color, knowledge_label, map_cell_style, object_color, object_icon, object_type_label, palette,
+    pane_block, ratio_color, Palette,
 };
 // ── Scanner panel ─────────────────────────────────────────────────────────────
 //
@@ -114,7 +114,10 @@ pub(crate) fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppSta
             Span::styled("  current sector", dim),
         ]));
         lines.push(Line::default());
-        lines.push(Line::from(Span::styled("→ details in the SECTOR pane", Style::default().fg(p.accent))));
+        lines.push(Line::from(Span::styled(
+            "→ details in the SECTOR pane",
+            Style::default().fg(p.accent),
+        )));
         let obj_count = sector.objects.as_ref().map(|o| o.len()).unwrap_or(0);
         let summary = if obj_count > 0 {
             format!("{obj_count} object(s) here")
@@ -199,7 +202,10 @@ pub(crate) fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppSta
             if !possible.is_empty() {
                 lines.push(Line::from(Span::styled("── possible ──", dim)));
                 for pobj in possible {
-                    lines.push(Line::from(vec![Span::styled("? ", dim), Span::styled(pobj.as_str(), text)]));
+                    lines.push(Line::from(vec![
+                        Span::styled("? ", dim),
+                        Span::styled(pobj.as_str(), text),
+                    ]));
                 }
             }
         }
@@ -265,8 +271,12 @@ pub(crate) fn sector_interest_color(s: &crate::api::types::SectorObservation, p:
             let has_star = objects
                 .iter()
                 .any(|o| matches!(o.object_type, SectorObjectType::Star | SectorObjectType::SolarSystem));
-            let has_blackhole = objects.iter().any(|o| matches!(o.object_type, SectorObjectType::BlackHole));
-            let has_extreme = objects.iter().any(|o| matches!(o.danger_level, Some(DangerLevel::Extreme)));
+            let has_blackhole = objects
+                .iter()
+                .any(|o| matches!(o.object_type, SectorObjectType::BlackHole));
+            let has_extreme = objects
+                .iter()
+                .any(|o| matches!(o.danger_level, Some(DangerLevel::Extreme)));
             if has_extreme || has_blackhole {
                 return p.crit;
             }
@@ -323,7 +333,11 @@ pub(crate) fn resource_shares_line<'a>(
             continue;
         }
         any = true;
-        let val = if percent { format!("{:.0}%", v * 100.0) } else { format!("{v:.2}") };
+        let val = if percent {
+            format!("{:.0}%", v * 100.0)
+        } else {
+            format!("{v:.2}")
+        };
         spans.push(Span::styled(format!("{name} "), Style::default().fg(p.dim)));
         spans.push(Span::styled(format!("{val}  "), Style::default().fg(p.text)));
     }
@@ -416,7 +430,10 @@ pub(crate) fn sector_object_lines<'a>(obj: &'a SectorObject, compact: bool, p: P
 
         // Planet / asteroid science (v63 fields).
         if let Some(cat) = &obj.category {
-            lines.push(Line::from(vec![Span::styled("  class ", dim), Span::styled(cat.as_str(), text)]));
+            lines.push(Line::from(vec![
+                Span::styled("  class ", dim),
+                Span::styled(cat.as_str(), text),
+            ]));
         }
         if let Some(h) = obj.habitability_score {
             lines.push(Line::from(vec![
@@ -425,7 +442,10 @@ pub(crate) fn sector_object_lines<'a>(obj: &'a SectorObject, compact: bool, p: P
             ]));
         }
         if let Some(comp) = &obj.composition {
-            lines.push(Line::from(vec![Span::styled("  composition ", dim), Span::styled(comp.as_str(), text)]));
+            lines.push(Line::from(vec![
+                Span::styled("  composition ", dim),
+                Span::styled(comp.as_str(), text),
+            ]));
         }
         if obj.manny_mineable == Some(true) {
             lines.push(Line::from(Span::styled("  ⛏ mineable", Style::default().fg(p.warn))));
@@ -444,7 +464,11 @@ pub(crate) fn sector_object_lines<'a>(obj: &'a SectorObject, compact: bool, p: P
         for target in targets {
             let tglyph = object_icon(&target.object_type).0;
             let tcolor = object_color(&target.object_type, p);
-            let name = target.name.as_deref().filter(|s| !s.trim().is_empty()).unwrap_or_else(|| object_type_label(&target.object_type));
+            let name = target
+                .name
+                .as_deref()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| object_type_label(&target.object_type));
             let mut spans: Vec<Span> = vec![
                 Span::raw("  "),
                 Span::styled(tglyph, Style::default().fg(tcolor)),
@@ -472,7 +496,11 @@ pub(crate) fn sector_object_lines<'a>(obj: &'a SectorObject, compact: bool, p: P
     for target in &obj.bookmark_targets {
         let tglyph = object_icon(&target.object_type).0;
         let tcolor = object_color(&target.object_type, p);
-        let name = target.name.as_deref().filter(|s| !s.trim().is_empty()).unwrap_or_else(|| object_type_label(&target.object_type));
+        let name = target
+            .name
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| object_type_label(&target.object_type));
         let mut spans: Vec<Span> = vec![
             Span::raw("  "),
             Span::styled(tglyph, Style::default().fg(tcolor)),

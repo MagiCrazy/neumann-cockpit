@@ -21,13 +21,18 @@ fn rel(sector: &ProbeSector) -> String {
 
 pub(crate) fn render_scut_network_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let ActiveWizard::ScutNetwork(scut_network) = &state.active_wizard else { return };
+    let ActiveWizard::ScutNetwork(scut_network) = &state.active_wizard else {
+        return;
+    };
     match scut_network {
         ScutNetworkInput::Picking { networks, selection } => {
             let items: Vec<&str> = networks.iter().map(|(_, name)| name.as_str()).collect();
             let height = (items.len() as u16) + 4;
             render_pick_list(
-                frame, area, palette(state.color_mode), " SCUT NETWORK ",
+                frame,
+                area,
+                palette(state.color_mode),
+                " SCUT NETWORK ",
                 52,
                 height,
                 Some("Pick a network to inspect"),
@@ -61,15 +66,24 @@ pub(crate) fn render_scut_network_overlay(frame: &mut Frame, area: Rect, state: 
                 )));
             } else if let Some(net) = &state.scut_network_view {
                 lines.push(Line::from(vec![
-                    Span::styled(net.name.clone(), Style::default().fg(p.text).add_modifier(Modifier::BOLD)),
+                    Span::styled(
+                        net.name.clone(),
+                        Style::default().fg(p.text).add_modifier(Modifier::BOLD),
+                    ),
                     Span::raw("   "),
                     Span::styled(
-                        format!("{} relays · {} sectors covered", net.relay_count, net.covered_sector_count),
+                        format!(
+                            "{} relays · {} sectors covered",
+                            net.relay_count, net.covered_sector_count
+                        ),
                         Style::default().fg(p.text),
                     ),
                 ]));
                 lines.push(Line::default());
-                lines.push(Line::from(Span::styled("RELAYS", Style::default().fg(p.accent).add_modifier(Modifier::BOLD))));
+                lines.push(Line::from(Span::styled(
+                    "RELAYS",
+                    Style::default().fg(p.accent).add_modifier(Modifier::BOLD),
+                )));
                 for r in &net.relays {
                     let (mark, color) = match r.status {
                         ScutRelayStatus::On => ("●", p.good),
@@ -87,7 +101,10 @@ pub(crate) fn render_scut_network_overlay(frame: &mut Frame, area: Rect, state: 
                     ]));
                 }
                 lines.push(Line::default());
-                lines.push(Line::from(Span::styled("PROBES", Style::default().fg(p.accent).add_modifier(Modifier::BOLD))));
+                lines.push(Line::from(Span::styled(
+                    "PROBES",
+                    Style::default().fg(p.accent).add_modifier(Modifier::BOLD),
+                )));
                 if net.probes.is_empty() {
                     lines.push(Line::from(Span::styled("  none detected", Style::default().fg(p.dim))));
                 } else {

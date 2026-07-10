@@ -1,5 +1,5 @@
-use crate::ui::theme::palette;
 use crate::app::{ActiveWizard, AppState, JettisonInput};
+use crate::ui::theme::palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::Style,
@@ -11,7 +11,9 @@ use ratatui::{
 use super::{centered_rect, render_footer, FooterKey};
 pub(crate) fn render_jettison_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let ActiveWizard::Jettison(jettison) = &state.active_wizard else { return };
+    let ActiveWizard::Jettison(jettison) = &state.active_wizard else {
+        return;
+    };
     match jettison {
         JettisonInput::ConfirmManny { manny_name, error, .. } => {
             let popup = centered_rect(48, 8, area);
@@ -42,10 +44,12 @@ pub(crate) fn render_jettison_overlay(frame: &mut Frame, area: Rect, state: &App
                 )));
             }
             frame.render_widget(Paragraph::new(lines), rows[0]);
-            render_footer(frame, rows[1], p, &[
-                FooterKey::danger("[Enter]", "EJECT"),
-                FooterKey::nav("[Esc]", "cancel"),
-            ]);
+            render_footer(
+                frame,
+                rows[1],
+                p,
+                &[FooterKey::danger("[Enter]", "EJECT"), FooterKey::nav("[Esc]", "cancel")],
+            );
         }
 
         JettisonInput::ConfirmRelay { error, .. } => {
@@ -76,13 +80,24 @@ pub(crate) fn render_jettison_overlay(frame: &mut Frame, area: Rect, state: &App
                 )));
             }
             frame.render_widget(Paragraph::new(lines), rows[0]);
-            render_footer(frame, rows[1], p, &[
-                FooterKey::commit("[Enter]", "DEPLOY"),
-                FooterKey::nav("[Esc]", "cancel"),
-            ]);
+            render_footer(
+                frame,
+                rows[1],
+                p,
+                &[
+                    FooterKey::commit("[Enter]", "DEPLOY"),
+                    FooterKey::nav("[Esc]", "cancel"),
+                ],
+            );
         }
 
-        JettisonInput::EnterAmount { item_name, max_amount, buf, error, .. } => {
+        JettisonInput::EnterAmount {
+            item_name,
+            max_amount,
+            buf,
+            error,
+            ..
+        } => {
             let popup = centered_rect(46, 8, area);
             frame.render_widget(Clear, popup);
             let block = Block::default()
@@ -120,13 +135,20 @@ pub(crate) fn render_jettison_overlay(frame: &mut Frame, area: Rect, state: &App
                 )));
             }
             frame.render_widget(Paragraph::new(lines), rows[0]);
-            render_footer(frame, rows[1], p, &[
-                FooterKey::nav("[Enter]", "review"),
-                FooterKey::nav("[Esc]", "cancel"),
-            ]);
+            render_footer(
+                frame,
+                rows[1],
+                p,
+                &[FooterKey::nav("[Enter]", "review"), FooterKey::nav("[Esc]", "cancel")],
+            );
         }
 
-        JettisonInput::Confirm { item_name, amount, error, .. } => {
+        JettisonInput::Confirm {
+            item_name,
+            amount,
+            error,
+            ..
+        } => {
             let popup = centered_rect(50, 8, area);
             frame.render_widget(Clear, popup);
             let block = Block::default()
@@ -151,10 +173,7 @@ pub(crate) fn render_jettison_overlay(frame: &mut Frame, area: Rect, state: &App
                     format!("Jettison {qty} of {item_name}?"),
                     Style::default().fg(p.crit),
                 )),
-                Line::from(Span::styled(
-                    "Discarded stock is lost.",
-                    Style::default().fg(p.dim),
-                )),
+                Line::from(Span::styled("Discarded stock is lost.", Style::default().fg(p.dim))),
             ];
             if let Some(err) = error {
                 lines.push(Line::default());
@@ -164,12 +183,15 @@ pub(crate) fn render_jettison_overlay(frame: &mut Frame, area: Rect, state: &App
                 )));
             }
             frame.render_widget(Paragraph::new(lines), rows[0]);
-            render_footer(frame, rows[1], p, &[
-                FooterKey::danger("[Enter]", "JETTISON"),
-                FooterKey::nav("[Esc]", "cancel"),
-            ]);
+            render_footer(
+                frame,
+                rows[1],
+                p,
+                &[
+                    FooterKey::danger("[Enter]", "JETTISON"),
+                    FooterKey::nav("[Esc]", "cancel"),
+                ],
+            );
         }
-
     }
 }
-

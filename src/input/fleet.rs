@@ -14,7 +14,9 @@ use super::geometry::list_nav;
 /// reconciles the `ApiClient` and refetches. An unreachable probe is refused
 /// with a toast: piloting it would return only limited telemetry.
 pub(super) fn handle_probe_switch_event(code: KeyCode, state: &mut AppState) {
-    let ProbeSwitchInput::Picking { selection } = state.probe_switch else { return };
+    let ProbeSwitchInput::Picking { selection } = state.probe_switch else {
+        return;
+    };
     let count = state.fleet.len();
     match code {
         KeyCode::Esc => state.probe_switch = ProbeSwitchInput::Inactive,
@@ -51,20 +53,27 @@ pub(super) fn handle_transfer_deuterium_event(
     tx: &mpsc::Sender<ApiMessage>,
 ) {
     // Step 1 — destination picker.
-    if let ActiveWizard::TransferDeuterium(TransferDeuteriumInput::PickTarget { targets, selection, .. }) = &state.active_wizard {
+    if let ActiveWizard::TransferDeuterium(TransferDeuteriumInput::PickTarget { targets, selection, .. }) =
+        &state.active_wizard
+    {
         let (count, sel) = (targets.len(), *selection);
         match code {
             KeyCode::Esc => state.close_wizard(),
             KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
-                if let (Some(ns), ActiveWizard::TransferDeuterium(TransferDeuteriumInput::PickTarget { selection, .. })) =
-                    (list_nav(code, sel, count), &mut state.active_wizard)
+                if let (
+                    Some(ns),
+                    ActiveWizard::TransferDeuterium(TransferDeuteriumInput::PickTarget { selection, .. }),
+                ) = (list_nav(code, sel, count), &mut state.active_wizard)
                 {
                     *selection = ns;
                 }
             }
             KeyCode::Enter => {
                 if let ActiveWizard::TransferDeuterium(TransferDeuteriumInput::PickTarget {
-                    manny_id, manny_name, targets, selection,
+                    manny_id,
+                    manny_name,
+                    targets,
+                    selection,
                 }) = &state.active_wizard
                 {
                     if let Some((target_id, target_name)) = targets.get(*selection).cloned() {
@@ -86,7 +95,10 @@ pub(super) fn handle_transfer_deuterium_event(
 
     // Step 2 — amount entry. Each arm takes its own borrow so reassigning the
     // wizard state never overlaps the mutable buffer borrow.
-    if !matches!(state.active_wizard, ActiveWizard::TransferDeuterium(TransferDeuteriumInput::EnterAmount { .. })) {
+    if !matches!(
+        state.active_wizard,
+        ActiveWizard::TransferDeuterium(TransferDeuteriumInput::EnterAmount { .. })
+    ) {
         return;
     }
     match code {
@@ -112,21 +124,22 @@ pub(super) fn handle_transfer_deuterium_event(
         }
         KeyCode::Enter => {
             let ActiveWizard::TransferDeuterium(TransferDeuteriumInput::EnterAmount {
-                manny_id, target_id, target_name, buf, ..
-            }) = &state.active_wizard else { return };
+                manny_id,
+                target_id,
+                target_name,
+                buf,
+                ..
+            }) = &state.active_wizard
+            else {
+                return;
+            };
             match buf.trim().parse::<f64>() {
                 Ok(amount) if amount > 0.0 => {
                     let (mid, tid, tname) = (manny_id.clone(), *target_id, target_name.clone());
                     fetch_transfer_deuterium(mid, tid, amount, client.clone(), tx.clone());
-                    state.log_event(LogEvent::transfer_deuterium(
-                        &tname,
-                        amount,
-                        state.active_probe_id,
-                    ));
+                    state.log_event(LogEvent::transfer_deuterium(&tname, amount, state.active_probe_id));
                 }
-                _ => state.set_transfer_deuterium_error(
-                    "enter a positive deuterium percentage".to_string(),
-                ),
+                _ => state.set_transfer_deuterium_error("enter a positive deuterium percentage".to_string()),
             }
         }
         _ => {}

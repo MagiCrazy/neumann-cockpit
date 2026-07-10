@@ -8,10 +8,18 @@ use crate::app::{ActiveWizard, ApiMessage, AppState, LogEvent, StorageMoveInput,
 use super::geometry::list_nav;
 
 fn wrap_prev(i: usize, len: usize) -> usize {
-    if len == 0 { 0 } else { (i + len - 1) % len }
+    if len == 0 {
+        0
+    } else {
+        (i + len - 1) % len
+    }
 }
 fn wrap_next(i: usize, len: usize) -> usize {
-    if len == 0 { 0 } else { (i + 1) % len }
+    if len == 0 {
+        0
+    } else {
+        (i + 1) % len
+    }
 }
 
 pub(super) fn handle_storage_move_event(
@@ -27,15 +35,20 @@ pub(super) fn handle_storage_move_event(
                 KeyCode::Esc => state.close_wizard(),
                 KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
                     if let Some(ns) = list_nav(code, sel, count) {
-                        if let ActiveWizard::StorageMove(StorageMoveInput::PickManny { selection, .. }) = &mut state.active_wizard {
+                        if let ActiveWizard::StorageMove(StorageMoveInput::PickManny { selection, .. }) =
+                            &mut state.active_wizard
+                        {
                             *selection = ns;
                         }
                     }
                 }
                 KeyCode::Enter => {
                     let (id, name) = {
-                        let ActiveWizard::StorageMove(StorageMoveInput::PickManny { mannies, selection }) = &state.active_wizard
-                        else { return };
+                        let ActiveWizard::StorageMove(StorageMoveInput::PickManny { mannies, selection }) =
+                            &state.active_wizard
+                        else {
+                            return;
+                        };
                         mannies[*selection].clone()
                     };
                     state.active_wizard = ActiveWizard::StorageMove(StorageMoveInput::PickKind {
@@ -53,15 +66,23 @@ pub(super) fn handle_storage_move_event(
                 KeyCode::Esc => state.close_wizard(),
                 KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
                     if let Some(ns) = list_nav(code, sel, 2) {
-                        if let ActiveWizard::StorageMove(StorageMoveInput::PickKind { selection, .. }) = &mut state.active_wizard {
+                        if let ActiveWizard::StorageMove(StorageMoveInput::PickKind { selection, .. }) =
+                            &mut state.active_wizard
+                        {
                             *selection = ns;
                         }
                     }
                 }
                 KeyCode::Enter => {
                     let (id, name) = {
-                        let ActiveWizard::StorageMove(StorageMoveInput::PickKind { actor_manny_id, actor_manny_name, .. }) =
-                            &state.active_wizard else { return };
+                        let ActiveWizard::StorageMove(StorageMoveInput::PickKind {
+                            actor_manny_id,
+                            actor_manny_name,
+                            ..
+                        }) = &state.active_wizard
+                        else {
+                            return;
+                        };
                         (actor_manny_id.clone(), actor_manny_name.clone())
                     };
                     if sel == 0 {
@@ -73,7 +94,9 @@ pub(super) fn handle_storage_move_event(
                 _ => {}
             }
         }
-        ActiveWizard::StorageMove(StorageMoveInput::ConfigureResource { .. }) => handle_resource(code, state, client, tx),
+        ActiveWizard::StorageMove(StorageMoveInput::ConfigureResource { .. }) => {
+            handle_resource(code, state, client, tx)
+        }
         ActiveWizard::StorageMove(StorageMoveInput::ConfigureItem { .. }) => handle_item(code, state, client, tx),
         _ => {}
     }
@@ -128,14 +151,16 @@ fn enter_item(state: &mut AppState, actor_manny_id: String, actor_manny_name: St
     });
 }
 
-fn handle_resource(
-    code: KeyCode,
-    state: &mut AppState,
-    client: &ApiClient,
-    tx: &mpsc::Sender<ApiMessage>,
-) {
+fn handle_resource(code: KeyCode, state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
     let ActiveWizard::StorageMove(StorageMoveInput::ConfigureResource {
-        actor_manny_id, containers, resource_idx, from_sel, to_sel, amount_buf, field, ..
+        actor_manny_id,
+        containers,
+        resource_idx,
+        from_sel,
+        to_sel,
+        amount_buf,
+        field,
+        ..
     }) = &mut state.active_wizard
     else {
         return;
@@ -196,20 +221,27 @@ fn handle_resource(
                 client.clone(),
                 tx.clone(),
             );
-            state.log_event(LogEvent::storage_move_resource(amount, &resource, &from_name, &to_name, state.active_probe_id));
+            state.log_event(LogEvent::storage_move_resource(
+                amount,
+                &resource,
+                &from_name,
+                &to_name,
+                state.active_probe_id,
+            ));
         }
         _ => {}
     }
 }
 
-fn handle_item(
-    code: KeyCode,
-    state: &mut AppState,
-    client: &ApiClient,
-    tx: &mpsc::Sender<ApiMessage>,
-) {
+fn handle_item(code: KeyCode, state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
     let ActiveWizard::StorageMove(StorageMoveInput::ConfigureItem {
-        actor_manny_id, containers, items, to_sel, item_cursor, field, ..
+        actor_manny_id,
+        containers,
+        items,
+        to_sel,
+        item_cursor,
+        field,
+        ..
     }) = &mut state.active_wizard
     else {
         return;
@@ -229,8 +261,11 @@ fn handle_item(
         KeyCode::Left | KeyCode::Char('h') if *field == 1 => *to_sel = wrap_prev(*to_sel, clen),
         KeyCode::Right | KeyCode::Char('l') if *field == 1 => *to_sel = wrap_next(*to_sel, clen),
         KeyCode::Enter => {
-            let ids: Vec<String> =
-                items.iter().filter(|(_, _, sel)| *sel).map(|(id, _, _)| id.clone()).collect();
+            let ids: Vec<String> = items
+                .iter()
+                .filter(|(_, _, sel)| *sel)
+                .map(|(id, _, _)| id.clone())
+                .collect();
             if ids.is_empty() {
                 state.set_storage_move_error("select at least one item with Space".into());
                 return;

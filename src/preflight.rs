@@ -23,8 +23,8 @@ use tokio::time::timeout;
 
 use crate::api::client::ApiClient;
 use crate::api::types::SectorObservation;
-use crate::app::LogEvent;
 use crate::app::ColorMode;
+use crate::app::LogEvent;
 use crate::config::{self, Config, ConfigStatus, DEFAULT_BASE_URL};
 use crate::store;
 
@@ -56,7 +56,10 @@ pub struct BootLog {
 impl BootLog {
     /// Append a new step in the `Pending` state and make it current.
     fn begin(&mut self, label: &'static str) {
-        self.steps.push(Step { label, status: Status::Pending });
+        self.steps.push(Step {
+            label,
+            status: Status::Pending,
+        });
     }
     /// Set the status of the current (last) step.
     fn set(&mut self, status: Status) {
@@ -253,13 +256,7 @@ async fn onboard(
     }
 }
 
-fn redraw(
-    terminal: &mut Term,
-    log: &BootLog,
-    entry: Option<&str>,
-    note: Option<&str>,
-    color: ColorMode,
-) -> Result<()> {
+fn redraw(terminal: &mut Term, log: &BootLog, entry: Option<&str>, note: Option<&str>, color: ColorMode) -> Result<()> {
     terminal.draw(|f| crate::ui::preflight::render(f, f.area(), &log.steps, entry, note, color))?;
     Ok(())
 }

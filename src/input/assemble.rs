@@ -28,8 +28,12 @@ pub(super) fn handle_assemble_probe_event(
             }
         }
         KeyCode::Char(' ') => {
-            if let ActiveWizard::AssembleProbe(AssembleProbeInput::PickContainers { selected, cursor, error, .. }) =
-                &mut state.active_wizard
+            if let ActiveWizard::AssembleProbe(AssembleProbeInput::PickContainers {
+                selected,
+                cursor,
+                error,
+                ..
+            }) = &mut state.active_wizard
             {
                 let cur = *cursor;
                 if let Some(pos) = selected.iter().position(|&i| i == cur) {
@@ -46,11 +50,13 @@ pub(super) fn handle_assemble_probe_event(
         KeyCode::Enter => {
             // Extract the order without holding a borrow across the fire.
             let order = match &state.active_wizard {
-                ActiveWizard::AssembleProbe(AssembleProbeInput::PickContainers { manny_id, containers, selected, .. })
-                    if selected.len() == 2 =>
-                {
-                    let ids: Vec<String> =
-                        selected.iter().map(|&i| containers[i].0.clone()).collect();
+                ActiveWizard::AssembleProbe(AssembleProbeInput::PickContainers {
+                    manny_id,
+                    containers,
+                    selected,
+                    ..
+                }) if selected.len() == 2 => {
+                    let ids: Vec<String> = selected.iter().map(|&i| containers[i].0.clone()).collect();
                     Some((manny_id.clone(), ids))
                 }
                 _ => None,

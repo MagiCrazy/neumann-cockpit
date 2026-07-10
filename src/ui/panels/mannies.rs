@@ -1,6 +1,4 @@
-use crate::api::types::{
-    Manny, MannyLocationType, MannyTask, MannyTaskVisibility,
-};
+use crate::api::types::{Manny, MannyLocationType, MannyTask, MannyTaskVisibility};
 use crate::app::AppState;
 use ratatui::{
     layout::Rect,
@@ -114,7 +112,11 @@ pub(crate) fn manny_mining_detail(m: &Manny) -> Option<MiningDetail> {
             .to_string(),
         _ => "probe".to_string(),
     };
-    Some(MiningDetail { target: name, resources, destination })
+    Some(MiningDetail {
+        target: name,
+        resources,
+        destination,
+    })
 }
 
 /// A hidden artificial object (detached container) a Manny turned up while
@@ -198,25 +200,29 @@ pub(crate) fn manny_list_item(m: &Manny, selected: bool, p: Palette) -> ListItem
     ]))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::manny_artificial_detection;
     use crate::api::types::Manny;
 
     fn mining_manny(task: &str) -> Manny {
-        serde_json::from_str(&format!(r#"{{
+        serde_json::from_str(&format!(
+            r#"{{
             "id":"m1","name":"Manny-1","location":{{"type":"sector","sector":null}},
             "currentTask":"mining","taskProgressPercent":50.0,
             "cargo":{{"capacity":0.3,"deuterium":0.0,"metals":0.0,"ice":0.0,"organicCompounds":0.0}},
             "canReceiveOrders":false,"taskEstimatedEndTime":null,"task":{task}
-        }}"#)).unwrap()
+        }}"#
+        ))
+        .unwrap()
     }
 
     #[test]
     fn detects_hidden_container_in_mining_task() {
-        let m = mining_manny(r#"{"objectId":"ast-1","artificialObjectDetected":
-            {"type":"detached_storage_container","detection":"hidden_on_asteroid","objectId":"c-9"}}"#);
+        let m = mining_manny(
+            r#"{"objectId":"ast-1","artificialObjectDetected":
+            {"type":"detached_storage_container","detection":"hidden_on_asteroid","objectId":"c-9"}}"#,
+        );
         let d = manny_artificial_detection(&m).expect("detection present");
         assert_eq!(d.object_id.as_deref(), Some("c-9"));
     }

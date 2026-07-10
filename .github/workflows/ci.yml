@@ -9,27 +9,43 @@ on:
 permissions:
   contents: read
 
+# One job per check: each shows as its own box in the PR status list, they run
+# in parallel, and one failure never hides another. `--locked` proves CI builds
+# against the committed Cargo.lock.
 jobs:
-  ci:
+  fmt:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          components: rustfmt
+      # No cache: `cargo fmt --check` does not compile.
+      - run: cargo fmt --check
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
           components: clippy
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      # `cargo check` is subsumed by clippy, which type-checks too.
+      - run: cargo clippy --locked -- -D warnings
 
-      - name: Cache
-        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - run: cargo test --locked
 
-      # `cargo check` is subsumed by clippy, which type-checks too — dropped.
-      # `--locked` proves CI builds against the committed Cargo.lock.
-      - name: Clippy
-        run: cargo clippy --locked -- -D warnings
-
-      - name: Test
-        run: cargo test --locked
-
-      - name: Build release
-        run: cargo build --release --locked
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - run: cargo build --release --locked

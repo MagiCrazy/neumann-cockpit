@@ -7,11 +7,16 @@ use ratatui::{
     Frame,
 };
 
-use crate::ui::theme::{format_duration, palette};
 use super::{centered_rect, render_footer, FooterKey, KeyTone};
+use crate::ui::theme::{format_duration, palette};
 pub(crate) fn render_repair_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let ActiveWizard::Repair(RepairInput::Typing { manny_name, buf, error, .. }) = &state.active_wizard else { return };
+    let ActiveWizard::Repair(RepairInput::Typing {
+        manny_name, buf, error, ..
+    }) = &state.active_wizard
+    else {
+        return;
+    };
 
     let max_pct = state.repair_max_percent();
     let metals_stock = state.repair_metals_stock();
@@ -72,10 +77,7 @@ pub(crate) fn render_repair_overlay(frame: &mut Frame, area: Rect, state: &AppSt
             Span::styled(format!("{metals:.4}"), Style::default().fg(metals_color)),
             Span::styled(" ECE", Style::default().fg(p.dim)),
             if insufficient {
-                Span::styled(
-                    format!("  (have {metals_stock:.4})"),
-                    Style::default().fg(p.crit),
-                )
+                Span::styled(format!("  (have {metals_stock:.4})"), Style::default().fg(p.crit))
             } else {
                 Span::raw("")
             },
@@ -86,12 +88,10 @@ pub(crate) fn render_repair_overlay(frame: &mut Frame, area: Rect, state: &AppSt
         ]));
         if let Some(eff) = effective {
             if parsed.is_some_and(|v| v > max_pct + 0.001) {
-                lines.push(Line::from(vec![
-                    Span::styled(
-                        format!("  → capped at {eff:.2}% (probe already at max above)"),
-                        Style::default().fg(p.dim),
-                    ),
-                ]));
+                lines.push(Line::from(vec![Span::styled(
+                    format!("  → capped at {eff:.2}% (probe already at max above)"),
+                    Style::default().fg(p.dim),
+                )]));
             }
         }
     } else {
@@ -117,8 +117,11 @@ pub(crate) fn render_repair_overlay(frame: &mut Frame, area: Rect, state: &AppSt
     let repair_key = if can_send {
         FooterKey::commit("[Enter]", "REPAIR")
     } else {
-        FooterKey { key: "[Enter]", label: "REPAIR", tone: KeyTone::Disabled }
+        FooterKey {
+            key: "[Enter]",
+            label: "REPAIR",
+            tone: KeyTone::Disabled,
+        }
     };
     render_footer(frame, hint_area, p, &[repair_key, FooterKey::nav("[Esc]", "cancel")]);
 }
-

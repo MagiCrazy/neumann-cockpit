@@ -3,9 +3,7 @@ use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
 use crate::api::tasks::{fetch_all, fetch_atomic_printer_craft, fetch_craft, fetch_mine};
-use crate::app::{
-    command_usage, ApiMessage, AppState, CommandFire, CompletionState, InputMode, LogEvent,
-};
+use crate::app::{command_usage, ApiMessage, AppState, CommandFire, CompletionState, InputMode, LogEvent};
 
 /// Route a key while the `:` command line is open. Typed characters are literal
 /// input; `Enter` runs the command, `Tab` completes/cycles the token under the
@@ -31,24 +29,40 @@ pub(super) fn handle_command_event(
             if let Some(fire) = state.pending_fire.take() {
                 match fire {
                     CommandFire::AtomicCraft { recipe_id } => {
-                        let name = state.fabrication_recipes().iter()
-                            .find(|(_, r)| r.id == recipe_id).map(|(_, r)| r.name.clone());
+                        let name = state
+                            .fabrication_recipes()
+                            .iter()
+                            .find(|(_, r)| r.id == recipe_id)
+                            .map(|(_, r)| r.name.clone());
                         fetch_atomic_printer_craft(recipe_id, client.clone(), tx.clone());
                         if let Some(name) = name {
                             state.log_event(LogEvent::craft(&name, true, state.active_probe_id));
                         }
                     }
                     CommandFire::MannyCraft { manny_id, recipe_id } => {
-                        let name = state.fabrication_recipes().iter()
-                            .find(|(_, r)| r.id == recipe_id).map(|(_, r)| r.name.clone());
+                        let name = state
+                            .fabrication_recipes()
+                            .iter()
+                            .find(|(_, r)| r.id == recipe_id)
+                            .map(|(_, r)| r.name.clone());
                         fetch_craft(manny_id, recipe_id, client.clone(), tx.clone());
                         if let Some(name) = name {
                             state.log_event(LogEvent::craft(&name, false, state.active_probe_id));
                         }
                     }
-                    CommandFire::Mine { manny_id, object_id, resources, amount, container_id } => {
+                    CommandFire::Mine {
+                        manny_id,
+                        object_id,
+                        resources,
+                        amount,
+                        container_id,
+                    } => {
                         let resources_label = resources.join(", ");
-                        let destination = if container_id.is_some() { "a container" } else { "the probe" };
+                        let destination = if container_id.is_some() {
+                            "a container"
+                        } else {
+                            "the probe"
+                        };
                         fetch_mine(
                             manny_id,
                             object_id,
@@ -58,7 +72,12 @@ pub(super) fn handle_command_event(
                             client.clone(),
                             tx.clone(),
                         );
-                        state.log_event(LogEvent::mine(&resources_label, amount, destination, state.active_probe_id));
+                        state.log_event(LogEvent::mine(
+                            &resources_label,
+                            amount,
+                            destination,
+                            state.active_probe_id,
+                        ));
                     }
                 }
             }
@@ -67,7 +86,9 @@ pub(super) fn handle_command_event(
         KeyCode::Up => history_step(state, -1),
         KeyCode::Down => history_step(state, 1),
         KeyCode::Backspace => {
-            let InputMode::Command(cmd) = &mut state.mode else { return };
+            let InputMode::Command(cmd) = &mut state.mode else {
+                return;
+            };
             if cmd.cursor > 0 {
                 cmd.cursor -= 1;
                 cmd.input.remove(byte_at(&cmd.input, cmd.cursor));
@@ -76,17 +97,23 @@ pub(super) fn handle_command_event(
             cmd.history_idx = None;
         }
         KeyCode::Left => {
-            let InputMode::Command(cmd) = &mut state.mode else { return };
+            let InputMode::Command(cmd) = &mut state.mode else {
+                return;
+            };
             cmd.cursor = cmd.cursor.saturating_sub(1);
             cmd.completion = None;
         }
         KeyCode::Right => {
-            let InputMode::Command(cmd) = &mut state.mode else { return };
+            let InputMode::Command(cmd) = &mut state.mode else {
+                return;
+            };
             cmd.cursor = (cmd.cursor + 1).min(cmd.input.chars().count());
             cmd.completion = None;
         }
         KeyCode::Char(c) => {
-            let InputMode::Command(cmd) = &mut state.mode else { return };
+            let InputMode::Command(cmd) = &mut state.mode else {
+                return;
+            };
             let byte = byte_at(&cmd.input, cmd.cursor);
             cmd.input.insert(byte, c);
             cmd.cursor += 1;
@@ -145,12 +172,17 @@ fn cycle_completion(state: &mut AppState) {
     }
     let cursor = new_input.chars().count();
 
-    let InputMode::Command(cmd) = &mut state.mode else { return };
+    let InputMode::Command(cmd) = &mut state.mode else {
+        return;
+    };
     cmd.input = new_input;
     cmd.cursor = cursor;
     cmd.history_idx = None;
-    cmd.completion =
-        (!unique).then_some(CompletionState { candidates, index, token_start });
+    cmd.completion = (!unique).then_some(CompletionState {
+        candidates,
+        index,
+        token_start,
+    });
 }
 
 /// `↑`/`↓`: step through the command history. `dir` is `-1` (older) or `1`
@@ -175,7 +207,9 @@ fn history_step(state: &mut AppState, dir: i32) {
         (Some(i), _) if i + 1 < len => Some(i + 1),
         // Newer past the end → drop back to the live (empty) line.
         (Some(_), _) => {
-            let InputMode::Command(cmd) = &mut state.mode else { return };
+            let InputMode::Command(cmd) = &mut state.mode else {
+                return;
+            };
             cmd.history_idx = None;
             cmd.input.clear();
             cmd.cursor = 0;
@@ -185,7 +219,9 @@ fn history_step(state: &mut AppState, dir: i32) {
     };
 
     let line = state.command_history[new_idx.unwrap()].clone();
-    let InputMode::Command(cmd) = &mut state.mode else { return };
+    let InputMode::Command(cmd) = &mut state.mode else {
+        return;
+    };
     cmd.history_idx = new_idx;
     cmd.cursor = line.chars().count();
     cmd.input = line;

@@ -7,11 +7,13 @@ use ratatui::{
     Frame,
 };
 
-use crate::ui::theme::{format_duration, palette};
 use super::{centered_rect, render_footer, FooterKey};
+use crate::ui::theme::{format_duration, palette};
 pub(crate) fn render_travel_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let ActiveWizard::Travel(travel) = &state.active_wizard else { return };
+    let ActiveWizard::Travel(travel) = &state.active_wizard else {
+        return;
+    };
     let popup = centered_rect(46, 11, area);
     frame.render_widget(Clear, popup);
 
@@ -37,10 +39,7 @@ pub(crate) fn render_travel_overlay(frame: &mut Frame, area: Rect, state: &AppSt
             if let Some((px, py, pz)) = state.probe_sector_coords() {
                 lines.push(Line::from(vec![
                     Span::styled("From: ", Style::default().fg(p.dim)),
-                    Span::styled(
-                        format!("({px},{py},{pz})"),
-                        Style::default().fg(p.text),
-                    ),
+                    Span::styled(format!("({px},{py},{pz})"), Style::default().fg(p.text)),
                 ]));
             }
 
@@ -67,10 +66,7 @@ pub(crate) fn render_travel_overlay(frame: &mut Frame, area: Rect, state: &AppSt
                 if parity_ok {
                     spans.push(Span::styled("  ✓", Style::default().fg(p.good)));
                 } else {
-                    spans.push(Span::styled(
-                        "  ✗ x+y+z must be even",
-                        Style::default().fg(p.crit),
-                    ));
+                    spans.push(Span::styled("  ✗ x+y+z must be even", Style::default().fg(p.crit)));
                 }
                 lines.push(Line::default());
                 lines.push(Line::from(spans));
@@ -83,13 +79,23 @@ pub(crate) fn render_travel_overlay(frame: &mut Frame, area: Rect, state: &AppSt
             }
 
             frame.render_widget(Paragraph::new(lines), body);
-            render_footer(frame, hint_area, p, &[
-                FooterKey::nav("[Enter]", "preview"),
-                FooterKey::nav("[Esc]", "cancel"),
-            ]);
+            render_footer(
+                frame,
+                hint_area,
+                p,
+                &[FooterKey::nav("[Enter]", "preview"), FooterKey::nav("[Esc]", "cancel")],
+            );
         }
 
-        TravelInput::Confirming { x, y, z, sector_distance, fuel_cost, eta_minutes, error } => {
+        TravelInput::Confirming {
+            x,
+            y,
+            z,
+            sector_distance,
+            fuel_cost,
+            eta_minutes,
+            error,
+        } => {
             let mut lines: Vec<Line> = Vec::new();
 
             lines.push(Line::from(vec![
@@ -118,10 +124,7 @@ pub(crate) fn render_travel_overlay(frame: &mut Frame, area: Rect, state: &AppSt
             if let Some(mins) = eta_minutes {
                 lines.push(Line::from(vec![
                     Span::styled("   ETA       ", Style::default().fg(p.dim)),
-                    Span::styled(
-                        format_duration(mins * 60),
-                        Style::default().fg(p.warn),
-                    ),
+                    Span::styled(format_duration(mins * 60), Style::default().fg(p.warn)),
                 ]));
             }
 
@@ -138,12 +141,13 @@ pub(crate) fn render_travel_overlay(frame: &mut Frame, area: Rect, state: &AppSt
             if error.is_some() {
                 render_footer(frame, hint_area, p, &[FooterKey::nav("[Esc]", "cancel")]);
             } else {
-                render_footer(frame, hint_area, p, &[
-                    FooterKey::commit("[Enter]", "GO"),
-                    FooterKey::nav("[Esc]", "cancel"),
-                ]);
+                render_footer(
+                    frame,
+                    hint_area,
+                    p,
+                    &[FooterKey::commit("[Enter]", "GO"), FooterKey::nav("[Esc]", "cancel")],
+                );
             }
         }
     }
 }
-

@@ -22,7 +22,11 @@ pub(super) fn handle_alerts_event(
     client: &ApiClient,
     tx: &mpsc::Sender<ApiMessage>,
 ) {
-    let ActiveWizard::Alerts(AlertsInput::Browsing { selection, show_warnings }) = state.active_wizard else {
+    let ActiveWizard::Alerts(AlertsInput::Browsing {
+        selection,
+        show_warnings,
+    }) = state.active_wizard
+    else {
         return;
     };
     let count = tab_len(state, show_warnings);
@@ -41,7 +45,10 @@ pub(super) fn handle_alerts_event(
         }
         KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
             if let Some(new_sel) = list_nav(code, selection, count) {
-                state.active_wizard = ActiveWizard::Alerts(AlertsInput::Browsing { selection: new_sel, show_warnings });
+                state.active_wizard = ActiveWizard::Alerts(AlertsInput::Browsing {
+                    selection: new_sel,
+                    show_warnings,
+                });
             }
         }
         KeyCode::Enter => {

@@ -50,7 +50,11 @@ fn spawn_fetch<T, E>(
 }
 
 pub fn fetch_api_version(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
-    spawn_fetch(tx, async move { client.get_api_version().await }, ApiMessage::VersionFetched);
+    spawn_fetch(
+        tx,
+        async move { client.get_api_version().await },
+        ApiMessage::VersionFetched,
+    );
 }
 
 pub fn fetch_all(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
@@ -66,14 +70,30 @@ pub fn fetch_all(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
 
     // Mannies, sector, visited sectors and the fleet roster are all non-fatal.
     let c = client.clone();
-    spawn_fetch(tx.clone(), async move { c.get_mannies().await }, ApiMessage::ManniesUpdated);
+    spawn_fetch(
+        tx.clone(),
+        async move { c.get_mannies().await },
+        ApiMessage::ManniesUpdated,
+    );
     let c = client.clone();
-    spawn_fetch(tx.clone(), async move { c.get_probe_sector().await }, ApiMessage::SectorUpdated);
+    spawn_fetch(
+        tx.clone(),
+        async move { c.get_probe_sector().await },
+        ApiMessage::SectorUpdated,
+    );
     let c = client.clone();
-    spawn_fetch(tx.clone(), async move { c.get_visited_sectors().await }, ApiMessage::VisitedSectorsFetched);
+    spawn_fetch(
+        tx.clone(),
+        async move { c.get_visited_sectors().await },
+        ApiMessage::VisitedSectorsFetched,
+    );
     // Fleet roster (API v81 multi-probe): drives the probe switcher.
     let c = client.clone();
-    spawn_fetch(tx.clone(), async move { c.get_probes().await }, ApiMessage::FleetFetched);
+    spawn_fetch(
+        tx.clone(),
+        async move { c.get_probes().await },
+        ApiMessage::FleetFetched,
+    );
 
     // Alerts + damage warnings + missions + probe improvements: same non-fatal
     // pattern, each in its own wrapper.
@@ -91,12 +111,7 @@ pub fn fetch_probe_improvements(client: ApiClient, tx: mpsc::Sender<ApiMessage>)
     );
 }
 
-pub fn fetch_improve_probe(
-    manny_id: String,
-    improvement: String,
-    client: ApiClient,
-    tx: mpsc::Sender<ApiMessage>,
-) {
+pub fn fetch_improve_probe(manny_id: String, improvement: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     spawn_action(
         tx,
         async move { client.improve_probe(&manny_id, &improvement).await },
@@ -106,15 +121,17 @@ pub fn fetch_improve_probe(
 }
 
 pub fn fetch_missions(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
-    spawn_fetch(tx, async move { client.get_missions().await }, ApiMessage::MissionsFetched);
+    spawn_fetch(
+        tx,
+        async move { client.get_missions().await },
+        ApiMessage::MissionsFetched,
+    );
 }
 
 pub fn fetch_messages(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
-    spawn_fetch(
-        tx,
-        async move { client.get_messages().await },
-        |(messages, _pag)| ApiMessage::MessagesFetched(messages),
-    );
+    spawn_fetch(tx, async move { client.get_messages().await }, |(messages, _pag)| {
+        ApiMessage::MessagesFetched(messages)
+    });
 }
 
 pub fn fetch_sent_messages(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
@@ -257,14 +274,22 @@ pub fn fetch_update_container_rules(
 ) {
     spawn_action(
         tx,
-        async move { client.update_container_rules(&id, priority, exclusion, strict_exclusion).await },
+        async move {
+            client
+                .update_container_rules(&id, priority, exclusion, strict_exclusion)
+                .await
+        },
         |(c, inv)| ApiMessage::UpdateContainerRulesDone(c, inv),
         ApiMessage::UpdateContainerRulesError,
     );
 }
 
 pub fn fetch_mannies(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
-    spawn_fetch(tx, async move { client.get_mannies().await }, ApiMessage::ManniesUpdated);
+    spawn_fetch(
+        tx,
+        async move { client.get_mannies().await },
+        ApiMessage::ManniesUpdated,
+    );
 }
 
 pub fn fetch_move(x: i32, y: i32, z: i32, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
@@ -297,7 +322,9 @@ pub fn fetch_mine(
     spawn_action(
         tx,
         async move {
-            client.mine_manny(&manny_id, &object_id, resources, target_amount, target_container_id).await
+            client
+                .mine_manny(&manny_id, &object_id, resources, target_amount, target_container_id)
+                .await
         },
         |_| ApiMessage::MineStarted,
         ApiMessage::MineError,
@@ -323,7 +350,11 @@ pub fn fetch_craft(manny_id: String, recipe: String, client: ApiClient, tx: mpsc
 }
 
 pub fn fetch_crafting_recipes(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
-    spawn_fetch(tx, async move { client.get_crafting_recipes().await }, ApiMessage::RecipesFetched);
+    spawn_fetch(
+        tx,
+        async move { client.get_crafting_recipes().await },
+        ApiMessage::RecipesFetched,
+    );
 }
 
 pub fn fetch_atomic_printer_craft(recipe: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
@@ -367,7 +398,13 @@ pub fn fetch_sector(coords: Option<(i32, i32, i32)>, client: ApiClient, tx: mpsc
     );
 }
 
-pub fn fetch_deploy(manny_id: String, object_id: String, name: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+pub fn fetch_deploy(
+    manny_id: String,
+    object_id: String,
+    name: String,
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+) {
     spawn_action(
         tx,
         async move { client.install_bookmark_manny(&manny_id, &object_id, &name).await },
@@ -405,7 +442,9 @@ pub fn fetch_detach(
     spawn_action(
         tx,
         async move {
-            client.detach_storage_container(&manny_id, &container_id, &mode, object_id.as_deref()).await
+            client
+                .detach_storage_container(&manny_id, &container_id, &mode, object_id.as_deref())
+                .await
         },
         |_| ApiMessage::DetachStarted,
         ApiMessage::DetachError,
@@ -422,7 +461,9 @@ pub fn fetch_drop_storage_container(
     spawn_action(
         tx,
         async move {
-            client.drop_storage_container_on_planet(&manny_id, &container_id, &planet_id).await
+            client
+                .drop_storage_container_on_planet(&manny_id, &container_id, &planet_id)
+                .await
         },
         ApiMessage::DropStorageContainerStarted,
         ApiMessage::DropStorageContainerError,
@@ -470,7 +511,11 @@ pub fn fetch_transfer_deuterium(
 ) {
     spawn_action(
         tx,
-        async move { client.transfer_deuterium_to_probe(&manny_id, target_probe_id, amount).await },
+        async move {
+            client
+                .transfer_deuterium_to_probe(&manny_id, target_probe_id, amount)
+                .await
+        },
         |_| ApiMessage::DeuteriumTransferStarted,
         ApiMessage::DeuteriumTransferError,
     );
@@ -502,12 +547,7 @@ pub fn fetch_turn_on_relay(
 
 /// Promote a probe to the player's default (`PATCH /api/probe/{id}`). The
 /// server refuses an out-of-reach target with 422, surfaced as `ActionError`.
-pub fn fetch_set_default_probe(
-    probe_id: u64,
-    name: String,
-    client: ApiClient,
-    tx: mpsc::Sender<ApiMessage>,
-) {
+pub fn fetch_set_default_probe(probe_id: u64, name: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     spawn_action(
         tx,
         async move { client.patch_probe(probe_id, None, Some(true)).await },
@@ -517,12 +557,7 @@ pub fn fetch_set_default_probe(
 }
 
 /// Rename a probe (`PATCH /api/probe/{id}` with `name`, API v81).
-pub fn fetch_rename_probe(
-    probe_id: u64,
-    name: String,
-    client: ApiClient,
-    tx: mpsc::Sender<ApiMessage>,
-) {
+pub fn fetch_rename_probe(probe_id: u64, name: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     // `name` is needed both in the request and in the success message; clone so
     // the future can borrow one copy while the `on_ok` closure owns the other.
     let label = name.clone();

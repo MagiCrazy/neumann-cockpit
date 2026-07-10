@@ -1,10 +1,10 @@
 use crossterm::event::KeyCode;
 use tokio::sync::mpsc;
 
+use super::geometry::list_nav;
 use crate::api::client::ApiClient;
 use crate::api::tasks::fetch_improve_probe;
 use crate::app::{ActiveWizard, ApiMessage, AppState, ImproveInput, LogEvent};
-use super::geometry::list_nav;
 
 /// Drive the probe-improvement wizard: pick an improvement, then resolve which
 /// idle onboard Manny installs it (auto for a single one, else `PickBuilder`).
@@ -21,7 +21,9 @@ pub(super) fn handle_improve_event(
                 KeyCode::Esc => state.close_wizard(),
                 KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
                     if let Some(new_sel) = list_nav(code, selection, count) {
-                        if let ActiveWizard::Improve(ImproveInput::PickImprovement { ref mut selection, .. }) = state.active_wizard {
+                        if let ActiveWizard::Improve(ImproveInput::PickImprovement { ref mut selection, .. }) =
+                            state.active_wizard
+                        {
                             *selection = new_sel;
                         }
                     }
@@ -30,20 +32,33 @@ pub(super) fn handle_improve_event(
                 _ => {}
             }
         }
-        ActiveWizard::Improve(ImproveInput::PickBuilder { selection, ref mannies, .. }) => {
+        ActiveWizard::Improve(ImproveInput::PickBuilder {
+            selection, ref mannies, ..
+        }) => {
             let count = mannies.len();
             match code {
                 KeyCode::Esc => state.close_wizard(),
                 KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
                     if let Some(new_sel) = list_nav(code, selection, count) {
-                        if let ActiveWizard::Improve(ImproveInput::PickBuilder { ref mut selection, .. }) = state.active_wizard {
+                        if let ActiveWizard::Improve(ImproveInput::PickBuilder { ref mut selection, .. }) =
+                            state.active_wizard
+                        {
                             *selection = new_sel;
                         }
                     }
                 }
                 KeyCode::Enter => {
-                    let picked = if let ActiveWizard::Improve(ImproveInput::PickBuilder { ref mannies, selection, ref improvement_id, ref improvement_name, .. }) = state.active_wizard {
-                        mannies.get(selection).map(|(id, _)| (id.clone(), improvement_id.clone(), improvement_name.clone()))
+                    let picked = if let ActiveWizard::Improve(ImproveInput::PickBuilder {
+                        ref mannies,
+                        selection,
+                        ref improvement_id,
+                        ref improvement_name,
+                        ..
+                    }) = state.active_wizard
+                    {
+                        mannies
+                            .get(selection)
+                            .map(|(id, _)| (id.clone(), improvement_id.clone(), improvement_name.clone()))
                     } else {
                         None
                     };
@@ -61,13 +76,10 @@ pub(super) fn handle_improve_event(
 
 /// Validate the selected improvement, then fire it (auto-picking the sole idle
 /// Manny) or advance to the builder-selection step.
-fn commit_improvement(
-    selection: usize,
-    state: &mut AppState,
-    client: &ApiClient,
-    tx: &mpsc::Sender<ApiMessage>,
-) {
-    let Some((id, name, done, available)) = state.probe_improvements.get(selection)
+fn commit_improvement(selection: usize, state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
+    let Some((id, name, done, available)) = state
+        .probe_improvements
+        .get(selection)
         .map(|i| (i.id.clone(), i.name.clone(), i.done, i.available))
     else {
         return;
