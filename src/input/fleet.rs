@@ -46,6 +46,12 @@ pub(super) fn handle_rename_probe_event(
 ) {
     match code {
         KeyCode::Esc => state.rename_probe = RenameProbeInput::Inactive,
+        KeyCode::Tab => {
+            let s = state.next_name_suggestion();
+            if let RenameProbeInput::Typing { buf, .. } = &mut state.rename_probe {
+                *buf = s;
+            }
+        }
         KeyCode::Backspace => {
             if let RenameProbeInput::Typing { buf, .. } = &mut state.rename_probe {
                 buf.pop();

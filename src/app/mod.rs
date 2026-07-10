@@ -6,6 +6,7 @@ mod grid;
 mod inputs;
 mod inventory;
 mod journal;
+mod lexicon;
 mod mannies;
 mod map;
 mod message;
@@ -62,6 +63,9 @@ pub struct AppState {
     /// Log entries staged by action handlers this tick, drained by the event
     /// loop to persist + prepend to `journal` (mirrors `pending_fire`).
     pub pending_journal: Vec<LogEvent>,
+    /// Monotonic seed cycling the naming-ceremony lexicon (see
+    /// `next_name_suggestion`); bumped each time a rename wizard suggests a name.
+    pub name_suggestion_seed: usize,
     pub scan_history_idx: usize,
     pub scan_loading: bool,
     pub scan_mode: ScanMode,
@@ -323,6 +327,14 @@ impl AppState {
     /// (mirrors how `pending_fire` is drained by the input layer).
     pub fn log_event(&mut self, ev: LogEvent) {
         self.pending_journal.push(ev);
+    }
+
+    /// Advance the naming-ceremony seed and return the next Culture-style name
+    /// suggestion, cycling through the lexicon. Used to pre-fill and regenerate
+    /// the rename wizards' input.
+    pub fn next_name_suggestion(&mut self) -> String {
+        self.name_suggestion_seed = self.name_suggestion_seed.wrapping_add(1);
+        lexicon::suggest(self.name_suggestion_seed).to_string()
     }
 
     /// The ship's-log flow shown in the pane: locally-captured actions merged
