@@ -1,0 +1,6 @@
+# Formatting is tuned to the codebase's existing hand-formatting: a generous
+# width keeps intentional single-line constructs (e.g. the WIZARD_INPUTS /
+# WIZARD_OVERLAYS registry entries, dense match arms) from being wrapped.
+# Stable rustfmt options only — CI runs stable `cargo fmt`.
+edition = "2021"
+max_width = 120
