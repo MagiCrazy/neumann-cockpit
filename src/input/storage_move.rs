@@ -2,7 +2,7 @@ use crossterm::event::KeyCode;
 use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
-use crate::api::tasks::fetch_storage_move;
+use crate::api::tasks::{fetch_storage_move, StorageMoveArgs};
 use crate::app::{ApiMessage, AppState, LogEvent, StorageMoveInput, MOVE_RESOURCE_TYPES};
 
 use super::geometry::list_nav;
@@ -184,13 +184,15 @@ fn handle_resource(
             let to_id = containers[*to_sel].0.clone();
             let to_name = containers[*to_sel].1.clone();
             fetch_storage_move(
-                actor,
-                "resource".into(),
-                to_id,
-                Some(from_id),
-                Some(resource.clone()),
-                Some(amount),
-                None,
+                StorageMoveArgs {
+                    actor_manny_id: actor,
+                    kind: "resource".into(),
+                    to_container_id: to_id,
+                    from_container_id: Some(from_id),
+                    resource_type: Some(resource.clone()),
+                    amount: Some(amount),
+                    item_ids: None,
+                },
                 client.clone(),
                 tx.clone(),
             );
@@ -238,13 +240,15 @@ fn handle_item(
             let to_name = containers[*to_sel].1.clone();
             let count = ids.len();
             fetch_storage_move(
-                actor,
-                "item".into(),
-                to_id,
-                None,
-                None,
-                None,
-                Some(ids),
+                StorageMoveArgs {
+                    actor_manny_id: actor,
+                    kind: "item".into(),
+                    to_container_id: to_id,
+                    from_container_id: None,
+                    resource_type: None,
+                    amount: None,
+                    item_ids: Some(ids),
+                },
                 client.clone(),
                 tx.clone(),
             );
