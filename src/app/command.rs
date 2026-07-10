@@ -2,8 +2,8 @@ use super::*;
 
 /// Command verbs recognised by `:` mode. Kept as a table so the input layer can
 /// offer Tab-completion and a `:help`-style listing.
-pub const COMMANDS: [&str; 12] = [
-    "focus", "travel", "goto", "filter", "refresh", "theme", "zoom", "craft", "mine", "probe", "help", "quit",
+pub const COMMANDS: [&str; 13] = [
+    "focus", "travel", "goto", "filter", "refresh", "theme", "zoom", "craft", "mine", "queue", "probe", "help", "quit",
 ];
 
 /// One-line argument usage for a verb, shown as inline ghost-text while typing
@@ -264,6 +264,7 @@ impl AppState {
                     self.mine_command(&args);
                 }
             }
+            "queue" => self.active_wizard = ActiveWizard::Queue(QueueInput::Browsing { selection: 0 }),
             "help" => self.help_open = true,
             "q" | "quit" => self.set_quit(),
             other => self.set_toast(format!("unknown command: {other}")),
