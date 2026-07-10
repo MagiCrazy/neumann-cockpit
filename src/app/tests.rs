@@ -2508,3 +2508,138 @@ fn probe_menu_offers_switch_and_default_when_multi() {
         .expect("set-default item");
     assert!(set_default.enabled);
 }
+
+// ── Production queue (#197) ─────────────────────────────────────────────────
+
+/// A Manny craft of `recipe` by builder `id`, for the queue tests.
+fn queued_manny_craft(recipe: &str, builder: &str) -> QueuedCraft {
+    QueuedCraft::new(
+        Fabricator::Manny,
+        recipe.into(),
+        recipe.into(),
+        Some(builder.into()),
+        Some(builder.into()),
+    )
+}
+
+#[test]
+fn queue_coalesces_identical_trailing_crafts() {
+    let mut s = AppState::default();
+    s.enqueue_craft(queued_manny_craft("steel_plate", "m1"));
+    s.enqueue_craft(queued_manny_craft("steel_plate", "m1"));
+    assert_eq!(s.craft_queue.len(), 1, "identical trailing steps merge");
+    assert_eq!(s.craft_queue[0].repeat, 2);
+    // A different recipe does not merge.
+    s.enqueue_craft(queued_manny_craft("steel_bar", "m1"));
+    assert_eq!(s.craft_queue.len(), 2);
+}
+
+#[test]
+fn queue_caps_at_max() {
+    let mut s = AppState::default();
+    for i in 0..(QUEUE_MAX + 3) {
+        s.enqueue_craft(queued_manny_craft(&format!("r{i}"), "m1"));
+    }
+    assert_eq!(s.craft_queue.len(), QUEUE_MAX, "enqueue past the cap is dropped");
+}
+
+#[test]
+fn queue_executor_completes_a_step_then_stops() {
+    let mut s = AppState::default();
+    s.enqueue_craft(queued_manny_craft("steel_plate", "m1"));
+    s.queue_toggle_run();
+    assert!(s.queue_running);
+
+    // Start: the pending step fires.
+    s.advance_queue();
+    assert!(s.queue_fire.take().is_some(), "first step fired");
+    assert!(matches!(
+        s.craft_queue[0].state,
+        StepState::Running { observed_busy: false }
+    ));
+
+    // Builder still idle (order not yet picked up) → not complete.
+    s.mannies = Some(vec![make_manny("m1", "probe", true, None)]);
+    s.advance_queue();
+    assert!(matches!(
+        s.craft_queue[0].state,
+        StepState::Running { observed_busy: false }
+    ));
+
+    // Builder busy → observed.
+    s.mannies = Some(vec![make_manny("m1", "probe", false, Some("crafting"))]);
+    s.advance_queue();
+    assert!(matches!(
+        s.craft_queue[0].state,
+        StepState::Running { observed_busy: true }
+    ));
+
+    // Builder idle again → the step is done.
+    s.mannies = Some(vec![make_manny("m1", "probe", true, None)]);
+    s.advance_queue();
+    assert!(matches!(s.craft_queue[0].state, StepState::Done));
+    assert_eq!(s.craft_queue[0].completed, 1);
+    assert!(s.queue_fire.is_none(), "nothing new fired");
+
+    // Nothing left → the queue stops on its own.
+    s.advance_queue();
+    assert!(!s.queue_running);
+}
+
+#[test]
+fn queue_executor_repeats_a_step_n_times() {
+    let mut s = AppState::default();
+    let mut c = queued_manny_craft("steel_plate", "m1");
+    c.repeat = 3;
+    s.enqueue_craft(c);
+    s.queue_toggle_run();
+
+    let mut fires = 0;
+    for _ in 0..20 {
+        s.advance_queue();
+        if s.queue_fire.take().is_some() {
+            fires += 1;
+        }
+        s.mannies = Some(vec![make_manny("m1", "probe", false, Some("crafting"))]);
+        s.advance_queue(); // observe busy
+        s.mannies = Some(vec![make_manny("m1", "probe", true, None)]);
+        s.advance_queue(); // idle → iteration complete
+        if matches!(s.craft_queue[0].state, StepState::Done) {
+            break;
+        }
+    }
+    assert!(matches!(s.craft_queue[0].state, StepState::Done));
+    assert_eq!(s.craft_queue[0].completed, 3);
+    assert_eq!(fires, 3, "one fire per repeat iteration");
+}
+
+#[test]
+fn queue_halts_on_failure_keeping_the_counter() {
+    let mut s = AppState::default();
+    let mut c = queued_manny_craft("steel_plate", "m1");
+    c.repeat = 5;
+    c.completed = 2;
+    s.enqueue_craft(c);
+    s.queue_toggle_run();
+    s.advance_queue();
+    s.queue_fire.take();
+    s.fail_queue("insufficient metals".into());
+    assert!(!s.queue_running, "a failed craft halts the queue");
+    match &s.craft_queue[0].state {
+        StepState::Failed(e) => assert!(e.contains("insufficient")),
+        _ => panic!("expected Failed"),
+    }
+    assert_eq!(s.craft_queue[0].completed, 2, "the completed counter is kept");
+}
+
+#[test]
+fn queue_bump_never_below_one_and_remove() {
+    let mut s = AppState::default();
+    s.enqueue_craft(queued_manny_craft("steel_plate", "m1"));
+    s.queue_bump(0, 4);
+    assert_eq!(s.craft_queue[0].repeat, 5);
+    s.queue_bump(0, -10);
+    assert_eq!(s.craft_queue[0].repeat, 1, "repeat floors at 1");
+    s.queue_remove(0);
+    assert!(s.craft_queue.is_empty());
+}
