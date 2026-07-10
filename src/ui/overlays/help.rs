@@ -29,6 +29,8 @@ const LEFT: &[Section] = &[
             ("d f g", "Sector · Probe · Missions"),
             ("c v b", "Inventory · Storage · Mannies"),
             ("j k / ↑↓", "move cursor in pane"),
+            ("PgUp PgDn", "page through long lists"),
+            ("Home End", "jump to first / last"),
             ("l / h", "drill in / out (→ ←)"),
             ("Tab", "cycle panes (Shift-Tab reverse)"),
             ("z", "zoom active pane full screen"),
@@ -40,6 +42,7 @@ const LEFT: &[Section] = &[
         &[
             ("Enter", "contextual action menu"),
             (":", "command line (see right)"),
+            ("i", "jump to next idle Manny"),
             ("F1", "toggle hints line"),
             ("F2", "cycle color mode"),
             ("F5", "refresh"),

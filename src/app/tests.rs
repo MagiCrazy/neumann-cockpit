@@ -482,6 +482,27 @@ fn manny_next_advances() {
 }
 
 #[test]
+fn idle_manny_count_and_cycling() {
+    let mut state = AppState::default();
+    state.mannies = Some(vec![
+        make_manny("m0", "probe", false, Some("mining")), // busy
+        make_manny("m1", "probe", true, None),            // idle
+        make_manny("m2", "sector", true, None),           // not onboard
+        make_manny("m3", "probe", true, None),            // idle
+    ]);
+    assert_eq!(state.idle_manny_count(), 2, "only onboard, order-ready mannies");
+
+    state.mannies_selection = 0;
+    state.cycle_to_next_idle_manny();
+    assert_eq!(state.active_pane, crate::app::Pane::Mannies, "focuses the Mannies pane");
+    assert_eq!(state.mannies_selection, 1, "first idle after index 0");
+    state.cycle_to_next_idle_manny();
+    assert_eq!(state.mannies_selection, 3, "next idle");
+    state.cycle_to_next_idle_manny();
+    assert_eq!(state.mannies_selection, 1, "wraps to the first idle");
+}
+
+#[test]
 fn manny_next_wraps() {
     let mut state = AppState::default();
     state.mannies = Some(vec![

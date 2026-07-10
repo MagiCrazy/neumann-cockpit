@@ -333,6 +333,39 @@ impl AppState {
             .unwrap_or_default()
     }
 
+    /// Indices (into `mannies`) of idle Mannies — onboard and free to take an
+    /// order. Backs the status-bar "N idle" indicator and the idle-cycling key.
+    fn idle_manny_indices(&self) -> Vec<usize> {
+        self.mannies.as_ref().map_or(Vec::new(), |ms| {
+            ms.iter()
+                .enumerate()
+                .filter(|(_, m)| {
+                    m.location.location_type == crate::api::types::MannyLocationType::Probe
+                        && m.can_receive_orders
+                })
+                .map(|(i, _)| i)
+                .collect()
+        })
+    }
+
+    /// How many Mannies are idle (onboard, awaiting orders).
+    pub fn idle_manny_count(&self) -> usize {
+        self.idle_manny_indices().len()
+    }
+
+    /// Focus the Mannies pane and move its cursor to the next idle Manny after
+    /// the current selection, wrapping around. No-op when none are idle.
+    pub fn cycle_to_next_idle_manny(&mut self) {
+        let idle = self.idle_manny_indices();
+        let Some(&first) = idle.first() else {
+            self.set_toast("no idle mannies");
+            return;
+        };
+        self.active_pane = crate::app::Pane::Mannies;
+        let cur = self.mannies_selection;
+        self.mannies_selection = idle.iter().copied().find(|&i| i > cur).unwrap_or(first);
+    }
+
     pub fn collect_deploy_candidates(&self) -> Vec<(String, String)> {
         self.probe_current_sector_scan()
             .and_then(|s| s.objects.as_ref())

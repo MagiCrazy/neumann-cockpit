@@ -307,6 +307,12 @@ fn render_status_line(frame: &mut Frame, area: Rect, state: &AppState, p: Palett
     if !state.scut_coverage().is_empty() {
         meta.push(("≣ SCUT".to_string(), accent));
     }
+    // Idle-Manny nudge: bold warning colour so free workers don't go unnoticed
+    // (`i` cycles to the next one).
+    let idle = state.idle_manny_count();
+    if idle > 0 {
+        meta.push((format!("⚙ {idle} idle"), Style::default().fg(p.warn).add_modifier(Modifier::BOLD)));
+    }
     let unread = state.unread_alert_count();
     if unread > 0 {
         // Urgency signal: crit_style survives the mono palettes (bold+REVERSED).
