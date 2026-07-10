@@ -9,7 +9,7 @@ use crate::api::tasks::{
     fetch_turn_on_relay,
 };
 use crate::app::{
-    ApiMessage, AppState, DeployInput, MineInput, ObjectAction, ObjectActionInput, SalvageInput,
+    ApiMessage, AppState, DeployInput, LogEvent, MineInput, ObjectAction, ObjectActionInput, SalvageInput,
     ScutNetworkInput, ScutRelayInput, WaypointsInput,
 };
 use super::geometry::list_nav;
@@ -42,6 +42,7 @@ pub(super) fn dispatch_object_action(
         }
         ObjectAction::Inspect => {
             fetch_inspect(manny_id, object_id, client.clone(), tx.clone());
+            state.log_event(LogEvent::inspect(&object_name, state.active_probe_id));
         }
         ObjectAction::Salvage => {
             state.salvage = SalvageInput::Confirm {
@@ -54,6 +55,7 @@ pub(super) fn dispatch_object_action(
         }
         ObjectAction::Recover => {
             fetch_recover(manny_id, object_id, client.clone(), tx.clone());
+            state.log_event(LogEvent::recover(&object_name, state.active_probe_id));
         }
         ObjectAction::DeployWaypoint => {
             state.deploy = DeployInput::EnterName {
@@ -111,7 +113,9 @@ pub(super) fn handle_scut_relay_event(
                 let name = if buf.trim().is_empty() { None } else { Some(buf.trim().to_string()) };
                 (manny_id.clone(), relay_id, name)
             };
+            let network = name.clone();
             fetch_turn_on_relay(manny_id, relay_id, name, client.clone(), tx.clone());
+            state.log_event(LogEvent::relay_on(network.as_deref(), state.active_probe_id));
         }
         _ => {}
     }

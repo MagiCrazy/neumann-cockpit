@@ -17,7 +17,7 @@ use crate::api::tasks::{
 };
 use crate::api::types::{MannyTask, MannyTaskVisibility};
 use crate::app::{
-    ApiMessage, AppState, AssembleProbeInput, CommsCategory, MissionsCategory, DeployInput, FabricationInput, ImproveInput, DetachInput, DropCargoInput,
+    ApiMessage, AppState, AssembleProbeInput, CommsCategory, MissionsCategory, DeployInput, FabricationInput, ImproveInput, DetachInput, DropCargoInput, LogEvent,
     CommandLine, DropStorageContainerInput, DrillLevel, InputMode, InspectInput, MenuAction,
     MessagesInput,
     MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput, Pane, RecallInput, RecoverInput,
@@ -472,7 +472,8 @@ fn fire_menu_action(
             if let Some(active) = state.active_probe_summary() {
                 if !active.is_default && active.is_reachable {
                     let (id, name) = (active.id, active.name.clone());
-                    fetch_set_default_probe(id, name, client.clone(), tx.clone());
+                    fetch_set_default_probe(id, name.clone(), client.clone(), tx.clone());
+                    state.log_event(LogEvent::set_default_probe(&name, Some(id)));
                 }
             }
             return;
@@ -582,8 +583,9 @@ fn fire_menu_action(
             match candidates.len() {
                 0 => state.error = Some("no inspectable objects in current sector — scan first".into()),
                 1 => {
-                    let (object_id, _) = candidates.into_iter().next().unwrap();
+                    let (object_id, object_name) = candidates.into_iter().next().unwrap();
                     fetch_inspect(id, object_id, client.clone(), tx.clone());
+                    state.log_event(LogEvent::inspect(&object_name, state.active_probe_id));
                 }
                 _ => state.inspect = InspectInput::PickTarget { manny_id: id, manny_name: name, candidates, selection: 0, error: None },
             }
@@ -593,8 +595,9 @@ fn fire_menu_action(
             match candidates.len() {
                 0 => state.error = Some("no detached containers in current sector — scan first".into()),
                 1 => {
-                    let (object_id, _) = candidates.into_iter().next().unwrap();
+                    let (object_id, container_name) = candidates.into_iter().next().unwrap();
                     fetch_recover(id, object_id, client.clone(), tx.clone());
+                    state.log_event(LogEvent::recover(&container_name, state.active_probe_id));
                 }
                 _ => state.recover = RecoverInput::PickContainer { manny_id: id, manny_name: name, candidates, selection: 0, error: None },
             }

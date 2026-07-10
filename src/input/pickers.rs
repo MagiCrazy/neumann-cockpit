@@ -42,11 +42,12 @@ pub(super) fn handle_salvage_event(
         SalvageInput::Confirm { .. } => match code {
             KeyCode::Esc => state.salvage = SalvageInput::Inactive,
             KeyCode::Enter => {
-                let (manny_id, object_id) = {
-                    let SalvageInput::Confirm { ref manny_id, ref object_id, .. } = state.salvage else { return };
-                    (manny_id.clone(), object_id.clone())
+                let (manny_id, object_id, object_name) = {
+                    let SalvageInput::Confirm { ref manny_id, ref object_id, ref object_name, .. } = state.salvage else { return };
+                    (manny_id.clone(), object_id.clone(), object_name.clone())
                 };
                 fetch_salvage(manny_id, object_id, client.clone(), tx.clone());
+                state.log_event(LogEvent::salvage(&object_name, state.active_probe_id));
             }
             _ => {}
         },
@@ -63,11 +64,12 @@ pub(super) fn handle_recall_event(
     match code {
         KeyCode::Esc => state.recall = RecallInput::Inactive,
         KeyCode::Enter => {
-            let manny_id = {
-                let RecallInput::Confirm { ref manny_id, .. } = state.recall else { return };
-                manny_id.clone()
+            let (manny_id, manny_name, remote) = {
+                let RecallInput::Confirm { ref manny_id, ref manny_name, remote, .. } = state.recall else { return };
+                (manny_id.clone(), manny_name.clone(), remote)
             };
             fetch_recall(manny_id, client.clone(), tx.clone());
+            state.log_event(LogEvent::recall(&manny_name, remote, state.active_probe_id));
         }
         _ => {}
     }
@@ -87,6 +89,7 @@ pub(super) fn handle_refuel_event(
                 manny_id.clone()
             };
             fetch_refill_deuterium(manny_id, client.clone(), tx.clone());
+            state.log_event(LogEvent::refuel(state.active_probe_id));
         }
         _ => {}
     }
@@ -102,6 +105,7 @@ pub(super) fn handle_mind_snapshot_event(
         KeyCode::Esc | KeyCode::Char('n') => state.mind_snapshot = MindSnapshotInput::Inactive,
         KeyCode::Enter | KeyCode::Char('y') => {
             fetch_reassign_mind_snapshot(client.clone(), tx.clone());
+            state.log_event(LogEvent::mind_snapshot(state.active_probe_id));
         }
         _ => {}
     }
@@ -188,6 +192,7 @@ pub(super) fn handle_drop_cargo_event(
                 manny_id.clone()
             };
             fetch_drop_manny_cargo(manny_id, client.clone(), tx.clone());
+            state.log_event(LogEvent::drop_cargo(state.active_probe_id));
         }
         _ => {}
     }
@@ -278,12 +283,14 @@ pub(super) fn handle_rename_manny_event(
         KeyCode::Backspace => state.rename_manny_backspace(),
         KeyCode::Char(c) => state.rename_manny_type_char(c),
         KeyCode::Enter => {
-            let (manny_id, name) = {
-                let RenameMannyInput::Typing { ref manny_id, ref buf, .. } = state.rename_manny else { return };
+            let (manny_id, name, old_name) = {
+                let RenameMannyInput::Typing { ref manny_id, ref buf, ref manny_name, .. } = state.rename_manny else { return };
                 if buf.is_empty() { return }
-                (manny_id.clone(), buf.clone())
+                (manny_id.clone(), buf.clone(), manny_name.clone())
             };
+            let new_name = name.clone();
             fetch_rename_manny(manny_id, name, client.clone(), tx.clone());
+            state.log_event(LogEvent::rename_manny(&old_name, &new_name, state.active_probe_id));
         }
         _ => {}
     }
@@ -303,11 +310,12 @@ pub(super) fn handle_inspect_event(
     match code {
         KeyCode::Esc => state.inspect = InspectInput::Inactive,
         KeyCode::Enter => {
-            let (manny_id, object_id) = {
+            let (manny_id, object_id, object_name) = {
                 let InspectInput::PickTarget { ref manny_id, ref candidates, selection, .. } = state.inspect else { return };
-                (manny_id.clone(), candidates[selection].0.clone())
+                (manny_id.clone(), candidates[selection].0.clone(), candidates[selection].1.clone())
             };
             fetch_inspect(manny_id, object_id, client.clone(), tx.clone());
+            state.log_event(LogEvent::inspect(&object_name, state.active_probe_id));
         }
         _ => {}
     }
@@ -327,11 +335,12 @@ pub(super) fn handle_recover_event(
     match code {
         KeyCode::Esc => state.recover = RecoverInput::Inactive,
         KeyCode::Enter => {
-            let (manny_id, object_id) = {
+            let (manny_id, object_id, container_name) = {
                 let RecoverInput::PickContainer { ref manny_id, ref candidates, selection, .. } = state.recover else { return };
-                (manny_id.clone(), candidates[selection].0.clone())
+                (manny_id.clone(), candidates[selection].0.clone(), candidates[selection].1.clone())
             };
             fetch_recover(manny_id, object_id, client.clone(), tx.clone());
+            state.log_event(LogEvent::recover(&container_name, state.active_probe_id));
         }
         _ => {}
     }

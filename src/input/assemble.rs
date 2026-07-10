@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
 use crate::api::tasks::fetch_assemble_probe;
-use crate::app::{ApiMessage, AppState, AssembleProbeInput};
+use crate::app::{ApiMessage, AppState, AssembleProbeInput, LogEvent};
 
 use super::geometry::list_nav;
 
@@ -59,6 +59,7 @@ pub(super) fn handle_assemble_probe_event(
                 Some((manny, ids)) => {
                     state.assemble_probe = AssembleProbeInput::Inactive;
                     fetch_assemble_probe(manny, ids, client.clone(), tx.clone());
+                    state.log_event(LogEvent::assemble_probe(state.active_probe_id));
                 }
                 None => {
                     if let AssembleProbeInput::PickContainers { error, .. } =

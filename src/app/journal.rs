@@ -106,6 +106,93 @@ impl LogEvent {
             probe_id,
         )
     }
+
+    pub fn repair(pct: f64, probe_id: Option<u64>) -> Self {
+        Self::action(kind::REPAIR, format!("Ordered a hull repair to {pct:.0}%."), probe_id)
+    }
+
+    /// Fabrication order, on the atomic printer or at the manny bay.
+    pub fn craft(recipe: &str, atomic_printer: bool, probe_id: Option<u64>) -> Self {
+        let bay = if atomic_printer { "on the atomic printer" } else { "at the manny bay" };
+        Self::action(kind::CRAFT, format!("Queued «{recipe}» {bay}."), probe_id)
+    }
+
+    pub fn salvage(target: &str, probe_id: Option<u64>) -> Self {
+        Self::action(kind::SALVAGE, format!("Sent a manny to salvage «{target}»."), probe_id)
+    }
+
+    pub fn recall(manny: &str, abandon: bool, probe_id: Option<u64>) -> Self {
+        let s = if abandon {
+            format!("Abandoned «{manny}» in a remote sector.")
+        } else {
+            format!("Recalled «{manny}».")
+        };
+        Self::action(kind::RECALL, s, probe_id)
+    }
+
+    pub fn recover(container: &str, probe_id: Option<u64>) -> Self {
+        Self::action(kind::RECOVER, format!("Sent a manny to recover container «{container}»."), probe_id)
+    }
+
+    pub fn rename_manny(old: &str, new: &str, probe_id: Option<u64>) -> Self {
+        Self::action(kind::RENAME, format!("Renamed manny «{old}» to «{new}»."), probe_id)
+    }
+
+    pub fn rename_container(new: &str, probe_id: Option<u64>) -> Self {
+        Self::action(kind::RENAME, format!("Renamed a container to «{new}»."), probe_id)
+    }
+
+    pub fn rename_probe(new: &str, probe_id: Option<u64>) -> Self {
+        Self::action(kind::RENAME, format!("Renamed the probe to «{new}»."), probe_id)
+    }
+
+    pub fn set_default_probe(name: &str, probe_id: Option<u64>) -> Self {
+        Self::action(kind::RENAME, format!("Set «{name}» as the default probe."), probe_id)
+    }
+
+    pub fn improve(improvement: &str, probe_id: Option<u64>) -> Self {
+        Self::action(kind::IMPROVE, format!("Began installing «{improvement}»."), probe_id)
+    }
+
+    pub fn inspect(target: &str, probe_id: Option<u64>) -> Self {
+        Self::action(kind::INSPECT, format!("Sent a manny to inspect «{target}»."), probe_id)
+    }
+
+    pub fn refuel(probe_id: Option<u64>) -> Self {
+        Self::action(kind::REFUEL, "Sent a manny to refill the deuterium tank.".to_string(), probe_id)
+    }
+
+    pub fn assemble_probe(probe_id: Option<u64>) -> Self {
+        Self::action(kind::ASSEMBLE, "Began assembling a new drone (~3h).".to_string(), probe_id)
+    }
+
+    pub fn drop_cargo(probe_id: Option<u64>) -> Self {
+        Self::action(kind::DROP_CARGO, "Dumped a manny's onboard cargo.".to_string(), probe_id)
+    }
+
+    pub fn mind_snapshot(probe_id: Option<u64>) -> Self {
+        Self::action(kind::MIND_SNAPSHOT, "Reassigned the mind snapshot to a fresh probe.".to_string(), probe_id)
+    }
+
+    pub fn mission_abandon(title: &str, probe_id: Option<u64>) -> Self {
+        Self::action(kind::MISSION, format!("Abandoned mission «{title}»."), probe_id)
+    }
+
+    pub fn relay_on(network: Option<&str>, probe_id: Option<u64>) -> Self {
+        let s = match network {
+            Some(n) if !n.is_empty() => format!("Turned on SCUT relay «{n}»."),
+            _ => "Turned on a SCUT relay.".to_string(),
+        };
+        Self::action(kind::RELAY, s, probe_id)
+    }
+
+    pub fn message_sent(recipient: &str, probe_id: Option<u64>) -> Self {
+        Self::action(kind::MESSAGE, format!("Sent a message to «{recipient}»."), probe_id)
+    }
+
+    pub fn container_rules(container: &str, probe_id: Option<u64>) -> Self {
+        Self::action(kind::RULES, format!("Updated routing rules for «{container}»."), probe_id)
+    }
 }
 
 /// Event-kind tags. Local actions and reconstructed server events share this
@@ -117,6 +204,21 @@ pub mod kind {
     pub const STORAGE_MOVE: &str = "storage_move";
     pub const CONTAINER: &str = "container";
     pub const WAYPOINT: &str = "waypoint";
+    pub const REPAIR: &str = "repair";
+    pub const SALVAGE: &str = "salvage";
+    pub const RECALL: &str = "recall";
+    pub const RECOVER: &str = "recover";
+    pub const RENAME: &str = "rename";
+    pub const IMPROVE: &str = "improve";
+    pub const INSPECT: &str = "inspect";
+    pub const REFUEL: &str = "refuel";
+    pub const ASSEMBLE: &str = "assemble";
+    pub const DROP_CARGO: &str = "drop_cargo";
+    pub const MIND_SNAPSHOT: &str = "mind_snapshot";
+    pub const MISSION: &str = "mission";
+    pub const RELAY: &str = "relay";
+    pub const MESSAGE: &str = "message";
+    pub const RULES: &str = "rules";
     /// Reconstructed server-side event (alert / damage warning).
     pub const ALERT: &str = "alert";
 }

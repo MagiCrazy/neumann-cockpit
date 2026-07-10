@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 use crate::api::client::ApiClient;
 use crate::api::tasks::{fetch_all, fetch_atomic_printer_craft, fetch_craft, fetch_mine};
 use crate::app::{
-    command_usage, ApiMessage, AppState, CommandFire, CompletionState, InputMode,
+    command_usage, ApiMessage, AppState, CommandFire, CompletionState, InputMode, LogEvent,
 };
 
 /// Route a key while the `:` command line is open. Typed characters are literal
@@ -31,12 +31,24 @@ pub(super) fn handle_command_event(
             if let Some(fire) = state.pending_fire.take() {
                 match fire {
                     CommandFire::AtomicCraft { recipe_id } => {
+                        let name = state.fabrication_recipes().iter()
+                            .find(|(_, r)| r.id == recipe_id).map(|(_, r)| r.name.clone());
                         fetch_atomic_printer_craft(recipe_id, client.clone(), tx.clone());
+                        if let Some(name) = name {
+                            state.log_event(LogEvent::craft(&name, true, state.active_probe_id));
+                        }
                     }
                     CommandFire::MannyCraft { manny_id, recipe_id } => {
+                        let name = state.fabrication_recipes().iter()
+                            .find(|(_, r)| r.id == recipe_id).map(|(_, r)| r.name.clone());
                         fetch_craft(manny_id, recipe_id, client.clone(), tx.clone());
+                        if let Some(name) = name {
+                            state.log_event(LogEvent::craft(&name, false, state.active_probe_id));
+                        }
                     }
                     CommandFire::Mine { manny_id, object_id, resources, amount, container_id } => {
+                        let resources_label = resources.join(", ");
+                        let destination = if container_id.is_some() { "a container" } else { "the probe" };
                         fetch_mine(
                             manny_id,
                             object_id,
@@ -46,6 +58,7 @@ pub(super) fn handle_command_event(
                             client.clone(),
                             tx.clone(),
                         );
+                        state.log_event(LogEvent::mine(&resources_label, amount, destination, state.active_probe_id));
                     }
                 }
             }

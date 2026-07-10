@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 use crate::api::client::ApiClient;
 use crate::api::tasks::fetch_repair;
 use crate::app::{
-    ApiMessage, AppState, RepairInput,
+    ApiMessage, AppState, LogEvent, RepairInput,
 };
 pub(super) fn handle_repair_event(
     code: KeyCode,
@@ -25,6 +25,7 @@ pub(super) fn handle_repair_event(
                 (manny_id.clone(), pct)
             };
             fetch_repair(manny_id, pct, client.clone(), tx.clone());
+            state.log_event(LogEvent::repair(pct, state.active_probe_id));
         }
         _ => {}
     }

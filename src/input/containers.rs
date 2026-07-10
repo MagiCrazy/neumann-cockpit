@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
 use crate::api::tasks::{fetch_rename_container, fetch_update_container_rules};
-use crate::app::{ApiMessage, AppState, ContainerRulesInput, RenameContainerInput};
+use crate::app::{ApiMessage, AppState, ContainerRulesInput, LogEvent, RenameContainerInput};
 
 use super::geometry::list_nav;
 
@@ -65,7 +65,9 @@ pub(super) fn handle_rename_container_event(
                 state.set_rename_container_error("label cannot be empty".into());
                 return;
             }
+            let new_label = label.clone();
             fetch_rename_container(id, label, client.clone(), tx.clone());
+            state.log_event(LogEvent::rename_container(&new_label, state.active_probe_id));
         }
         KeyCode::Char(c) => {
             if let RenameContainerInput::Typing { buf, error, .. } = &mut state.rename_container {
@@ -119,9 +121,9 @@ pub(super) fn handle_container_rules_event(
             }
         }
         KeyCode::Enter => {
-            let (id, p, e, s) = {
+            let (id, p, e, s, label) = {
                 let ContainerRulesInput::Editing {
-                    container_id, priority, exclusion, strict_exclusion, ..
+                    container_id, priority, exclusion, strict_exclusion, container_label, ..
                 } = &state.container_rules
                 else {
                     return;
@@ -131,9 +133,11 @@ pub(super) fn handle_container_rules_event(
                     priority.clone(),
                     exclusion.clone(),
                     strict_exclusion.clone(),
+                    container_label.clone(),
                 )
             };
             fetch_update_container_rules(id, p, e, s, client.clone(), tx.clone());
+            state.log_event(LogEvent::container_rules(&label, state.active_probe_id));
         }
         _ => {}
     }
