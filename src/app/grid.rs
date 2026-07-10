@@ -3,7 +3,6 @@
 //! These types back the 3×3 tiling dashboard. They are consumed by later
 //! blocs (navigation, drill-in, rendering); U1 only establishes the state
 //! that `AppState` carries, so most of it is not read yet.
-#![allow(dead_code)]
 
 /// Rows moved by one PageUp/PageDown in a pane list.
 const PANE_PAGE: usize = 10;
