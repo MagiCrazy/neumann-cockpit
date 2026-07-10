@@ -1,5 +1,16 @@
 # Changelog
 
+## [81.2.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v81.1.1...neumann-cockpit-v81.2.0) (2026-07-10)
+
+
+### Features
+
+* **journal:** capture the remaining pilot actions ([#189](https://github.com/MagiCrazy/neumann-cockpit/issues/189)) ([8afe925](https://github.com/MagiCrazy/neumann-cockpit/commit/8afe925be80146975abb6e3f4e34758cfe111dc7))
+* **journal:** merge server events into the ship's log ([#190](https://github.com/MagiCrazy/neumann-cockpit/issues/190)) ([963c8f7](https://github.com/MagiCrazy/neumann-cockpit/commit/963c8f7057e399d6b6a7a1023f89e3b6fe2a6198))
+* **journal:** ship's log — persistent captain's-log journal in the Missions pane ([#188](https://github.com/MagiCrazy/neumann-cockpit/issues/188)) ([339dc1a](https://github.com/MagiCrazy/neumann-cockpit/commit/339dc1a0e2eb1d54b9a662167e9e1ea9a9db0c09))
+* **mannies:** idle-Manny indicator and cycling key ([#193](https://github.com/MagiCrazy/neumann-cockpit/issues/193)) ([be8e5b5](https://github.com/MagiCrazy/neumann-cockpit/commit/be8e5b55ae16d3c02f0130d09b72100e6738985b))
+* **naming:** naming ceremony — Culture-style suggestions in the rename wizards ([#192](https://github.com/MagiCrazy/neumann-cockpit/issues/192)) ([77e1562](https://github.com/MagiCrazy/neumann-cockpit/commit/77e15620cd18196a0428f03c256c1eb7f5d5e107))
+
 ## [81.1.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v81.1.0...neumann-cockpit-v81.1.1) (2026-07-09)
 
 
