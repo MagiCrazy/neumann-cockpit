@@ -1,5 +1,15 @@
 # Changelog
 
+## [86.0.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v81.2.0...neumann-cockpit-v86.0.0) (2026-07-10)
+
+
+* release 86.0.0 ([#196](https://github.com/MagiCrazy/neumann-cockpit/issues/196)) ([279cdb3](https://github.com/MagiCrazy/neumann-cockpit/commit/279cdb339039574f43bf99a81351f2cafecfe303))
+
+
+### Features
+
+* **mannies:** transfer deuterium between fleet probes (API v86) ([#194](https://github.com/MagiCrazy/neumann-cockpit/issues/194)) ([0337a9b](https://github.com/MagiCrazy/neumann-cockpit/commit/0337a9b50b9985500b3aaa0f921fccd770a4b5f3))
+
 ## [81.2.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v81.1.1...neumann-cockpit-v81.2.0) (2026-07-10)
 
 
