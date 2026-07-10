@@ -1,6 +1,6 @@
 [package]
 name = "neumann-cockpit"
-version = "81.2.0"
+version = "86.0.0"
 edition = "2021"
 license  = "GPL-3.0-only"
 description = "A keyboard-first terminal cockpit for the Von Neumann probe game."
