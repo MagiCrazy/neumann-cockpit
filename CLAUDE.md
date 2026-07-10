@@ -33,7 +33,7 @@ Copy `config.example.toml` to that path and fill in the API key (generated once 
 
 Scan history is persisted across runs in a local SQLite database (`cockpit.db`, under the XDG state dir); the legacy `scan_history.json` is migrated into it once, then removed (`src/store.rs`, issue #134).
 
-The same database holds the **ship's log** — an append-only `events` table recording pilot actions (travel, mine, deploy, drop/detach container, storage move…) as narrated captain's-log entries. Actions stage a pre-rendered line into `AppState::pending_journal` (mirroring `pending_fire`), which the event loop drains to persist and prepend to `AppState::journal`. The table is never trimmed (full history kept for long-term stats); only the most recent `store::JOURNAL_WINDOW` are loaded into memory at boot.
+The same database holds the **ship's log** — an append-only `events` table recording pilot actions (travel, mine, deploy, drop/detach container, storage move…) as narrated captain's-log entries. Actions stage a pre-rendered line into `AppState::pending_journal` (mirroring `pending_fire`), which the event loop drains to persist and prepend to `AppState::journal`. The table is never trimmed (full history kept for long-term stats); only the most recent `store::JOURNAL_WINDOW` are loaded into memory at boot. The Missions-pane view (`AppState::ship_log_entries`) merges these captured actions with reconstructed server events (alerts + damage warnings, projected fresh from memory rather than persisted, since the server keeps them), newest first.
 
 ## Architecture
 
