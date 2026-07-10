@@ -206,8 +206,7 @@ mod tests {
             render_help_overlay(f, a, p, 0);
         })
         .unwrap();
-        let text: String =
-            t.backend().buffer().content.iter().map(|c| c.symbol()).collect();
+        let text: String = t.backend().buffer().content.iter().map(|c| c.symbol()).collect();
         assert!(text.contains("Navigate"), "navigation section shown");
         assert!(text.contains("Command mode"), "command-mode section shown");
         assert!(text.contains(":travel"), "command verbs documented");

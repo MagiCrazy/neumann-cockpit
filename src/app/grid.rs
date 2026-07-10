@@ -16,16 +16,16 @@ const PANE_JUMP_CAP: usize = 4096;
 /// QWERTY). `Probe` is the centre — the `f` home key with the tactile bump.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Pane {
-    Scanner,   // e
-    Map,       // r
-    Comms,     // t
-    Sector,    // d
+    Scanner, // e
+    Map,     // r
+    Comms,   // t
+    Sector,  // d
     #[default]
-    Probe,     // f — centre of the square
-    Missions,  // g
+    Probe, // f — centre of the square
+    Missions, // g
     Inventory, // c
-    Storage,   // v
-    Mannies,   // b
+    Storage, // v
+    Mannies, // b
 }
 
 impl Pane {
@@ -148,8 +148,7 @@ impl CommsCategory {
     }
 
     /// Root-row order in the Comms pane.
-    pub const ALL: [CommsCategory; 3] =
-        [CommsCategory::Messages, CommsCategory::Alerts, CommsCategory::Warnings];
+    pub const ALL: [CommsCategory; 3] = [CommsCategory::Messages, CommsCategory::Alerts, CommsCategory::Warnings];
 }
 
 /// The two sub-views of the Missions pane, selectable at its root: the active
@@ -185,15 +184,8 @@ impl super::AppState {
     /// around (fallback to the grid keys for `Tab`/`Shift+Tab`).
     pub fn cycle_pane(&mut self, forward: bool) {
         let n = Pane::ALL.len();
-        let cur = Pane::ALL
-            .iter()
-            .position(|p| *p == self.active_pane)
-            .unwrap_or(0);
-        let next = if forward {
-            (cur + 1) % n
-        } else {
-            (cur + n - 1) % n
-        };
+        let cur = Pane::ALL.iter().position(|p| *p == self.active_pane).unwrap_or(0);
+        let next = if forward { (cur + 1) % n } else { (cur + n - 1) % n };
         self.active_pane = Pane::ALL[next];
     }
 
@@ -217,11 +209,9 @@ impl super::AppState {
             Pane::Missions => match drill {
                 None => MissionsCategory::ALL.len(),
                 Some(DrillLevel::MissionsCat(MissionsCategory::ShipsLog)) => self.ship_log_entries().len(),
-                Some(DrillLevel::Mission(id)) => self
-                    .missions
-                    .iter()
-                    .find(|m| &m.id == id)
-                    .map_or(0, |m| m.steps.len()),
+                Some(DrillLevel::Mission(id)) => {
+                    self.missions.iter().find(|m| &m.id == id).map_or(0, |m| m.steps.len())
+                }
                 _ => self.missions.len(),
             },
             // Drilled into a container, the cursor is frozen (contents are
@@ -378,10 +368,13 @@ impl super::AppState {
     /// The Missions category currently drilled into, if any — found anywhere in
     /// the stack, so it holds while drilled deeper into a mission's steps.
     pub fn missions_category(&self) -> Option<MissionsCategory> {
-        self.pane_nav[Pane::Missions.index()].drill.iter().find_map(|l| match l {
-            DrillLevel::MissionsCat(c) => Some(*c),
-            _ => None,
-        })
+        self.pane_nav[Pane::Missions.index()]
+            .drill
+            .iter()
+            .find_map(|l| match l {
+                DrillLevel::MissionsCat(c) => Some(*c),
+                _ => None,
+            })
     }
 
     /// Enter a Missions category from the root (missions list / ship's log).
@@ -588,10 +581,7 @@ mod tests {
         // Root exposes the two categories.
         assert_eq!(s.pane_item_count(Pane::Missions), MissionsCategory::ALL.len());
         // The Ship's log category lists the journal entries.
-        s.journal = vec![
-            LogEvent::action("test", "a", None),
-            LogEvent::action("test", "b", None),
-        ];
+        s.journal = vec![LogEvent::action("test", "a", None), LogEvent::action("test", "b", None)];
         s.missions_enter_category(MissionsCategory::ShipsLog);
         assert_eq!(s.missions_category(), Some(MissionsCategory::ShipsLog));
         assert_eq!(s.pane_item_count(Pane::Missions), 2);

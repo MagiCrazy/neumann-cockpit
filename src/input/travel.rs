@@ -3,9 +3,7 @@ use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
 use crate::api::tasks::fetch_move;
-use crate::app::{
-    ActiveWizard, ApiMessage, AppState, LogEvent, TravelInput,
-};
+use crate::app::{ActiveWizard, ApiMessage, AppState, LogEvent, TravelInput};
 pub(super) fn handle_travel_event(
     code: KeyCode,
     state: &mut AppState,

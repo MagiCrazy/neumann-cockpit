@@ -1,5 +1,5 @@
-use crate::api::types::SectorObjectType;
 use super::*;
+use crate::api::types::SectorObjectType;
 
 /// Category of a known destination shown in the waypoints overlay.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -40,7 +40,9 @@ impl AppState {
                 let obj_name = o.name.clone().unwrap_or_else(|| "object".into());
                 for wb in &o.waypoint_bookmarks {
                     bookmarks.push(WaypointEntry {
-                        x, y, z,
+                        x,
+                        y,
+                        z,
                         distance: s.distance,
                         label: format!("{} @ {}", wb.name, obj_name),
                         kind: WaypointKind::Bookmark,
@@ -50,7 +52,9 @@ impl AppState {
                     let t_name = t.name.clone().unwrap_or_else(|| "object".into());
                     for wb in &t.waypoint_bookmarks {
                         bookmarks.push(WaypointEntry {
-                            x, y, z,
+                            x,
+                            y,
+                            z,
                             distance: s.distance,
                             label: format!("{} @ {}", wb.name, t_name),
                             kind: WaypointKind::Bookmark,
@@ -59,24 +63,28 @@ impl AppState {
                 }
             }
 
-            let has_star = objects.iter().any(|o| {
-                matches!(o.object_type, SectorObjectType::Star | SectorObjectType::SolarSystem)
-            });
+            let has_star = objects
+                .iter()
+                .any(|o| matches!(o.object_type, SectorObjectType::Star | SectorObjectType::SolarSystem));
             if has_star {
                 stars.push(WaypointEntry {
-                    x, y, z,
+                    x,
+                    y,
+                    z,
                     distance: s.distance,
                     label: "star".into(),
                     kind: WaypointKind::Star,
                 });
             }
 
-            let has_minable = objects.iter().any(|o| {
-                o.minable_targets.as_ref().is_some_and(|t| !t.is_empty())
-            });
+            let has_minable = objects
+                .iter()
+                .any(|o| o.minable_targets.as_ref().is_some_and(|t| !t.is_empty()));
             if has_minable {
                 minables.push(WaypointEntry {
-                    x, y, z,
+                    x,
+                    y,
+                    z,
                     distance: s.distance,
                     label: "minable resources".into(),
                     kind: WaypointKind::Minable,

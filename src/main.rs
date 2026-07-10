@@ -11,15 +11,11 @@ use std::io;
 use tokio::sync::mpsc;
 
 use neumann_cockpit::api::tasks::{
-    fetch_all, fetch_api_version, fetch_crafting_recipes, fetch_mannies, fetch_messages,
-    fetch_missions, fetch_sent_messages,
+    fetch_all, fetch_api_version, fetch_crafting_recipes, fetch_mannies, fetch_messages, fetch_missions,
+    fetch_sent_messages,
 };
 use neumann_cockpit::app::{
-    ActiveWizard,
-    ApiMessage, AppState, ColorMode,
-    MessagesInput, MissionsInput,
-    Refetch,
-    RemoteMineInput,
+    ActiveWizard, ApiMessage, AppState, ColorMode, MessagesInput, MissionsInput, Refetch, RemoteMineInput,
     ScutNetworkInput,
 };
 use neumann_cockpit::input::handle_event;
@@ -82,11 +78,16 @@ async fn main() -> Result<()> {
     result
 }
 
-async fn run(
-    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
-    ready: preflight::Ready,
-) -> Result<()> {
-    let preflight::Ready { config, client, conn, scan_history, journal, api_version, link_ok } = ready;
+async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: preflight::Ready) -> Result<()> {
+    let preflight::Ready {
+        config,
+        client,
+        conn,
+        scan_history,
+        journal,
+        api_version,
+        link_ok,
+    } = ready;
     // Mutable so a probe switch can retarget every subsequent call (auto-refresh
     // + actions) at the newly-active probe — see the reconcile after handle_event.
     let mut client = client;

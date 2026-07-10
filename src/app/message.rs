@@ -1,7 +1,7 @@
 use crate::api::types::{
-    ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, Mission, Probe, ProbeAlert,
-    ProbeImprovement, ProbeInventory, ProbeListResponse, ProbeMessage, ProbeMovement,
-    ProbeSentMessage, ScutNetwork, SectorObservation, StorageContainer, VisitedSector,
+    ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, Mission, Probe, ProbeAlert, ProbeImprovement,
+    ProbeInventory, ProbeListResponse, ProbeMessage, ProbeMovement, ProbeSentMessage, ScutNetwork, SectorObservation,
+    StorageContainer, VisitedSector,
 };
 
 pub enum ApiMessage {

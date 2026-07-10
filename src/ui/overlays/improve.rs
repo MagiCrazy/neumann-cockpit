@@ -12,19 +12,36 @@ use super::{centered_rect, render_footer, render_pick_list, FooterKey, KeyTone};
 
 /// Render whichever step of the probe-improvement wizard is active.
 pub(crate) fn render_improve_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let ActiveWizard::Improve(improve) = &state.active_wizard else { return };
+    let ActiveWizard::Improve(improve) = &state.active_wizard else {
+        return;
+    };
     match improve {
         ImproveInput::PickImprovement { selection, error } => {
             render_catalog(frame, area, state, *selection, error.as_deref());
         }
-        ImproveInput::PickBuilder { improvement_name, mannies, selection, error, .. } => {
+        ImproveInput::PickBuilder {
+            improvement_name,
+            mannies,
+            selection,
+            error,
+            ..
+        } => {
             let p = palette(state.color_mode);
             let names: Vec<&str> = mannies.iter().map(|(_, n)| n.as_str()).collect();
             let prompt = format!("Install {improvement_name} with:");
             let height = (names.len() as u16 + 6).clamp(8, 20);
             render_pick_list(
-                frame, area, p, " IMPROVE PROBE — SELECT BUILDER ", 48, height,
-                Some(&prompt), &names, *selection, error.as_deref(), "BUILD",
+                frame,
+                area,
+                p,
+                " IMPROVE PROBE — SELECT BUILDER ",
+                48,
+                height,
+                Some(&prompt),
+                &names,
+                *selection,
+                error.as_deref(),
+                "BUILD",
             );
         }
     }
@@ -32,13 +49,7 @@ pub(crate) fn render_improve_overlay(frame: &mut Frame, area: Rect, state: &AppS
 
 /// Two-panel catalog: the improvement list on the left, the selected one's
 /// detail (status, duration, ingredient have/need, description) on the right.
-fn render_catalog(
-    frame: &mut Frame,
-    area: Rect,
-    state: &AppState,
-    selection: usize,
-    error: Option<&str>,
-) {
+fn render_catalog(frame: &mut Frame, area: Rect, state: &AppState, selection: usize, error: Option<&str>) {
     let p = palette(state.color_mode);
     let items = &state.probe_improvements;
     let sel = items.get(selection);
@@ -126,9 +137,15 @@ fn render_catalog(
                 (format!("{:.2}", ing.quantity), format!("{have:.2}"))
             };
             detail.push(Line::from(vec![
-                Span::styled(if ok { "✓ " } else { "✗ " }, Style::default().fg(if ok { p.good } else { p.crit })),
+                Span::styled(
+                    if ok { "✓ " } else { "✗ " },
+                    Style::default().fg(if ok { p.good } else { p.crit }),
+                ),
                 Span::styled(format!("{:<19}", ing.ingredient_type), text),
-                Span::styled(format!("{have_str}/{need}"), Style::default().fg(if ok { p.text } else { p.crit })),
+                Span::styled(
+                    format!("{have_str}/{need}"),
+                    Style::default().fg(if ok { p.text } else { p.crit }),
+                ),
             ]));
         }
         detail.push(Line::default());
@@ -138,22 +155,36 @@ fn render_catalog(
     }
     if let Some(err) = error {
         detail.push(Line::default());
-        detail.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(p.crit))));
+        detail.push(Line::from(Span::styled(
+            format!("✗ {err}"),
+            Style::default().fg(p.crit),
+        )));
     }
     frame.render_widget(Paragraph::new(detail), detail_area);
 
     // Footer — Enter dimmed unless the selected improvement can be installed now.
-    let can = sel.map(|i| i.available && !i.done && state.improvement_affordable(i)).unwrap_or(false);
+    let can = sel
+        .map(|i| i.available && !i.done && state.improvement_affordable(i))
+        .unwrap_or(false);
     let commit = if can {
         FooterKey::commit("[Enter]", "INSTALL")
     } else {
-        FooterKey { key: "[Enter]", label: "INSTALL", tone: KeyTone::Disabled }
+        FooterKey {
+            key: "[Enter]",
+            label: "INSTALL",
+            tone: KeyTone::Disabled,
+        }
     };
-    render_footer(frame, layout[1], p, &[
-        FooterKey::nav("[↑/↓]", "select"),
-        commit,
-        FooterKey::nav("[Esc]", "cancel"),
-    ]);
+    render_footer(
+        frame,
+        layout[1],
+        p,
+        &[
+            FooterKey::nav("[↑/↓]", "select"),
+            commit,
+            FooterKey::nav("[Esc]", "cancel"),
+        ],
+    );
 }
 
 /// Greedy word-wrap to `width` columns (right detail panel is narrow).
@@ -179,4 +210,3 @@ fn wrap(s: &str, width: usize) -> Vec<String> {
     }
     lines
 }
-

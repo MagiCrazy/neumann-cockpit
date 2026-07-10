@@ -1,6 +1,6 @@
+use super::*;
 use crate::api::types::{DangerLevel, ScutRelayStatus, SectorObjectType, SectorObservation};
 use chrono::Utc;
-use super::*;
 
 /// Reserves (presence flags + amounts, indexed as [`RESOURCE_TYPES`]) paired
 /// with the danger level for a sector object — the inputs a pick-row label needs.
@@ -40,9 +40,11 @@ pub fn sector_matches_filter(s: &SectorObservation, f: ScanFilter) -> bool {
     match f {
         ScanFilter::All => true,
         ScanFilter::Objects => s.objects.as_ref().is_some_and(|o| !o.is_empty()),
-        ScanFilter::Minable => s.objects.iter().flatten().any(|o| {
-            o.minable_targets.as_ref().is_some_and(|t| !t.is_empty())
-        }),
+        ScanFilter::Minable => s
+            .objects
+            .iter()
+            .flatten()
+            .any(|o| o.minable_targets.as_ref().is_some_and(|t| !t.is_empty())),
         ScanFilter::Danger => {
             let observed = s.objects.iter().flatten().any(|o| {
                 matches!(o.object_type, crate::api::types::SectorObjectType::BlackHole)
@@ -191,9 +193,7 @@ impl AppState {
     fn danger_in(sector: &SectorObservation, object_id: &str) -> Option<DangerLevel> {
         let objs = sector.objects.as_ref()?;
         for o in objs {
-            if o.id.as_deref() == Some(object_id)
-                || o.minable_targets.iter().flatten().any(|t| t.id == object_id)
-            {
+            if o.id.as_deref() == Some(object_id) || o.minable_targets.iter().flatten().any(|t| t.id == object_id) {
                 return o.danger_level.clone();
             }
         }
@@ -267,32 +267,41 @@ impl AppState {
         };
         for o in objects {
             if let Some(id) = &o.id {
-                push(&mut out, ScannerObjectEntry {
-                    id: id.clone(),
-                    name: o.name.clone().unwrap_or_default(),
-                    object_type: o.object_type.clone(),
-                    provenance: ObjectProvenance::TopLevel,
-                    attached: false,
-                });
+                push(
+                    &mut out,
+                    ScannerObjectEntry {
+                        id: id.clone(),
+                        name: o.name.clone().unwrap_or_default(),
+                        object_type: o.object_type.clone(),
+                        provenance: ObjectProvenance::TopLevel,
+                        attached: false,
+                    },
+                );
             }
             for t in o.minable_targets.iter().flatten() {
-                push(&mut out, ScannerObjectEntry {
-                    id: t.id.clone(),
-                    name: t.name.clone().unwrap_or_default(),
-                    object_type: t.object_type.clone(),
-                    provenance: ObjectProvenance::MinableTarget,
-                    attached: false,
-                });
-            }
-            for t in &o.bookmark_targets {
-                if matches!(t.object_type, SectorObjectType::Asteroid) {
-                    push(&mut out, ScannerObjectEntry {
+                push(
+                    &mut out,
+                    ScannerObjectEntry {
                         id: t.id.clone(),
                         name: t.name.clone().unwrap_or_default(),
                         object_type: t.object_type.clone(),
-                        provenance: ObjectProvenance::BookmarkTarget,
+                        provenance: ObjectProvenance::MinableTarget,
                         attached: false,
-                    });
+                    },
+                );
+            }
+            for t in &o.bookmark_targets {
+                if matches!(t.object_type, SectorObjectType::Asteroid) {
+                    push(
+                        &mut out,
+                        ScannerObjectEntry {
+                            id: t.id.clone(),
+                            name: t.name.clone().unwrap_or_default(),
+                            object_type: t.object_type.clone(),
+                            provenance: ObjectProvenance::BookmarkTarget,
+                            attached: false,
+                        },
+                    );
                 }
             }
         }
@@ -324,14 +333,12 @@ impl AppState {
                 .and_then(|o| o.target_object_id.clone())
         };
         let is_container = |id: &str| -> bool {
-            objects.iter().any(|o| {
-                o.id.as_deref() == Some(id)
-                    && matches!(o.object_type, SectorObjectType::DetachedContainer)
-            })
+            objects
+                .iter()
+                .any(|o| o.id.as_deref() == Some(id) && matches!(o.object_type, SectorObjectType::DetachedContainer))
         };
         let mut hosts: Vec<ScannerObjectEntry> = Vec::new();
-        let mut hosted: std::collections::HashMap<String, Vec<ScannerObjectEntry>> =
-            std::collections::HashMap::new();
+        let mut hosted: std::collections::HashMap<String, Vec<ScannerObjectEntry>> = std::collections::HashMap::new();
         let mut drifting: Vec<ScannerObjectEntry> = Vec::new();
         for mut e in out.into_iter() {
             match host_of(&e.id) {
@@ -395,9 +402,7 @@ impl AppState {
             }
             _ => {}
         }
-        if entry.provenance == ObjectProvenance::TopLevel
-            && self.inventory_waypoint_bookmark_id().is_some()
-        {
+        if entry.provenance == ObjectProvenance::TopLevel && self.inventory_waypoint_bookmark_id().is_some() {
             actions.push(ObjectAction::DeployWaypoint);
         }
         actions
@@ -415,7 +420,8 @@ impl AppState {
         self.probe_current_sector_scan()
             .and_then(|s| s.objects.as_ref())
             .and_then(|objects| {
-                objects.iter()
+                objects
+                    .iter()
                     .find(|o| o.id.as_deref() == Some(id))
                     .and_then(|o| o.status.clone())
             })
@@ -449,13 +455,19 @@ impl AppState {
     }
 
     pub(crate) fn probe_current_sector_scan(&self) -> Option<&SectorObservation> {
-        let current_pos = self.probe.as_ref()
+        let current_pos = self
+            .probe
+            .as_ref()
             .and_then(|p| p.sector.as_ref())
             .and_then(|s| s.relative.as_ref())
             .map(|r| (r.x as i64, r.y as i64, r.z as i64));
         if let Some(pos) = current_pos {
             self.scan_history.iter().find(|s| {
-                (s.relative_coordinates.x as i64, s.relative_coordinates.y as i64, s.relative_coordinates.z as i64) == pos
+                (
+                    s.relative_coordinates.x as i64,
+                    s.relative_coordinates.y as i64,
+                    s.relative_coordinates.z as i64,
+                ) == pos
             })
         } else {
             self.scan_history.first()
@@ -533,7 +545,9 @@ impl AppState {
     pub fn batch_tick(&mut self) {
         if let Some(ref mut n) = self.scan_batch {
             *n = n.saturating_sub(1);
-            if *n == 0 { self.scan_batch = None; }
+            if *n == 0 {
+                self.scan_batch = None;
+            }
         }
     }
 

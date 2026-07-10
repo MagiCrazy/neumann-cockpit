@@ -22,8 +22,14 @@ const ASSEMBLY_BILL: &[&str] = &[
 ];
 
 pub(crate) fn render_assemble_probe_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let ActiveWizard::AssembleProbe(AssembleProbeInput::PickContainers { manny_name, containers, selected, cursor, error, .. }) =
-        &state.active_wizard
+    let ActiveWizard::AssembleProbe(AssembleProbeInput::PickContainers {
+        manny_name,
+        containers,
+        selected,
+        cursor,
+        error,
+        ..
+    }) = &state.active_wizard
     else {
         return;
     };
@@ -68,19 +74,30 @@ pub(crate) fn render_assemble_probe_overlay(frame: &mut Frame, area: Rect, state
     lines.push(Line::default());
     lines.push(Line::from(Span::styled("Also consumes", Style::default().fg(p.dim))));
     for item in ASSEMBLY_BILL {
-        lines.push(Line::from(Span::styled(format!("  · {item}"), Style::default().fg(p.dim))));
+        lines.push(Line::from(Span::styled(
+            format!("  · {item}"),
+            Style::default().fg(p.dim),
+        )));
     }
     lines.push(Line::from(Span::styled(
         "  → new drone in this sector (~3h task)",
         Style::default().fg(p.dim),
     )));
     if let Some(err) = error {
-        lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(p.crit))));
+        lines.push(Line::from(Span::styled(
+            format!("✗ {err}"),
+            Style::default().fg(p.crit),
+        )));
     }
     frame.render_widget(Paragraph::new(lines), rows[0]);
-    render_footer(frame, rows[1], p, &[
-        FooterKey::nav("[Space]", "select"),
-        FooterKey::commit("[Enter]", "ASSEMBLE"),
-        FooterKey::nav("[Esc]", "cancel"),
-    ]);
+    render_footer(
+        frame,
+        rows[1],
+        p,
+        &[
+            FooterKey::nav("[Space]", "select"),
+            FooterKey::commit("[Enter]", "ASSEMBLE"),
+            FooterKey::nav("[Esc]", "cancel"),
+        ],
+    );
 }

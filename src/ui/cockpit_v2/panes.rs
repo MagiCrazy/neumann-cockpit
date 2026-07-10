@@ -7,8 +7,7 @@
 //! Colours come from the active [`Palette`].
 
 use crate::api::types::{
-    Manny, MannyLocationType, MannyTaskVisibility, MissionStatus, MissionStepStatus, SectorObject,
-    SectorObjectType,
+    Manny, MannyLocationType, MannyTaskVisibility, MissionStatus, MissionStepStatus, SectorObject, SectorObjectType,
 };
 use crate::app::{AppState, CommsCategory, DrillLevel, MissionsCategory, Pane};
 use crate::ui::panels::mannies::{
@@ -61,7 +60,11 @@ fn scroll_offset(cursor_line: usize, total: usize, height: usize) -> u16 {
         return 0;
     }
     let max_off = total - height;
-    let off = if cursor_line < height { 0 } else { cursor_line + 1 - height };
+    let off = if cursor_line < height {
+        0
+    } else {
+        cursor_line + 1 - height
+    };
     off.min(max_off) as u16
 }
 
@@ -91,15 +94,24 @@ pub fn render_map(frame: &mut Frame, area: Rect, state: &AppState, active: bool,
     let dim = Style::default().fg(p.dim);
     let mut lines = Vec::new();
     match state.probe_sector_coords() {
-        Some((x, y, z)) => lines.push(Line::styled(format!("sector ({x}, {y}, {z})"), Style::default().fg(p.text))),
+        Some((x, y, z)) => lines.push(Line::styled(
+            format!("sector ({x}, {y}, {z})"),
+            Style::default().fg(p.text),
+        )),
         None => lines.push(Line::styled("sector unknown", dim)),
     }
-    lines.push(Line::styled(format!("visited: {}", state.visited_sectors.len()), Style::default().fg(p.text)));
+    lines.push(Line::styled(
+        format!("visited: {}", state.visited_sectors.len()),
+        Style::default().fg(p.text),
+    ));
     let nets = state.scut_coverage();
     if nets.is_empty() {
         lines.push(Line::styled("SCUT: no coverage", dim));
     } else {
-        lines.push(Line::styled(format!("≣ SCUT: {} network(s)", nets.len()), Style::default().fg(p.accent)));
+        lines.push(Line::styled(
+            format!("≣ SCUT: {} network(s)", nets.len()),
+            Style::default().fg(p.accent),
+        ));
     }
     lines.push(Line::styled("z open map · Enter travel", dim));
     render_body(frame, area, " MAP ", active, p, lines, None);
@@ -125,15 +137,32 @@ fn render_comms_root(frame: &mut Frame, area: Rect, state: &AppState, active: bo
     let text = Style::default().fg(p.text);
     let cur = cursor(state, Pane::Comms);
     let latest_msg = state.messages.first().map(|m| {
-        let icon = if m.status == crate::api::types::MessageStatus::Unread { "✉" } else { "·" };
+        let icon = if m.status == crate::api::types::MessageStatus::Unread {
+            "✉"
+        } else {
+            "·"
+        };
         format!("{icon} {}: {}", m.sender.name, comms_preview(&m.body))
     });
     let latest_alert = state.alerts.first().map(|a| format!("✱ {}", comms_preview(&a.message)));
-    let latest_warn = state.damage_warnings.first().map(|w| format!("⚠ {}", comms_preview(&w.message)));
+    let latest_warn = state
+        .damage_warnings
+        .first()
+        .map(|w| format!("⚠ {}", comms_preview(&w.message)));
     let rows = [
-        ("Messages", state.messages.len(), state.unread_message_count(), latest_msg),
+        (
+            "Messages",
+            state.messages.len(),
+            state.unread_message_count(),
+            latest_msg,
+        ),
         ("Alerts", state.alerts.len(), state.unread_alert_count(), latest_alert),
-        ("Warnings", state.damage_warnings.len(), state.damage_warnings.iter().filter(|w| w.is_unread()).count(), latest_warn),
+        (
+            "Warnings",
+            state.damage_warnings.len(),
+            state.damage_warnings.iter().filter(|w| w.is_unread()).count(),
+            latest_warn,
+        ),
     ];
     let mut lines = Vec::new();
     let mut sel_line = None;
@@ -146,7 +175,10 @@ fn render_comms_root(frame: &mut Frame, area: Rect, state: &AppState, active: bo
             Span::styled(format!("{total}"), dim),
         ];
         if *unread > 0 {
-            spans.push(Span::styled(format!("  ({unread} unread)"), Style::default().fg(p.accent)));
+            spans.push(Span::styled(
+                format!("  ({unread} unread)"),
+                Style::default().fg(p.accent),
+            ));
         }
         lines.push(Line::from(spans));
         // Preview of the most recent entry (dash when the category is empty).
@@ -208,7 +240,15 @@ pub fn render_sector(frame: &mut Frame, area: Rect, state: &AppState, active: bo
     let dim = Style::default().fg(p.dim);
     let text = Style::default().fg(p.text);
     let Some(s) = state.current_sector() else {
-        render_body(frame, area, " SECTOR ", active, p, vec![Line::styled("no sector scan yet", dim)], None);
+        render_body(
+            frame,
+            area,
+            " SECTOR ",
+            active,
+            p,
+            vec![Line::styled("no sector scan yet", dim)],
+            None,
+        );
         return;
     };
     let v = &s.relative_coordinates;
@@ -298,18 +338,27 @@ fn sector_entry_tags(state: &AppState, id: &str, p: Palette) -> Vec<Span<'static
         match o.object_type {
             SectorObjectType::SolarSystem => {
                 out.push(Span::styled("  ★".to_string(), Style::default().fg(p.warn)));
-                out.push(Span::styled(format!(" · {} planet(s)", o.planet_count.unwrap_or(0)), dim));
+                out.push(Span::styled(
+                    format!(" · {} planet(s)", o.planet_count.unwrap_or(0)),
+                    dim,
+                ));
             }
             SectorObjectType::Asteroid => {
                 if let Some(c) = &o.composition {
                     out.push(Span::styled(format!("  {c}"), dim));
                 } else if !o.resource_types.is_empty() {
-                    out.push(Span::styled(format!("  {}", resource_types_str(&o.resource_types)), dim));
+                    out.push(Span::styled(
+                        format!("  {}", resource_types_str(&o.resource_types)),
+                        dim,
+                    ));
                 }
             }
             SectorObjectType::Planet => {
                 if let Some(h) = o.habitability_score {
-                    out.push(Span::styled(format!("  hab {:.0}%", h * 100.0), Style::default().fg(ratio_color(h, p))));
+                    out.push(Span::styled(
+                        format!("  hab {:.0}%", h * 100.0),
+                        Style::default().fg(ratio_color(h, p)),
+                    ));
                 }
                 if let Some(c) = &o.category {
                     out.push(Span::styled(format!(" {c}"), dim));
@@ -343,7 +392,10 @@ fn sector_entry_tags(state: &AppState, id: &str, p: Palette) -> Vec<Span<'static
         }
         if let Some(t) = o.bookmark_targets.iter().find(|t| t.id == id) {
             if let Some(h) = t.habitability_score {
-                out.push(Span::styled(format!("  hab {:.0}%", h * 100.0), Style::default().fg(ratio_color(h, p))));
+                out.push(Span::styled(
+                    format!("  hab {:.0}%", h * 100.0),
+                    Style::default().fg(ratio_color(h, p)),
+                ));
             }
             if let Some(c) = &t.category {
                 out.push(Span::styled(format!(" {c}"), dim));
@@ -368,7 +420,10 @@ fn solar_system_zoom_lines(obj: &SectorObject, p: Palette) -> Vec<Line<'static>>
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| object_type_label(&obj.object_type).to_string());
     lines.push(Line::from(vec![
-        Span::styled(format!("{} ", object_icon(&obj.object_type).0), Style::default().fg(object_color(&obj.object_type, p))),
+        Span::styled(
+            format!("{} ", object_icon(&obj.object_type).0),
+            Style::default().fg(object_color(&obj.object_type, p)),
+        ),
         Span::styled(name, text),
     ]));
     lines.push(Line::styled(
@@ -398,7 +453,9 @@ fn solar_system_zoom_lines(obj: &SectorObject, p: Palette) -> Vec<Line<'static>>
     for id in ids {
         let bt = obj.bookmark_targets.iter().find(|t| t.id == id);
         let mt = obj.minable_targets.iter().flatten().find(|t| t.id == id);
-        let otype = bt.map(|b| b.object_type.clone()).or_else(|| mt.map(|m| m.object_type.clone()));
+        let otype = bt
+            .map(|b| b.object_type.clone())
+            .or_else(|| mt.map(|m| m.object_type.clone()));
         let Some(otype) = otype else { continue };
         let label = object_type_label(&otype);
         let n = counts.entry(label).or_insert(0);
@@ -410,7 +467,10 @@ fn solar_system_zoom_lines(obj: &SectorObject, p: Palette) -> Vec<Line<'static>>
             .unwrap_or_else(|| format!("{label} #{n}"));
 
         lines.push(Line::from(vec![
-            Span::styled(format!("  {} ", object_icon(&otype).0), Style::default().fg(object_color(&otype, p))),
+            Span::styled(
+                format!("  {} ", object_icon(&otype).0),
+                Style::default().fg(object_color(&otype, p)),
+            ),
             Span::styled(name, text),
             Span::styled(format!("  {label}"), dim),
         ]));
@@ -422,7 +482,10 @@ fn solar_system_zoom_lines(obj: &SectorObject, p: Palette) -> Vec<Line<'static>>
                 ]));
             }
             if let Some(c) = &b.category {
-                lines.push(Line::from(vec![Span::styled("      class ", dim), Span::styled(c.clone(), text)]));
+                lines.push(Line::from(vec![
+                    Span::styled("      class ", dim),
+                    Span::styled(c.clone(), text),
+                ]));
             }
         }
         if let Some(m) = mt {
@@ -512,7 +575,10 @@ fn render_mission_detail(frame: &mut Frame, area: Rect, state: &AppState, id: &s
         };
         lines.push(Line::from(vec![
             Span::styled(format!("{mark} "), Style::default().fg(color)),
-            Span::styled(step.title.clone(), row_style(active, i == cur).patch(Style::default().fg(p.text))),
+            Span::styled(
+                step.title.clone(),
+                row_style(active, i == cur).patch(Style::default().fg(p.text)),
+            ),
         ]));
     }
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
@@ -661,9 +727,7 @@ pub fn render_storage(frame: &mut Frame, area: Rect, state: &AppState, active: b
     let mut sel_line = None;
 
     // Drilled into a container: render its contents inline (fetched on drill-in).
-    if let Some(DrillLevel::Container(id)) =
-        state.pane_nav[Pane::Storage.index()].drill.last()
-    {
+    if let Some(DrillLevel::Container(id)) = state.pane_nav[Pane::Storage.index()].drill.last() {
         return render_container_contents(frame, area, state, id, active, p);
     }
 
@@ -676,7 +740,11 @@ pub fn render_storage(frame: &mut Frame, area: Rect, state: &AppState, active: b
             const W: usize = 8;
             for (i, c) in cs.iter().enumerate() {
                 let selected = active && i == cur;
-                let ratio = if c.capacity > 0.0 { (c.used_capacity / c.capacity).clamp(0.0, 1.0) } else { 0.0 };
+                let ratio = if c.capacity > 0.0 {
+                    (c.used_capacity / c.capacity).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
                 let filled = (ratio * W as f64).round() as usize;
                 let name_style = if selected {
                     Style::default().fg(p.accent).add_modifier(Modifier::BOLD)
@@ -704,15 +772,27 @@ pub fn render_storage(frame: &mut Frame, area: Rect, state: &AppState, active: b
                 // Zoom: routing rules and free capacity per container.
                 if zoomed {
                     if !rules.priority.is_empty() {
-                        lines.push(Line::styled(format!("    priority: {}", rules.priority.join(", ")), dim));
+                        lines.push(Line::styled(
+                            format!("    priority: {}", rules.priority.join(", ")),
+                            dim,
+                        ));
                     }
                     if !rules.exclusion.is_empty() {
-                        lines.push(Line::styled(format!("    exclude:  {}", rules.exclusion.join(", ")), dim));
+                        lines.push(Line::styled(
+                            format!("    exclude:  {}", rules.exclusion.join(", ")),
+                            dim,
+                        ));
                     }
                     if !rules.strict_exclusion.is_empty() {
-                        lines.push(Line::styled(format!("    strict:   {}", rules.strict_exclusion.join(", ")), dim));
+                        lines.push(Line::styled(
+                            format!("    strict:   {}", rules.strict_exclusion.join(", ")),
+                            dim,
+                        ));
                     }
-                    lines.push(Line::styled(format!("    free {:.2} of {:.2}", c.free_capacity, c.capacity), dim));
+                    lines.push(Line::styled(
+                        format!("    free {:.2} of {:.2}", c.free_capacity, c.capacity),
+                        dim,
+                    ));
                 }
             }
         }
@@ -723,14 +803,7 @@ pub fn render_storage(frame: &mut Frame, area: Rect, state: &AppState, active: b
 /// Inline contents of a container (drill-in `l` on the Storage pane): capacity,
 /// resource stocks, and unit items. Fetched on drill-in; shows a placeholder
 /// until the detail arrives.
-fn render_container_contents(
-    frame: &mut Frame,
-    area: Rect,
-    state: &AppState,
-    id: &str,
-    active: bool,
-    p: Palette,
-) {
+fn render_container_contents(frame: &mut Frame, area: Rect, state: &AppState, id: &str, active: bool, p: Palette) {
     let dim = Style::default().fg(p.dim);
     let text = Style::default().fg(p.text);
     let mut lines: Vec<Line> = Vec::new();
@@ -753,8 +826,17 @@ fn render_container_contents(
             } else {
                 0.0
             };
-            lines.push(block_gauge_line("USED", ratio, &format!("{:.0}%", ratio * 100.0), fill_color(p, 1.0 - ratio), p));
-            lines.push(Line::styled(format!("free {:.2} of {:.2}", c.free_capacity, c.capacity), dim));
+            lines.push(block_gauge_line(
+                "USED",
+                ratio,
+                &format!("{:.0}%", ratio * 100.0),
+                fill_color(p, 1.0 - ratio),
+                p,
+            ));
+            lines.push(Line::styled(
+                format!("free {:.2} of {:.2}", c.free_capacity, c.capacity),
+                dim,
+            ));
 
             let rules = &c.rules;
             if !rules.priority.is_empty() {
@@ -764,7 +846,10 @@ fn render_container_contents(
                 lines.push(Line::styled(format!("exclude:  {}", rules.exclusion.join(", ")), dim));
             }
             if !rules.strict_exclusion.is_empty() {
-                lines.push(Line::styled(format!("strict:   {}", rules.strict_exclusion.join(", ")), dim));
+                lines.push(Line::styled(
+                    format!("strict:   {}", rules.strict_exclusion.join(", ")),
+                    dim,
+                ));
             }
 
             lines.push(Line::raw(""));
@@ -849,9 +934,18 @@ fn manny_detail_lines(state: &AppState, m: &Manny, p: Palette) -> Vec<Line<'stat
     let c = &m.cargo;
     let used = c.metals + c.ice + c.deuterium + c.organic_compounds;
     let ratio = if c.capacity > 0.0 { used / c.capacity } else { 0.0 };
-    lines.push(block_gauge_line("CARGO", ratio, &format!("{:.0}%", ratio * 100.0), p.accent, p));
+    lines.push(block_gauge_line(
+        "CARGO",
+        ratio,
+        &format!("{:.0}%", ratio * 100.0),
+        p.accent,
+        p,
+    ));
     lines.push(Line::styled(format!("metals {:.2}  ice {:.2}", c.metals, c.ice), text));
-    lines.push(Line::styled(format!("deut {:.2}  org {:.2}", c.deuterium, c.organic_compounds), text));
+    lines.push(Line::styled(
+        format!("deut {:.2}  org {:.2}", c.deuterium, c.organic_compounds),
+        text,
+    ));
     lines
 }
 
@@ -860,14 +954,20 @@ pub fn render_manny_detail(frame: &mut Frame, area: Rect, state: &AppState, id: 
         let block = pane_block(" MANNY ", active, p);
         let inner = block.inner(area);
         frame.render_widget(block, area);
-        frame.render_widget(Paragraph::new(Line::styled("manny gone", Style::default().fg(p.dim))), inner);
+        frame.render_widget(
+            Paragraph::new(Line::styled("manny gone", Style::default().fg(p.dim))),
+            inner,
+        );
         return;
     };
     let title = format!(" {} ", m.name);
     let block = pane_block(&title, active, p);
     let inner = block.inner(area);
     frame.render_widget(block, area);
-    frame.render_widget(Paragraph::new(manny_detail_lines(state, m, p)).wrap(Wrap { trim: false }), inner);
+    frame.render_widget(
+        Paragraph::new(manny_detail_lines(state, m, p)).wrap(Wrap { trim: false }),
+        inner,
+    );
 }
 
 /// Zoomed Mannies pane: a vertical list where each manny is a summary line
@@ -943,7 +1043,13 @@ pub fn render_mannies_overview(frame: &mut Frame, area: Rect, state: &AppState, 
         let c = &m.cargo;
         let used = c.metals + c.ice + c.deuterium + c.organic_compounds;
         let ratio = if c.capacity > 0.0 { used / c.capacity } else { 0.0 };
-        lines.push(block_gauge_line("    CARGO", ratio, &format!("{:.0}%", ratio * 100.0), p.accent, p));
+        lines.push(block_gauge_line(
+            "    CARGO",
+            ratio,
+            &format!("{:.0}%", ratio * 100.0),
+            p.accent,
+            p,
+        ));
         lines.push(Line::styled(
             format!(
                 "    metals {:.2} · ice {:.2} · deut {:.2} · org {:.2}",
@@ -1014,7 +1120,11 @@ pub fn render_scanner_neighbors(frame: &mut Frame, area: Rect, state: &AppState,
     let (dy, ds) = cell(px, py - 1, pz);
     let (lx, ls) = cell(px - 1, py, pz);
     let (rx, rs) = cell(px + 1, py, pz);
-    lines.push(Line::from(vec![Span::raw("      "), Span::styled(uy, us), Span::styled("  +Y", dim)]));
+    lines.push(Line::from(vec![
+        Span::raw("      "),
+        Span::styled(uy, us),
+        Span::styled("  +Y", dim),
+    ]));
     lines.push(Line::from(vec![
         Span::styled(lx, ls),
         Span::styled(" -X   ", dim),
@@ -1022,7 +1132,11 @@ pub fn render_scanner_neighbors(frame: &mut Frame, area: Rect, state: &AppState,
         Span::styled("   +X ", dim),
         Span::styled(rx, rs),
     ]));
-    lines.push(Line::from(vec![Span::raw("      "), Span::styled(dy, ds), Span::styled("  -Y", dim)]));
+    lines.push(Line::from(vec![
+        Span::raw("      "),
+        Span::styled(dy, ds),
+        Span::styled("  -Y", dim),
+    ]));
     lines.push(Line::raw(""));
 
     // Z axis on its own row (out-of-plane).
@@ -1049,7 +1163,12 @@ pub fn render_scanner_neighbors(frame: &mut Frame, area: Rect, state: &AppState,
         let (sym, st, label, coord_color) = match at(x, y, z) {
             Some(s) => {
                 let (sym, st) = map_cell_style(s, p);
-                (sym.to_string(), st, knowledge_label(&s.knowledge_level), sector_interest_color(s, p))
+                (
+                    sym.to_string(),
+                    st,
+                    knowledge_label(&s.knowledge_level),
+                    sector_interest_color(s, p),
+                )
             }
             None => ("·".to_string(), dim, "unscanned", p.dim),
         };
@@ -1099,5 +1218,3 @@ mod tests {
         assert_eq!(scroll_offset(5, 10, 0), 0);
     }
 }
-
-

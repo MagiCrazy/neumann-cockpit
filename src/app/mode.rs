@@ -178,7 +178,11 @@ impl super::AppState {
                 }
             },
         ];
-        ContextMenu { title: "MAP".into(), items, cursor: 0 }
+        ContextMenu {
+            title: "MAP".into(),
+            items,
+            cursor: 0,
+        }
     }
 
     fn scanner_context_menu(&self) -> ContextMenu {
@@ -229,7 +233,11 @@ impl super::AppState {
             },
         ];
         let cursor = items.iter().position(|i| i.enabled).unwrap_or(0);
-        ContextMenu { title: "SCANNER".into(), items, cursor }
+        ContextMenu {
+            title: "SCANNER".into(),
+            items,
+            cursor,
+        }
     }
 
     fn storage_context_menu(&self) -> Option<ContextMenu> {
@@ -273,8 +281,7 @@ impl super::AppState {
                     action: MenuAction::SetDefaultProbe,
                     label: "Set as default probe".into(),
                     enabled: active.is_reachable,
-                    disabled_reason: (!active.is_reachable)
-                        .then(|| "out of SCUT range".to_string()),
+                    disabled_reason: (!active.is_reachable).then(|| "out of SCUT range".to_string()),
                 });
             }
         }
@@ -311,7 +318,11 @@ impl super::AppState {
             });
         }
         let cursor = items.iter().position(|i| i.enabled).unwrap_or(0);
-        Some(ContextMenu { title: "PROBE".into(), items, cursor })
+        Some(ContextMenu {
+            title: "PROBE".into(),
+            items,
+            cursor,
+        })
     }
 
     fn inventory_context_menu(&self) -> ContextMenu {
@@ -356,7 +367,11 @@ impl super::AppState {
             });
         }
         let cursor = items.iter().position(|i| i.enabled).unwrap_or(0);
-        ContextMenu { title: "INVENTORY".into(), items, cursor }
+        ContextMenu {
+            title: "INVENTORY".into(),
+            items,
+            cursor,
+        }
     }
 
     fn mannies_context_menu(&self) -> Option<ContextMenu> {

@@ -174,7 +174,10 @@ mod tests {
 
     #[test]
     fn boot_completes_then_auto_continues() {
-        let mut s = AppState { booting: true, ..Default::default() };
+        let mut s = AppState {
+            booting: true,
+            ..Default::default()
+        };
         assert!(!s.boot_complete());
         for _ in 0..BOOT_SEQUENCE_END {
             s.boot_tick();
@@ -191,7 +194,10 @@ mod tests {
 
     #[test]
     fn any_key_leaves_the_boot() {
-        let mut s = AppState { booting: true, ..Default::default() };
+        let mut s = AppState {
+            booting: true,
+            ..Default::default()
+        };
         s.skip_boot();
         assert!(!s.booting);
     }

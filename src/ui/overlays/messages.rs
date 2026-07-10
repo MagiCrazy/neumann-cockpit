@@ -7,9 +7,9 @@ use ratatui::{
     Frame,
 };
 
+use super::{centered_rect, render_footer, render_pick_list, FooterKey};
 use crate::api::types::MessageStatus;
 use crate::app::{ActiveWizard, AppState, MessagesInput};
-use super::{centered_rect, render_footer, render_pick_list, FooterKey};
 
 fn preview(body: &str) -> String {
     let one = body.replace('\n', " ");
@@ -22,7 +22,9 @@ fn preview(body: &str) -> String {
 
 pub(crate) fn render_messages_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let ActiveWizard::Messages(messages_input) = &state.active_wizard else { return };
+    let ActiveWizard::Messages(messages_input) = &state.active_wizard else {
+        return;
+    };
     match messages_input {
         MessagesInput::Browsing { sent_tab, selection } => {
             let popup = centered_rect(76, 80, area);
@@ -41,8 +43,16 @@ pub(crate) fn render_messages_overlay(frame: &mut Frame, area: Rect, state: &App
                 .split(inner);
 
             // Tabs
-            let inbox_style = if *sent_tab { Style::default().fg(p.dim) } else { Style::default().fg(p.text).add_modifier(Modifier::BOLD) };
-            let sent_style = if *sent_tab { Style::default().fg(p.text).add_modifier(Modifier::BOLD) } else { Style::default().fg(p.dim) };
+            let inbox_style = if *sent_tab {
+                Style::default().fg(p.dim)
+            } else {
+                Style::default().fg(p.text).add_modifier(Modifier::BOLD)
+            };
+            let sent_style = if *sent_tab {
+                Style::default().fg(p.text).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(p.dim)
+            };
             frame.render_widget(
                 Paragraph::new(Line::from(vec![
                     Span::styled("Inbox", inbox_style),
@@ -55,7 +65,10 @@ pub(crate) fn render_messages_overlay(frame: &mut Frame, area: Rect, state: &App
             let mut lines: Vec<Line> = Vec::new();
             if *sent_tab {
                 if state.sent_messages.is_empty() {
-                    lines.push(Line::from(Span::styled("No sent messages.", Style::default().fg(p.dim))));
+                    lines.push(Line::from(Span::styled(
+                        "No sent messages.",
+                        Style::default().fg(p.dim),
+                    )));
                 }
                 for (i, m) in state.sent_messages.iter().enumerate() {
                     let marker = if i == *selection { "▸ " } else { "  " };
@@ -72,8 +85,16 @@ pub(crate) fn render_messages_overlay(frame: &mut Frame, area: Rect, state: &App
                 for (i, m) in state.messages.iter().enumerate() {
                     let marker = if i == *selection { "▸ " } else { "  " };
                     let unread = m.status == MessageStatus::Unread;
-                    let dot = if unread { Span::styled("● ", Style::default().fg(p.accent)) } else { Span::raw("  ") };
-                    let name_style = if unread { Style::default().fg(p.text).add_modifier(Modifier::BOLD) } else { Style::default().fg(p.text) };
+                    let dot = if unread {
+                        Span::styled("● ", Style::default().fg(p.accent))
+                    } else {
+                        Span::raw("  ")
+                    };
+                    let name_style = if unread {
+                        Style::default().fg(p.text).add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(p.text)
+                    };
                     lines.push(Line::from(vec![
                         Span::styled(marker, Style::default().fg(p.accent)),
                         dot,
@@ -84,19 +105,32 @@ pub(crate) fn render_messages_overlay(frame: &mut Frame, area: Rect, state: &App
             }
             frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), rows[1]);
 
-            render_footer(frame, rows[2], p, &[
-                FooterKey::nav("[Tab]", "inbox/sent"),
-                FooterKey::nav("[Enter]", "read"),
-                FooterKey::nav("[c]", "compose"),
-                FooterKey::nav("[Esc]", "close"),
-            ]);
+            render_footer(
+                frame,
+                rows[2],
+                p,
+                &[
+                    FooterKey::nav("[Tab]", "inbox/sent"),
+                    FooterKey::nav("[Enter]", "read"),
+                    FooterKey::nav("[c]", "compose"),
+                    FooterKey::nav("[Esc]", "close"),
+                ],
+            );
         }
 
         MessagesInput::Reading { id, sent_tab } => {
             let msg = if *sent_tab {
-                state.sent_messages.iter().find(|m| m.id == *id).map(|m| (&m.sender, &m.recipient, &m.body, &m.sector, &m.created_at))
+                state
+                    .sent_messages
+                    .iter()
+                    .find(|m| m.id == *id)
+                    .map(|m| (&m.sender, &m.recipient, &m.body, &m.sector, &m.created_at))
             } else {
-                state.messages.iter().find(|m| m.id == *id).map(|m| (&m.sender, &m.recipient, &m.body, &m.sector, &m.created_at))
+                state
+                    .messages
+                    .iter()
+                    .find(|m| m.id == *id)
+                    .map(|m| (&m.sender, &m.recipient, &m.body, &m.sector, &m.created_at))
             };
             let popup = centered_rect(64, 16, area);
             frame.render_widget(Clear, popup);
@@ -115,8 +149,14 @@ pub(crate) fn render_messages_overlay(frame: &mut Frame, area: Rect, state: &App
             let text = Style::default().fg(p.text);
             let mut lines = Vec::new();
             if let Some((sender, recipient, body, sector, created)) = msg {
-                lines.push(Line::from(vec![Span::styled("from ", dim), Span::styled(sender.name.clone(), text)]));
-                lines.push(Line::from(vec![Span::styled("to   ", dim), Span::styled(recipient.name.clone(), text)]));
+                lines.push(Line::from(vec![
+                    Span::styled("from ", dim),
+                    Span::styled(sender.name.clone(), text),
+                ]));
+                lines.push(Line::from(vec![
+                    Span::styled("to   ", dim),
+                    Span::styled(recipient.name.clone(), text),
+                ]));
                 if let Some(v) = sector.as_ref().and_then(|s| s.relative.as_ref()) {
                     lines.push(Line::from(vec![
                         Span::styled("at   ", dim),
@@ -134,18 +174,33 @@ pub(crate) fn render_messages_overlay(frame: &mut Frame, area: Rect, state: &App
         }
 
         MessagesInput::PickRecipient { recipients, selection } => {
-            let names: Vec<String> = recipients.iter()
+            let names: Vec<String> = recipients
+                .iter()
                 .map(|(kind, _, name)| format!("{name}  ({kind})"))
                 .collect();
             let refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
             let height = (recipients.len() as u16 + 6).min(16);
             render_pick_list(
-                frame, area, palette(state.color_mode), " NEW MESSAGE — recipient ", 54, height,
-                Some("Send to:"), &refs, *selection, None, "compose",
+                frame,
+                area,
+                palette(state.color_mode),
+                " NEW MESSAGE — recipient ",
+                54,
+                height,
+                Some("Send to:"),
+                &refs,
+                *selection,
+                None,
+                "compose",
             );
         }
 
-        MessagesInput::Compose { recipient_name, body_buf, error, .. } => {
+        MessagesInput::Compose {
+            recipient_name,
+            body_buf,
+            error,
+            ..
+        } => {
             let popup = centered_rect(60, 9, area);
             frame.render_widget(Clear, popup);
             let block = Block::default()
@@ -167,14 +222,18 @@ pub(crate) fn render_messages_overlay(frame: &mut Frame, area: Rect, state: &App
             ])];
             if let Some(err) = error {
                 lines.push(Line::default());
-                lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(p.crit))));
+                lines.push(Line::from(Span::styled(
+                    format!("✗ {err}"),
+                    Style::default().fg(p.crit),
+                )));
             }
             frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), rows[0]);
-            render_footer(frame, rows[1], p, &[
-                FooterKey::commit("[Enter]", "SEND"),
-                FooterKey::nav("[Esc]", "cancel"),
-            ]);
+            render_footer(
+                frame,
+                rows[1],
+                p,
+                &[FooterKey::commit("[Enter]", "SEND"), FooterKey::nav("[Esc]", "cancel")],
+            );
         }
-
     }
 }

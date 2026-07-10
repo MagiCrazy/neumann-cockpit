@@ -1,5 +1,5 @@
-use crate::ui::theme::palette;
 use crate::app::{ActiveWizard, AppState, ContainerRulesInput, RenameContainerInput};
+use crate::ui::theme::palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -12,8 +12,12 @@ use super::{centered_rect, render_footer, FooterKey};
 
 pub(crate) fn render_rename_container_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let ActiveWizard::RenameContainer(RenameContainerInput::Typing { current_label, buf, error, .. }) =
-        &state.active_wizard
+    let ActiveWizard::RenameContainer(RenameContainerInput::Typing {
+        current_label,
+        buf,
+        error,
+        ..
+    }) = &state.active_wizard
     else {
         return;
     };
@@ -40,15 +44,23 @@ pub(crate) fn render_rename_container_overlay(frame: &mut Frame, area: Rect, sta
     ])];
     if let Some(err) = error {
         lines.push(Line::default());
-        lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(p.crit))));
+        lines.push(Line::from(Span::styled(
+            format!("✗ {err}"),
+            Style::default().fg(p.crit),
+        )));
     }
 
     frame.render_widget(Paragraph::new(lines), rows[0]);
-    render_footer(frame, rows[1], p, &[
-        FooterKey::commit("[Enter]", "RENAME"),
-        FooterKey::nav("[Tab]", "suggest"),
-        FooterKey::nav("[Esc]", "cancel"),
-    ]);
+    render_footer(
+        frame,
+        rows[1],
+        p,
+        &[
+            FooterKey::commit("[Enter]", "RENAME"),
+            FooterKey::nav("[Tab]", "suggest"),
+            FooterKey::nav("[Esc]", "cancel"),
+        ],
+    );
 }
 
 pub(crate) fn render_container_rules_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -111,7 +123,10 @@ pub(crate) fn render_container_rules_overlay(frame: &mut Frame, area: Rect, stat
                 ("[ ]", p.dim)
             };
             ListItem::new(Line::from(vec![
-                Span::styled(format!("{tag} "), Style::default().fg(color).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    format!("{tag} "),
+                    Style::default().fg(color).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(ty.clone(), Style::default().fg(p.text)),
             ]))
         })
@@ -134,11 +149,16 @@ pub(crate) fn render_container_rules_overlay(frame: &mut Frame, area: Rect, stat
             rows[2],
         );
     } else {
-        render_footer(frame, rows[2], p, &[
-            FooterKey::nav("[Space]", "cycle"),
-            FooterKey::nav("[Del]", "clear"),
-            FooterKey::commit("[Enter]", "SAVE"),
-            FooterKey::nav("[Esc]", "cancel"),
-        ]);
+        render_footer(
+            frame,
+            rows[2],
+            p,
+            &[
+                FooterKey::nav("[Space]", "cycle"),
+                FooterKey::nav("[Del]", "clear"),
+                FooterKey::commit("[Enter]", "SAVE"),
+                FooterKey::nav("[Esc]", "cancel"),
+            ],
+        );
     }
 }

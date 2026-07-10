@@ -1,5 +1,5 @@
-use crate::ui::theme::{palette, Palette};
 use crate::app::{AppState, InventoryRow};
+use crate::ui::theme::{palette, Palette};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::Style,
@@ -21,12 +21,16 @@ pub(crate) fn detail_kv(p: Palette, key: &str, value: String) -> Line<'static> {
 pub(crate) fn render_inventory_detail_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
     let Some(probe) = &state.probe else { return };
-    let Some(row) = state.selected_inventory_row() else { return };
+    let Some(row) = state.selected_inventory_row() else {
+        return;
+    };
     let inv = &probe.inventory;
 
     let (title, lines): (String, Vec<Line>) = match row {
         InventoryRow::Stock { id } => {
-            let Some(stock) = inv.resource_stocks.iter().find(|s| s.id == id) else { return };
+            let Some(stock) = inv.resource_stocks.iter().find(|s| s.id == id) else {
+                return;
+            };
             let mut lines = vec![
                 detail_kv(p, "Type", stock.stock_type.clone()),
                 detail_kv(p, "Amount", format!("{:.4} ECE", stock.amount)),
@@ -34,12 +38,10 @@ pub(crate) fn render_inventory_detail_overlay(frame: &mut Frame, area: Rect, sta
             ];
             if !stock.containers.is_empty() {
                 lines.push(Line::default());
-                lines.push(Line::from(Span::styled(
-                    "── containers ──",
-                    Style::default().fg(p.dim),
-                )));
+                lines.push(Line::from(Span::styled("── containers ──", Style::default().fg(p.dim))));
                 for line in &stock.containers {
-                    lines.push(detail_kv(p, 
+                    lines.push(detail_kv(
+                        p,
                         &line.container.label,
                         format!("{:.4} ECE  (space {:.4})", line.amount, line.container_space),
                     ));
@@ -48,11 +50,14 @@ pub(crate) fn render_inventory_detail_overlay(frame: &mut Frame, area: Rect, sta
             (stock.name.clone(), lines)
         }
         InventoryRow::ActiveItem { id } => {
-            let Some(item) = inv.items.iter().find(|i| i.id == id) else { return };
+            let Some(item) = inv.items.iter().find(|i| i.id == id) else {
+                return;
+            };
             let mut lines = vec![
                 detail_kv(p, "Type", item.item_type.clone()),
                 detail_kv(p, "Space", format!("{:.4}", item.container_space)),
-                detail_kv(p, 
+                detail_kv(
+                    p,
                     "Task",
                     match item.current_task.as_deref() {
                         None => "idle".into(),
@@ -61,17 +66,18 @@ pub(crate) fn render_inventory_detail_overlay(frame: &mut Frame, area: Rect, sta
                 ),
             ];
             if let Some(loc) = &item.location {
-                lines.push(detail_kv(p, "Location", format!("{:?}", loc.location_type).to_lowercase()));
+                lines.push(detail_kv(
+                    p,
+                    "Location",
+                    format!("{:?}", loc.location_type).to_lowercase(),
+                ));
             }
             if let Some(container) = &item.container {
                 lines.push(detail_kv(p, "Container", container.label.clone()));
             }
             if let Some(cargo) = &item.cargo {
                 lines.push(Line::default());
-                lines.push(Line::from(Span::styled(
-                    "── cargo ──",
-                    Style::default().fg(p.dim),
-                )));
+                lines.push(Line::from(Span::styled("── cargo ──", Style::default().fg(p.dim))));
                 lines.push(detail_kv(p, "Capacity", format!("{:.3}", cargo.capacity)));
                 lines.push(detail_kv(p, "Deuterium", format!("{:.3}", cargo.deuterium)));
                 lines.push(detail_kv(p, "Metals", format!("{:.3}", cargo.metals)));
@@ -86,14 +92,17 @@ pub(crate) fn render_inventory_detail_overlay(frame: &mut Frame, area: Rect, sta
             let mut lines = vec![
                 detail_kv(p, "Type", item_type.clone()),
                 detail_kv(p, "Count", format!("{}", items.len())),
-                detail_kv(p, 
+                detail_kv(
+                    p,
                     "Space",
                     format!("{:.4} total", items.iter().map(|i| i.container_space).sum::<f64>()),
                 ),
                 Line::default(),
             ];
             for item in &items {
-                let container = item.container.as_ref()
+                let container = item
+                    .container
+                    .as_ref()
                     .map(|c| format!("  ({})", c.label))
                     .unwrap_or_default();
                 lines.push(Line::from(vec![
@@ -123,4 +132,3 @@ pub(crate) fn render_inventory_detail_overlay(frame: &mut Frame, area: Rect, sta
     frame.render_widget(Paragraph::new(lines), rows[0]);
     render_footer(frame, rows[1], p, &[FooterKey::nav("[Esc]", "close")]);
 }
-

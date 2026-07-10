@@ -1,7 +1,8 @@
 use super::*;
 
 fn make_sector(x: f64, y: f64, z: f64) -> SectorObservation {
-    serde_json::from_str(&format!(r#"{{
+    serde_json::from_str(&format!(
+        r#"{{
         "relativeCoordinates": {{"x": {x}, "y": {y}, "z": {z}}},
         "distance": 1,
         "knowledgeLevel": "detailed",
@@ -19,11 +20,14 @@ fn make_sector(x: f64, y: f64, z: f64) -> SectorObservation {
             "requiredResidenceSeconds": 60,
             "scanQuality": 1.0
         }}
-    }}"#)).unwrap()
+    }}"#
+    ))
+    .unwrap()
 }
 
 fn make_probe(free_capacity: f64, sector_x: f64, sector_y: f64, sector_z: f64) -> Probe {
-    serde_json::from_str(&format!(r#"{{
+    serde_json::from_str(&format!(
+        r#"{{
         "id": 1,
         "name": "test",
         "status": "idle",
@@ -41,7 +45,10 @@ fn make_probe(free_capacity: f64, sector_x: f64, sector_y: f64, sector_z: f64) -
             "externalTanks": [],
             "containers": []
         }}
-    }}"#, used = 10.0 - free_capacity)).unwrap()
+    }}"#,
+        used = 10.0 - free_capacity
+    ))
+    .unwrap()
 }
 
 // ── parse_scan_coords ─────────────────────────────────────────────────────
@@ -152,7 +159,10 @@ fn travel_submit_invalid_input_is_noop() {
     let mut state = AppState::default();
     state.active_wizard = ActiveWizard::Travel(TravelInput::Typing("abc".into()));
     state.travel_submit();
-    assert!(matches!(state.active_wizard, ActiveWizard::Travel(TravelInput::Typing(_))));
+    assert!(matches!(
+        state.active_wizard,
+        ActiveWizard::Travel(TravelInput::Typing(_))
+    ));
 }
 
 #[test]
@@ -176,7 +186,10 @@ fn travel_relative_without_probe_position_is_noop() {
     state.active_wizard = ActiveWizard::Travel(TravelInput::Typing("+2 0 0".into()));
     assert_eq!(state.resolve_travel_target(), None);
     state.travel_submit();
-    assert!(matches!(state.active_wizard, ActiveWizard::Travel(TravelInput::Typing(_))));
+    assert!(matches!(
+        state.active_wizard,
+        ActiveWizard::Travel(TravelInput::Typing(_))
+    ));
 }
 
 #[test]
@@ -207,7 +220,11 @@ fn scan_hist_nav_empty_is_noop() {
 #[test]
 fn scan_hist_next_advances_index() {
     let mut state = AppState::default();
-    state.scan_history = vec![make_sector(0., 0., 0.), make_sector(2., 0., 0.), make_sector(4., 0., 0.)];
+    state.scan_history = vec![
+        make_sector(0., 0., 0.),
+        make_sector(2., 0., 0.),
+        make_sector(4., 0., 0.),
+    ];
     state.scan_hist_next();
     assert_eq!(state.scan_history_idx, 1);
     state.scan_hist_next();
@@ -265,7 +282,8 @@ fn mine_max_amount_clamps_to_zero() {
 // ── inventory_rows / jettison_for_selected ────────────────────────────────
 
 fn probe_with_inventory(items_json: &str, stocks_json: &str) -> Probe {
-    serde_json::from_str(&format!(r#"{{
+    serde_json::from_str(&format!(
+        r#"{{
         "id": 1, "name": "test", "status": "idle",
         "fuel": {{"deuterium": 100.0}}, "sensorMode": "normal",
         "sector": null, "movement": null, "systems": null,
@@ -275,7 +293,9 @@ fn probe_with_inventory(items_json: &str, stocks_json: &str) -> Probe {
             "resourceStocks": {stocks_json},
             "externalTanks": [], "containers": []
         }}
-    }}"#)).unwrap()
+    }}"#
+    ))
+    .unwrap()
 }
 
 const STOCK_METALS: &str = r#"[{
@@ -285,7 +305,8 @@ const STOCK_METALS: &str = r#"[{
 
 fn manny_item(task: Option<&str>) -> String {
     let task_json = task.map(|t| format!("\"{t}\"")).unwrap_or("null".into());
-    format!(r#"{{
+    format!(
+        r#"{{
         "id": "manny-1", "type": "manny", "name": "Manny-1",
         "containerSpace": 1.0,
         "currentTask": {task_json},
@@ -293,7 +314,8 @@ fn manny_item(task: Option<&str>) -> String {
         "location": {{"type": "probe", "sector": null}},
         "cargo": null,
         "container": null
-    }}"#)
+    }}"#
+    )
 }
 
 #[test]
@@ -306,7 +328,8 @@ fn inventory_rows_no_probe_is_empty() {
 #[test]
 fn inventory_rows_order_stocks_active_passive() {
     let mut state = AppState::default();
-    let items = format!(r#"[
+    let items = format!(
+        r#"[
         {{"id": "wb-1", "type": "waypoint_bookmark", "name": "Bookmark",
           "containerSpace": 0.1, "currentTask": null, "taskProgressPercent": 0.0,
           "location": null, "cargo": null, "container": null}},
@@ -314,13 +337,25 @@ fn inventory_rows_order_stocks_active_passive() {
           "containerSpace": 0.1, "currentTask": null, "taskProgressPercent": 0.0,
           "location": null, "cargo": null, "container": null}},
         {}
-    ]"#, manny_item(None));
+    ]"#,
+        manny_item(None)
+    );
     state.probe = Some(probe_with_inventory(&items, STOCK_METALS));
     let rows = state.inventory_rows();
     assert_eq!(rows.len(), 3);
-    assert_eq!(rows[0], InventoryRow::Stock { id: "stock-metals".into() });
+    assert_eq!(
+        rows[0],
+        InventoryRow::Stock {
+            id: "stock-metals".into()
+        }
+    );
     assert_eq!(rows[1], InventoryRow::ActiveItem { id: "manny-1".into() });
-    assert_eq!(rows[2], InventoryRow::PassiveGroup { item_type: "waypoint_bookmark".into() });
+    assert_eq!(
+        rows[2],
+        InventoryRow::PassiveGroup {
+            item_type: "waypoint_bookmark".into()
+        }
+    );
 }
 
 #[test]
@@ -341,7 +376,12 @@ fn jettison_for_selected_stock_enters_amount() {
     let mut state = AppState::default();
     state.probe = Some(probe_with_inventory("[]", STOCK_METALS));
     match state.jettison_for_selected() {
-        Ok(JettisonInput::EnterAmount { item_id, item_name, max_amount, .. }) => {
+        Ok(JettisonInput::EnterAmount {
+            item_id,
+            item_name,
+            max_amount,
+            ..
+        }) => {
             assert_eq!(item_id, "stock-metals");
             assert_eq!(item_name, "Metals");
             assert_eq!(max_amount, 0.5);
@@ -355,7 +395,9 @@ fn jettison_for_selected_idle_manny_confirms() {
     let mut state = AppState::default();
     state.probe = Some(probe_with_inventory(&format!("[{}]", manny_item(None)), "[]"));
     match state.jettison_for_selected() {
-        Ok(JettisonInput::ConfirmManny { item_id, manny_name, .. }) => {
+        Ok(JettisonInput::ConfirmManny {
+            item_id, manny_name, ..
+        }) => {
             assert_eq!(item_id, "manny-1");
             assert_eq!(manny_name, "Manny-1");
         }
@@ -402,7 +444,8 @@ fn jettison_fill_max_sets_buffer() {
 
 #[test]
 fn visited_sector_parses_spec_example() {
-    let v: Vec<VisitedSector> = serde_json::from_str(r#"[
+    let v: Vec<VisitedSector> = serde_json::from_str(
+        r#"[
         {"relativeCoordinates": {"x": 0, "y": 0, "z": 0},
          "firstVisitedAt": "2026-06-01T12:00:00+00:00",
          "lastVisitedAt": "2026-06-01T12:00:00+00:00",
@@ -411,7 +454,9 @@ fn visited_sector_parses_spec_example() {
          "firstVisitedAt": "2026-06-01T13:15:00+00:00",
          "lastVisitedAt": "2026-06-01T15:45:00+00:00",
          "visitCount": 2}
-    ]"#).unwrap();
+    ]"#,
+    )
+    .unwrap();
     assert_eq!(v.len(), 2);
     assert_eq!(v[1].visit_count, 2);
     assert_eq!(v[1].relative_coordinates.x as i32, 1);
@@ -444,7 +489,8 @@ fn make_manny(id: &str, location_type: &str, can_receive_orders: bool, task: Opt
         Some(t) => format!("\"{}\"", t),
         None => "null".into(),
     };
-    serde_json::from_str(&format!(r#"{{
+    serde_json::from_str(&format!(
+        r#"{{
         "id": "{id}",
         "name": "{id}",
         "location": {{"type": "{location_type}", "sector": null}},
@@ -453,11 +499,14 @@ fn make_manny(id: &str, location_type: &str, can_receive_orders: bool, task: Opt
         "cargo": {{"capacity": 0.3, "deuterium": 0.0, "metals": 0.0, "ice": 0.0, "organicCompounds": 0.0}},
         "canReceiveOrders": {can_receive_orders},
         "taskEstimatedEndTime": null
-    }}"#)).unwrap()
+    }}"#
+    ))
+    .unwrap()
 }
 
 fn make_sector_with_objects(x: f64, y: f64, z: f64, objects_json: &str) -> SectorObservation {
-    serde_json::from_str(&format!(r#"{{
+    serde_json::from_str(&format!(
+        r#"{{
         "relativeCoordinates": {{"x": {x}, "y": {y}, "z": {z}}},
         "distance": 1,
         "knowledgeLevel": "detailed",
@@ -471,7 +520,9 @@ fn make_sector_with_objects(x: f64, y: f64, z: f64, objects_json: &str) -> Secto
         "sensorMode": null,
         "dataFreshness": null,
         "scan": {{"currentSectorResidenceSeconds": 60, "requiredResidenceSeconds": 60, "scanQuality": 1.0}}
-    }}"#)).unwrap()
+    }}"#
+    ))
+    .unwrap()
 }
 
 fn probe_at(x: f64, y: f64, z: f64) -> Probe {
@@ -565,7 +616,9 @@ fn repair_max_percent_no_probe() {
 #[test]
 fn repair_max_percent_full_integrity() {
     let mut state = AppState::default();
-    state.probe = Some(serde_json::from_str(r#"{
+    state.probe = Some(
+        serde_json::from_str(
+            r#"{
         "id": 1, "name": "t", "status": "idle",
         "fuel": {"deuterium": null}, "sensorMode": "normal",
         "sector": null, "movement": null,
@@ -573,14 +626,19 @@ fn repair_max_percent_full_integrity() {
                     "energyStored": null, "internalClockRate": null, "currentTask": null},
         "inventory": {"capacity": 1.0, "usedCapacity": 0.0, "freeCapacity": 1.0,
                       "items": [], "resourceStocks": [], "externalTanks": [], "containers": []}
-    }"#).unwrap());
+    }"#,
+        )
+        .unwrap(),
+    );
     assert_eq!(state.repair_max_percent(), 0.0);
 }
 
 #[test]
 fn repair_max_percent_damaged() {
     let mut state = AppState::default();
-    state.probe = Some(serde_json::from_str(r#"{
+    state.probe = Some(
+        serde_json::from_str(
+            r#"{
         "id": 1, "name": "t", "status": "idle",
         "fuel": {"deuterium": null}, "sensorMode": "normal",
         "sector": null, "movement": null,
@@ -588,7 +646,10 @@ fn repair_max_percent_damaged() {
                     "energyStored": null, "internalClockRate": null, "currentTask": null},
         "inventory": {"capacity": 1.0, "usedCapacity": 0.0, "freeCapacity": 1.0,
                       "items": [], "resourceStocks": [], "externalTanks": [], "containers": []}
-    }"#).unwrap());
+    }"#,
+        )
+        .unwrap(),
+    );
     assert_eq!(state.repair_max_percent(), 40.0);
 }
 
@@ -700,15 +761,24 @@ fn update_sector_resets_scroll_and_idx() {
 fn manny_craft_recipes_filters_correctly() {
     let mut state = AppState::default();
     state.recipes = vec![
-        serde_json::from_str(r#"{"id":"r1","name":"R1","craftableBy":["manny"],
+        serde_json::from_str(
+            r#"{"id":"r1","name":"R1","craftableBy":["manny"],
             "ingredients":[],"durationSeconds":60,
-            "output":{"type":"x","name":"X","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}"#).unwrap(),
-        serde_json::from_str(r#"{"id":"r2","name":"R2","craftableBy":["atomic_3d_printer"],
+            "output":{"type":"x","name":"X","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}"#,
+        )
+        .unwrap(),
+        serde_json::from_str(
+            r#"{"id":"r2","name":"R2","craftableBy":["atomic_3d_printer"],
             "ingredients":[],"durationSeconds":60,
-            "output":{"type":"x","name":"X","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}"#).unwrap(),
-        serde_json::from_str(r#"{"id":"r3","name":"R3","craftableBy":["manny","atomic_3d_printer"],
+            "output":{"type":"x","name":"X","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}"#,
+        )
+        .unwrap(),
+        serde_json::from_str(
+            r#"{"id":"r3","name":"R3","craftableBy":["manny","atomic_3d_printer"],
             "ingredients":[],"durationSeconds":60,
-            "output":{"type":"x","name":"X","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}"#).unwrap(),
+            "output":{"type":"x","name":"X","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}"#,
+        )
+        .unwrap(),
     ];
     let manny = state.manny_craft_recipes();
     assert_eq!(manny.len(), 2);
@@ -720,12 +790,18 @@ fn manny_craft_recipes_filters_correctly() {
 fn atomic_printer_recipes_filters_correctly() {
     let mut state = AppState::default();
     state.recipes = vec![
-        serde_json::from_str(r#"{"id":"r1","name":"R1","craftableBy":["manny"],
+        serde_json::from_str(
+            r#"{"id":"r1","name":"R1","craftableBy":["manny"],
             "ingredients":[],"durationSeconds":60,
-            "output":{"type":"x","name":"X","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}"#).unwrap(),
-        serde_json::from_str(r#"{"id":"r2","name":"R2","craftableBy":["atomic_3d_printer"],
+            "output":{"type":"x","name":"X","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}"#,
+        )
+        .unwrap(),
+        serde_json::from_str(
+            r#"{"id":"r2","name":"R2","craftableBy":["atomic_3d_printer"],
             "ingredients":[],"durationSeconds":60,
-            "output":{"type":"x","name":"X","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}"#).unwrap(),
+            "output":{"type":"x","name":"X","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}"#,
+        )
+        .unwrap(),
     ];
     let printer = state.atomic_printer_recipes();
     assert_eq!(printer.len(), 1);
@@ -737,25 +813,40 @@ fn fabrication_recipes_orders_atomic_then_manny() {
     use crate::app::Fabricator;
     let mut state = AppState::default();
     state.recipes = vec![
-        serde_json::from_str(r#"{"id":"r1","name":"R1","craftableBy":["manny"],
+        serde_json::from_str(
+            r#"{"id":"r1","name":"R1","craftableBy":["manny"],
             "ingredients":[],"durationSeconds":60,
-            "output":{"type":"x","name":"X","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}"#).unwrap(),
-        serde_json::from_str(r#"{"id":"r2","name":"R2","craftableBy":["atomic_3d_printer"],
+            "output":{"type":"x","name":"X","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}"#,
+        )
+        .unwrap(),
+        serde_json::from_str(
+            r#"{"id":"r2","name":"R2","craftableBy":["atomic_3d_printer"],
             "ingredients":[],"durationSeconds":60,
-            "output":{"type":"x","name":"X","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}"#).unwrap(),
+            "output":{"type":"x","name":"X","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}"#,
+        )
+        .unwrap(),
         // Craftable by both → appears once in each section.
-        serde_json::from_str(r#"{"id":"r3","name":"R3","craftableBy":["manny","atomic_3d_printer"],
+        serde_json::from_str(
+            r#"{"id":"r3","name":"R3","craftableBy":["manny","atomic_3d_printer"],
             "ingredients":[],"durationSeconds":60,
-            "output":{"type":"x","name":"X","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}"#).unwrap(),
+            "output":{"type":"x","name":"X","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}"#,
+        )
+        .unwrap(),
     ];
-    let rows: Vec<(Fabricator, &str)> = state.fabrication_recipes()
-        .into_iter().map(|(f, r)| (f, r.id.as_str())).collect();
-    assert_eq!(rows, vec![
-        (Fabricator::AtomicPrinter, "r2"),
-        (Fabricator::AtomicPrinter, "r3"),
-        (Fabricator::Manny, "r1"),
-        (Fabricator::Manny, "r3"),
-    ]);
+    let rows: Vec<(Fabricator, &str)> = state
+        .fabrication_recipes()
+        .into_iter()
+        .map(|(f, r)| (f, r.id.as_str()))
+        .collect();
+    assert_eq!(
+        rows,
+        vec![
+            (Fabricator::AtomicPrinter, "r2"),
+            (Fabricator::AtomicPrinter, "r3"),
+            (Fabricator::Manny, "r1"),
+            (Fabricator::Manny, "r3"),
+        ]
+    );
 }
 
 // ── has_atomic_printer ────────────────────────────────────────────────────
@@ -775,7 +866,9 @@ fn has_atomic_printer_absent() {
 #[test]
 fn has_atomic_printer_present() {
     let mut state = AppState::default();
-    state.probe = Some(serde_json::from_str(r#"{
+    state.probe = Some(
+        serde_json::from_str(
+            r#"{
         "id": 1, "name": "t", "status": "idle",
         "fuel": {"deuterium": null}, "sensorMode": "normal",
         "sector": null, "movement": null, "systems": null,
@@ -784,7 +877,10 @@ fn has_atomic_printer_present() {
             "items": [{"id": "ap-1", "type": "atomic_3d_printer", "name": "Atomic Printer",
                 "containerSpace": 1.0, "currentTask": null, "taskProgressPercent": 0.0,
                 "location": {"type": "probe", "sector": null}, "cargo": null, "container": null}]}
-    }"#).unwrap());
+    }"#,
+        )
+        .unwrap(),
+    );
     assert!(state.has_atomic_printer());
 }
 
@@ -799,7 +895,11 @@ fn collect_mineable_candidates_empty_when_no_sector() {
 fn collect_mineable_candidates_returns_asteroid_targets() {
     let mut state = AppState::default();
     state.probe = Some(probe_at(2., 0., -2.));
-    state.scan_history = vec![make_sector_with_objects(2., 0., -2., r#"[
+    state.scan_history = vec![make_sector_with_objects(
+        2.,
+        0.,
+        -2.,
+        r#"[
         {
             "id": "planet-1", "type": "planet", "name": "P1",
             "estimated": null, "summary": null, "mass": null, "massUnit": null,
@@ -813,7 +913,8 @@ fn collect_mineable_candidates_returns_asteroid_targets() {
             ],
             "waypointBookmarks": [], "bookmarkTargets": []
         }
-    ]"#)];
+    ]"#,
+    )];
     let candidates = state.collect_mineable_candidates();
     assert_eq!(candidates.len(), 2);
     assert!(candidates.iter().any(|(id, _)| id == "ast-1"));
@@ -826,7 +927,11 @@ fn collect_mineable_candidates_includes_top_level_asteroid() {
     // parent minableTargets) — it must still reach the mine picker.
     let mut state = AppState::default();
     state.probe = Some(probe_at(0., 0., 0.));
-    state.scan_history = vec![make_sector_with_objects(0., 0., 0., r#"[
+    state.scan_history = vec![make_sector_with_objects(
+        0.,
+        0.,
+        0.,
+        r#"[
         {
             "id": "deuterium-asteroid-abc", "type": "asteroid",
             "name": "Astéroïde contenant du Deutérium",
@@ -837,7 +942,8 @@ fn collect_mineable_candidates_includes_top_level_asteroid() {
             "capacity": null, "capacityUnit": null, "mannyMineable": true,
             "minableTargets": null, "waypointBookmarks": [], "bookmarkTargets": []
         }
-    ]"#)];
+    ]"#,
+    )];
     let candidates = state.collect_mineable_candidates();
     assert_eq!(candidates.len(), 1);
     assert_eq!(candidates[0].0, "deuterium-asteroid-abc");
@@ -848,7 +954,11 @@ fn collect_mineable_candidates_includes_top_level_asteroid() {
 fn deuterium_station_detected_in_current_sector() {
     let mut state = AppState::default();
     state.probe = Some(probe_at(2., 0., -2.));
-    state.scan_history = vec![make_sector_with_objects(2., 0., -2., r#"[
+    state.scan_history = vec![make_sector_with_objects(
+        2.,
+        0.,
+        -2.,
+        r#"[
         {
             "id": "station-1", "type": "deuterium_refuel_station", "name": "Refuel Stop",
             "estimated": null, "summary": null, "mass": null, "massUnit": null,
@@ -858,12 +968,18 @@ fn deuterium_station_detected_in_current_sector() {
             "capacity": null, "capacityUnit": null,
             "minableTargets": null, "waypointBookmarks": [], "bookmarkTargets": []
         }
-    ]"#)];
+    ]"#,
+    )];
     assert!(state.deuterium_station_in_current_sector());
 }
 
 fn relay_sector(status: &str) -> SectorObservation {
-    make_sector_with_objects(0., 0., 0., &format!(r#"[
+    make_sector_with_objects(
+        0.,
+        0.,
+        0.,
+        &format!(
+            r#"[
         {{
             "id": "42", "type": "scut_relay", "name": "Relais SCUT",
             "estimated": false, "summary": "relay", "mass": 0.0, "massUnit": null,
@@ -876,7 +992,9 @@ fn relay_sector(status: &str) -> SectorObservation {
             "capacity": null, "capacityUnit": null,
             "minableTargets": null, "waypointBookmarks": [], "bookmarkTargets": []
         }}
-    ]"#))
+    ]"#
+        ),
+    )
 }
 
 fn remote_manny(task_visibility: &str, task: &str) -> crate::api::types::Manny {
@@ -913,9 +1031,15 @@ fn remote_mine_advances_to_pick_asteroid_when_sector_loads() {
     state.active_wizard = ActiveWizard::RemoteMine(RemoteMineInput::Loading {
         manny_id: "mny_remote".into(),
         manny_name: "manny-r".into(),
-        x: 2, y: 0, z: -2,
+        x: 2,
+        y: 0,
+        z: -2,
     });
-    state.scan_history = vec![make_sector_with_objects(2., 0., -2., r#"[
+    state.scan_history = vec![make_sector_with_objects(
+        2.,
+        0.,
+        -2.,
+        r#"[
         {
             "id": "ast-9", "type": "asteroid", "name": "Rock", "summary": null,
             "estimated": null, "mass": null, "massUnit": null, "radius": null, "radiusUnit": null,
@@ -924,23 +1048,30 @@ fn remote_mine_advances_to_pick_asteroid_when_sector_loads() {
             "mode": null, "targetObjectId": null, "capacity": null, "capacityUnit": null,
             "minableTargets": null, "waypointBookmarks": [], "bookmarkTargets": []
         }
-    ]"#)];
+    ]"#,
+    )];
     state.remote_mine_sector_loaded(2, 0, -2);
-    assert!(matches!(state.active_wizard, ActiveWizard::RemoteMine(RemoteMineInput::PickAsteroid { .. })));
+    assert!(matches!(
+        state.active_wizard,
+        ActiveWizard::RemoteMine(RemoteMineInput::PickAsteroid { .. })
+    ));
 }
 
 #[test]
 fn unread_message_count_counts_only_unread() {
     let mut state = AppState::default();
     let mk = |id: i64, status: &str| -> crate::api::types::ProbeMessage {
-        serde_json::from_str(&format!(r#"{{
+        serde_json::from_str(&format!(
+            r#"{{
             "id": {id},
             "sender": {{ "type": "probe", "id": 2, "name": "nova" }},
             "recipient": {{ "type": "probe", "id": 1, "name": "me" }},
             "sector": {{ "relative": {{"x":0,"y":0,"z":0}} }},
             "body": "hi", "status": "{status}", "readAt": null,
             "createdAt": "2026-06-06T12:00:00+00:00", "updatedAt": "2026-06-06T12:00:00+00:00"
-        }}"#)).unwrap()
+        }}"#
+        ))
+        .unwrap()
     };
     state.messages = vec![mk(1, "unread"), mk(2, "read"), mk(3, "unread")];
     assert_eq!(state.unread_message_count(), 2);
@@ -951,9 +1082,7 @@ fn scut_coverage_read_from_sector() {
     let mut state = AppState::default();
     state.probe = Some(probe_at(0., 0., 0.));
     let mut sector = make_sector_with_objects(0., 0., 0., "[]");
-    sector.scut_networks = vec![
-        serde_json::from_str(r#"{"id": 7, "name": "Delta SCUT"}"#).unwrap(),
-    ];
+    sector.scut_networks = vec![serde_json::from_str(r#"{"id": 7, "name": "Delta SCUT"}"#).unwrap()];
     state.scan_history = vec![sector];
     let cov = state.scut_coverage();
     assert_eq!(cov.len(), 1);
@@ -976,7 +1105,9 @@ fn inactive_relay_offers_turn_on_and_salvage() {
     let mut state = AppState::default();
     state.probe = Some(probe_at(0., 0., 0.));
     state.scan_history = vec![relay_sector("off")];
-    let entry = state.scanner_objects().into_iter()
+    let entry = state
+        .scanner_objects()
+        .into_iter()
         .find(|e| matches!(e.object_type, crate::api::types::SectorObjectType::ScutRelay))
         .expect("relay entry present");
     let actions = state.actions_for_object(&entry);
@@ -989,7 +1120,9 @@ fn active_relay_offers_no_turn_on() {
     let mut state = AppState::default();
     state.probe = Some(probe_at(0., 0., 0.));
     state.scan_history = vec![relay_sector("on")];
-    let entry = state.scanner_objects().into_iter()
+    let entry = state
+        .scanner_objects()
+        .into_iter()
         .find(|e| matches!(e.object_type, crate::api::types::SectorObjectType::ScutRelay))
         .expect("relay entry present");
     let actions = state.actions_for_object(&entry);
@@ -1000,7 +1133,11 @@ fn active_relay_offers_no_turn_on() {
 fn deuterium_station_absent_in_current_sector() {
     let mut state = AppState::default();
     state.probe = Some(probe_at(0., 0., 0.));
-    state.scan_history = vec![make_sector_with_objects(0., 0., 0., r#"[
+    state.scan_history = vec![make_sector_with_objects(
+        0.,
+        0.,
+        0.,
+        r#"[
         {
             "id": "planet-1", "type": "planet", "name": "P1",
             "estimated": null, "summary": null, "mass": null, "massUnit": null,
@@ -1010,7 +1147,8 @@ fn deuterium_station_absent_in_current_sector() {
             "capacity": null, "capacityUnit": null,
             "minableTargets": null, "waypointBookmarks": [], "bookmarkTargets": []
         }
-    ]"#)];
+    ]"#,
+    )];
     assert!(!state.deuterium_station_in_current_sector());
 }
 
@@ -1018,7 +1156,11 @@ fn deuterium_station_absent_in_current_sector() {
 fn collect_mineable_candidates_unnamed_fallback() {
     let mut state = AppState::default();
     state.probe = Some(probe_at(0., 0., 0.));
-    state.scan_history = vec![make_sector_with_objects(0., 0., 0., r#"[
+    state.scan_history = vec![make_sector_with_objects(
+        0.,
+        0.,
+        0.,
+        r#"[
         {
             "id": "planet-1", "type": "planet", "name": null,
             "estimated": null, "summary": null, "mass": null, "massUnit": null,
@@ -1029,7 +1171,8 @@ fn collect_mineable_candidates_unnamed_fallback() {
             "minableTargets": [{"id": "ast-x", "type": "asteroid", "name": null, "mass": null, "resourceTypes": null}],
             "waypointBookmarks": [], "bookmarkTargets": []
         }
-    ]"#)];
+    ]"#,
+    )];
     let candidates = state.collect_mineable_candidates();
     assert_eq!(candidates[0].1, "unnamed");
 }
@@ -1045,7 +1188,7 @@ fn collect_idle_onboard_mannies_empty_when_no_mannies() {
 fn collect_idle_onboard_mannies_filters_correctly() {
     let mut state = AppState::default();
     state.mannies = Some(vec![
-        make_manny("m1", "probe", true, None),           // included
+        make_manny("m1", "probe", true, None),            // included
         make_manny("m2", "probe", false, Some("mining")), // busy — excluded
         make_manny("m3", "sector", true, None),           // in sector — excluded
     ]);
@@ -1064,7 +1207,9 @@ fn collect_detachable_containers_empty_when_no_probe() {
 #[test]
 fn collect_detachable_containers_excludes_probe_container() {
     let mut state = AppState::default();
-    state.probe = Some(serde_json::from_str(r#"{
+    state.probe = Some(
+        serde_json::from_str(
+            r#"{
         "id": 1, "name": "t", "status": "idle",
         "fuel": {"deuterium": null}, "sensorMode": "normal",
         "sector": null, "movement": null, "systems": null,
@@ -1078,7 +1223,10 @@ fn collect_detachable_containers_excludes_probe_container() {
                  "capacity": 2.0, "usedCapacity": 0.0, "freeCapacity": 2.0,
                  "rules": {"priority": [], "exclusion": [], "strictExclusion": []}}
             ]}
-    }"#).unwrap());
+    }"#,
+        )
+        .unwrap(),
+    );
     let result = state.collect_detachable_containers();
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].0, "c-ext");
@@ -1088,7 +1236,9 @@ fn collect_detachable_containers_excludes_probe_container() {
 #[test]
 fn collect_empty_containers_excludes_probe_and_non_empty() {
     let mut state = AppState::default();
-    state.probe = Some(serde_json::from_str(r#"{
+    state.probe = Some(
+        serde_json::from_str(
+            r#"{
         "id": 1, "name": "t", "status": "idle",
         "fuel": {"deuterium": null}, "sensorMode": "normal",
         "sector": null, "movement": null, "systems": null,
@@ -1105,7 +1255,10 @@ fn collect_empty_containers_excludes_probe_and_non_empty() {
                  "capacity": 2.0, "usedCapacity": 1.5, "freeCapacity": 0.5,
                  "rules": {"priority": [], "exclusion": [], "strictExclusion": []}}
             ]}
-    }"#).unwrap());
+    }"#,
+        )
+        .unwrap(),
+    );
     let result = state.collect_empty_containers();
     assert_eq!(result.len(), 1, "only the empty additional container");
     assert_eq!(result[0].0, "c-empty");
@@ -1122,7 +1275,11 @@ fn collect_detached_containers_empty_when_no_scan() {
 fn collect_detached_containers_returns_only_detached_type() {
     let mut state = AppState::default();
     state.probe = Some(probe_at(0., 0., 0.));
-    state.scan_history = vec![make_sector_with_objects(0., 0., 0., r#"[
+    state.scan_history = vec![make_sector_with_objects(
+        0.,
+        0.,
+        0.,
+        r#"[
         {
             "id": "dc-1", "type": "detached_container", "name": "Floater",
             "estimated": null, "summary": null, "mass": null, "massUnit": null,
@@ -1141,7 +1298,8 @@ fn collect_detached_containers_returns_only_detached_type() {
             "capacity": null, "capacityUnit": null, "minableTargets": null,
             "waypointBookmarks": [], "bookmarkTargets": []
         }
-    ]"#)];
+    ]"#,
+    )];
     let result = state.collect_detached_containers();
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].0, "dc-1");
@@ -1152,7 +1310,11 @@ fn collect_detached_containers_returns_only_detached_type() {
 fn collect_detached_containers_unnamed_fallback() {
     let mut state = AppState::default();
     state.probe = Some(probe_at(0., 0., 0.));
-    state.scan_history = vec![make_sector_with_objects(0., 0., 0., r#"[
+    state.scan_history = vec![make_sector_with_objects(
+        0.,
+        0.,
+        0.,
+        r#"[
         {
             "id": "dc-2", "type": "detached_container", "name": null,
             "estimated": null, "summary": null, "mass": null, "massUnit": null,
@@ -1162,7 +1324,8 @@ fn collect_detached_containers_unnamed_fallback() {
             "capacity": null, "capacityUnit": null, "minableTargets": null,
             "waypointBookmarks": [], "bookmarkTargets": []
         }
-    ]"#)];
+    ]"#,
+    )];
     let result = state.collect_detached_containers();
     assert_eq!(result[0].1, "unnamed container");
 }
@@ -1243,7 +1406,13 @@ fn scanner_objects_nest_hidden_containers_under_host() {
         "[{},{},{},{}]",
         tmpl("ast-1", "asteroid", "Rock A", "null", "null"),
         tmpl("c-drift", "detached_container", "Floater", "\"drifting\"", "null"),
-        tmpl("c-hidden", "detached_container", "Cache", "\"hidden_on_asteroid\"", "\"ast-1\""),
+        tmpl(
+            "c-hidden",
+            "detached_container",
+            "Cache",
+            "\"hidden_on_asteroid\"",
+            "\"ast-1\""
+        ),
         tmpl("ast-2", "asteroid", "Rock B", "null", "null"),
     );
     let mut state = AppState::default();
@@ -1301,14 +1470,21 @@ fn actions_for_object_by_kind() {
     // manny wreck: salvage
     assert_eq!(state.actions_for_object(&entries[2]), vec![ObjectAction::Salvage]);
     // detached container: recover + inspect (API v65 lets a Manny inspect it)
-    assert_eq!(state.actions_for_object(&entries[3]), vec![ObjectAction::Recover, ObjectAction::Inspect]);
+    assert_eq!(
+        state.actions_for_object(&entries[3]),
+        vec![ObjectAction::Recover, ObjectAction::Inspect]
+    );
 }
 
 #[test]
 fn dormant_construct_offers_inspect() {
     let mut state = AppState::default();
     state.probe = Some(probe_at(0., 0., 0.));
-    state.scan_history = vec![make_sector_with_objects(0., 0., 0., r#"[
+    state.scan_history = vec![make_sector_with_objects(
+        0.,
+        0.,
+        0.,
+        r#"[
         {"id": "dc-1", "type": "dormant_construct", "name": "Relic",
          "estimated": null, "summary": null, "mass": null, "massUnit": null,
          "radius": null, "radiusUnit": null, "dangerLevel": null, "salvageable": null,
@@ -1316,12 +1492,16 @@ fn dormant_construct_offers_inspect() {
          "quantity": null, "containerSpace": null, "mode": null, "targetObjectId": null,
          "capacity": null, "capacityUnit": null,
          "minableTargets": null, "waypointBookmarks": [], "bookmarkTargets": []}
-    ]"#)];
+    ]"#,
+    )];
     let entries = state.scanner_objects();
     assert_eq!(state.actions_for_object(&entries[0]), vec![ObjectAction::Inspect]);
     // …and it shows up as an inspectable candidate for the Mannies-pane flow.
     let cands = state.collect_inspectable_candidates();
-    assert!(cands.iter().any(|(id, _)| id == "dc-1"), "dormant construct is inspectable");
+    assert!(
+        cands.iter().any(|(id, _)| id == "dc-1"),
+        "dormant construct is inspectable"
+    );
 }
 
 #[test]
@@ -1338,7 +1518,10 @@ fn actions_include_deploy_when_bookmark_in_inventory() {
     state.scan_history = vec![make_sector_with_objects(0., 0., 0., MIXED_OBJECTS)];
     let entries = state.scanner_objects();
     // top-level planet gains deploy; nested minable target does not
-    assert_eq!(state.actions_for_object(&entries[0]), vec![ObjectAction::DeployWaypoint]);
+    assert_eq!(
+        state.actions_for_object(&entries[0]),
+        vec![ObjectAction::DeployWaypoint]
+    );
     assert_eq!(state.actions_for_object(&entries[1]), vec![ObjectAction::Mine]);
 }
 
@@ -1355,7 +1538,7 @@ fn filtered_history_respects_objects_filter() {
     let mut state = AppState::default();
     state.scan_history = vec![
         make_sector_with_objects(0., 0., 0., MIXED_OBJECTS), // has objects
-        make_sector(2., 0., 0.),                              // objects: null
+        make_sector(2., 0., 0.),                             // objects: null
     ];
     state.scan_filter = ScanFilter::Objects;
     assert_eq!(state.filtered_history_indices(), vec![0]);
@@ -1404,7 +1587,8 @@ fn collect_waypoints_empty_history() {
 #[test]
 fn collect_waypoints_bookmarks_first_then_sorted_by_distance() {
     let mut state = AppState::default();
-    let star_far: SectorObservation = serde_json::from_str(r#"{
+    let star_far: SectorObservation = serde_json::from_str(
+        r#"{
         "relativeCoordinates": {"x": 6.0, "y": 0.0, "z": 0.0},
         "distance": 6, "knowledgeLevel": "detailed", "confidence": 1.0,
         "objects": [{
@@ -1419,7 +1603,9 @@ fn collect_waypoints_bookmarks_first_then_sorted_by_distance() {
         "probes": null, "possibleObjects": null, "estimatedObjects": null,
         "navigationalRisk": null, "message": null, "sensorMode": null, "dataFreshness": null,
         "scan": {"currentSectorResidenceSeconds": 0, "requiredResidenceSeconds": 0, "scanQuality": 1.0}
-    }"#).unwrap();
+    }"#,
+    )
+    .unwrap();
     let bookmark_near: SectorObservation = serde_json::from_str(r#"{
         "relativeCoordinates": {"x": 2.0, "y": 0.0, "z": 0.0},
         "distance": 2, "knowledgeLevel": "detailed", "confidence": 1.0,
@@ -1541,7 +1727,7 @@ fn mannies_context_menu_reflects_manny_state() {
     assert!(!menu_item(&menu, MenuAction::Refuel).enabled); // no station
     assert!(!menu_item(&menu, MenuAction::TransferDeuterium).enabled); // single probe
     assert!(!menu_item(&menu, MenuAction::DropCargo).enabled); // not waiting
-    // Cursor lands on the first enabled item.
+                                                               // Cursor lands on the first enabled item.
     assert!(menu.items[menu.cursor].enabled);
 
     // Busy manny with a task: order-requiring actions disabled, recall enabled.
@@ -1570,14 +1756,18 @@ fn probe_menu_offers_scut_inspect_disabled_without_coverage() {
         .iter()
         .find(|i| i.action == MenuAction::ScutInspect)
         .expect("SCUT inspect offered");
-    assert!(!item.enabled && item.disabled_reason.is_some(), "no coverage → disabled with a reason");
+    assert!(
+        !item.enabled && item.disabled_reason.is_some(),
+        "no coverage → disabled with a reason"
+    );
 }
 
 fn improvement(id: &str, available: bool, done: bool) -> crate::api::types::ProbeImprovement {
     serde_json::from_str(&format!(
         r#"{{"id":"{id}","name":"{id}","description":"d","available":{available},"done":{done},
             "durationSeconds":300,"ingredients":[],"effects":null}}"#
-    )).unwrap()
+    ))
+    .unwrap()
 }
 
 #[test]
@@ -1598,7 +1788,11 @@ fn probe_menu_improve_enabled_only_with_an_orderable_improvement() {
     state.active_pane = Pane::Probe;
     state.probe_improvements = vec![improvement("deuterium_compression", true, false)];
     let menu = state.build_context_menu().expect("probe menu");
-    let item = menu.items.iter().find(|i| i.action == MenuAction::Improve).expect("improve offered");
+    let item = menu
+        .items
+        .iter()
+        .find(|i| i.action == MenuAction::Improve)
+        .expect("improve offered");
     assert!(item.enabled, "orderable improvement → enabled");
 }
 
@@ -1618,7 +1812,9 @@ fn inventory_context_menu_present_but_disabled_when_empty() {
 fn inventory_menu_offers_deploy_only_with_a_held_bookmark() {
     let mut state = AppState::default();
     state.active_pane = Pane::Inventory;
-    state.probe = Some(serde_json::from_str(r#"{
+    state.probe = Some(
+        serde_json::from_str(
+            r#"{
         "id": 1, "name": "t", "status": "idle",
         "fuel": {"deuterium": null}, "sensorMode": "normal",
         "sector": null, "movement": null, "systems": null,
@@ -1627,9 +1823,16 @@ fn inventory_menu_offers_deploy_only_with_a_held_bookmark() {
             "items": [{"id": "wp-1", "type": "waypoint_bookmark", "name": "Waypoint bookmark",
                 "containerSpace": 0.01, "currentTask": null, "taskProgressPercent": 0.0,
                 "location": {"type": "probe", "sector": null}, "cargo": null, "container": null}]}
-    }"#).unwrap());
+    }"#,
+        )
+        .unwrap(),
+    );
     let menu = state.build_context_menu().expect("inventory menu");
-    let deploy = menu.items.iter().find(|i| i.action == MenuAction::Deploy).expect("deploy offered");
+    let deploy = menu
+        .items
+        .iter()
+        .find(|i| i.action == MenuAction::Deploy)
+        .expect("deploy offered");
     // No idle manny / no sector target here → offered but disabled with a reason.
     assert!(!deploy.enabled && deploy.disabled_reason.is_some());
 }
@@ -1736,7 +1939,8 @@ fn manny_task_progress_complete_when_past_end() {
 #[test]
 fn sector_object_planet_science_fields_deserialize() {
     use crate::api::types::SectorObject;
-    let planet: SectorObject = serde_json::from_str(r#"{
+    let planet: SectorObject = serde_json::from_str(
+        r#"{
         "type": "planet",
         "name": "Kepler-relative-1",
         "summary": "temperate ocean world",
@@ -1745,7 +1949,9 @@ fn sector_object_planet_science_fields_deserialize() {
         "mannyMineable": true,
         "resourceTypes": ["metals", "ice"],
         "resourceComposition": {"deuterium": 0.0, "metals": 0.6, "ice": 0.4, "carbon_compounds": 0.0}
-    }"#).unwrap();
+    }"#,
+    )
+    .unwrap();
     assert_eq!(planet.category.as_deref(), Some("ocean"));
     assert_eq!(planet.habitability_score, Some(0.82));
     assert_eq!(planet.manny_mineable, Some(true));
@@ -1757,13 +1963,16 @@ fn sector_object_planet_science_fields_deserialize() {
 #[test]
 fn sector_object_asteroid_reserves_deserialize() {
     use crate::api::types::SectorObject;
-    let ast: SectorObject = serde_json::from_str(r#"{
+    let ast: SectorObject = serde_json::from_str(
+        r#"{
         "type": "asteroid",
         "name": "AX-12",
         "summary": "carbonaceous",
         "composition": "carbonaceous",
         "resourceAmounts": {"deuterium": 0.0, "metals": 1.25, "ice": 0.0, "carbon_compounds": 3.5}
-    }"#).unwrap();
+    }"#,
+    )
+    .unwrap();
     assert_eq!(ast.composition.as_deref(), Some("carbonaceous"));
     let amt = ast.resource_amounts.expect("amounts");
     assert!((amt.carbon_compounds - 3.5).abs() < 1e-9);
@@ -1776,11 +1985,16 @@ fn scanner_objects_number_unnamed_by_type() {
     let mut state = AppState::default();
     state.probe = Some(probe_at(0., 0., 0.));
     // Two unnamed top-level asteroids + one named planet.
-    state.scan_history = vec![make_sector_with_objects(0., 0., 0., r#"[
+    state.scan_history = vec![make_sector_with_objects(
+        0.,
+        0.,
+        0.,
+        r#"[
         {"type": "asteroid", "id": "a1", "name": null, "summary": ""},
         {"type": "planet", "id": "p1", "name": "Vulcan", "summary": ""},
         {"type": "asteroid", "id": "a2", "name": null, "summary": ""}
-    ]"#)];
+    ]"#,
+    )];
     let entries = state.scanner_objects();
     let by_id = |id: &str| entries.iter().find(|e| e.id == id).unwrap().name.clone();
     assert_eq!(by_id("a1"), "asteroid #1");
@@ -1793,11 +2007,16 @@ fn scanner_objects_number_unnamed_by_type() {
 #[test]
 fn minable_target_reserves_reads_types_and_amounts() {
     let mut state = AppState::default();
-    state.scan_history = vec![make_sector_with_objects(0., 0., 0., r#"[
+    state.scan_history = vec![make_sector_with_objects(
+        0.,
+        0.,
+        0.,
+        r#"[
         {"type": "asteroid", "id": "ast-1", "name": "AX", "summary": "",
          "resourceTypes": ["metals", "ice"],
          "resourceAmounts": {"deuterium": 0.0, "metals": 2.0, "ice": 1.0, "carbon_compounds": 0.0}}
-    ]"#)];
+    ]"#,
+    )];
     let (flags, res) = state.minable_target_reserves("ast-1").expect("reserves");
     assert_eq!(flags, [false, true, true, false]);
     assert_eq!(res, [0.0, 2.0, 1.0, 0.0]);
@@ -1811,9 +2030,14 @@ fn minable_target_reserves_reads_types_and_amounts() {
 fn mine_reserve_max_falls_back_to_free_capacity_without_reserves() {
     let mut state = AppState::default();
     state.probe = Some(make_probe(0.5, 0., 0., 0.));
-    state.scan_history = vec![make_sector_with_objects(0., 0., 0., r#"[
+    state.scan_history = vec![make_sector_with_objects(
+        0.,
+        0.,
+        0.,
+        r#"[
         {"type": "asteroid", "id": "ast-1", "name": "AX", "summary": "", "resourceTypes": ["metals"]}
-    ]"#)];
+    ]"#,
+    )];
     // No resourceAmounts → reserves are 0 → fall back to free capacity (0.5).
     assert_eq!(state.mine_reserve_max("ast-1", [false, true, false, false]), 0.5);
 }
@@ -1829,7 +2053,13 @@ fn map_context_menu_goto_disabled_without_visited() {
     let goto = menu.items.iter().find(|i| i.action == MenuAction::GotoVisited).unwrap();
     assert!(!goto.enabled, "no visited sectors → jump disabled");
     // Open map / travel are always available.
-    assert!(menu.items.iter().find(|i| i.action == MenuAction::Travel).unwrap().enabled);
+    assert!(
+        menu.items
+            .iter()
+            .find(|i| i.action == MenuAction::Travel)
+            .unwrap()
+            .enabled
+    );
 }
 
 #[test]
@@ -1839,13 +2069,23 @@ fn scanner_travel_here_enabled_for_remote_selection_only() {
     state.probe = Some(probe_at(0., 0., 0.));
     // Remote observation selected → Travel here enabled.
     state.scan_history = vec![make_sector(2., 0., 0.)];
-    let travel = state.build_context_menu().unwrap().items.into_iter()
-        .find(|i| i.action == MenuAction::ScanTravel).unwrap();
+    let travel = state
+        .build_context_menu()
+        .unwrap()
+        .items
+        .into_iter()
+        .find(|i| i.action == MenuAction::ScanTravel)
+        .unwrap();
     assert!(travel.enabled);
     // Current sector selected → disabled ("already here").
     state.scan_history = vec![make_sector(0., 0., 0.)];
-    let travel = state.build_context_menu().unwrap().items.into_iter()
-        .find(|i| i.action == MenuAction::ScanTravel).unwrap();
+    let travel = state
+        .build_context_menu()
+        .unwrap()
+        .items
+        .into_iter()
+        .find(|i| i.action == MenuAction::ScanTravel)
+        .unwrap();
     assert!(!travel.enabled);
 }
 
@@ -1878,12 +2118,15 @@ fn recipe_affordable_checks_stocks_and_items() {
     assert!(state.recipe_affordable(&recipe), "have 5.0 metals ≥ 2.0");
 
     // Needs 2 integrated circuits but only 1 on hand.
-    let hungry: CraftingRecipe = serde_json::from_str(r#"{
+    let hungry: CraftingRecipe = serde_json::from_str(
+        r#"{
         "id":"r2","name":"Board","craftableBy":["manny"],
         "ingredients":[{"type":"integrated_circuit","quantity":2.0,"unit":"item","kind":null}],
         "durationSeconds":600,
         "output":{"type":"board","name":"Board","containerSpace":0.1,"containerSpaceUnit":"ece","capacityBonus":null}
-    }"#).unwrap();
+    }"#,
+    )
+    .unwrap();
     assert!(!state.recipe_affordable(&hungry));
     assert_eq!(state.recipe_ingredient_have(&hungry.ingredients[0]), 1.0);
 }
@@ -1920,7 +2163,10 @@ fn run_command_travel_and_goto() {
     state.probe = Some(probe_at(0., 0., 0.));
     // even-sum target → travel confirm
     state.run_command("travel 2 0 -2");
-    assert!(matches!(state.active_wizard, ActiveWizard::Travel(TravelInput::Confirming { x: 2, y: 0, z: -2, .. })));
+    assert!(matches!(
+        state.active_wizard,
+        ActiveWizard::Travel(TravelInput::Confirming { x: 2, y: 0, z: -2, .. })
+    ));
 
     state.run_command("goto 1 1 0");
     assert!(state.map.open);
@@ -1977,7 +2223,10 @@ fn run_command_records_history_deduping_repeats() {
     state.run_command("zoom");
     state.run_command("zoom"); // consecutive duplicate is not re-pushed
     state.run_command("filter all");
-    assert_eq!(state.command_history, vec!["zoom".to_string(), "filter all".to_string()]);
+    assert_eq!(
+        state.command_history,
+        vec!["zoom".to_string(), "filter all".to_string()]
+    );
     // Blank lines are never recorded.
     state.run_command("   ");
     assert_eq!(state.command_history.len(), 2);
@@ -2026,7 +2275,13 @@ fn mine_one_shot_stages_fire_with_defaults() {
     // Only an amount given → resources default to metals, destination = probe.
     state.run_command("mine 0.5");
     match state.pending_fire.take() {
-        Some(CommandFire::Mine { manny_id, object_id, resources, amount, container_id }) => {
+        Some(CommandFire::Mine {
+            manny_id,
+            object_id,
+            resources,
+            amount,
+            container_id,
+        }) => {
             assert_eq!(manny_id, "m1");
             assert_eq!(object_id, "ast-1");
             assert_eq!(resources, vec!["metals".to_string()]);
@@ -2089,7 +2344,10 @@ fn craft_one_shot_stages_manny_fire() {
     state.run_command("craft widget"); // case-insensitive
     assert_eq!(
         state.pending_fire,
-        Some(CommandFire::MannyCraft { manny_id: "m1".into(), recipe_id: "r1".into() })
+        Some(CommandFire::MannyCraft {
+            manny_id: "m1".into(),
+            recipe_id: "r1".into()
+        })
     );
 }
 
@@ -2117,7 +2375,10 @@ fn craft_bare_still_opens_wizard() {
     )
     .unwrap()];
     state.run_command("craft");
-    assert!(matches!(state.active_wizard, ActiveWizard::Fabrication(FabricationInput::PickRecipe { .. })));
+    assert!(matches!(
+        state.active_wizard,
+        ActiveWizard::Fabrication(FabricationInput::PickRecipe { .. })
+    ));
     assert!(state.pending_fire.is_none());
 }
 

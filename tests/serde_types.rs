@@ -1,9 +1,8 @@
 use neumann_cockpit::api::types::{
-    AlertPhase, AlertStatus, AlertType, ContainerInventory, CraftingRecipe, DamageWarningRule,
-    DataFreshness, KnowledgeLevel, Manny, MannyLocationType, MannyTask, Mission, MissionStatus,
-    EndpointId, MannyTaskVisibility, MessageStatus, MissionStepStatus, MovementPhase, Probe,
-    ProbeImprovement, ProbeMessage, ScutNetwork, ScutRelayStatus, SectorObject,
-    ProbeAlert, ProbeInventory, ProbeMovement, ProbeStatus, SectorObjectType, SectorObservation,
+    AlertPhase, AlertStatus, AlertType, ContainerInventory, CraftingRecipe, DamageWarningRule, DataFreshness,
+    EndpointId, KnowledgeLevel, Manny, MannyLocationType, MannyTask, MannyTaskVisibility, MessageStatus, Mission,
+    MissionStatus, MissionStepStatus, MovementPhase, Probe, ProbeAlert, ProbeImprovement, ProbeInventory, ProbeMessage,
+    ProbeMovement, ProbeStatus, ScutNetwork, ScutRelayStatus, SectorObject, SectorObjectType, SectorObservation,
     SensorMode, StorageContainer,
 };
 
@@ -510,11 +509,17 @@ fn alerts_response_deser() {
     assert_eq!(r.alerts[0].status, AlertStatus::Unread);
     assert!(r.alerts[0].is_unread());
     assert_eq!(r.alerts[0].risk.as_ref().unwrap().percent, 30);
-    assert_eq!(r.alerts[0].container.as_ref().unwrap().object_id.as_deref(), Some("detached-container-7"));
+    assert_eq!(
+        r.alerts[0].container.as_ref().unwrap().object_id.as_deref(),
+        Some("detached-container-7")
+    );
     // read alert is no longer unread
     assert_eq!(r.alerts[1].alert_type, AlertType::IntelligentLife);
     assert!(!r.alerts[1].is_unread());
-    assert_eq!(r.alerts[1].planet.as_ref().unwrap().name.as_deref(), Some("Pale Signal"));
+    assert_eq!(
+        r.alerts[1].planet.as_ref().unwrap().name.as_deref(),
+        Some("Pale Signal")
+    );
     // object-detected carries resource types
     assert_eq!(r.alerts[2].object.as_ref().unwrap().resource_types, vec!["deuterium"]);
 }
@@ -530,7 +535,10 @@ fn damage_warnings_response_deser() {
 
 #[test]
 fn alert_unknown_type_fallback() {
-    let json = ALERTS_JSON.replace("storage_container_break\",\n      \"status\": \"unread", "supernova_imminent\",\n      \"status\": \"unread");
+    let json = ALERTS_JSON.replace(
+        "storage_container_break\",\n      \"status\": \"unread",
+        "supernova_imminent\",\n      \"status\": \"unread",
+    );
     let r: AlertsResponseProbe = deser(&json);
     assert_eq!(r.alerts[0].alert_type, AlertType::Unknown);
 }
@@ -634,7 +642,10 @@ fn manny_task_visibility_deserializes() {
         MannyTaskVisibility::ScutNetwork
     );
     assert_eq!(deser::<MannyTaskVisibility>(r#""local""#), MannyTaskVisibility::Local);
-    assert_eq!(deser::<MannyTaskVisibility>(r#""too_far""#), MannyTaskVisibility::TooFar);
+    assert_eq!(
+        deser::<MannyTaskVisibility>(r#""too_far""#),
+        MannyTaskVisibility::TooFar
+    );
 }
 
 #[test]
@@ -648,7 +659,10 @@ fn new_sector_object_types_deserialize() {
         deser::<SectorObjectType>(r#""deuterium_refuel_station""#),
         SectorObjectType::DeuteriumRefuelStation
     );
-    assert_eq!(deser::<SectorObjectType>(r#""scut_relay""#), SectorObjectType::ScutRelay);
+    assert_eq!(
+        deser::<SectorObjectType>(r#""scut_relay""#),
+        SectorObjectType::ScutRelay
+    );
 }
 
 #[test]

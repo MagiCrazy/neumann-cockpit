@@ -27,7 +27,12 @@ impl AppState {
     pub fn has_atmospheric_drop_kit(&self) -> bool {
         self.probe
             .as_ref()
-            .map(|p| p.inventory.items.iter().any(|it| it.item_type == "atmospheric_drop_kit"))
+            .map(|p| {
+                p.inventory
+                    .items
+                    .iter()
+                    .any(|it| it.item_type == "atmospheric_drop_kit")
+            })
             .unwrap_or(false)
     }
 

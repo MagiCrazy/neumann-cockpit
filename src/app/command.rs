@@ -3,8 +3,7 @@ use super::*;
 /// Command verbs recognised by `:` mode. Kept as a table so the input layer can
 /// offer Tab-completion and a `:help`-style listing.
 pub const COMMANDS: [&str; 12] = [
-    "focus", "travel", "goto", "filter", "refresh", "theme", "zoom", "craft", "mine", "probe",
-    "help", "quit",
+    "focus", "travel", "goto", "filter", "refresh", "theme", "zoom", "craft", "mine", "probe", "help", "quit",
 ];
 
 /// One-line argument usage for a verb, shown as inline ghost-text while typing
@@ -72,7 +71,11 @@ fn fleet_probe_id(state: &AppState, args: &[&str]) -> Option<u64> {
         return Some(p.id);
     }
     let ql = q.to_lowercase();
-    state.fleet.iter().find(|p| p.name.to_lowercase().contains(&ql)).map(|p| p.id)
+    state
+        .fleet
+        .iter()
+        .find(|p| p.name.to_lowercase().contains(&ql))
+        .map(|p| p.id)
 }
 
 fn color_from_name(name: &str) -> Option<ColorMode> {
@@ -113,7 +116,10 @@ impl AppState {
     fn arg_candidates(&self, verb: &str) -> Vec<String> {
         match verb {
             "focus" => Pane::ALL.iter().map(|p| p.label().to_lowercase()).collect(),
-            "filter" => ["all", "objects", "minable", "danger"].iter().map(|s| s.to_string()).collect(),
+            "filter" => ["all", "objects", "minable", "danger"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
             "theme" => [
                 ColorMode::MonoGreen,
                 ColorMode::MonoAmber,
@@ -144,8 +150,11 @@ impl AppState {
             // Still on the first token → complete the verb.
             None => {
                 let stem = head[lead..].to_lowercase();
-                let cands: Vec<String> =
-                    COMMANDS.iter().filter(|c| c.starts_with(&stem)).map(|c| c.to_string()).collect();
+                let cands: Vec<String> = COMMANDS
+                    .iter()
+                    .filter(|c| c.starts_with(&stem))
+                    .map(|c| c.to_string())
+                    .collect();
                 (!cands.is_empty()).then_some((lead, cands))
             }
             // Verb typed → complete its (single) argument. The token spans the
@@ -160,8 +169,10 @@ impl AppState {
                 let region = &head[after_verb..];
                 let ts = after_verb + (region.len() - region.trim_start().len());
                 let stem = input[ts..cbyte].to_lowercase();
-                let cands: Vec<String> =
-                    all.into_iter().filter(|c| c.to_lowercase().starts_with(&stem)).collect();
+                let cands: Vec<String> = all
+                    .into_iter()
+                    .filter(|c| c.to_lowercase().starts_with(&stem))
+                    .collect();
                 (!cands.is_empty()).then_some((ts, cands))
             }
         }
@@ -271,7 +282,10 @@ impl AppState {
             return Some(m.clone());
         }
         let q = query.to_lowercase();
-        mannies.iter().find(|(_, name)| name.to_lowercase().contains(&q)).cloned()
+        mannies
+            .iter()
+            .find(|(_, name)| name.to_lowercase().contains(&q))
+            .cloned()
     }
 
     /// `:craft <recipe>` — resolve the recipe by name (case-insensitive exact,
@@ -357,7 +371,12 @@ impl AppState {
                 });
             }
             _ => {
-                self.active_wizard = ActiveWizard::Mine(MineInput::PickAsteroid { manny_id, manny_name, candidates, selection: 0 });
+                self.active_wizard = ActiveWizard::Mine(MineInput::PickAsteroid {
+                    manny_id,
+                    manny_name,
+                    candidates,
+                    selection: 0,
+                });
             }
         }
     }
@@ -369,8 +388,7 @@ impl AppState {
         // Split into the positional head (resources + amount) and the by/at/to
         // keyword buckets. Keyword values run to the next keyword, so names may
         // contain spaces.
-        let (mut positional, mut by, mut at, mut to) =
-            (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        let (mut positional, mut by, mut at, mut to) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
         let mut bucket = 0u8; // 0 positional · 1 by · 2 at · 3 to
         for &tok in args {
             match tok {

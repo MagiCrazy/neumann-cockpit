@@ -7,8 +7,8 @@ use ratatui::{
     Frame,
 };
 
-use crate::ui::theme::{format_duration, palette};
 use super::{centered_rect, render_footer, render_pick_list, FooterKey, KeyTone};
+use crate::ui::theme::{format_duration, palette};
 /// A mining-target picker row: `#n [name][ danger]  metals 1.20  ice 0.55 …`.
 /// Thin wrapper over the shared [`super::probe_object_label`] so every
 /// asteroid/object picker renders identically.
@@ -46,9 +46,16 @@ pub(crate) fn estimate_mine_duration(target_amount: f64, travel_deducted: bool) 
 
 pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let ActiveWizard::Mine(mine) = &state.active_wizard else { return };
+    let ActiveWizard::Mine(mine) = &state.active_wizard else {
+        return;
+    };
     match mine {
-        MineInput::PickAsteroid { manny_name, candidates, selection, .. } => {
+        MineInput::PickAsteroid {
+            manny_name,
+            candidates,
+            selection,
+            ..
+        } => {
             // Asteroids are usually unnamed, so label each by index + its known
             // resource content (like the Sector pane) instead of a bare name.
             let labels: Vec<String> = candidates
@@ -58,17 +65,46 @@ pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppStat
                 .collect();
             let names: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
             let height = (candidates.len() as u16 + 6).min(16);
-            render_pick_list(frame, area, palette(state.color_mode), &format!(" MINE — {manny_name} "), 62, height,
-                Some("Select mining target:"), &names, *selection, None, "confirm");
+            render_pick_list(
+                frame,
+                area,
+                palette(state.color_mode),
+                &format!(" MINE — {manny_name} "),
+                62,
+                height,
+                Some("Select mining target:"),
+                &names,
+                *selection,
+                None,
+                "confirm",
+            );
         }
 
-        MineInput::Configure { manny_name, object_name, object_id, resources, amount_buf, amount_mode, target_container, error, .. } => {
+        MineInput::Configure {
+            manny_name,
+            object_name,
+            object_id,
+            resources,
+            amount_buf,
+            amount_mode,
+            target_container,
+            error,
+            ..
+        } => {
             let reserves = state.minable_target_reserves(object_id);
             let popup = centered_rect(52, 15, area);
             frame.render_widget(Clear, popup);
 
-            let manny_short = if manny_name.len() > 10 { &manny_name[..10] } else { manny_name };
-            let obj_short = if object_name.len() > 12 { &object_name[..12] } else { object_name };
+            let manny_short = if manny_name.len() > 10 {
+                &manny_name[..10]
+            } else {
+                manny_name
+            };
+            let obj_short = if object_name.len() > 12 {
+                &object_name[..12]
+            } else {
+                object_name
+            };
             let title = format!(" MINE — {manny_short} → {obj_short} ");
             let block = Block::default()
                 .title(title)
@@ -90,7 +126,11 @@ pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppStat
             lines.push(Line::from(vec![
                 Span::styled("Resources", Style::default().fg(res_header_color)),
                 Span::styled(
-                    if *amount_mode { "  (Tab to edit)" } else { "  [1-4 to toggle]" },
+                    if *amount_mode {
+                        "  (Tab to edit)"
+                    } else {
+                        "  [1-4 to toggle]"
+                    },
                     Style::default().fg(p.dim),
                 ),
             ]));
@@ -111,10 +151,9 @@ pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppStat
                 ];
                 // Remaining reserve (ECE) when the target exposes it.
                 match (present, reserve) {
-                    (true, Some(r)) if r > 0.0 => spans.push(Span::styled(
-                        format!(" {r:.2}"),
-                        Style::default().fg(p.dim),
-                    )),
+                    (true, Some(r)) if r > 0.0 => {
+                        spans.push(Span::styled(format!(" {r:.2}"), Style::default().fg(p.dim)))
+                    }
                     (false, _) => spans.push(Span::styled(" —", Style::default().fg(p.dim))),
                     _ => {}
                 }
@@ -154,16 +193,14 @@ pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppStat
                         .is_some_and(|(cid, _)| state.mining_travel_deducted(object_id, cid));
                     let (trips, secs) = estimate_mine_duration(amount, travel_deducted);
                     let dest = if travel_deducted { "on-site" } else { "+ travel" };
-                    lines.push(Line::from(vec![
-                        Span::styled(
-                            format!(
-                                "≈ {trips} trip{} · ~{} ({dest})",
-                                if trips == 1 { "" } else { "s" },
-                                format_duration(secs),
-                            ),
-                            Style::default().fg(p.dim),
+                    lines.push(Line::from(vec![Span::styled(
+                        format!(
+                            "≈ {trips} trip{} · ~{} ({dest})",
+                            if trips == 1 { "" } else { "s" },
+                            format_duration(secs),
                         ),
-                    ]));
+                        Style::default().fg(p.dim),
+                    )]));
                 } else {
                     lines.push(Line::default());
                 }
@@ -203,10 +240,18 @@ pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppStat
             let mine_key = if can_send {
                 FooterKey::commit("[Enter]", "MINE")
             } else {
-                FooterKey { key: "[Enter]", label: "MINE", tone: KeyTone::Disabled }
+                FooterKey {
+                    key: "[Enter]",
+                    label: "MINE",
+                    tone: KeyTone::Disabled,
+                }
             };
             let keys = if *amount_mode {
-                vec![FooterKey::nav("[Tab]", "resources"), mine_key, FooterKey::nav("[Esc]", "cancel")]
+                vec![
+                    FooterKey::nav("[Tab]", "resources"),
+                    mine_key,
+                    FooterKey::nav("[Esc]", "cancel"),
+                ]
             } else {
                 vec![
                     FooterKey::nav("[1-4]", "toggle"),
@@ -217,10 +262,8 @@ pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppStat
             };
             render_footer(frame, rows[1], p, &keys);
         }
-
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -249,7 +292,10 @@ mod tests {
     fn unnamed_asteroid_labelled_by_index_and_reserves() {
         let state = state_with_targets();
         let label = asteroid_label(&state, 0, "ast-1", "unnamed");
-        assert_eq!(label, "#1  deuterium 0.42  metals 1.20", "index + named per-resource reserves, no 'unnamed'");
+        assert_eq!(
+            label, "#1  deuterium 0.42  metals 1.20",
+            "index + named per-resource reserves, no 'unnamed'"
+        );
     }
 
     #[test]

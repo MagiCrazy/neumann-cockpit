@@ -1,6 +1,6 @@
-use crate::ui::theme::{palette, Palette};
 use crate::api::types::{AlertType, ProbeAlert};
 use crate::app::{ActiveWizard, AlertsInput, AppState};
+use crate::ui::theme::{palette, Palette};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -46,7 +46,11 @@ fn alert_row(alert: &ProbeAlert, p: Palette) -> ListItem<'static> {
     } else {
         Style::default().fg(p.dim)
     };
-    let label_color = if unread { type_color(&alert.alert_type, p) } else { p.dim };
+    let label_color = if unread {
+        type_color(&alert.alert_type, p)
+    } else {
+        p.dim
+    };
     ListItem::new(Line::from(vec![
         Span::styled(marker, Style::default().fg(marker_color)),
         Span::styled(
@@ -59,7 +63,11 @@ fn alert_row(alert: &ProbeAlert, p: Palette) -> ListItem<'static> {
 
 pub(crate) fn render_alerts_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let ActiveWizard::Alerts(AlertsInput::Browsing { selection, show_warnings }) = &state.active_wizard else {
+    let ActiveWizard::Alerts(AlertsInput::Browsing {
+        selection,
+        show_warnings,
+    }) = &state.active_wizard
+    else {
         return;
     };
     let (selection, show_warnings) = (*selection, *show_warnings);
@@ -95,7 +103,10 @@ pub(crate) fn render_alerts_overlay(frame: &mut Frame, area: Rect, state: &AppSt
     let warns_unread = state.damage_warnings.iter().filter(|w| w.is_unread()).count();
     let tab_style = |active: bool| {
         if active {
-            Style::default().fg(Color::Black).bg(p.accent).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(Color::Black)
+                .bg(p.accent)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(p.dim)
         }
@@ -111,7 +122,11 @@ pub(crate) fn render_alerts_overlay(frame: &mut Frame, area: Rect, state: &AppSt
 
     // ── List ──
     if entries.is_empty() {
-        let label = if show_warnings { "no damage warnings" } else { "no active alerts" };
+        let label = if show_warnings {
+            "no damage warnings"
+        } else {
+            "no active alerts"
+        };
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(label, Style::default().fg(p.dim)))),
             rows[1],
@@ -127,10 +142,15 @@ pub(crate) fn render_alerts_overlay(frame: &mut Frame, area: Rect, state: &AppSt
     }
 
     // ── Footer ──
-    render_footer(frame, rows[2], p, &[
-        FooterKey::nav("[↑/↓]", "select"),
-        FooterKey::nav("[Tab]", "switch"),
-        FooterKey::commit("[Enter]", "ACK"),
-        FooterKey::nav("[Esc]", "close"),
-    ]);
+    render_footer(
+        frame,
+        rows[2],
+        p,
+        &[
+            FooterKey::nav("[↑/↓]", "select"),
+            FooterKey::nav("[Tab]", "switch"),
+            FooterKey::commit("[Enter]", "ACK"),
+            FooterKey::nav("[Esc]", "close"),
+        ],
+    );
 }

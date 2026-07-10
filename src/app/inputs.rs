@@ -110,10 +110,7 @@ pub enum ObjectActionInput {
 pub enum AlertsInput {
     /// `show_warnings` selects the Warnings tab; otherwise the Alerts tab.
     /// The entries themselves live in `AppState::alerts` / `damage_warnings`.
-    Browsing {
-        selection: usize,
-        show_warnings: bool,
-    },
+    Browsing { selection: usize, show_warnings: bool },
 }
 
 pub enum RenameContainerInput {
@@ -484,10 +481,7 @@ pub enum JettisonInput {
         error: Option<String>,
     },
     /// Confirmation for deploying a scut_relay item as an inactive relay.
-    ConfirmRelay {
-        item_id: String,
-        error: Option<String>,
-    },
+    ConfirmRelay { item_id: String, error: Option<String> },
     EnterAmount {
         item_id: String,
         item_name: String,

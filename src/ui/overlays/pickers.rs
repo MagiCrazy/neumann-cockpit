@@ -1,5 +1,8 @@
+use crate::app::{
+    ActiveWizard, AppState, DeployInput, DetachInput, DropCargoInput, InspectInput, MindSnapshotInput, RecallInput,
+    RecoverInput, RefuelInput, RenameMannyInput, SalvageInput, ScutRelayInput,
+};
 use crate::ui::theme::palette;
-use crate::app::{ActiveWizard, AppState, DeployInput, DetachInput, DropCargoInput, InspectInput, MindSnapshotInput, RecallInput, RecoverInput, RefuelInput, RenameMannyInput, SalvageInput, ScutRelayInput};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -11,16 +14,39 @@ use ratatui::{
 use super::{centered_rect, render_footer, render_pick_list, FooterKey};
 pub(crate) fn render_salvage_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let ActiveWizard::Salvage(salvage) = &state.active_wizard else { return };
+    let ActiveWizard::Salvage(salvage) = &state.active_wizard else {
+        return;
+    };
     match salvage {
-        SalvageInput::PickTarget { manny_name, candidates, selection, .. } => {
+        SalvageInput::PickTarget {
+            manny_name,
+            candidates,
+            selection,
+            ..
+        } => {
             let names: Vec<&str> = candidates.iter().map(|(_, n)| n.as_str()).collect();
             let height = (candidates.len() as u16 + 6).min(16);
-            render_pick_list(frame, area, p, &format!(" SALVAGE — {manny_name} "), 50, height,
-                Some("Select salvage target:"), &names, *selection, None, "confirm");
+            render_pick_list(
+                frame,
+                area,
+                p,
+                &format!(" SALVAGE — {manny_name} "),
+                50,
+                height,
+                Some("Select salvage target:"),
+                &names,
+                *selection,
+                None,
+                "confirm",
+            );
         }
 
-        SalvageInput::Confirm { manny_name, object_name, error, .. } => {
+        SalvageInput::Confirm {
+            manny_name,
+            object_name,
+            error,
+            ..
+        } => {
             let popup = centered_rect(50, 8, area);
             frame.render_widget(Clear, popup);
             let block = Block::default()
@@ -39,7 +65,10 @@ pub(crate) fn render_salvage_overlay(frame: &mut Frame, area: Rect, state: &AppS
             let mut lines: Vec<Line> = Vec::new();
             lines.push(Line::from(vec![
                 Span::styled("Target: ", Style::default().fg(p.dim)),
-                Span::styled(object_name.as_str(), Style::default().fg(p.text).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    object_name.as_str(),
+                    Style::default().fg(p.text).add_modifier(Modifier::BOLD),
+                ),
             ]));
             if let Some(err) = error {
                 lines.push(Line::default());
@@ -49,17 +78,24 @@ pub(crate) fn render_salvage_overlay(frame: &mut Frame, area: Rect, state: &AppS
                 )));
             }
             frame.render_widget(Paragraph::new(lines), rows[0]);
-            render_footer(frame, rows[1], p, &[
-                FooterKey::commit("[Enter]", "SALVAGE"),
-                FooterKey::nav("[Esc]", "cancel"),
-            ]);
+            render_footer(
+                frame,
+                rows[1],
+                p,
+                &[
+                    FooterKey::commit("[Enter]", "SALVAGE"),
+                    FooterKey::nav("[Esc]", "cancel"),
+                ],
+            );
         }
     }
 }
 
 pub(crate) fn render_drop_cargo_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let ActiveWizard::DropCargo(DropCargoInput::Confirm { manny_name, error, .. }) = &state.active_wizard else { return };
+    let ActiveWizard::DropCargo(DropCargoInput::Confirm { manny_name, error, .. }) = &state.active_wizard else {
+        return;
+    };
 
     let popup = centered_rect(54, 8, area);
     frame.render_widget(Clear, popup);
@@ -90,18 +126,34 @@ pub(crate) fn render_drop_cargo_overlay(frame: &mut Frame, area: Rect, state: &A
     ];
     if let Some(err) = error {
         lines.push(Line::default());
-        lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(p.crit))));
+        lines.push(Line::from(Span::styled(
+            format!("✗ {err}"),
+            Style::default().fg(p.crit),
+        )));
     }
     frame.render_widget(Paragraph::new(lines), rows[0]);
-    render_footer(frame, rows[1], p, &[
-        FooterKey::danger("[Enter/y]", "DROP"),
-        FooterKey::nav("[Esc]", "cancel"),
-    ]);
+    render_footer(
+        frame,
+        rows[1],
+        p,
+        &[
+            FooterKey::danger("[Enter/y]", "DROP"),
+            FooterKey::nav("[Esc]", "cancel"),
+        ],
+    );
 }
 
 pub(crate) fn render_recall_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let ActiveWizard::Recall(RecallInput::Confirm { manny_name, remote, error, .. }) = &state.active_wizard else { return };
+    let ActiveWizard::Recall(RecallInput::Confirm {
+        manny_name,
+        remote,
+        error,
+        ..
+    }) = &state.active_wizard
+    else {
+        return;
+    };
 
     let popup = centered_rect(52, 8, area);
     frame.render_widget(Clear, popup);
@@ -126,7 +178,11 @@ pub(crate) fn render_recall_overlay(frame: &mut Frame, area: Rect, state: &AppSt
 
     let mut lines: Vec<Line> = Vec::new();
     lines.push(Line::from(Span::styled(
-        if *remote { "Abandon this Manny's remote task?" } else { "Send recall order?" },
+        if *remote {
+            "Abandon this Manny's remote task?"
+        } else {
+            "Send recall order?"
+        },
         Style::default().fg(p.text),
     )));
     if *remote {
@@ -154,7 +210,9 @@ pub(crate) fn render_recall_overlay(frame: &mut Frame, area: Rect, state: &AppSt
 
 pub(crate) fn render_refuel_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let ActiveWizard::Refuel(RefuelInput::Confirm { manny_name, error, .. }) = &state.active_wizard else { return };
+    let ActiveWizard::Refuel(RefuelInput::Confirm { manny_name, error, .. }) = &state.active_wizard else {
+        return;
+    };
 
     let popup = centered_rect(50, 7, area);
     frame.render_widget(Clear, popup);
@@ -186,16 +244,26 @@ pub(crate) fn render_refuel_overlay(frame: &mut Frame, area: Rect, state: &AppSt
         )));
     }
     frame.render_widget(Paragraph::new(lines), rows[0]);
-    render_footer(frame, rows[1], p, &[
-        FooterKey::commit("[Enter]", "REFUEL"),
-        FooterKey::nav("[Esc]", "cancel"),
-    ]);
+    render_footer(
+        frame,
+        rows[1],
+        p,
+        &[
+            FooterKey::commit("[Enter]", "REFUEL"),
+            FooterKey::nav("[Esc]", "cancel"),
+        ],
+    );
 }
 
 pub(crate) fn render_scut_relay_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let ActiveWizard::ScutRelay(ScutRelayInput::EnterNetworkName { manny_name, relay_name, buf, error, .. }) =
-        &state.active_wizard
+    let ActiveWizard::ScutRelay(ScutRelayInput::EnterNetworkName {
+        manny_name,
+        relay_name,
+        buf,
+        error,
+        ..
+    }) = &state.active_wizard
     else {
         return;
     };
@@ -230,18 +298,28 @@ pub(crate) fn render_scut_relay_overlay(frame: &mut Frame, area: Rect, state: &A
     ];
     if let Some(err) = error {
         lines.push(Line::default());
-        lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(p.crit))));
+        lines.push(Line::from(Span::styled(
+            format!("✗ {err}"),
+            Style::default().fg(p.crit),
+        )));
     }
     frame.render_widget(Paragraph::new(lines), rows[0]);
-    render_footer(frame, rows[1], p, &[
-        FooterKey::commit("[Enter]", "TURN ON"),
-        FooterKey::nav("[Esc]", "cancel"),
-    ]);
+    render_footer(
+        frame,
+        rows[1],
+        p,
+        &[
+            FooterKey::commit("[Enter]", "TURN ON"),
+            FooterKey::nav("[Esc]", "cancel"),
+        ],
+    );
 }
 
 pub(crate) fn render_mind_snapshot_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let ActiveWizard::MindSnapshot(MindSnapshotInput::Confirm { error }) = &state.active_wizard else { return };
+    let ActiveWizard::MindSnapshot(MindSnapshotInput::Confirm { error }) = &state.active_wizard else {
+        return;
+    };
     let alert = state.probe_terminal_alert();
 
     let popup = centered_rect(60, 10, area);
@@ -265,10 +343,7 @@ pub(crate) fn render_mind_snapshot_overlay(frame: &mut Frame, area: Rect, state:
 
     let mut lines: Vec<Line> = Vec::new();
     if let Some(a) = alert {
-        lines.push(Line::from(Span::styled(
-            a.message.clone(),
-            Style::default().fg(p.text),
-        )));
+        lines.push(Line::from(Span::styled(a.message.clone(), Style::default().fg(p.text))));
         lines.push(Line::default());
     }
     lines.push(Line::from(Span::styled(
@@ -287,15 +362,25 @@ pub(crate) fn render_mind_snapshot_overlay(frame: &mut Frame, area: Rect, state:
         )));
     }
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), rows[0]);
-    render_footer(frame, rows[1], p, &[
-        FooterKey::danger("[Enter]", "REASSIGN"),
-        FooterKey::nav("[Esc]", "cancel"),
-    ]);
+    render_footer(
+        frame,
+        rows[1],
+        p,
+        &[
+            FooterKey::danger("[Enter]", "REASSIGN"),
+            FooterKey::nav("[Esc]", "cancel"),
+        ],
+    );
 }
 
 pub(crate) fn render_rename_manny_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let ActiveWizard::RenameManny(RenameMannyInput::Typing { manny_name, buf, error, .. }) = &state.active_wizard else { return };
+    let ActiveWizard::RenameManny(RenameMannyInput::Typing {
+        manny_name, buf, error, ..
+    }) = &state.active_wizard
+    else {
+        return;
+    };
 
     let popup = centered_rect(46, 7, area);
     frame.render_widget(Clear, popup);
@@ -329,34 +414,73 @@ pub(crate) fn render_rename_manny_overlay(frame: &mut Frame, area: Rect, state: 
     }
 
     frame.render_widget(Paragraph::new(lines), rows[0]);
-    render_footer(frame, rows[1], p, &[
-        FooterKey::commit("[Enter]", "RENAME"),
-        FooterKey::nav("[Tab]", "suggest"),
-        FooterKey::nav("[Esc]", "cancel"),
-    ]);
+    render_footer(
+        frame,
+        rows[1],
+        p,
+        &[
+            FooterKey::commit("[Enter]", "RENAME"),
+            FooterKey::nav("[Tab]", "suggest"),
+            FooterKey::nav("[Esc]", "cancel"),
+        ],
+    );
 }
 
 pub(crate) fn render_deploy_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let ActiveWizard::Deploy(deploy) = &state.active_wizard else { return };
+    let ActiveWizard::Deploy(deploy) = &state.active_wizard else {
+        return;
+    };
     match deploy {
         DeployInput::PickManny { mannies, selection } => {
             let names: Vec<&str> = mannies.iter().map(|(_, n)| n.as_str()).collect();
             let height = (mannies.len() as u16 + 6).min(18);
-            render_pick_list(frame, area, p, " DEPLOY WAYPOINT — SELECT MANNY ", 52, height,
-                None, &names, *selection, None, "confirm");
+            render_pick_list(
+                frame,
+                area,
+                p,
+                " DEPLOY WAYPOINT — SELECT MANNY ",
+                52,
+                height,
+                None,
+                &names,
+                *selection,
+                None,
+                "confirm",
+            );
         }
 
-        DeployInput::PickObject { candidates, selection, .. } => {
-            let labels: Vec<String> = candidates.iter().enumerate()
-                .map(|(i, (id, n))| super::probe_object_label(state, i, id, n)).collect();
+        DeployInput::PickObject {
+            candidates, selection, ..
+        } => {
+            let labels: Vec<String> = candidates
+                .iter()
+                .enumerate()
+                .map(|(i, (id, n))| super::probe_object_label(state, i, id, n))
+                .collect();
             let names: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
             let height = (candidates.len() as u16 + 6).min(18);
-            render_pick_list(frame, area, p, " DEPLOY WAYPOINT ", 52, height,
-                None, &names, *selection, None, "confirm");
+            render_pick_list(
+                frame,
+                area,
+                p,
+                " DEPLOY WAYPOINT ",
+                52,
+                height,
+                None,
+                &names,
+                *selection,
+                None,
+                "confirm",
+            );
         }
 
-        DeployInput::EnterName { object_name, name_buf, error, .. } => {
+        DeployInput::EnterName {
+            object_name,
+            name_buf,
+            error,
+            ..
+        } => {
             let popup = centered_rect(52, 8, area);
             frame.render_widget(Clear, popup);
             let title = format!(" DEPLOY WAYPOINT — {object_name} ");
@@ -387,63 +511,166 @@ pub(crate) fn render_deploy_overlay(frame: &mut Frame, area: Rect, state: &AppSt
                 )));
             }
             frame.render_widget(Paragraph::new(lines), rows[0]);
-            render_footer(frame, rows[1], p, &[
-                FooterKey::commit("[Enter]", "DEPLOY"),
-                FooterKey::nav("[Esc]", "cancel"),
-            ]);
+            render_footer(
+                frame,
+                rows[1],
+                p,
+                &[
+                    FooterKey::commit("[Enter]", "DEPLOY"),
+                    FooterKey::nav("[Esc]", "cancel"),
+                ],
+            );
         }
     }
 }
 
 pub(crate) fn render_inspect_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let ActiveWizard::Inspect(InspectInput::PickTarget { manny_name, candidates, selection, error, .. }) = &state.active_wizard else { return };
-    let labels: Vec<String> = candidates.iter().enumerate()
-        .map(|(i, (id, n))| super::probe_object_label(state, i, id, n)).collect();
+    let ActiveWizard::Inspect(InspectInput::PickTarget {
+        manny_name,
+        candidates,
+        selection,
+        error,
+        ..
+    }) = &state.active_wizard
+    else {
+        return;
+    };
+    let labels: Vec<String> = candidates
+        .iter()
+        .enumerate()
+        .map(|(i, (id, n))| super::probe_object_label(state, i, id, n))
+        .collect();
     let names: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
     let error_lines = if error.is_some() { 2u16 } else { 0 };
     let height = (candidates.len() as u16 + 6 + error_lines).min(18);
-    render_pick_list(frame, area, p, &format!(" INSPECT — {manny_name} "), 52, height,
-        Some("Select object to inspect:"), &names, *selection, error.as_deref(), "INSPECT");
+    render_pick_list(
+        frame,
+        area,
+        p,
+        &format!(" INSPECT — {manny_name} "),
+        52,
+        height,
+        Some("Select object to inspect:"),
+        &names,
+        *selection,
+        error.as_deref(),
+        "INSPECT",
+    );
 }
 
 pub(crate) fn render_recover_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let ActiveWizard::Recover(RecoverInput::PickContainer { manny_name, candidates, selection, error, .. }) = &state.active_wizard else { return };
+    let ActiveWizard::Recover(RecoverInput::PickContainer {
+        manny_name,
+        candidates,
+        selection,
+        error,
+        ..
+    }) = &state.active_wizard
+    else {
+        return;
+    };
     let names: Vec<&str> = candidates.iter().map(|(_, n)| n.as_str()).collect();
     let error_lines = if error.is_some() { 2u16 } else { 0 };
     let height = (candidates.len() as u16 + 6 + error_lines).min(18);
-    render_pick_list(frame, area, p, &format!(" RECOVER — {manny_name} "), 52, height,
-        Some("Select container to recover:"), &names, *selection, error.as_deref(), "RECOVER");
+    render_pick_list(
+        frame,
+        area,
+        p,
+        &format!(" RECOVER — {manny_name} "),
+        52,
+        height,
+        Some("Select container to recover:"),
+        &names,
+        *selection,
+        error.as_deref(),
+        "RECOVER",
+    );
 }
 
 pub(crate) fn render_detach_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let ActiveWizard::Detach(detach) = &state.active_wizard else { return };
+    let ActiveWizard::Detach(detach) = &state.active_wizard else {
+        return;
+    };
     match detach {
-        DetachInput::PickContainer { manny_name, containers, selection, .. } => {
+        DetachInput::PickContainer {
+            manny_name,
+            containers,
+            selection,
+            ..
+        } => {
             let names: Vec<&str> = containers.iter().map(|(_, n)| n.as_str()).collect();
             let height = (containers.len() as u16 + 6).min(16);
-            render_pick_list(frame, area, p, &format!(" DETACH — {manny_name} "), 52, height,
-                Some("Select container to detach:"), &names, *selection, None, "next");
+            render_pick_list(
+                frame,
+                area,
+                p,
+                &format!(" DETACH — {manny_name} "),
+                52,
+                height,
+                Some("Select container to detach:"),
+                &names,
+                *selection,
+                None,
+                "next",
+            );
         }
 
-        DetachInput::PickMode { manny_name, container_name, selection, error, .. } => {
+        DetachInput::PickMode {
+            manny_name,
+            container_name,
+            selection,
+            error,
+            ..
+        } => {
             let names: Vec<&str> = crate::app::DETACH_MODES.iter().map(|(_, l)| *l).collect();
             let prompt = format!("Detach mode  (manny: {manny_name})");
-            render_pick_list(frame, area, p, &format!(" DETACH — {container_name} "), 52, 10,
-                Some(&prompt), &names, *selection, error.as_deref(), "confirm");
+            render_pick_list(
+                frame,
+                area,
+                p,
+                &format!(" DETACH — {container_name} "),
+                52,
+                10,
+                Some(&prompt),
+                &names,
+                *selection,
+                error.as_deref(),
+                "confirm",
+            );
         }
 
-        DetachInput::PickAsteroid { manny_name, container_name, asteroids, selection, error, .. } => {
-            let labels: Vec<String> = asteroids.iter().enumerate()
-                .map(|(i, (id, n))| super::probe_object_label(state, i, id, n)).collect();
+        DetachInput::PickAsteroid {
+            manny_name,
+            container_name,
+            asteroids,
+            selection,
+            error,
+            ..
+        } => {
+            let labels: Vec<String> = asteroids
+                .iter()
+                .enumerate()
+                .map(|(i, (id, n))| super::probe_object_label(state, i, id, n))
+                .collect();
             let names: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
             let height = (asteroids.len() as u16 + 8).min(18);
             let prompt = format!("Attach to asteroid  (manny: {manny_name})");
-            render_pick_list(frame, area, p, &format!(" DETACH — hide {container_name} "), 52, height,
-                Some(&prompt), &names, *selection, error.as_deref(), "HIDE HERE");
+            render_pick_list(
+                frame,
+                area,
+                p,
+                &format!(" DETACH — hide {container_name} "),
+                52,
+                height,
+                Some(&prompt),
+                &names,
+                *selection,
+                error.as_deref(),
+                "HIDE HERE",
+            );
         }
     }
 }
-

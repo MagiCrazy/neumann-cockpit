@@ -7,7 +7,9 @@ use super::geometry::list_nav;
 /// Picker over visited sectors: navigate the list, `Enter` launches the travel
 /// confirm for the chosen sector, `Esc` cancels.
 pub(super) fn handle_goto_visited_event(code: KeyCode, state: &mut AppState) {
-    let GotoVisitedInput::Picking { selection } = state.goto_visited else { return };
+    let GotoVisitedInput::Picking { selection } = state.goto_visited else {
+        return;
+    };
     let count = state.visited_sectors.len();
     match code {
         KeyCode::Esc => state.goto_visited = GotoVisitedInput::Inactive,
@@ -59,10 +61,10 @@ pub(super) fn handle_map_event(code: KeyCode, state: &mut AppState) {
 
     match code {
         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('b') => state.map.open = false,
-        KeyCode::Char('h') | KeyCode::Left  => state.map.center_x -= 2,
+        KeyCode::Char('h') | KeyCode::Left => state.map.center_x -= 2,
         KeyCode::Char('l') | KeyCode::Right => state.map.center_x += 2,
-        KeyCode::Char('k') | KeyCode::Up    => state.map.center_z -= 2,
-        KeyCode::Char('j') | KeyCode::Down  => state.map.center_z += 2,
+        KeyCode::Char('k') | KeyCode::Up => state.map.center_z -= 2,
+        KeyCode::Char('j') | KeyCode::Down => state.map.center_z += 2,
         KeyCode::Char('u') => state.map_move_y(1),
         KeyCode::Char('d') => state.map_move_y(-1),
         KeyCode::Char('0') => state.map_recenter_on_probe(),

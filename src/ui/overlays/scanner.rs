@@ -1,5 +1,5 @@
-use crate::ui::theme::{palette, Palette};
 use crate::app::{AppState, ScanMode};
+use crate::ui::theme::{palette, Palette};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::Style,
@@ -53,10 +53,15 @@ fn render_coord_input(frame: &mut Frame, area: Rect, buf: &str, p: Palette) {
         ])),
         rows[1],
     );
-    render_footer(frame, rows[2], p, &[
-        FooterKey::commit("[Enter]", "OBSERVE"),
-        FooterKey::nav("[Esc]", "cancel"),
-    ]);
+    render_footer(
+        frame,
+        rows[2],
+        p,
+        &[
+            FooterKey::commit("[Enter]", "OBSERVE"),
+            FooterKey::nav("[Esc]", "cancel"),
+        ],
+    );
 }
 
 fn render_direction_pick(frame: &mut Frame, area: Rect, state: &AppState) {
@@ -91,8 +96,10 @@ fn render_direction_pick(frame: &mut Frame, area: Rect, state: &AppState) {
         ]),
         rows[0],
     );
-    render_footer(frame, rows[1], p, &[
-        FooterKey::nav("[x] [y] [z]", "scan"),
-        FooterKey::nav("[Esc]", "cancel"),
-    ]);
+    render_footer(
+        frame,
+        rows[1],
+        p,
+        &[FooterKey::nav("[x] [y] [z]", "scan"), FooterKey::nav("[Esc]", "cancel")],
+    );
 }

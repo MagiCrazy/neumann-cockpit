@@ -1,5 +1,5 @@
-use crate::api::types::{CraftingRecipe, CraftingRecipeIngredient, ProbeInventory};
 use super::*;
+use crate::api::types::{CraftingRecipe, CraftingRecipeIngredient, ProbeInventory};
 
 /// Active items (manny, atomic printer) are listed individually in the
 /// inventory panel; passive items are grouped by type.
@@ -26,7 +26,8 @@ impl AppState {
     }
 
     pub fn mine_max_amount(&self) -> f64 {
-        self.probe.as_ref()
+        self.probe
+            .as_ref()
             .map(|p| (p.inventory.free_capacity * 10000.0).round() / 10000.0)
             .unwrap_or(0.30)
             .max(0.0)
@@ -48,7 +49,9 @@ impl AppState {
         for item in inv.items.iter().filter(|i| !is_active_item(&i.item_type)) {
             if !seen.contains(&item.item_type.as_str()) {
                 seen.push(&item.item_type);
-                out.push(InventoryRow::PassiveGroup { item_type: item.item_type.clone() });
+                out.push(InventoryRow::PassiveGroup {
+                    item_type: item.item_type.clone(),
+                });
             }
         }
         out
@@ -68,19 +71,21 @@ impl AppState {
     pub fn inventory_prev(&mut self) {
         let count = self.inventory_rows().len();
         if count > 0 {
-            self.inventory_selection = self
-                .inventory_selection
-                .checked_sub(1)
-                .unwrap_or(count - 1);
+            self.inventory_selection = self.inventory_selection.checked_sub(1).unwrap_or(count - 1);
         }
     }
 
     /// Build the jettison wizard state for the currently selected inventory row.
     pub fn jettison_for_selected(&self) -> Result<JettisonInput, String> {
-        let Some(probe) = &self.probe else { return Err("no probe data".into()) };
+        let Some(probe) = &self.probe else {
+            return Err("no probe data".into());
+        };
         match self.selected_inventory_row() {
             Some(InventoryRow::Stock { id }) => {
-                let stock = probe.inventory.resource_stocks.iter()
+                let stock = probe
+                    .inventory
+                    .resource_stocks
+                    .iter()
                     .find(|s| s.id == id)
                     .ok_or_else(|| "stock not found".to_string())?;
                 if stock.amount <= 0.0 {
@@ -95,13 +100,18 @@ impl AppState {
                 })
             }
             Some(InventoryRow::ActiveItem { id }) => {
-                let item = probe.inventory.items.iter()
+                let item = probe
+                    .inventory
+                    .items
+                    .iter()
                     .find(|i| i.id == id)
                     .ok_or_else(|| "item not found".to_string())?;
                 if item.item_type != "manny" {
                     return Err("only resource stocks and mannies can be jettisoned".into());
                 }
-                let in_probe = item.location.as_ref()
+                let in_probe = item
+                    .location
+                    .as_ref()
                     .map(|l| l.location_type == crate::api::types::MannyLocationType::Probe)
                     .unwrap_or(false);
                 if !in_probe {
@@ -117,7 +127,10 @@ impl AppState {
                 })
             }
             Some(InventoryRow::PassiveGroup { item_type }) if item_type == "scut_relay" => {
-                let item = probe.inventory.items.iter()
+                let item = probe
+                    .inventory
+                    .items
+                    .iter()
                     .find(|i| i.item_type == "scut_relay")
                     .ok_or_else(|| "no SCUT relay in inventory".to_string())?;
                 Ok(JettisonInput::ConfirmRelay {
@@ -154,14 +167,18 @@ impl AppState {
     }
 
     pub fn jettison_fill_max(&mut self) {
-        if let ActiveWizard::Jettison(JettisonInput::EnterAmount { buf, max_amount, error, .. }) = &mut self.active_wizard {
+        if let ActiveWizard::Jettison(JettisonInput::EnterAmount {
+            buf, max_amount, error, ..
+        }) = &mut self.active_wizard
+        {
             *buf = format!("{max_amount:.4}");
             *error = None;
         }
     }
 
     pub fn has_atomic_printer(&self) -> bool {
-        self.probe.as_ref()
+        self.probe
+            .as_ref()
             .map(|p| p.inventory.items.iter().any(|i| i.item_type == "atomic_3d_printer"))
             .unwrap_or(false)
     }
@@ -178,13 +195,15 @@ impl AppState {
     }
 
     pub fn atomic_printer_recipes(&self) -> Vec<&CraftingRecipe> {
-        self.recipes.iter()
+        self.recipes
+            .iter()
             .filter(|r| r.craftable_by.iter().any(|c| c == "atomic_3d_printer"))
             .collect()
     }
 
     pub fn manny_craft_recipes(&self) -> Vec<&CraftingRecipe> {
-        self.recipes.iter()
+        self.recipes
+            .iter()
             .filter(|r| r.craftable_by.iter().any(|c| c == "manny"))
             .collect()
     }
@@ -194,7 +213,9 @@ impl AppState {
     /// selection order of the fabrication wizard. A recipe craftable by both
     /// fabricators appears once per section (either route is valid).
     pub fn fabrication_recipes(&self) -> Vec<(Fabricator, &CraftingRecipe)> {
-        self.atomic_printer_recipes().into_iter().map(|r| (Fabricator::AtomicPrinter, r))
+        self.atomic_printer_recipes()
+            .into_iter()
+            .map(|r| (Fabricator::AtomicPrinter, r))
             .chain(self.manny_craft_recipes().into_iter().map(|r| (Fabricator::Manny, r)))
             .collect()
     }
@@ -204,7 +225,12 @@ impl AppState {
     pub fn recipe_ingredient_have(&self, ing: &CraftingRecipeIngredient) -> f64 {
         let Some(probe) = &self.probe else { return 0.0 };
         if ing.unit == "item" {
-            probe.inventory.items.iter().filter(|it| it.item_type == ing.ingredient_type).count() as f64
+            probe
+                .inventory
+                .items
+                .iter()
+                .filter(|it| it.item_type == ing.ingredient_type)
+                .count() as f64
         } else if ing.ingredient_type == "deuterium" {
             // Deuterium lives in the fuel tank, not in resource_stocks. The tank
             // level is a percentage (0..max_deuterium) where 100% of a size-1 tank
@@ -223,12 +249,17 @@ impl AppState {
 
     /// Whether every ingredient of a recipe is currently on hand.
     pub fn recipe_affordable(&self, recipe: &CraftingRecipe) -> bool {
-        recipe.ingredients.iter().all(|ing| self.recipe_ingredient_have(ing) >= ing.quantity)
+        recipe
+            .ingredients
+            .iter()
+            .all(|ing| self.recipe_ingredient_have(ing) >= ing.quantity)
     }
 
     /// Whether every ingredient of a probe improvement is currently on hand.
     pub fn improvement_affordable(&self, imp: &crate::api::types::ProbeImprovement) -> bool {
-        imp.ingredients.iter().all(|ing| self.recipe_ingredient_have(ing) >= ing.quantity)
+        imp.ingredients
+            .iter()
+            .all(|ing| self.recipe_ingredient_have(ing) >= ing.quantity)
     }
 
     /// Whether at least one probe improvement is installable right now (unlocked
@@ -238,7 +269,11 @@ impl AppState {
     }
 
     pub fn inventory_waypoint_bookmark_id(&self) -> Option<String> {
-        self.probe.as_ref()?.inventory.items.iter()
+        self.probe
+            .as_ref()?
+            .inventory
+            .items
+            .iter()
             .find(|i| i.item_type == "waypoint_bookmark")
             .map(|i| i.id.clone())
     }

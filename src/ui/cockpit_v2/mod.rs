@@ -12,9 +12,7 @@ mod menu;
 mod panes;
 
 use crate::app::{AppState, DrillLevel, Pane};
-use crate::ui::panels::{
-    render_inventory_panel, render_mannies_panel, render_probe_panel, render_scanner_panel,
-};
+use crate::ui::panels::{render_inventory_panel, render_mannies_panel, render_probe_panel, render_scanner_panel};
 use crate::ui::theme::{palette, pane_block, Palette};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -77,8 +75,7 @@ fn render_boot(frame: &mut Frame, area: Rect, state: &AppState, p: Palette) {
 
         if !state.boot_revealed(pane) {
             frame.render_widget(
-                Paragraph::new(Line::styled("· · ·", Style::default().fg(p.dim)))
-                    .alignment(Alignment::Center),
+                Paragraph::new(Line::styled("· · ·", Style::default().fg(p.dim))).alignment(Alignment::Center),
                 inner,
             );
             continue;
@@ -94,9 +91,7 @@ fn render_boot(frame: &mut Frame, area: Rect, state: &AppState, p: Palette) {
                 break;
             }
             let base_len = label.chars().count() + 1;
-            let pad = width
-                .saturating_sub(base_len + result.chars().count() + 1)
-                .max(1);
+            let pad = width.saturating_sub(base_len + result.chars().count() + 1).max(1);
             let dotted = format!("{label} {}", "·".repeat(pad));
             let revealed = (elapsed - start) as usize * BOOT_CHARS_PER_FRAME;
             if revealed >= dotted.chars().count() {
@@ -115,7 +110,11 @@ fn render_boot(frame: &mut Frame, area: Rect, state: &AppState, p: Palette) {
         // Once the self-check is done, invite the pilot to continue — in the
         // centre probe pane.
         if pane == Pane::Probe && state.boot_complete() {
-            let cur = if (state.boot_frame / 3).is_multiple_of(2) { "▌" } else { " " };
+            let cur = if (state.boot_frame / 3).is_multiple_of(2) {
+                "▌"
+            } else {
+                " "
+            };
             lines.push(Line::raw(""));
             lines.push(Line::from(Span::styled(
                 "— WE ARE LEGION —",
@@ -178,7 +177,11 @@ fn render_pane(frame: &mut Frame, area: Rect, pane: Pane, state: &AppState, acti
 fn render_status(frame: &mut Frame, area: Rect, state: &AppState, p: Palette, visible: &[Pane]) {
     // The command line always claims the second row while `:` is open, even if
     // the hints line is toggled off.
-    let command = if let crate::app::InputMode::Command(cmd) = &state.mode { Some(cmd) } else { None };
+    let command = if let crate::app::InputMode::Command(cmd) = &state.mode {
+        Some(cmd)
+    } else {
+        None
+    };
     let want_second = state.hints_visible || command.is_some();
     let (bar, second) = if want_second && area.height >= 2 {
         let rows = Layout::default()
@@ -226,17 +229,15 @@ fn render_status(frame: &mut Frame, area: Rect, state: &AppState, p: Palette, vi
                     };
                     spans.push(Span::styled(cand.clone(), style));
                 }
-            } else if let Some(usage) = cmd
-                .input
-                .split_whitespace()
-                .next()
-                .and_then(crate::app::command_usage)
-            {
+            } else if let Some(usage) = cmd.input.split_whitespace().next().and_then(crate::app::command_usage) {
                 spans.push(Span::styled(format!("   {usage}"), Style::default().fg(p.dim)));
             }
             Line::from(spans)
         } else {
-            Line::from(Span::styled(format!(" {}", state.pane_hints()), Style::default().fg(p.dim)))
+            Line::from(Span::styled(
+                format!(" {}", state.pane_hints()),
+                Style::default().fg(p.dim),
+            ))
         };
         frame.render_widget(Paragraph::new(line), second_area);
     }
@@ -248,9 +249,15 @@ fn render_status_line(frame: &mut Frame, area: Rect, state: &AppState, p: Palett
     let mut left = vec![
         Span::styled(
             format!(" {tag} "),
-            Style::default().fg(Color::Black).bg(p.accent).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Black)
+                .bg(p.accent)
+                .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(format!("  {}", state.breadcrumb().join(" › ")), Style::default().fg(p.accent)),
+        Span::styled(
+            format!("  {}", state.breadcrumb().join(" › ")),
+            Style::default().fg(p.accent),
+        ),
     ];
     // Position mini-map: shown only when the grid is reduced (not all 9 panes
     // visible), so you know where the active pane sits. Groups of three keys
@@ -263,7 +270,10 @@ fn render_status_line(frame: &mut Frame, area: Rect, state: &AppState, p: Palett
             }
             let key = pane.key_label().to_string();
             let style = if *pane == state.active_pane {
-                Style::default().fg(Color::Black).bg(p.accent).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(p.accent)
+                    .add_modifier(Modifier::BOLD)
             } else if visible.contains(pane) {
                 Style::default().fg(p.text)
             } else {
@@ -290,7 +300,11 @@ fn render_status_line(frame: &mut Frame, area: Rect, state: &AppState, p: Palett
     if state.loading {
         meta.push(("⟳ sync".to_string(), accent));
     } else if let Some(age) = state.seconds_since_sync() {
-        let label = if age < 60 { format!("⟳ {age}s") } else { format!("⟳ {}m", age / 60) };
+        let label = if age < 60 {
+            format!("⟳ {age}s")
+        } else {
+            format!("⟳ {}m", age / 60)
+        };
         meta.push((label, dim));
     }
     // Active probe (multi-probe, API v81): shown only when the fleet has more
@@ -311,7 +325,10 @@ fn render_status_line(frame: &mut Frame, area: Rect, state: &AppState, p: Palett
     // (`i` cycles to the next one).
     let idle = state.idle_manny_count();
     if idle > 0 {
-        meta.push((format!("⚙ {idle} idle"), Style::default().fg(p.warn).add_modifier(Modifier::BOLD)));
+        meta.push((
+            format!("⚙ {idle} idle"),
+            Style::default().fg(p.warn).add_modifier(Modifier::BOLD),
+        ));
     }
     let unread = state.unread_alert_count();
     if unread > 0 {

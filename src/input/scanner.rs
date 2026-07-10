@@ -1,18 +1,13 @@
 use crossterm::event::KeyCode;
 use tokio::sync::mpsc;
 
-use crate::api::client::ApiClient;
-use crate::api::tasks::{
-    fetch_inspect,
-    fetch_recover,
-    fetch_scut_network,
-    fetch_turn_on_relay,
-};
-use crate::app::{
-    ActiveWizard, ApiMessage, AppState, DeployInput, LogEvent, MineInput, ObjectAction, ObjectActionInput, SalvageInput,
-    ScutNetworkInput, ScutRelayInput, WaypointsInput,
-};
 use super::geometry::list_nav;
+use crate::api::client::ApiClient;
+use crate::api::tasks::{fetch_inspect, fetch_recover, fetch_scut_network, fetch_turn_on_relay};
+use crate::app::{
+    ActiveWizard, ApiMessage, AppState, DeployInput, LogEvent, MineInput, ObjectAction, ObjectActionInput,
+    SalvageInput, ScutNetworkInput, ScutRelayInput, WaypointsInput,
+};
 /// Send the chosen object action, reusing the existing wizards/endpoints.
 pub(super) fn dispatch_object_action(
     state: &mut AppState,
@@ -92,7 +87,9 @@ pub(super) fn handle_scut_relay_event(
     client: &ApiClient,
     tx: &mpsc::Sender<ApiMessage>,
 ) {
-    let ActiveWizard::ScutRelay(ScutRelayInput::EnterNetworkName { .. }) = &state.active_wizard else { return };
+    let ActiveWizard::ScutRelay(ScutRelayInput::EnterNetworkName { .. }) = &state.active_wizard else {
+        return;
+    };
     match code {
         KeyCode::Esc => state.close_wizard(),
         KeyCode::Backspace => {
@@ -107,12 +104,20 @@ pub(super) fn handle_scut_relay_event(
         }
         KeyCode::Enter => {
             let (manny_id, relay_id, name) = {
-                let ActiveWizard::ScutRelay(ScutRelayInput::EnterNetworkName { manny_id, relay_id, buf, .. }) =
-                    &state.active_wizard
+                let ActiveWizard::ScutRelay(ScutRelayInput::EnterNetworkName {
+                    manny_id,
+                    relay_id,
+                    buf,
+                    ..
+                }) = &state.active_wizard
                 else {
                     return;
                 };
-                let name = if buf.trim().is_empty() { None } else { Some(buf.trim().to_string()) };
+                let name = if buf.trim().is_empty() {
+                    None
+                } else {
+                    Some(buf.trim().to_string())
+                };
                 (manny_id.clone(), *relay_id, name)
             };
             let network = name.clone();
@@ -137,14 +142,20 @@ pub(super) fn handle_scut_network_event(
                 KeyCode::Esc => state.close_wizard(),
                 KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
                     if let Some(new_sel) = list_nav(code, selection, count) {
-                        if let ActiveWizard::ScutNetwork(ScutNetworkInput::Picking { selection, .. }) = &mut state.active_wizard {
+                        if let ActiveWizard::ScutNetwork(ScutNetworkInput::Picking { selection, .. }) =
+                            &mut state.active_wizard
+                        {
                             *selection = new_sel;
                         }
                     }
                 }
                 KeyCode::Enter => {
                     let id = {
-                        let ActiveWizard::ScutNetwork(ScutNetworkInput::Picking { networks, .. }) = &state.active_wizard else { return };
+                        let ActiveWizard::ScutNetwork(ScutNetworkInput::Picking { networks, .. }) =
+                            &state.active_wizard
+                        else {
+                            return;
+                        };
                         networks[selection].0
                     };
                     state.active_wizard = ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { error: None });
@@ -154,17 +165,18 @@ pub(super) fn handle_scut_network_event(
                 _ => {}
             }
         }
-        ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { .. })
-            if code == KeyCode::Esc => {
-                state.close_wizard();
-                state.scut_network_view = None;
-            }
+        ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { .. }) if code == KeyCode::Esc => {
+            state.close_wizard();
+            state.scut_network_view = None;
+        }
         _ => {}
     }
 }
 
 pub(super) fn handle_waypoints_event(code: KeyCode, state: &mut AppState) {
-    let ActiveWizard::Waypoints(WaypointsInput::Browsing { entries, selection }) = &state.active_wizard else { return };
+    let ActiveWizard::Waypoints(WaypointsInput::Browsing { entries, selection }) = &state.active_wizard else {
+        return;
+    };
     let count = entries.len();
     let selection = *selection;
     match code {
@@ -178,7 +190,9 @@ pub(super) fn handle_waypoints_event(code: KeyCode, state: &mut AppState) {
         }
         KeyCode::Enter => {
             let (x, y, z) = {
-                let ActiveWizard::Waypoints(WaypointsInput::Browsing { entries, .. }) = &state.active_wizard else { return };
+                let ActiveWizard::Waypoints(WaypointsInput::Browsing { entries, .. }) = &state.active_wizard else {
+                    return;
+                };
                 let e = &entries[selection];
                 (e.x, e.y, e.z)
             };
@@ -203,14 +217,24 @@ pub(super) fn handle_object_action_event(
                 KeyCode::Esc => state.close_wizard(),
                 KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
                     if let Some(new_sel) = list_nav(code, sel, count) {
-                        if let ActiveWizard::ObjectAction(ObjectActionInput::PickAction { selection, .. }) = &mut state.active_wizard {
+                        if let ActiveWizard::ObjectAction(ObjectActionInput::PickAction { selection, .. }) =
+                            &mut state.active_wizard
+                        {
                             *selection = new_sel;
                         }
                     }
                 }
                 KeyCode::Enter => {
                     let (object_id, object_name, action) = {
-                        let ActiveWizard::ObjectAction(ObjectActionInput::PickAction { object_id, object_name, actions, selection }) = &state.active_wizard else { return };
+                        let ActiveWizard::ObjectAction(ObjectActionInput::PickAction {
+                            object_id,
+                            object_name,
+                            actions,
+                            selection,
+                        }) = &state.active_wizard
+                        else {
+                            return;
+                        };
                         (object_id.clone(), object_name.clone(), actions[*selection])
                     };
                     let mannies = state.collect_idle_onboard_mannies();
@@ -244,15 +268,30 @@ pub(super) fn handle_object_action_event(
                 KeyCode::Esc => state.close_wizard(),
                 KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
                     if let Some(new_sel) = list_nav(code, sel, count) {
-                        if let ActiveWizard::ObjectAction(ObjectActionInput::PickManny { selection, .. }) = &mut state.active_wizard {
+                        if let ActiveWizard::ObjectAction(ObjectActionInput::PickManny { selection, .. }) =
+                            &mut state.active_wizard
+                        {
                             *selection = new_sel;
                         }
                     }
                 }
                 KeyCode::Enter => {
                     let (object, action, manny) = {
-                        let ActiveWizard::ObjectAction(ObjectActionInput::PickManny { object_id, object_name, action, mannies, selection }) = &state.active_wizard else { return };
-                        ((object_id.clone(), object_name.clone()), *action, mannies[*selection].clone())
+                        let ActiveWizard::ObjectAction(ObjectActionInput::PickManny {
+                            object_id,
+                            object_name,
+                            action,
+                            mannies,
+                            selection,
+                        }) = &state.active_wizard
+                        else {
+                            return;
+                        };
+                        (
+                            (object_id.clone(), object_name.clone()),
+                            *action,
+                            mannies[*selection].clone(),
+                        )
                     };
                     dispatch_object_action(state, client, tx, action, object, manny);
                 }

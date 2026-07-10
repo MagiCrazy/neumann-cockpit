@@ -102,13 +102,21 @@ pub(crate) fn render_missions_overlay(frame: &mut Frame, area: Rect, state: &App
     }
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), rows[0]);
 
-    render_footer(frame, rows[1], p, &[
-        FooterKey::nav("[↑↓]", "select"),
-        FooterKey::nav("[a]", "abandon"),
-        FooterKey::nav("[Esc]", "close"),
-    ]);
+    render_footer(
+        frame,
+        rows[1],
+        p,
+        &[
+            FooterKey::nav("[↑↓]", "select"),
+            FooterKey::nav("[a]", "abandon"),
+            FooterKey::nav("[Esc]", "close"),
+        ],
+    );
 
-    if let ActiveWizard::Missions(MissionsInput::ConfirmAbandon { mission_title, error, .. }) = &state.active_wizard {
+    if let ActiveWizard::Missions(MissionsInput::ConfirmAbandon {
+        mission_title, error, ..
+    }) = &state.active_wizard
+    {
         render_abandon_confirm(frame, area, mission_title, error.as_deref(), p);
     }
 }
@@ -141,8 +149,10 @@ fn render_abandon_confirm(frame: &mut Frame, area: Rect, title: &str, error: Opt
         )));
     }
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), rows[0]);
-    render_footer(frame, rows[1], p, &[
-        FooterKey::danger("[Enter]", "ABANDON"),
-        FooterKey::nav("[Esc]", "keep"),
-    ]);
+    render_footer(
+        frame,
+        rows[1],
+        p,
+        &[FooterKey::danger("[Enter]", "ABANDON"), FooterKey::nav("[Esc]", "keep")],
+    );
 }

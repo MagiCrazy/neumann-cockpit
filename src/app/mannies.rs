@@ -1,5 +1,5 @@
-use crate::api::types::{Manny, MannyTaskVisibility, SectorObject, SectorObjectType};
 use super::*;
+use crate::api::types::{Manny, MannyTaskVisibility, SectorObject, SectorObjectType};
 
 impl AppState {
     pub fn manny_next(&mut self) {
@@ -13,16 +13,14 @@ impl AppState {
     pub fn manny_prev(&mut self) {
         if let Some(mannies) = &self.mannies {
             if !mannies.is_empty() {
-                self.mannies_selection = self
-                    .mannies_selection
-                    .checked_sub(1)
-                    .unwrap_or(mannies.len() - 1);
+                self.mannies_selection = self.mannies_selection.checked_sub(1).unwrap_or(mannies.len() - 1);
             }
         }
     }
 
     pub fn repair_max_percent(&self) -> f64 {
-        self.probe.as_ref()
+        self.probe
+            .as_ref()
             .and_then(|p| p.systems.as_ref())
             .and_then(|s| s.integrity_percent)
             .map(|i| (100.0_f64 - i).max(0.0))
@@ -30,9 +28,12 @@ impl AppState {
     }
 
     pub fn repair_metals_stock(&self) -> f64 {
-        self.probe.as_ref()
+        self.probe
+            .as_ref()
             .map(|p| {
-                p.inventory.resource_stocks.iter()
+                p.inventory
+                    .resource_stocks
+                    .iter()
                     .find(|s| s.stock_type == "metals")
                     .map(|s| s.amount)
                     .unwrap_or(0.0)
@@ -127,7 +128,9 @@ impl AppState {
     }
 
     pub fn set_transfer_deuterium_error(&mut self, msg: String) {
-        if let ActiveWizard::TransferDeuterium(TransferDeuteriumInput::EnterAmount { error, .. }) = &mut self.active_wizard {
+        if let ActiveWizard::TransferDeuterium(TransferDeuteriumInput::EnterAmount { error, .. }) =
+            &mut self.active_wizard
+        {
             *error = Some(msg);
         }
     }
@@ -157,7 +160,8 @@ impl AppState {
     }
 
     pub fn unread_message_count(&self) -> usize {
-        self.messages.iter()
+        self.messages
+            .iter()
             .filter(|m| m.status == crate::api::types::MessageStatus::Unread)
             .count()
     }
@@ -167,7 +171,9 @@ impl AppState {
     pub fn collect_message_recipients(&self) -> Vec<(String, crate::api::types::EndpointId, String)> {
         use crate::api::types::EndpointId;
         let mut out = Vec::new();
-        let Some(sector) = self.probe_current_sector_scan() else { return out };
+        let Some(sector) = self.probe_current_sector_scan() else {
+            return out;
+        };
         if let Some(probes) = sector.probes.as_ref() {
             for p in probes {
                 out.push(("probe".to_string(), EndpointId::Probe(p.id), p.name.clone()));
@@ -196,22 +202,24 @@ impl AppState {
         self.probe_current_sector_scan()
             .and_then(|s| s.objects.as_ref())
             .is_some_and(|objects| {
-                objects.iter().any(|o| {
-                    matches!(o.object_type, SectorObjectType::DeuteriumRefuelStation)
-                })
+                objects
+                    .iter()
+                    .any(|o| matches!(o.object_type, SectorObjectType::DeuteriumRefuelStation))
             })
     }
 
     pub fn collect_mineable_candidates(&self) -> Vec<(String, String)> {
-        let Some(sector) = self.probe_current_sector_scan() else { return Vec::new() };
-        let Some(objects) = sector.objects.as_ref() else { return Vec::new() };
+        let Some(sector) = self.probe_current_sector_scan() else {
+            return Vec::new();
+        };
+        let Some(objects) = sector.objects.as_ref() else {
+            return Vec::new();
+        };
         let mut out: Vec<(String, String)> = Vec::new();
         for o in objects {
             // Asteroids nested under a parent object (e.g. a solar system).
             for t in o.minable_targets.iter().flatten() {
-                if matches!(t.object_type, SectorObjectType::Asteroid)
-                    && !out.iter().any(|(id, _)| id == &t.id)
-                {
+                if matches!(t.object_type, SectorObjectType::Asteroid) && !out.iter().any(|(id, _)| id == &t.id) {
                     out.push((t.id.clone(), t.name.clone().unwrap_or_else(|| "unnamed".into())));
                 }
             }
@@ -239,7 +247,9 @@ impl AppState {
     /// Objects a Manny can inspect in the probe's current sector (API v65):
     /// asteroids plus top-level dormant constructs and detached containers.
     pub fn collect_inspectable_candidates(&self) -> Vec<(String, String)> {
-        let Some(sector) = self.probe_current_sector_scan() else { return Vec::new() };
+        let Some(sector) = self.probe_current_sector_scan() else {
+            return Vec::new();
+        };
         let mut out = self.collect_asteroid_candidates_in(sector);
         if let Some(objects) = sector.objects.as_ref() {
             for o in objects {
@@ -267,13 +277,19 @@ impl AppState {
         Some(sector)
             .and_then(|s| s.objects.as_ref())
             .map(|objects| {
-                objects.iter()
+                objects
+                    .iter()
                     .flat_map(|o| {
                         let direct = if matches!(o.object_type, SectorObjectType::Asteroid) {
-                            o.id.as_ref().map(|id| vec![(id.clone(), o.name.clone().unwrap_or_else(|| "unnamed".into()))])
+                            o.id.as_ref()
+                                .map(|id| vec![(id.clone(), o.name.clone().unwrap_or_else(|| "unnamed".into()))])
                                 .unwrap_or_default()
-                        } else { vec![] };
-                        let nested: Vec<(String, String)> = o.bookmark_targets.iter()
+                        } else {
+                            vec![]
+                        };
+                        let nested: Vec<(String, String)> = o
+                            .bookmark_targets
+                            .iter()
                             .filter(|t| matches!(t.object_type, SectorObjectType::Asteroid))
                             .map(|t| (t.id.clone(), t.name.clone().unwrap_or_else(|| "unnamed".into())))
                             .collect();
@@ -288,7 +304,8 @@ impl AppState {
         self.probe_current_sector_scan()
             .and_then(|s| s.objects.as_ref())
             .map(|objects| {
-                objects.iter()
+                objects
+                    .iter()
                     .filter(|o| matches!(o.object_type, SectorObjectType::Manny))
                     .map(|o| {
                         let id = o.id.clone().unwrap_or_default();
@@ -341,12 +358,12 @@ impl AppState {
     }
 
     pub fn collect_idle_onboard_mannies(&self) -> Vec<(String, String)> {
-        self.mannies.as_ref()
+        self.mannies
+            .as_ref()
             .map(|ms| {
                 ms.iter()
                     .filter(|m| {
-                        m.location.location_type == crate::api::types::MannyLocationType::Probe
-                            && m.can_receive_orders
+                        m.location.location_type == crate::api::types::MannyLocationType::Probe && m.can_receive_orders
                     })
                     .map(|m| (m.id.clone(), m.name.clone()))
                     .collect()
@@ -361,8 +378,7 @@ impl AppState {
             ms.iter()
                 .enumerate()
                 .filter(|(_, m)| {
-                    m.location.location_type == crate::api::types::MannyLocationType::Probe
-                        && m.can_receive_orders
+                    m.location.location_type == crate::api::types::MannyLocationType::Probe && m.can_receive_orders
                 })
                 .map(|(i, _)| i)
                 .collect()
@@ -391,11 +407,15 @@ impl AppState {
         self.probe_current_sector_scan()
             .and_then(|s| s.objects.as_ref())
             .map(|objects| {
-                objects.iter()
+                objects
+                    .iter()
                     .filter(|o| o.id.is_some())
                     .map(|o: &SectorObject| {
                         let id = o.id.clone().unwrap();
-                        let name = o.name.clone().unwrap_or_else(|| format!("{:?}", o.object_type).to_lowercase());
+                        let name = o
+                            .name
+                            .clone()
+                            .unwrap_or_else(|| format!("{:?}", o.object_type).to_lowercase());
                         (id, name)
                     })
                     .collect()
@@ -432,9 +452,12 @@ impl AppState {
     }
 
     pub fn collect_detachable_containers(&self) -> Vec<(String, String)> {
-        self.probe.as_ref()
+        self.probe
+            .as_ref()
             .map(|p| {
-                p.inventory.containers.iter()
+                p.inventory
+                    .containers
+                    .iter()
                     .filter(|c| c.kind != "probe")
                     .map(|c| (c.id.clone(), c.label.clone()))
                     .collect()
@@ -446,9 +469,12 @@ impl AppState {
     /// (API v81 `assemble-probe` consumes two of them). Excludes the probe's
     /// own container and any that still hold cargo.
     pub fn collect_empty_containers(&self) -> Vec<(String, String)> {
-        self.probe.as_ref()
+        self.probe
+            .as_ref()
             .map(|p| {
-                p.inventory.containers.iter()
+                p.inventory
+                    .containers
+                    .iter()
                     .filter(|c| c.kind != "probe" && c.used_capacity == 0.0)
                     .map(|c| (c.id.clone(), c.label.clone()))
                     .collect()
@@ -470,7 +496,8 @@ impl AppState {
         Some(sector)
             .and_then(|s| s.objects.as_ref())
             .map(|objects| {
-                objects.iter()
+                objects
+                    .iter()
                     .filter(|o| matches!(o.object_type, SectorObjectType::DetachedContainer))
                     .map(|o| {
                         let id = o.id.clone().unwrap_or_default();
@@ -486,11 +513,13 @@ impl AppState {
     /// to asteroid selection (or abort with an error if it has no asteroids).
     pub fn remote_mine_sector_loaded(&mut self, x: i32, y: i32, z: i32) {
         let (manny_id, manny_name) = match &self.active_wizard {
-            ActiveWizard::RemoteMine(RemoteMineInput::Loading { manny_id, manny_name, x: lx, y: ly, z: lz })
-                if (*lx, *ly, *lz) == (x, y, z) =>
-            {
-                (manny_id.clone(), manny_name.clone())
-            }
+            ActiveWizard::RemoteMine(RemoteMineInput::Loading {
+                manny_id,
+                manny_name,
+                x: lx,
+                y: ly,
+                z: lz,
+            }) if (*lx, *ly, *lz) == (x, y, z) => (manny_id.clone(), manny_name.clone()),
             _ => return,
         };
         let candidates = match self.sector_observation_at(x, y, z) {
@@ -533,11 +562,7 @@ impl AppState {
 
     /// Relative sector coords of a Manny from its location payload.
     pub fn manny_sector_coords(&self, manny: &Manny) -> Option<(i32, i32, i32)> {
-        let v = manny
-            .location
-            .sector
-            .as_ref()?
-            .get("relative")?;
+        let v = manny.location.sector.as_ref()?.get("relative")?;
         Some((
             v.get("x")?.as_f64()? as i32,
             v.get("y")?.as_f64()? as i32,

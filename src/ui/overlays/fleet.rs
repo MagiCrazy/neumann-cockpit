@@ -31,15 +31,28 @@ pub(crate) fn render_probe_switch_overlay(frame: &mut Frame, area: Rect, state: 
             } else {
                 " "
             };
-            let reach = if pr.is_reachable { "" } else { "   ⚠ out of SCUT range" };
+            let reach = if pr.is_reachable {
+                ""
+            } else {
+                "   ⚠ out of SCUT range"
+            };
             format!("{mark} {}  ·  {}{reach}", pr.name, probe_status_label(&pr.status))
         })
         .collect();
     let refs: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
     let height = (refs.len() as u16 + 6).clamp(8, 20);
     render_pick_list(
-        frame, area, p, " SWITCH PROBE ", 52, height,
-        Some("Pilot:"), &refs, selection, None, "pilot",
+        frame,
+        area,
+        p,
+        " SWITCH PROBE ",
+        52,
+        height,
+        Some("Pilot:"),
+        &refs,
+        selection,
+        None,
+        "pilot",
     );
 }
 
@@ -48,20 +61,40 @@ pub(crate) fn render_probe_switch_overlay(frame: &mut Frame, area: Rect, state: 
 /// server-validated, so a mismatch surfaces as an error line in step 2.
 pub(crate) fn render_transfer_deuterium_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let ActiveWizard::TransferDeuterium(transfer_deuterium) = &state.active_wizard else { return };
+    let ActiveWizard::TransferDeuterium(transfer_deuterium) = &state.active_wizard else {
+        return;
+    };
     match transfer_deuterium {
-        TransferDeuteriumInput::PickTarget { manny_name, targets, selection, .. } => {
-            let labels: Vec<String> =
-                targets.iter().map(|(id, name)| format!("{name}  ·  #{id}")).collect();
+        TransferDeuteriumInput::PickTarget {
+            manny_name,
+            targets,
+            selection,
+            ..
+        } => {
+            let labels: Vec<String> = targets.iter().map(|(id, name)| format!("{name}  ·  #{id}")).collect();
             let refs: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
             let height = (refs.len() as u16 + 6).clamp(8, 20);
             let title = format!(" TRANSFER DEUTERIUM — {manny_name} ");
             render_pick_list(
-                frame, area, p, &title, 54, height,
-                Some("Send to:"), &refs, *selection, None, "select",
+                frame,
+                area,
+                p,
+                &title,
+                54,
+                height,
+                Some("Send to:"),
+                &refs,
+                *selection,
+                None,
+                "select",
             );
         }
-        TransferDeuteriumInput::EnterAmount { target_name, buf, error, .. } => {
+        TransferDeuteriumInput::EnterAmount {
+            target_name,
+            buf,
+            error,
+            ..
+        } => {
             let popup = centered_rect(52, 8, area);
             frame.render_widget(Clear, popup);
             let block = Block::default()
@@ -97,17 +130,28 @@ pub(crate) fn render_transfer_deuterium_overlay(frame: &mut Frame, area: Rect, s
                 )));
             }
             frame.render_widget(Paragraph::new(lines), rows[0]);
-            render_footer(frame, rows[1], p, &[
-                FooterKey::commit("[Enter]", "TRANSFER"),
-                FooterKey::nav("[Esc]", "cancel"),
-            ]);
+            render_footer(
+                frame,
+                rows[1],
+                p,
+                &[
+                    FooterKey::commit("[Enter]", "TRANSFER"),
+                    FooterKey::nav("[Esc]", "cancel"),
+                ],
+            );
         }
     }
 }
 
 /// Text-entry overlay to rename the piloted probe (API v81).
 pub(crate) fn render_rename_probe_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let ActiveWizard::RenameProbe(RenameProbeInput::Typing { current_name, buf, error, .. }) = &state.active_wizard else {
+    let ActiveWizard::RenameProbe(RenameProbeInput::Typing {
+        current_name,
+        buf,
+        error,
+        ..
+    }) = &state.active_wizard
+    else {
         return;
     };
     let p = palette(state.color_mode);
@@ -134,12 +178,20 @@ pub(crate) fn render_rename_probe_overlay(frame: &mut Frame, area: Rect, state: 
     ]));
     if let Some(err) = error {
         lines.push(Line::default());
-        lines.push(Line::from(Span::styled(format!("✗ {err}"), Style::default().fg(p.crit))));
+        lines.push(Line::from(Span::styled(
+            format!("✗ {err}"),
+            Style::default().fg(p.crit),
+        )));
     }
     frame.render_widget(Paragraph::new(lines), rows[0]);
-    render_footer(frame, rows[1], p, &[
-        FooterKey::commit("[Enter]", "RENAME"),
-        FooterKey::nav("[Tab]", "suggest"),
-        FooterKey::nav("[Esc]", "cancel"),
-    ]);
+    render_footer(
+        frame,
+        rows[1],
+        p,
+        &[
+            FooterKey::commit("[Enter]", "RENAME"),
+            FooterKey::nav("[Tab]", "suggest"),
+            FooterKey::nav("[Esc]", "cancel"),
+        ],
+    );
 }

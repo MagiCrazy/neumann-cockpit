@@ -35,7 +35,11 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
     let label = |s: &str| Span::styled(format!("{s:<7} "), dim);
 
     let Some(probe) = &state.probe else {
-        let msg = if state.loading { "fetching…" } else { "no data — F5 to refresh" };
+        let msg = if state.loading {
+            "fetching…"
+        } else {
+            "no data — F5 to refresh"
+        };
         frame.render_widget(Paragraph::new(msg).style(dim), content);
         return;
     };
@@ -50,7 +54,10 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
     let name_line = if piloting_drone {
         Line::from(vec![
             Span::styled("▸ ", Style::default().fg(p.accent)),
-            Span::styled(probe.name.clone(), Style::default().fg(p.accent).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                probe.name.clone(),
+                Style::default().fg(p.accent).add_modifier(Modifier::BOLD),
+            ),
         ])
     } else {
         Line::styled(probe.name.clone(), text.add_modifier(Modifier::BOLD))
@@ -75,8 +82,16 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
     // Compact cue in the grid cell; the full roster unfolds when zoomed (`z`),
     // turning the centre pane into a fleet cockpit.
     if state.fleet.len() > 1 {
-        let piloting = if state.active_probe_id.is_none() { "★ default" } else { "▸ drone" };
-        let pilot_col = if state.active_probe_id.is_none() { p.dim } else { p.accent };
+        let piloting = if state.active_probe_id.is_none() {
+            "★ default"
+        } else {
+            "▸ drone"
+        };
+        let pilot_col = if state.active_probe_id.is_none() {
+            p.dim
+        } else {
+            p.accent
+        };
         lines.push(Line::from(vec![
             label("fleet"),
             Span::styled(format!("{} probes  ", state.fleet.len()), text),
@@ -84,9 +99,15 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
         ]));
         if state.zoomed {
             for pr in &state.fleet {
-                let is_active = Some(pr.id) == state.active_probe_id
-                    || (pr.is_default && state.active_probe_id.is_none());
-                let mark = if pr.is_default { "★" } else if is_active { "▸" } else { " " };
+                let is_active =
+                    Some(pr.id) == state.active_probe_id || (pr.is_default && state.active_probe_id.is_none());
+                let mark = if pr.is_default {
+                    "★"
+                } else if is_active {
+                    "▸"
+                } else {
+                    " "
+                };
                 let reach = if pr.is_reachable { "" } else { "  ⚠ far" };
                 let st = if is_active { Style::default().fg(p.accent) } else { dim };
                 lines.push(Line::styled(
@@ -116,15 +137,41 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
     // ── Vital gauges ──
     lines.push(Line::raw(""));
     let max_deuterium = probe.fuel.max_deuterium.unwrap_or(100.0);
-    let fuel = probe.fuel.deuterium.map(|d| (d / max_deuterium).clamp(0.0, 1.0)).unwrap_or(0.0);
-    lines.push(block_gauge_line("FUEL", fuel, &format!("{:.0}%", fuel * 100.0), ratio_color(fuel, p), p));
+    let fuel = probe
+        .fuel
+        .deuterium
+        .map(|d| (d / max_deuterium).clamp(0.0, 1.0))
+        .unwrap_or(0.0);
+    lines.push(block_gauge_line(
+        "FUEL",
+        fuel,
+        &format!("{:.0}%", fuel * 100.0),
+        ratio_color(fuel, p),
+        p,
+    ));
     if let Some(sys) = &probe.systems {
         let integ = (sys.integrity_percent.unwrap_or(100.0) / 100.0).clamp(0.0, 1.0);
-        lines.push(block_gauge_line("INTEG", integ, &format!("{:.0}%", integ * 100.0), ratio_color(integ, p), p));
+        lines.push(block_gauge_line(
+            "INTEG",
+            integ,
+            &format!("{:.0}%", integ * 100.0),
+            ratio_color(integ, p),
+            p,
+        ));
     }
     let inv = &probe.inventory;
-    let cargo = if inv.capacity > 0.0 { (inv.used_capacity / inv.capacity).clamp(0.0, 1.0) } else { 0.0 };
-    lines.push(block_gauge_line("CARGO", cargo, &format!("{:.0}%", cargo * 100.0), p.accent, p));
+    let cargo = if inv.capacity > 0.0 {
+        (inv.used_capacity / inv.capacity).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    lines.push(block_gauge_line(
+        "CARGO",
+        cargo,
+        &format!("{:.0}%", cargo * 100.0),
+        p.accent,
+        p,
+    ));
 
     // ── Movement (active) or current sector ──
     let active = probe.movement.as_ref().filter(|mv| {
@@ -146,20 +193,45 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
             Span::styled(
                 format!(
                     "({},{},{}) → ({},{},{})",
-                    mv.origin.x as i64, mv.origin.y as i64, mv.origin.z as i64,
-                    mv.target.x as i64, mv.target.y as i64, mv.target.z as i64,
+                    mv.origin.x as i64,
+                    mv.origin.y as i64,
+                    mv.origin.z as i64,
+                    mv.target.x as i64,
+                    mv.target.y as i64,
+                    mv.target.z as i64,
                 ),
                 text,
             ),
         ]));
-        lines.push(Line::from(vec![label("dist"), Span::styled(format!("{}", mv.distance), text)]));
+        lines.push(Line::from(vec![
+            label("dist"),
+            Span::styled(format!("{}", mv.distance), text),
+        ]));
         lines.push(Line::from(vec![
             label("phase"),
-            Span::styled(movement_phase_label(mv.phase.as_ref().unwrap_or(&mv.status)), Style::default().fg(p.warn)),
+            Span::styled(
+                movement_phase_label(mv.phase.as_ref().unwrap_or(&mv.status)),
+                Style::default().fg(p.warn),
+            ),
         ]));
-        lines.push(Line::from(vec![label("ETA"), Span::styled(format_duration(remaining), text)]));
-        lines.push(block_gauge_line("BURN", progress, &format!("{:.0}%", progress * 100.0), p.accent, p));
-        lines.push(block_gauge_line("SPEED", velocity, &format!("{velocity:.2}c"), p.accent, p));
+        lines.push(Line::from(vec![
+            label("ETA"),
+            Span::styled(format_duration(remaining), text),
+        ]));
+        lines.push(block_gauge_line(
+            "BURN",
+            progress,
+            &format!("{:.0}%", progress * 100.0),
+            p.accent,
+            p,
+        ));
+        lines.push(block_gauge_line(
+            "SPEED",
+            velocity,
+            &format!("{velocity:.2}c"),
+            p.accent,
+            p,
+        ));
         lines.push(Line::from(vec![
             label("cost"),
             Span::styled(format!("{:.1} deut", mv.fuel_cost_deuterium), dim),
@@ -179,13 +251,21 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
             lines.push(Line::from(vec![label("energy"), Span::styled(format!("{e:.0}"), text)]));
         }
         if let Some(rate) = sys.internal_clock_rate {
-            lines.push(Line::from(vec![label("clock"), Span::styled(format!("{rate:.2}×"), text)]));
+            lines.push(Line::from(vec![
+                label("clock"),
+                Span::styled(format!("{rate:.2}×"), text),
+            ]));
         }
     }
     lines.push(Line::from(vec![
         label("hold"),
         Span::styled(
-            format!("{} items · {} stocks · {} tanks", inv.items.len(), inv.resource_stocks.len(), inv.external_tanks.len()),
+            format!(
+                "{} items · {} stocks · {} tanks",
+                inv.items.len(),
+                inv.resource_stocks.len(),
+                inv.external_tanks.len()
+            ),
             dim,
         ),
     ]));

@@ -12,10 +12,10 @@ mod map;
 mod message;
 mod mode;
 mod scan;
-mod travel;
-mod waypoints;
 #[cfg(test)]
 mod tests;
+mod travel;
+mod waypoints;
 
 pub use boot::{BOOT_CHARS_PER_FRAME, BOOT_LINE_STRIDE};
 pub use color::*;
@@ -31,9 +31,9 @@ pub use scan::*;
 pub use waypoints::*;
 
 use crate::api::types::{
-    ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, Mission, Probe,
-    ProbeAlert, ProbeImprovement, ProbeInventory, ProbeMessage, ProbeSentMessage, ProbeSummary,
-    ScutNetwork, SectorObservation, StorageContainer, VisitedSector,
+    ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, Mission, Probe, ProbeAlert, ProbeImprovement,
+    ProbeInventory, ProbeMessage, ProbeSentMessage, ProbeSummary, ScutNetwork, SectorObservation, StorageContainer,
+    VisitedSector,
 };
 use chrono::{DateTime, Local, Utc};
 use tokio::time::Instant;
@@ -287,8 +287,7 @@ impl AppState {
 
     pub fn set_storage_move_error(&mut self, msg: String) {
         if let ActiveWizard::StorageMove(
-            StorageMoveInput::ConfigureResource { error, .. }
-            | StorageMoveInput::ConfigureItem { error, .. },
+            StorageMoveInput::ConfigureResource { error, .. } | StorageMoveInput::ConfigureItem { error, .. },
         ) = &mut self.active_wizard
         {
             *error = Some(msg);
@@ -308,7 +307,9 @@ impl AppState {
     }
 
     pub fn set_drop_container_error(&mut self, msg: String) {
-        if let ActiveWizard::DropContainer(DropStorageContainerInput::PickPlanet { error, .. }) = &mut self.active_wizard {
+        if let ActiveWizard::DropContainer(DropStorageContainerInput::PickPlanet { error, .. }) =
+            &mut self.active_wizard
+        {
             *error = Some(msg);
         }
     }
@@ -442,9 +443,7 @@ impl AppState {
     pub fn next_refresh_instant(&self) -> Instant {
         match self.movement_arrival {
             Some(arrival) => {
-                let remaining = (arrival - Utc::now())
-                    .to_std()
-                    .unwrap_or(std::time::Duration::ZERO);
+                let remaining = (arrival - Utc::now()).to_std().unwrap_or(std::time::Duration::ZERO);
                 Instant::now() + remaining
             }
             None => Instant::now() + std::time::Duration::from_secs(86400),
@@ -452,7 +451,6 @@ impl AppState {
     }
 
     pub fn seconds_until_refresh(&self) -> Option<i64> {
-        self.movement_arrival
-            .map(|a| (a - Utc::now()).num_seconds().max(0))
+        self.movement_arrival.map(|a| (a - Utc::now()).num_seconds().max(0))
     }
 }

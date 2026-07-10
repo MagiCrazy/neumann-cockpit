@@ -110,8 +110,7 @@ pub fn write_config(base_url: &str, api_key: &str) -> Result<PathBuf> {
 /// Path-injectable core of `write_config`.
 fn write_config_at(path: &std::path::Path, base_url: &str, api_key: &str) -> Result<()> {
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("creating config dir {}", parent.display()))?;
+        std::fs::create_dir_all(parent).with_context(|| format!("creating config dir {}", parent.display()))?;
     }
     // `{:?}` emits a double-quoted, backslash-escaped string — valid TOML basic
     // string syntax, and API keys / URLs never contain anything exotic.
@@ -141,11 +140,7 @@ pub fn history_path() -> PathBuf {
 /// source.
 pub fn db_path() -> PathBuf {
     ProjectDirs::from("net", "neumann", "neumann-cockpit")
-        .map(|d| {
-            d.state_dir()
-                .unwrap_or_else(|| d.data_local_dir())
-                .join("cockpit.db")
-        })
+        .map(|d| d.state_dir().unwrap_or_else(|| d.data_local_dir()).join("cockpit.db"))
         .unwrap_or_else(|| PathBuf::from("cockpit.db"))
 }
 
@@ -216,7 +211,10 @@ mod tests {
     fn placeholder_and_empty_key_need_key() {
         let path = tmp("placeholder");
         std::fs::write(&path, format!("api_key = {PLACEHOLDER_KEY:?}\n")).unwrap();
-        assert!(matches!(load_status_at(&path), ConfigStatus::NeedsKey), "example key is not real");
+        assert!(
+            matches!(load_status_at(&path), ConfigStatus::NeedsKey),
+            "example key is not real"
+        );
         std::fs::write(&path, "api_key = \"\"\n").unwrap();
         assert!(matches!(load_status_at(&path), ConfigStatus::NeedsKey), "empty key");
         std::fs::write(&path, "base_url = \"https://x\"\n").unwrap();
