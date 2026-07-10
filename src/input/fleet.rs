@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
 use crate::api::tasks::fetch_rename_probe;
-use crate::app::{ApiMessage, AppState, ProbeSwitchInput, RenameProbeInput};
+use crate::app::{ApiMessage, AppState, LogEvent, ProbeSwitchInput, RenameProbeInput};
 
 use super::geometry::list_nav;
 
@@ -64,7 +64,9 @@ pub(super) fn handle_rename_probe_event(
                 _ => None,
             };
             if let Some((id, name)) = order {
+                let new_name = name.clone();
                 fetch_rename_probe(id, name, client.clone(), tx.clone());
+                state.log_event(LogEvent::rename_probe(&new_name, Some(id)));
             }
         }
         _ => {}

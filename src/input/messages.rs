@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
 use crate::api::tasks::{fetch_mark_message_read, fetch_send_message};
-use crate::app::{ApiMessage, AppState, MessagesInput};
+use crate::app::{ApiMessage, AppState, LogEvent, MessagesInput};
 
 use super::geometry::list_nav;
 
@@ -101,12 +101,13 @@ pub(super) fn handle_messages_event(
                 }
             }
             KeyCode::Enter => {
-                let (kind, id, body) = {
-                    let MessagesInput::Compose { ref recipient_type, ref recipient_id, ref body_buf, .. } = state.messages_input else { return };
+                let (kind, id, body, recipient_name) = {
+                    let MessagesInput::Compose { ref recipient_type, ref recipient_id, ref body_buf, ref recipient_name, .. } = state.messages_input else { return };
                     if body_buf.trim().is_empty() { return }
-                    (recipient_type.clone(), recipient_id.clone(), body_buf.clone())
+                    (recipient_type.clone(), recipient_id.clone(), body_buf.clone(), recipient_name.clone())
                 };
                 fetch_send_message(kind, id, body, client.clone(), tx.clone());
+                state.log_event(LogEvent::message_sent(&recipient_name, state.active_probe_id));
             }
             _ => {}
         },

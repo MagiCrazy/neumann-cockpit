@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 
 use crate::api::tasks::fetch_abandon_mission;
 use crate::api::types::MissionStatus;
-use crate::app::{ApiMessage, AppState, MissionsInput};
+use crate::app::{ApiMessage, AppState, LogEvent, MissionsInput};
 use crate::api::client::ApiClient;
 
 use super::geometry::list_nav;
@@ -48,14 +48,15 @@ pub(super) fn handle_missions_event(
                 state.missions_input = MissionsInput::Browsing { selection };
             }
             KeyCode::Enter | KeyCode::Char('y') => {
-                let mission_id = {
-                    let MissionsInput::ConfirmAbandon { ref mission_id, .. } = state.missions_input
+                let (mission_id, mission_title) = {
+                    let MissionsInput::ConfirmAbandon { ref mission_id, ref mission_title, .. } = state.missions_input
                     else {
                         return;
                     };
-                    mission_id.clone()
+                    (mission_id.clone(), mission_title.clone())
                 };
                 fetch_abandon_mission(mission_id, client.clone(), tx.clone());
+                state.log_event(LogEvent::mission_abandon(&mission_title, state.active_probe_id));
             }
             _ => {}
         },

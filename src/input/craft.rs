@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
 use crate::api::tasks::{fetch_atomic_printer_craft, fetch_craft};
-use crate::app::{ApiMessage, AppState, Fabricator, FabricationInput};
+use crate::app::{ApiMessage, AppState, Fabricator, FabricationInput, LogEvent};
 use super::geometry::list_nav;
 
 /// Drive the unified fabrication wizard. `PickRecipe` browses the sectioned
@@ -50,13 +50,14 @@ pub(super) fn handle_fabrication_event(
                     }
                 }
                 KeyCode::Enter => {
-                    let picked = if let FabricationInput::PickBuilder { ref mannies, selection, ref recipe_id, .. } = state.fabrication {
-                        mannies.get(selection).map(|(id, _)| (id.clone(), recipe_id.clone()))
+                    let picked = if let FabricationInput::PickBuilder { ref mannies, selection, ref recipe_id, ref recipe_name, .. } = state.fabrication {
+                        mannies.get(selection).map(|(id, _)| (id.clone(), recipe_id.clone(), recipe_name.clone()))
                     } else {
                         None
                     };
-                    if let Some((manny_id, recipe_id)) = picked {
+                    if let Some((manny_id, recipe_id, recipe_name)) = picked {
                         fetch_craft(manny_id, recipe_id, client.clone(), tx.clone());
+                        state.log_event(LogEvent::craft(&recipe_name, false, state.active_probe_id));
                     }
                 }
                 _ => {}
@@ -82,6 +83,7 @@ fn commit_recipe(
         Fabricator::AtomicPrinter => {
             if state.has_atomic_printer() {
                 fetch_atomic_printer_craft(recipe_id, client.clone(), tx.clone());
+                state.log_event(LogEvent::craft(&recipe_name, true, state.active_probe_id));
             } else {
                 state.set_fabrication_error("no atomic printer in inventory".into());
             }
@@ -94,6 +96,7 @@ fn commit_recipe(
             };
             if let Some((manny_id, _)) = prefilled {
                 fetch_craft(manny_id, recipe_id, client.clone(), tx.clone());
+                state.log_event(LogEvent::craft(&recipe_name, false, state.active_probe_id));
                 return;
             }
             let mannies = state.collect_idle_onboard_mannies();
@@ -102,6 +105,7 @@ fn commit_recipe(
                 1 => {
                     let (manny_id, _) = mannies.into_iter().next().unwrap();
                     fetch_craft(manny_id, recipe_id, client.clone(), tx.clone());
+                    state.log_event(LogEvent::craft(&recipe_name, false, state.active_probe_id));
                 }
                 _ => {
                     state.fabrication = FabricationInput::PickBuilder {

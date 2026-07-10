@@ -301,7 +301,7 @@ pub(super) fn handle_remote_mine_event(
                     }
                 }
                 KeyCode::Enter => {
-                    let (manny_id, object_id, selected_resources, amount, container_id) = {
+                    let (manny_id, object_id, selected_resources, amount, container_id, destination) = {
                         let RemoteMineInput::PickContainer {
                             ref manny_id, ref object_id, resources, amount, ref containers, selection, ..
                         } = state.remote_mine else { return };
@@ -309,9 +309,11 @@ pub(super) fn handle_remote_mine_event(
                             .filter(|(i, _)| resources[*i])
                             .map(|(_, &t)| t.to_string())
                             .collect();
-                        (manny_id.clone(), object_id.clone(), selected, amount, containers[selection].0.clone())
+                        (manny_id.clone(), object_id.clone(), selected, amount, containers[selection].0.clone(), containers[selection].1.clone())
                     };
+                    let resources_label = selected_resources.join(", ");
                     fetch_mine(manny_id, object_id, selected_resources, amount, Some(container_id), client.clone(), tx.clone());
+                    state.log_event(LogEvent::mine(&resources_label, amount, &destination, state.active_probe_id));
                 }
                 _ => {}
             }

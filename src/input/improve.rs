@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
 use crate::api::tasks::fetch_improve_probe;
-use crate::app::{ApiMessage, AppState, ImproveInput};
+use crate::app::{ApiMessage, AppState, ImproveInput, LogEvent};
 use super::geometry::list_nav;
 
 /// Drive the probe-improvement wizard: pick an improvement, then resolve which
@@ -42,13 +42,14 @@ pub(super) fn handle_improve_event(
                     }
                 }
                 KeyCode::Enter => {
-                    let picked = if let ImproveInput::PickBuilder { ref mannies, selection, ref improvement_id, .. } = state.improve {
-                        mannies.get(selection).map(|(id, _)| (id.clone(), improvement_id.clone()))
+                    let picked = if let ImproveInput::PickBuilder { ref mannies, selection, ref improvement_id, ref improvement_name, .. } = state.improve {
+                        mannies.get(selection).map(|(id, _)| (id.clone(), improvement_id.clone(), improvement_name.clone()))
                     } else {
                         None
                     };
-                    if let Some((manny_id, improvement_id)) = picked {
+                    if let Some((manny_id, improvement_id, improvement_name)) = picked {
                         fetch_improve_probe(manny_id, improvement_id, client.clone(), tx.clone());
+                        state.log_event(LogEvent::improve(&improvement_name, state.active_probe_id));
                     }
                 }
                 _ => {}
@@ -85,6 +86,7 @@ fn commit_improvement(
         1 => {
             let (manny_id, _) = mannies.into_iter().next().unwrap();
             fetch_improve_probe(manny_id, id, client.clone(), tx.clone());
+            state.log_event(LogEvent::improve(&name, state.active_probe_id));
         }
         _ => {
             state.improve = ImproveInput::PickBuilder {
