@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::{AppState, ProbeSwitchInput, RenameProbeInput, TransferDeuteriumInput};
+use crate::app::{ActiveWizard, AppState, ProbeSwitchInput, RenameProbeInput, TransferDeuteriumInput};
 use crate::ui::theme::{palette, probe_status_label};
 
 use super::{centered_rect, render_footer, render_pick_list, FooterKey};
@@ -48,7 +48,8 @@ pub(crate) fn render_probe_switch_overlay(frame: &mut Frame, area: Rect, state: 
 /// server-validated, so a mismatch surfaces as an error line in step 2.
 pub(crate) fn render_transfer_deuterium_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    match &state.transfer_deuterium {
+    let ActiveWizard::TransferDeuterium(transfer_deuterium) = &state.active_wizard else { return };
+    match transfer_deuterium {
         TransferDeuteriumInput::PickTarget { manny_name, targets, selection, .. } => {
             let labels: Vec<String> =
                 targets.iter().map(|(id, name)| format!("{name}  ·  #{id}")).collect();
@@ -101,13 +102,12 @@ pub(crate) fn render_transfer_deuterium_overlay(frame: &mut Frame, area: Rect, s
                 FooterKey::nav("[Esc]", "cancel"),
             ]);
         }
-        TransferDeuteriumInput::Inactive => {}
     }
 }
 
 /// Text-entry overlay to rename the piloted probe (API v81).
 pub(crate) fn render_rename_probe_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let RenameProbeInput::Typing { current_name, buf, error, .. } = &state.rename_probe else {
+    let ActiveWizard::RenameProbe(RenameProbeInput::Typing { current_name, buf, error, .. }) = &state.active_wizard else {
         return;
     };
     let p = palette(state.color_mode);

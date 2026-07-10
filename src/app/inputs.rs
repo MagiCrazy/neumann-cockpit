@@ -9,10 +9,7 @@ pub enum ScanMode {
     DirectionPick,
 }
 
-#[derive(Default)]
 pub enum RepairInput {
-    #[default]
-    Inactive,
     Typing {
         manny_id: String,
         manny_name: String,
@@ -21,10 +18,7 @@ pub enum RepairInput {
     },
 }
 
-#[derive(Default)]
 pub enum TravelInput {
-    #[default]
-    Inactive,
     Typing(String),
     Confirming {
         x: i32,
@@ -62,10 +56,7 @@ pub enum ProbeSwitchInput {
 
 /// Rename-probe wizard (API v81): text entry that renames the piloted probe
 /// via `PATCH /api/probe/{id}`.
-#[derive(Default)]
 pub enum RenameProbeInput {
-    #[default]
-    Inactive,
     Typing {
         probe_id: u64,
         current_name: String,
@@ -78,10 +69,7 @@ pub enum RenameProbeInput {
 /// additional containers. Single step — the container multi-select and the
 /// (always-visible) ingredient bill live together; `Enter` with two selected
 /// fires the 3-hour task.
-#[derive(Default)]
 pub enum AssembleProbeInput {
-    #[default]
-    Inactive,
     PickContainers {
         manny_id: String,
         manny_name: String,
@@ -103,10 +91,7 @@ pub const DETACH_MODES: [(&str, &str); 2] = [
     ("hidden_on_asteroid", "hidden — attach to asteroid"),
 ];
 
-#[derive(Default)]
 pub enum ObjectActionInput {
-    #[default]
-    Inactive,
     PickAction {
         object_id: String,
         object_name: String,
@@ -122,10 +107,7 @@ pub enum ObjectActionInput {
     },
 }
 
-#[derive(Default)]
 pub enum AlertsInput {
-    #[default]
-    Inactive,
     /// `show_warnings` selects the Warnings tab; otherwise the Alerts tab.
     /// The entries themselves live in `AppState::alerts` / `damage_warnings`.
     Browsing {
@@ -134,10 +116,7 @@ pub enum AlertsInput {
     },
 }
 
-#[derive(Default)]
 pub enum RenameContainerInput {
-    #[default]
-    Inactive,
     Typing {
         container_id: String,
         current_label: String,
@@ -146,10 +125,7 @@ pub enum RenameContainerInput {
     },
 }
 
-#[derive(Default)]
 pub enum ContainerRulesInput {
-    #[default]
-    Inactive,
     /// Each routable type in `types` is assigned to at most one of the three
     /// lists; `selection` cursors `types`, cycled none → priority → exclusion
     /// → strict via Space.
@@ -169,10 +145,7 @@ pub enum ContainerRulesInput {
 /// not in storage containers, so it is excluded (matches the v44 schema).
 pub const MOVE_RESOURCE_TYPES: [&str; 3] = ["metals", "ice", "carbon_compounds"];
 
-#[derive(Default)]
 pub enum StorageMoveInput {
-    #[default]
-    Inactive,
     PickManny {
         mannies: Vec<(String, String)>,
         selection: usize,
@@ -205,10 +178,7 @@ pub enum StorageMoveInput {
     },
 }
 
-#[derive(Default)]
 pub enum DropStorageContainerInput {
-    #[default]
-    Inactive,
     PickContainer {
         manny_id: String,
         manny_name: String,
@@ -226,10 +196,7 @@ pub enum DropStorageContainerInput {
     },
 }
 
-#[derive(Default)]
 pub enum DropCargoInput {
-    #[default]
-    Inactive,
     /// Confirmation for the irreversible cargo drop (resources are lost).
     Confirm {
         manny_id: String,
@@ -238,10 +205,7 @@ pub enum DropCargoInput {
     },
 }
 
-#[derive(Default)]
 pub enum WaypointsInput {
-    #[default]
-    Inactive,
     Browsing {
         entries: Vec<WaypointEntry>,
         selection: usize,
@@ -260,10 +224,7 @@ pub enum Fabricator {
 
 /// Probe-improvement wizard (API v67+): pick an improvement, then resolve which
 /// idle onboard Manny installs it (auto when a single one, else `PickBuilder`).
-#[derive(Default)]
 pub enum ImproveInput {
-    #[default]
-    Inactive,
     PickImprovement {
         selection: usize,
         error: Option<String>,
@@ -281,10 +242,7 @@ pub enum ImproveInput {
 /// atomic printer and Manny craft. `PickRecipe` lists every recipe sectioned by
 /// fabricator; selecting a Manny recipe with no pre-chosen builder advances to
 /// `PickBuilder`, atomic recipes fire straight away.
-#[derive(Default)]
 pub enum FabricationInput {
-    #[default]
-    Inactive,
     PickRecipe {
         /// A builder Manny (id, name) pre-chosen when the catalog was opened
         /// from the Mannies pane on an orderable Manny. Manny recipes skip the
@@ -303,10 +261,7 @@ pub enum FabricationInput {
     },
 }
 
-#[derive(Default)]
 pub enum MineInput {
-    #[default]
-    Inactive,
     PickAsteroid {
         manny_id: String,
         manny_name: String,
@@ -330,10 +285,7 @@ pub enum MineInput {
 
 /// Remote mining of an idle Manny in a SCUT-reachable sector (API v60).
 /// Targets the Manny's sector; a detached container there is mandatory.
-#[derive(Default)]
 pub enum RemoteMineInput {
-    #[default]
-    Inactive,
     /// Waiting for the Manny's sector scan to arrive.
     Loading {
         manny_id: String,
@@ -375,10 +327,7 @@ pub enum RemoteMineInput {
     },
 }
 
-#[derive(Default)]
 pub enum SalvageInput {
-    #[default]
-    Inactive,
     PickTarget {
         manny_id: String,
         manny_name: String,
@@ -394,10 +343,7 @@ pub enum SalvageInput {
     },
 }
 
-#[derive(Default)]
 pub enum RecallInput {
-    #[default]
-    Inactive,
     Confirm {
         manny_id: String,
         manny_name: String,
@@ -408,10 +354,7 @@ pub enum RecallInput {
     },
 }
 
-#[derive(Default)]
 pub enum RefuelInput {
-    #[default]
-    Inactive,
     /// Confirmation to send a Manny to refill the probe deuterium tank.
     Confirm {
         manny_id: String,
@@ -426,10 +369,7 @@ pub enum RefuelInput {
 /// the percentage to transfer. The same-sector constraint is server-validated
 /// (the roster carries no coordinates), so a wrong target surfaces as an error
 /// in `EnterAmount`.
-#[derive(Default)]
 pub enum TransferDeuteriumInput {
-    #[default]
-    Inactive,
     /// Choose the destination probe from the roster (id, name pairs).
     PickTarget {
         manny_id: String,
@@ -448,19 +388,13 @@ pub enum TransferDeuteriumInput {
     },
 }
 
-#[derive(Default)]
 pub enum MindSnapshotInput {
-    #[default]
-    Inactive,
     /// Confirmation for the irreversible mind-snapshot reassignment to a fresh
     /// probe (only offered when the probe is dead or trapped by a black hole).
     Confirm { error: Option<String> },
 }
 
-#[derive(Default)]
 pub enum ScutRelayInput {
-    #[default]
-    Inactive,
     /// Turn-on wizard for an inactive relay: optional network name then confirm.
     EnterNetworkName {
         manny_id: String,
@@ -472,10 +406,7 @@ pub enum ScutRelayInput {
     },
 }
 
-#[derive(Default)]
 pub enum MessagesInput {
-    #[default]
-    Inactive,
     /// Browsing inbox (sent_tab=false) or sent (true); entries in AppState.
     Browsing { sent_tab: bool, selection: usize },
     /// Reading one message full-screen (its full body + emission sector).
@@ -495,10 +426,7 @@ pub enum MessagesInput {
     },
 }
 
-#[derive(Default)]
 pub enum ScutNetworkInput {
-    #[default]
-    Inactive,
     /// Several networks cover the sector — pick which one to inspect.
     Picking {
         networks: Vec<(i64, String)>, // (network id, name)
@@ -509,10 +437,7 @@ pub enum ScutNetworkInput {
     Viewing { error: Option<String> },
 }
 
-#[derive(Default)]
 pub enum MissionsInput {
-    #[default]
-    Inactive,
     /// Browsing the mission list; entries live in `AppState::missions`.
     Browsing { selection: usize },
     /// Confirmation for abandoning the selected active mission.
@@ -524,10 +449,7 @@ pub enum MissionsInput {
     },
 }
 
-#[derive(Default)]
 pub enum RenameMannyInput {
-    #[default]
-    Inactive,
     Typing {
         manny_id: String,
         manny_name: String,
@@ -536,10 +458,7 @@ pub enum RenameMannyInput {
     },
 }
 
-#[derive(Default)]
 pub enum DeployInput {
-    #[default]
-    Inactive,
     PickManny {
         mannies: Vec<(String, String)>,
         selection: usize,
@@ -558,10 +477,7 @@ pub enum DeployInput {
     },
 }
 
-#[derive(Default)]
 pub enum JettisonInput {
-    #[default]
-    Inactive,
     ConfirmManny {
         item_id: String,
         manny_name: String,
@@ -588,10 +504,7 @@ pub enum JettisonInput {
     },
 }
 
-#[derive(Default)]
 pub enum InspectInput {
-    #[default]
-    Inactive,
     PickTarget {
         manny_id: String,
         manny_name: String,
@@ -601,10 +514,7 @@ pub enum InspectInput {
     },
 }
 
-#[derive(Default)]
 pub enum RecoverInput {
-    #[default]
-    Inactive,
     PickContainer {
         manny_id: String,
         manny_name: String,
@@ -614,10 +524,7 @@ pub enum RecoverInput {
     },
 }
 
-#[derive(Default)]
 pub enum DetachInput {
-    #[default]
-    Inactive,
     PickContainer {
         manny_id: String,
         manny_name: String,
@@ -641,4 +548,46 @@ pub enum DetachInput {
         selection: usize,
         error: Option<String>,
     },
+}
+
+/// The single modal wizard the cockpit currently has open — a sum type over the
+/// 31 mutually-exclusive wizards, replacing 31 coexisting `*Input` fields on
+/// `AppState`. Because only one variant can be held at a time, "two wizards open
+/// at once" is now unrepresentable (the invariant is a compile-time fact, not a
+/// convention). `None` is the sole idle state (it replaced every `*Input::Inactive`).
+#[derive(Default)]
+pub enum ActiveWizard {
+    #[default]
+    None,
+    Repair(RepairInput),
+    Travel(TravelInput),
+    AssembleProbe(AssembleProbeInput),
+    RenameProbe(RenameProbeInput),
+    Jettison(JettisonInput),
+    Fabrication(FabricationInput),
+    Improve(ImproveInput),
+    Salvage(SalvageInput),
+    Recall(RecallInput),
+    Refuel(RefuelInput),
+    TransferDeuterium(TransferDeuteriumInput),
+    MindSnapshot(MindSnapshotInput),
+    ScutRelay(ScutRelayInput),
+    ScutNetwork(ScutNetworkInput),
+    Missions(MissionsInput),
+    Messages(MessagesInput),
+    RenameManny(RenameMannyInput),
+    Deploy(DeployInput),
+    Inspect(InspectInput),
+    Recover(RecoverInput),
+    Detach(DetachInput),
+    Alerts(AlertsInput),
+    RenameContainer(RenameContainerInput),
+    ContainerRules(ContainerRulesInput),
+    StorageMove(StorageMoveInput),
+    DropCargo(DropCargoInput),
+    DropContainer(DropStorageContainerInput),
+    ObjectAction(ObjectActionInput),
+    Waypoints(WaypointsInput),
+    Mine(MineInput),
+    RemoteMine(RemoteMineInput),
 }

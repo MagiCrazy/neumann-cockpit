@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
 use crate::api::tasks::{fetch_mark_message_read, fetch_send_message};
-use crate::app::{ApiMessage, AppState, LogEvent, MessagesInput};
+use crate::app::{ActiveWizard, ApiMessage, AppState, LogEvent, MessagesInput};
 
 use super::geometry::list_nav;
 
@@ -13,21 +13,21 @@ pub(super) fn handle_messages_event(
     client: &ApiClient,
     tx: &mpsc::Sender<ApiMessage>,
 ) {
-    match &state.messages_input {
-        MessagesInput::Browsing { sent_tab, selection } => {
+    match &state.active_wizard {
+        ActiveWizard::Messages(MessagesInput::Browsing { sent_tab, selection }) => {
             let sent_tab = *sent_tab;
             let selection = *selection;
             let count = if sent_tab { state.sent_messages.len() } else { state.messages.len() };
             match code {
                 KeyCode::Esc | KeyCode::Char('Y') | KeyCode::Char('q') => {
-                    state.messages_input = MessagesInput::Inactive;
+                    state.close_wizard();
                 }
                 KeyCode::Tab | KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l') => {
-                    state.messages_input = MessagesInput::Browsing { sent_tab: !sent_tab, selection: 0 };
+                    state.active_wizard = ActiveWizard::Messages(MessagesInput::Browsing { sent_tab: !sent_tab, selection: 0 });
                 }
                 KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
                     if let Some(new_sel) = list_nav(code, selection, count) {
-                        state.messages_input = MessagesInput::Browsing { sent_tab, selection: new_sel };
+                        state.active_wizard = ActiveWizard::Messages(MessagesInput::Browsing { sent_tab, selection: new_sel });
                     }
                 }
                 KeyCode::Enter => {
@@ -42,7 +42,7 @@ pub(super) fn handle_messages_event(
                         })
                     };
                     if let Some(id) = id {
-                        state.messages_input = MessagesInput::Reading { id, sent_tab };
+                        state.active_wizard = ActiveWizard::Messages(MessagesInput::Reading { id, sent_tab });
                     }
                 }
                 KeyCode::Char('c') => {
@@ -50,59 +50,59 @@ pub(super) fn handle_messages_event(
                     if recipients.is_empty() {
                         state.error = Some("no reachable recipient in this sector".into());
                     } else {
-                        state.messages_input = MessagesInput::PickRecipient { recipients, selection: 0 };
+                        state.active_wizard = ActiveWizard::Messages(MessagesInput::PickRecipient { recipients, selection: 0 });
                     }
                 }
                 _ => {}
             }
         }
-        MessagesInput::Reading { sent_tab, .. } => {
+        ActiveWizard::Messages(MessagesInput::Reading { sent_tab, .. }) => {
             let sent_tab = *sent_tab;
             if matches!(code, KeyCode::Esc | KeyCode::Char('h') | KeyCode::Left | KeyCode::Char('q')) {
-                state.messages_input = MessagesInput::Browsing { sent_tab, selection: 0 };
+                state.active_wizard = ActiveWizard::Messages(MessagesInput::Browsing { sent_tab, selection: 0 });
             }
         }
-        MessagesInput::PickRecipient { recipients, selection } => {
+        ActiveWizard::Messages(MessagesInput::PickRecipient { recipients, selection }) => {
             let sel = *selection;
             let count = recipients.len();
             match code {
-                KeyCode::Esc => state.messages_input = MessagesInput::Browsing { sent_tab: false, selection: 0 },
+                KeyCode::Esc => state.active_wizard = ActiveWizard::Messages(MessagesInput::Browsing { sent_tab: false, selection: 0 }),
                 KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
                     if let Some(new_sel) = list_nav(code, sel, count) {
-                        if let MessagesInput::PickRecipient { ref mut selection, .. } = state.messages_input {
+                        if let ActiveWizard::Messages(MessagesInput::PickRecipient { ref mut selection, .. }) = state.active_wizard {
                             *selection = new_sel;
                         }
                     }
                 }
                 KeyCode::Enter => {
-                    let MessagesInput::PickRecipient { ref recipients, selection } = state.messages_input else { return };
+                    let ActiveWizard::Messages(MessagesInput::PickRecipient { ref recipients, selection }) = state.active_wizard else { return };
                     let (kind, id, name) = recipients[selection].clone();
-                    state.messages_input = MessagesInput::Compose {
+                    state.active_wizard = ActiveWizard::Messages(MessagesInput::Compose {
                         recipient_type: kind,
                         recipient_id: id,
                         recipient_name: name,
                         body_buf: String::new(),
                         error: None,
-                    };
+                    });
                 }
                 _ => {}
             }
         }
-        MessagesInput::Compose { .. } => match code {
-            KeyCode::Esc => state.messages_input = MessagesInput::Browsing { sent_tab: false, selection: 0 },
+        ActiveWizard::Messages(MessagesInput::Compose { .. }) => match code {
+            KeyCode::Esc => state.active_wizard = ActiveWizard::Messages(MessagesInput::Browsing { sent_tab: false, selection: 0 }),
             KeyCode::Backspace => {
-                if let MessagesInput::Compose { ref mut body_buf, .. } = state.messages_input {
+                if let ActiveWizard::Messages(MessagesInput::Compose { ref mut body_buf, .. }) = state.active_wizard {
                     body_buf.pop();
                 }
             }
             KeyCode::Char(c) => {
-                if let MessagesInput::Compose { ref mut body_buf, .. } = state.messages_input {
+                if let ActiveWizard::Messages(MessagesInput::Compose { ref mut body_buf, .. }) = state.active_wizard {
                     body_buf.push(c);
                 }
             }
             KeyCode::Enter => {
                 let (kind, id, body, recipient_name) = {
-                    let MessagesInput::Compose { ref recipient_type, ref recipient_id, ref body_buf, ref recipient_name, .. } = state.messages_input else { return };
+                    let ActiveWizard::Messages(MessagesInput::Compose { ref recipient_type, ref recipient_id, ref body_buf, ref recipient_name, .. }) = state.active_wizard else { return };
                     if body_buf.trim().is_empty() { return }
                     (recipient_type.clone(), recipient_id.clone(), body_buf.clone(), recipient_name.clone())
                 };
@@ -111,6 +111,6 @@ pub(super) fn handle_messages_event(
             }
             _ => {}
         },
-        MessagesInput::Inactive => {}
+        _ => {}
     }
 }

@@ -1,5 +1,5 @@
 use crate::ui::theme::palette;
-use crate::app::{AppState, WaypointKind, WaypointsInput};
+use crate::app::{ActiveWizard, AppState, WaypointKind, WaypointsInput};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -11,7 +11,8 @@ use ratatui::{
 use super::{centered_rect, render_footer, FooterKey};
 pub(crate) fn render_waypoints_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let WaypointsInput::Browsing { ref entries, selection } = state.waypoints else { return };
+    let ActiveWizard::Waypoints(WaypointsInput::Browsing { entries, selection }) = &state.active_wizard else { return };
+    let selection = *selection;
 
     let height = (entries.len() as u16 + 5).min(20);
     let popup = centered_rect(58, height, area);

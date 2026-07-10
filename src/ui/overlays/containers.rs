@@ -1,5 +1,5 @@
 use crate::ui::theme::palette;
-use crate::app::{AppState, ContainerRulesInput, RenameContainerInput};
+use crate::app::{ActiveWizard, AppState, ContainerRulesInput, RenameContainerInput};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -12,8 +12,8 @@ use super::{centered_rect, render_footer, FooterKey};
 
 pub(crate) fn render_rename_container_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let RenameContainerInput::Typing { ref current_label, ref buf, ref error, .. } =
-        state.rename_container
+    let ActiveWizard::RenameContainer(RenameContainerInput::Typing { current_label, buf, error, .. }) =
+        &state.active_wizard
     else {
         return;
     };
@@ -53,19 +53,20 @@ pub(crate) fn render_rename_container_overlay(frame: &mut Frame, area: Rect, sta
 
 pub(crate) fn render_container_rules_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let ContainerRulesInput::Editing {
-        ref container_label,
-        ref types,
-        ref priority,
-        ref exclusion,
-        ref strict_exclusion,
+    let ActiveWizard::ContainerRules(ContainerRulesInput::Editing {
+        container_label,
+        types,
+        priority,
+        exclusion,
+        strict_exclusion,
         selection,
-        ref error,
+        error,
         ..
-    } = state.container_rules
+    }) = &state.active_wizard
     else {
         return;
     };
+    let selection = *selection;
 
     let height = (types.len() as u16 + 8).clamp(10, 24);
     let popup = centered_rect(58, height, area);

@@ -1,5 +1,5 @@
 use crate::ui::theme::palette;
-use crate::app::{AppState, JettisonInput};
+use crate::app::{ActiveWizard, AppState, JettisonInput};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::Style,
@@ -11,7 +11,8 @@ use ratatui::{
 use super::{centered_rect, render_footer, FooterKey};
 pub(crate) fn render_jettison_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    match &state.jettison {
+    let ActiveWizard::Jettison(jettison) = &state.active_wizard else { return };
+    match jettison {
         JettisonInput::ConfirmManny { manny_name, error, .. } => {
             let popup = centered_rect(48, 8, area);
             frame.render_widget(Clear, popup);
@@ -169,7 +170,6 @@ pub(crate) fn render_jettison_overlay(frame: &mut Frame, area: Rect, state: &App
             ]);
         }
 
-        JettisonInput::Inactive => {}
     }
 }
 

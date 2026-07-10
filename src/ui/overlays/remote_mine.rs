@@ -7,12 +7,13 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::{AppState, RemoteMineInput, RESOURCE_LABELS};
+use crate::app::{ActiveWizard, AppState, RemoteMineInput, RESOURCE_LABELS};
 use super::{centered_rect, render_footer, render_pick_list, FooterKey};
 
 pub(crate) fn render_remote_mine_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    match &state.remote_mine {
+    let ActiveWizard::RemoteMine(remote_mine) = &state.active_wizard else { return };
+    match remote_mine {
         RemoteMineInput::Loading { manny_name, x, y, z, .. } => {
             let popup = centered_rect(50, 5, area);
             frame.render_widget(Clear, popup);
@@ -105,6 +106,5 @@ pub(crate) fn render_remote_mine_overlay(frame: &mut Frame, area: Rect, state: &
             );
         }
 
-        RemoteMineInput::Inactive => {}
     }
 }

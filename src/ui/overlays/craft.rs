@@ -1,4 +1,4 @@
-use crate::app::{AppState, Fabricator, FabricationInput};
+use crate::app::{ActiveWizard, AppState, Fabricator, FabricationInput};
 use crate::ui::theme::{palette, Palette};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -12,21 +12,21 @@ use super::{centered_rect, render_footer, render_pick_list, FooterKey, KeyTone};
 
 /// Render whichever step of the unified fabrication wizard is active.
 pub(crate) fn render_fabrication_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    match state.fabrication {
-        FabricationInput::PickRecipe { selection, ref error, .. } => {
-            render_catalog(frame, area, state, selection, error.as_deref());
+    let ActiveWizard::Fabrication(fabrication) = &state.active_wizard else { return };
+    match fabrication {
+        FabricationInput::PickRecipe { selection, error, .. } => {
+            render_catalog(frame, area, state, *selection, error.as_deref());
         }
-        FabricationInput::PickBuilder { ref recipe_name, ref mannies, selection, ref error, .. } => {
+        FabricationInput::PickBuilder { recipe_name, mannies, selection, error, .. } => {
             let p = palette(state.color_mode);
             let names: Vec<&str> = mannies.iter().map(|(_, n)| n.as_str()).collect();
             let prompt = format!("Build {recipe_name} with:");
             let height = (names.len() as u16 + 6).clamp(8, 20);
             render_pick_list(
                 frame, area, p, " FABRICATION — SELECT BUILDER ", 46, height,
-                Some(&prompt), &names, selection, error.as_deref(), "BUILD",
+                Some(&prompt), &names, *selection, error.as_deref(), "BUILD",
             );
         }
-        FabricationInput::Inactive => {}
     }
 }
 
@@ -212,7 +212,7 @@ fn builder_line(fab: Fabricator, state: &AppState, p: Palette) -> Line<'static> 
         }
         Fabricator::Manny => {
             // A pre-chosen builder (opened from the Mannies pane) wins.
-            if let FabricationInput::PickRecipe { prefilled_manny: Some((_, name)), .. } = &state.fabrication {
+            if let ActiveWizard::Fabrication(FabricationInput::PickRecipe { prefilled_manny: Some((_, name)), .. }) = &state.active_wizard {
                 return Line::from(vec![
                     Span::styled("⚙ builder: ", dim),
                     Span::styled(name.clone(), Style::default().fg(p.text)),

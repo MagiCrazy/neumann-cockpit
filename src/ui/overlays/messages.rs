@@ -8,7 +8,7 @@ use ratatui::{
 };
 
 use crate::api::types::MessageStatus;
-use crate::app::{AppState, MessagesInput};
+use crate::app::{ActiveWizard, AppState, MessagesInput};
 use super::{centered_rect, render_footer, render_pick_list, FooterKey};
 
 fn preview(body: &str) -> String {
@@ -22,7 +22,8 @@ fn preview(body: &str) -> String {
 
 pub(crate) fn render_messages_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    match &state.messages_input {
+    let ActiveWizard::Messages(messages_input) = &state.active_wizard else { return };
+    match messages_input {
         MessagesInput::Browsing { sent_tab, selection } => {
             let popup = centered_rect(76, 80, area);
             frame.render_widget(Clear, popup);
@@ -175,6 +176,5 @@ pub(crate) fn render_messages_overlay(frame: &mut Frame, area: Rect, state: &App
             ]);
         }
 
-        MessagesInput::Inactive => {}
     }
 }

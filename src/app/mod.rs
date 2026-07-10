@@ -93,24 +93,16 @@ pub struct AppState {
     pub scan_filter: ScanFilter,
     /// Some(idx) when the scanner panel is in object-browsing mode.
     pub scanner_obj_selection: Option<usize>,
-    pub object_action: ObjectActionInput,
-    pub waypoints: WaypointsInput,
     /// Persistent alerts and damage warnings (fetched in `fetch_all`).
     pub alerts: Vec<ProbeAlert>,
     pub damage_warnings: Vec<ProbeAlert>,
     pub damage_warning_rule: Option<DamageWarningRule>,
-    pub alerts_input: AlertsInput,
     /// Storage containers fetched on demand when the containers overlay opens.
     pub storage_containers: Vec<StorageContainer>,
     pub storage_container_detail: Option<(StorageContainer, ContainerInventory)>,
     /// Error from the last container-detail fetch, shown in the drill-in instead
     /// of a "fetching…" line that would otherwise hang forever.
     pub storage_container_detail_error: Option<String>,
-    pub rename_container: RenameContainerInput,
-    pub container_rules: ContainerRulesInput,
-    pub storage_move: StorageMoveInput,
-    pub drop_cargo: DropCargoInput,
-    pub drop_container: DropStorageContainerInput,
     pub help_open: bool,
     /// Vertical scroll offset of the help overlay (rows). Reset when it closes.
     pub help_scroll: u16,
@@ -120,36 +112,17 @@ pub struct AppState {
     pub toast: Option<(String, DateTime<Local>)>,
     /// Sectors already visited by the probe (server-side history).
     pub visited_sectors: Vec<VisitedSector>,
-    pub travel: TravelInput,
     pub goto_visited: GotoVisitedInput,
     pub probe_switch: ProbeSwitchInput,
-    pub assemble_probe: AssembleProbeInput,
-    pub rename_probe: RenameProbeInput,
-    pub repair: RepairInput,
-    pub mine: MineInput,
-    pub remote_mine: RemoteMineInput,
-    pub jettison: JettisonInput,
-    pub fabrication: FabricationInput,
-    pub improve: ImproveInput,
-    pub salvage: SalvageInput,
-    pub recall: RecallInput,
-    pub refuel: RefuelInput,
-    pub transfer_deuterium: TransferDeuteriumInput,
-    pub mind_snapshot: MindSnapshotInput,
-    pub scut_relay: ScutRelayInput,
-    pub scut_network: ScutNetworkInput,
     pub scut_network_view: Option<ScutNetwork>,
     pub missions: Vec<Mission>,
-    pub missions_input: MissionsInput,
     pub messages: Vec<ProbeMessage>,
     pub sent_messages: Vec<ProbeSentMessage>,
-    pub messages_input: MessagesInput,
-    pub deploy: DeployInput,
-    pub rename_manny: RenameMannyInput,
-    pub inspect: InspectInput,
-    pub recover: RecoverInput,
-    pub detach: DetachInput,
     pub map: MapView,
+    /// The single modal wizard currently open (or `None`). Replaces the 31
+    /// mutually-exclusive `*Input` fields — only one can be held at a time, so
+    /// two wizards open at once is unrepresentable.
+    pub active_wizard: ActiveWizard,
     pub api_version: Option<u32>,
     pub recipes: Vec<CraftingRecipe>,
     pub probe_improvements: Vec<ProbeImprovement>,
@@ -230,7 +203,7 @@ impl AppState {
     }
 
     pub fn set_rename_probe_error(&mut self, msg: String) {
-        if let RenameProbeInput::Typing { ref mut error, .. } = self.rename_probe {
+        if let ActiveWizard::RenameProbe(RenameProbeInput::Typing { error, .. }) = &mut self.active_wizard {
             *error = Some(msg);
         }
     }
@@ -301,39 +274,41 @@ impl AppState {
     }
 
     pub fn set_rename_container_error(&mut self, msg: String) {
-        if let RenameContainerInput::Typing { ref mut error, .. } = self.rename_container {
+        if let ActiveWizard::RenameContainer(RenameContainerInput::Typing { error, .. }) = &mut self.active_wizard {
             *error = Some(msg);
         }
     }
 
     pub fn set_container_rules_error(&mut self, msg: String) {
-        if let ContainerRulesInput::Editing { ref mut error, .. } = self.container_rules {
+        if let ActiveWizard::ContainerRules(ContainerRulesInput::Editing { error, .. }) = &mut self.active_wizard {
             *error = Some(msg);
         }
     }
 
     pub fn set_storage_move_error(&mut self, msg: String) {
-        match &mut self.storage_move {
+        if let ActiveWizard::StorageMove(
             StorageMoveInput::ConfigureResource { error, .. }
-            | StorageMoveInput::ConfigureItem { error, .. } => *error = Some(msg),
-            _ => {}
+            | StorageMoveInput::ConfigureItem { error, .. },
+        ) = &mut self.active_wizard
+        {
+            *error = Some(msg);
         }
     }
 
     pub fn set_drop_cargo_error(&mut self, msg: String) {
-        if let DropCargoInput::Confirm { ref mut error, .. } = self.drop_cargo {
+        if let ActiveWizard::DropCargo(DropCargoInput::Confirm { error, .. }) = &mut self.active_wizard {
             *error = Some(msg);
         }
     }
 
     pub fn set_assemble_probe_error(&mut self, msg: String) {
-        if let AssembleProbeInput::PickContainers { ref mut error, .. } = self.assemble_probe {
+        if let ActiveWizard::AssembleProbe(AssembleProbeInput::PickContainers { error, .. }) = &mut self.active_wizard {
             *error = Some(msg);
         }
     }
 
     pub fn set_drop_container_error(&mut self, msg: String) {
-        if let DropStorageContainerInput::PickPlanet { ref mut error, .. } = self.drop_container {
+        if let ActiveWizard::DropContainer(DropStorageContainerInput::PickPlanet { error, .. }) = &mut self.active_wizard {
             *error = Some(msg);
         }
     }
@@ -342,12 +317,19 @@ impl AppState {
         self.toast = Some((msg.into(), Local::now()));
     }
 
+    /// Close whatever modal wizard is open (back to the idle cockpit). Replaces
+    /// the per-wizard `state.<field> = <Input>::Inactive` resets — with a single
+    /// `active_wizard` field there is now one way to close any wizard.
+    pub fn close_wizard(&mut self) {
+        self.active_wizard = ActiveWizard::None;
+    }
+
     /// Common tail of a successful action: show a confirmation toast and stage
-    /// the follow-up refresh. The wizard reset stays at the call site — it varies
-    /// (some actions reset two inputs, some return to a browsing state) — but the
-    /// toast + refetch pair is uniform, and centralising the refetch here removes
-    /// the `client.clone()`/`tx.clone()` spawn scattered across every match arm.
-    /// The event loop drains `pending_refetch` and dispatches the actual fetch.
+    /// the follow-up refresh. The wizard reset stays at the call site — most
+    /// arms `close_wizard()` first, but a few (mission abandon, message sent)
+    /// return to a browsing state and keep their overlay open, so closing here
+    /// would be wrong. The event loop drains `pending_refetch` and dispatches
+    /// the actual fetch.
     pub fn finish_action(&mut self, toast: impl Into<String>, refetch: Refetch) {
         self.set_toast(toast);
         self.pending_refetch = Some(refetch);

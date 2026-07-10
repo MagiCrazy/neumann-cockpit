@@ -1,4 +1,4 @@
-use crate::app::{AppState, MineInput, RESOURCE_LABELS, RESOURCE_TYPES};
+use crate::app::{ActiveWizard, AppState, MineInput, RESOURCE_LABELS, RESOURCE_TYPES};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::Style,
@@ -46,7 +46,8 @@ pub(crate) fn estimate_mine_duration(target_amount: f64, travel_deducted: bool) 
 
 pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    match &state.mine {
+    let ActiveWizard::Mine(mine) = &state.active_wizard else { return };
+    match mine {
         MineInput::PickAsteroid { manny_name, candidates, selection, .. } => {
             // Asteroids are usually unnamed, so label each by index + its known
             // resource content (like the Sector pane) instead of a bare name.
@@ -217,7 +218,6 @@ pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppStat
             render_footer(frame, rows[1], p, &keys);
         }
 
-        MineInput::Inactive => {}
     }
 }
 

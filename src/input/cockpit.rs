@@ -17,7 +17,7 @@ use crate::api::tasks::{
 };
 use crate::api::types::{MannyTask, MannyTaskVisibility};
 use crate::app::{
-    ApiMessage, AppState, AssembleProbeInput, CommsCategory, MissionsCategory, DeployInput, FabricationInput, ImproveInput, DetachInput, DropCargoInput, LogEvent,
+    ActiveWizard, ApiMessage, AppState, AssembleProbeInput, CommsCategory, MissionsCategory, DeployInput, FabricationInput, ImproveInput, DetachInput, DropCargoInput, LogEvent,
     CommandLine, DropStorageContainerInput, DrillLevel, InputMode, InspectInput, MenuAction,
     MessagesInput,
     MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput, Pane, RecallInput, RecoverInput,
@@ -119,7 +119,7 @@ fn open_actions(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiM
                     state.set_toast("no missions");
                 } else {
                     let selection = state.pane_nav[Pane::Missions.index()].cursor;
-                    state.missions_input = MissionsInput::Browsing { selection };
+                    state.active_wizard = ActiveWizard::Missions(MissionsInput::Browsing { selection });
                 }
             }
         },
@@ -136,7 +136,7 @@ fn comms_activate(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<Ap
     match state.comms_drill() {
         None => match CommsCategory::ALL.get(cursor) {
             Some(CommsCategory::Messages) => {
-                state.messages_input = MessagesInput::Browsing { sent_tab: false, selection: 0 };
+                state.active_wizard = ActiveWizard::Messages(MessagesInput::Browsing { sent_tab: false, selection: 0 });
                 fetch_messages(client.clone(), tx.clone());
                 fetch_sent_messages(client.clone(), tx.clone());
             }
@@ -236,12 +236,12 @@ fn open_sector_object_actions(state: &mut AppState) {
         state.set_toast(format!("no actions for {}", entry.name));
         return;
     }
-    state.object_action = ObjectActionInput::PickAction {
+    state.active_wizard = ActiveWizard::ObjectAction(ObjectActionInput::PickAction {
         object_id: entry.id.clone(),
         object_name: entry.name.clone(),
         actions,
         selection: 0,
-    };
+    });
 }
 
 fn handle_menu_key(
@@ -305,7 +305,7 @@ fn fire_menu_action(
     match action {
         MenuAction::Jettison => {
             match state.jettison_for_selected() {
-                Ok(input) => state.jettison = input,
+                Ok(input) => state.active_wizard = ActiveWizard::Jettison(input),
                 Err(msg) => state.error = Some(msg),
             }
             return;
@@ -316,11 +316,11 @@ fn fire_menu_action(
             if state.fabrication_recipes().is_empty() {
                 state.error = Some("recipes not loaded yet — F5 to refresh".into());
             } else {
-                state.fabrication = FabricationInput::PickRecipe {
+                state.active_wizard = ActiveWizard::Fabrication(FabricationInput::PickRecipe {
                     prefilled_manny: None,
                     selection: 0,
                     error: None,
-                };
+                });
             }
             return;
         }
@@ -330,13 +330,13 @@ fn fire_menu_action(
                 0 => state.error = Some("no idle Manny on board".into()),
                 1 => {
                     let (id, name) = mannies.into_iter().next().unwrap();
-                    state.storage_move = StorageMoveInput::PickKind {
+                    state.active_wizard = ActiveWizard::StorageMove(StorageMoveInput::PickKind {
                         actor_manny_id: id,
                         actor_manny_name: name,
                         selection: 0,
-                    };
+                    });
                 }
-                _ => state.storage_move = StorageMoveInput::PickManny { mannies, selection: 0 },
+                _ => state.active_wizard = ActiveWizard::StorageMove(StorageMoveInput::PickManny { mannies, selection: 0 }),
             }
             return;
         }
@@ -349,7 +349,7 @@ fn fire_menu_action(
             } else if state.collect_deploy_candidates().is_empty() {
                 state.error = Some("no target object in current sector — scan first".into());
             } else {
-                state.deploy = DeployInput::PickManny { mannies, selection: 0 };
+                state.active_wizard = ActiveWizard::Deploy(DeployInput::PickManny { mannies, selection: 0 });
             }
             return;
         }
@@ -358,17 +358,17 @@ fn fire_menu_action(
             match nets.len() {
                 0 => state.error = Some("no SCUT network covers this sector".into()),
                 1 => {
-                    state.scut_network = ScutNetworkInput::Viewing { error: None };
+                    state.active_wizard = ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { error: None });
                     state.scut_network_view = None;
                     fetch_scut_network(nets[0].0, client.clone(), tx.clone());
                 }
-                _ => state.scut_network = ScutNetworkInput::Picking { networks: nets, selection: 0 },
+                _ => state.active_wizard = ActiveWizard::ScutNetwork(ScutNetworkInput::Picking { networks: nets, selection: 0 }),
             }
             return;
         }
         MenuAction::Improve => {
             if state.has_orderable_improvement() {
-                state.improve = ImproveInput::PickImprovement { selection: 0, error: None };
+                state.active_wizard = ActiveWizard::Improve(ImproveInput::PickImprovement { selection: 0, error: None });
             } else {
                 state.error = Some("no probe improvement available".into());
             }
@@ -376,7 +376,7 @@ fn fire_menu_action(
         }
         MenuAction::MindSnapshot => {
             if state.probe_terminal_alert().is_some() {
-                state.mind_snapshot = MindSnapshotInput::Confirm { error: None };
+                state.active_wizard = ActiveWizard::MindSnapshot(MindSnapshotInput::Confirm { error: None });
             }
             return;
         }
@@ -386,12 +386,12 @@ fn fire_menu_action(
                     state.storage_container(&id).map(|c| (c.id.clone(), c.label.clone()))
                 {
                     let buf = state.next_name_suggestion();
-                    state.rename_container = RenameContainerInput::Typing {
+                    state.active_wizard = ActiveWizard::RenameContainer(RenameContainerInput::Typing {
                         container_id,
                         current_label: label,
                         buf,
                         error: None,
-                    };
+                    });
                 }
             }
             return;
@@ -399,7 +399,7 @@ fn fire_menu_action(
         MenuAction::EditContainerRules => {
             if let Some(id) = state.storage_selected_container_id() {
                 if let Some(editor) = state.rules_editor_for(&id) {
-                    state.container_rules = editor;
+                    state.active_wizard = ActiveWizard::ContainerRules(editor);
                 }
             }
             return;
@@ -442,7 +442,7 @@ fn fire_menu_action(
             return;
         }
         MenuAction::Travel => {
-            state.travel = TravelInput::Typing(String::new());
+            state.active_wizard = ActiveWizard::Travel(TravelInput::Typing(String::new()));
             return;
         }
         MenuAction::GotoVisited => {
@@ -454,7 +454,7 @@ fn fire_menu_action(
         MenuAction::Waypoints => {
             let entries = state.collect_waypoints();
             if !entries.is_empty() {
-                state.waypoints = WaypointsInput::Browsing { entries, selection: 0 };
+                state.active_wizard = ActiveWizard::Waypoints(WaypointsInput::Browsing { entries, selection: 0 });
             }
             return;
         }
@@ -484,12 +484,12 @@ fn fire_menu_action(
         MenuAction::RenameProbe => {
             if let Some((id, name)) = state.active_probe_identity() {
                 let buf = state.next_name_suggestion();
-                state.rename_probe = RenameProbeInput::Typing {
+                state.active_wizard = ActiveWizard::RenameProbe(RenameProbeInput::Typing {
                     probe_id: id,
                     current_name: name,
                     buf,
                     error: None,
-                };
+                });
             }
             return;
         }
@@ -510,17 +510,17 @@ fn fire_menu_action(
 
     match action {
         MenuAction::Repair if can => {
-            state.repair = RepairInput::Typing { manny_id: id, manny_name: name, buf: String::new(), error: None };
+            state.active_wizard = ActiveWizard::Repair(RepairInput::Typing { manny_id: id, manny_name: name, buf: String::new(), error: None });
         }
         MenuAction::Fabricate if can => {
             if state.fabrication_recipes().is_empty() {
                 state.error = Some("recipes not loaded yet — F5 to refresh".into());
             } else {
-                state.fabrication = FabricationInput::PickRecipe {
+                state.active_wizard = ActiveWizard::Fabrication(FabricationInput::PickRecipe {
                     prefilled_manny: Some((id, name)),
                     selection: 0,
                     error: None,
-                };
+                });
             }
         }
         MenuAction::AssembleProbe if can => {
@@ -528,25 +528,25 @@ fn fire_menu_action(
             if containers.len() < 2 {
                 state.error = Some("need two empty additional containers".into());
             } else {
-                state.assemble_probe = AssembleProbeInput::PickContainers {
+                state.active_wizard = ActiveWizard::AssembleProbe(AssembleProbeInput::PickContainers {
                     manny_id: id,
                     manny_name: name,
                     containers,
                     selected: Vec::new(),
                     cursor: 0,
                     error: None,
-                };
+                });
             }
         }
         MenuAction::Mine => {
             if remote_minable {
-                state.remote_mine = RemoteMineInput::Loading {
+                state.active_wizard = ActiveWizard::RemoteMine(RemoteMineInput::Loading {
                     manny_id: id,
                     manny_name: name,
                     x: coords.0,
                     y: coords.1,
                     z: coords.2,
-                };
+                });
                 state.set_toast("fetching remote sector…");
                 fetch_sector(Some(coords), client.clone(), tx.clone());
             } else if can {
@@ -555,7 +555,7 @@ fn fire_menu_action(
                     0 => state.error = Some("no mineable objects in current sector — scan first".into()),
                     1 => {
                         let (object_id, object_name) = candidates.into_iter().next().unwrap();
-                        state.mine = MineInput::Configure {
+                        state.active_wizard = ActiveWizard::Mine(MineInput::Configure {
                             manny_id: id,
                             manny_name: name,
                             object_id,
@@ -565,9 +565,9 @@ fn fire_menu_action(
                             amount_mode: false,
                             target_container: None,
                             error: None,
-                        };
+                        });
                     }
-                    _ => state.mine = MineInput::PickAsteroid { manny_id: id, manny_name: name, candidates, selection: 0 },
+                    _ => state.active_wizard = ActiveWizard::Mine(MineInput::PickAsteroid { manny_id: id, manny_name: name, candidates, selection: 0 }),
                 }
             }
         }
@@ -577,9 +577,9 @@ fn fire_menu_action(
                 0 => state.error = Some("no salvageable objects in current sector — scan first".into()),
                 1 => {
                     let (object_id, object_name) = candidates.into_iter().next().unwrap();
-                    state.salvage = SalvageInput::Confirm { manny_id: id, manny_name: name, object_id, object_name, error: None };
+                    state.active_wizard = ActiveWizard::Salvage(SalvageInput::Confirm { manny_id: id, manny_name: name, object_id, object_name, error: None });
                 }
-                _ => state.salvage = SalvageInput::PickTarget { manny_id: id, manny_name: name, candidates, selection: 0 },
+                _ => state.active_wizard = ActiveWizard::Salvage(SalvageInput::PickTarget { manny_id: id, manny_name: name, candidates, selection: 0 }),
             }
         }
         MenuAction::Inspect if can => {
@@ -591,7 +591,7 @@ fn fire_menu_action(
                     fetch_inspect(id, object_id, client.clone(), tx.clone());
                     state.log_event(LogEvent::inspect(&object_name, state.active_probe_id));
                 }
-                _ => state.inspect = InspectInput::PickTarget { manny_id: id, manny_name: name, candidates, selection: 0, error: None },
+                _ => state.active_wizard = ActiveWizard::Inspect(InspectInput::PickTarget { manny_id: id, manny_name: name, candidates, selection: 0, error: None }),
             }
         }
         MenuAction::Recover if can => {
@@ -603,7 +603,7 @@ fn fire_menu_action(
                     fetch_recover(id, object_id, client.clone(), tx.clone());
                     state.log_event(LogEvent::recover(&container_name, state.active_probe_id));
                 }
-                _ => state.recover = RecoverInput::PickContainer { manny_id: id, manny_name: name, candidates, selection: 0, error: None },
+                _ => state.active_wizard = ActiveWizard::Recover(RecoverInput::PickContainer { manny_id: id, manny_name: name, candidates, selection: 0, error: None }),
             }
         }
         MenuAction::Detach if can => {
@@ -612,9 +612,9 @@ fn fire_menu_action(
                 0 => state.error = Some("no detachable containers in inventory".into()),
                 1 => {
                     let (container_id, container_name) = containers.into_iter().next().unwrap();
-                    state.detach = DetachInput::PickMode { manny_id: id, manny_name: name, container_id, container_name, selection: 0, error: None };
+                    state.active_wizard = ActiveWizard::Detach(DetachInput::PickMode { manny_id: id, manny_name: name, container_id, container_name, selection: 0, error: None });
                 }
-                _ => state.detach = DetachInput::PickContainer { manny_id: id, manny_name: name, containers, selection: 0 },
+                _ => state.active_wizard = ActiveWizard::Detach(DetachInput::PickContainer { manny_id: id, manny_name: name, containers, selection: 0 }),
             }
         }
         MenuAction::DropStorageContainer if can => {
@@ -629,7 +629,7 @@ fn fire_menu_action(
                     state.error = Some("no planet in current sector — scan first".into());
                 } else if containers.len() == 1 {
                     let (container_id, container_name) = containers.into_iter().next().unwrap();
-                    state.drop_container = DropStorageContainerInput::PickPlanet {
+                    state.active_wizard = ActiveWizard::DropContainer(DropStorageContainerInput::PickPlanet {
                         manny_id: id,
                         manny_name: name,
                         container_id,
@@ -637,20 +637,20 @@ fn fire_menu_action(
                         planets,
                         selection: 0,
                         error: None,
-                    };
+                    });
                 } else {
-                    state.drop_container = DropStorageContainerInput::PickContainer {
+                    state.active_wizard = ActiveWizard::DropContainer(DropStorageContainerInput::PickContainer {
                         manny_id: id,
                         manny_name: name,
                         containers,
                         selection: 0,
-                    };
+                    });
                 }
             }
         }
         MenuAction::Refuel if can => {
             if state.deuterium_station_in_current_sector() {
-                state.refuel = RefuelInput::Confirm { manny_id: id, manny_name: name, error: None };
+                state.active_wizard = ActiveWizard::Refuel(RefuelInput::Confirm { manny_id: id, manny_name: name, error: None });
             } else {
                 state.error = Some("no deuterium refuel station in this sector".into());
             }
@@ -660,23 +660,23 @@ fn fire_menu_action(
             if targets.is_empty() {
                 state.error = Some("no other probe in the fleet".into());
             } else {
-                state.transfer_deuterium = TransferDeuteriumInput::PickTarget {
+                state.active_wizard = ActiveWizard::TransferDeuterium(TransferDeuteriumInput::PickTarget {
                     manny_id: id,
                     manny_name: name,
                     targets,
                     selection: 0,
-                };
+                });
             }
         }
         MenuAction::DropCargo if waiting_space => {
-            state.drop_cargo = DropCargoInput::Confirm { manny_id: id, manny_name: name, error: None };
+            state.active_wizard = ActiveWizard::DropCargo(DropCargoInput::Confirm { manny_id: id, manny_name: name, error: None });
         }
         MenuAction::Recall if !can && has_task => {
-            state.recall = RecallInput::Confirm { manny_id: id, manny_name: name, remote: remote_recall, error: None };
+            state.active_wizard = ActiveWizard::Recall(RecallInput::Confirm { manny_id: id, manny_name: name, remote: remote_recall, error: None });
         }
         MenuAction::Rename => {
             let buf = state.next_name_suggestion();
-            state.rename_manny = RenameMannyInput::Typing { manny_id: id, manny_name: name, buf, error: None };
+            state.active_wizard = ActiveWizard::RenameManny(RenameMannyInput::Typing { manny_id: id, manny_name: name, buf, error: None });
         }
         // Guard mismatch (state changed since the menu was built): no-op.
         _ => {}

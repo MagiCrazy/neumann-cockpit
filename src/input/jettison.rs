@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 use crate::api::client::ApiClient;
 use crate::api::tasks::fetch_jettison;
 use crate::app::{
-    ApiMessage, AppState, JettisonInput,
+    ActiveWizard, ApiMessage, AppState, JettisonInput,
 };
 pub(super) fn handle_jettison_event(
     code: KeyCode,
@@ -12,13 +12,13 @@ pub(super) fn handle_jettison_event(
     client: &ApiClient,
     tx: &mpsc::Sender<ApiMessage>,
 ) {
-    match &state.jettison {
-        JettisonInput::ConfirmManny { .. } => {
+    match &state.active_wizard {
+        ActiveWizard::Jettison(JettisonInput::ConfirmManny { .. }) => {
             match code {
-                KeyCode::Esc => state.jettison = JettisonInput::Inactive,
+                KeyCode::Esc => state.close_wizard(),
                 KeyCode::Enter => {
                     let item_id = {
-                        let JettisonInput::ConfirmManny { ref item_id, .. } = state.jettison else { return };
+                        let ActiveWizard::Jettison(JettisonInput::ConfirmManny { ref item_id, .. }) = state.active_wizard else { return };
                         item_id.clone()
                     };
                     fetch_jettison(item_id, None, client.clone(), tx.clone());
@@ -26,12 +26,12 @@ pub(super) fn handle_jettison_event(
                 _ => {}
             }
         }
-        JettisonInput::ConfirmRelay { .. } => {
+        ActiveWizard::Jettison(JettisonInput::ConfirmRelay { .. }) => {
             match code {
-                KeyCode::Esc => state.jettison = JettisonInput::Inactive,
+                KeyCode::Esc => state.close_wizard(),
                 KeyCode::Enter => {
                     let item_id = {
-                        let JettisonInput::ConfirmRelay { ref item_id, .. } = state.jettison else { return };
+                        let ActiveWizard::Jettison(JettisonInput::ConfirmRelay { ref item_id, .. }) = state.active_wizard else { return };
                         item_id.clone()
                     };
                     fetch_jettison(item_id, None, client.clone(), tx.clone());
@@ -39,9 +39,9 @@ pub(super) fn handle_jettison_event(
                 _ => {}
             }
         }
-        JettisonInput::EnterAmount { .. } => {
+        ActiveWizard::Jettison(JettisonInput::EnterAmount { .. }) => {
             match code {
-                KeyCode::Esc => state.jettison = JettisonInput::Inactive,
+                KeyCode::Esc => state.close_wizard(),
                 KeyCode::Backspace => state.jettison_backspace(),
                 KeyCode::Char('m') | KeyCode::Char('M') => state.jettison_fill_max(),
                 KeyCode::Char(c) => state.jettison_type_char(c),
@@ -49,7 +49,7 @@ pub(super) fn handle_jettison_event(
                 // irreversible drop, rather than firing straight away.
                 KeyCode::Enter => {
                     let next = {
-                        let JettisonInput::EnterAmount { ref item_id, ref item_name, ref buf, .. } = state.jettison else { return };
+                        let ActiveWizard::Jettison(JettisonInput::EnterAmount { ref item_id, ref item_name, ref buf, .. }) = state.active_wizard else { return };
                         let amount = if buf.is_empty() {
                             None
                         } else {
@@ -64,17 +64,17 @@ pub(super) fn handle_jettison_event(
                             error: None,
                         }
                     };
-                    state.jettison = next;
+                    state.active_wizard = ActiveWizard::Jettison(next);
                 }
                 _ => {}
             }
         }
-        JettisonInput::Confirm { .. } => {
+        ActiveWizard::Jettison(JettisonInput::Confirm { .. }) => {
             match code {
-                KeyCode::Esc => state.jettison = JettisonInput::Inactive,
+                KeyCode::Esc => state.close_wizard(),
                 KeyCode::Enter => {
                     let (item_id, amount) = {
-                        let JettisonInput::Confirm { ref item_id, amount, .. } = state.jettison else { return };
+                        let ActiveWizard::Jettison(JettisonInput::Confirm { ref item_id, amount, .. }) = state.active_wizard else { return };
                         (item_id.clone(), amount)
                     };
                     fetch_jettison(item_id, amount, client.clone(), tx.clone());
@@ -82,6 +82,6 @@ pub(super) fn handle_jettison_event(
                 _ => {}
             }
         }
-        JettisonInput::Inactive => {}
+        _ => {}
     }
 }

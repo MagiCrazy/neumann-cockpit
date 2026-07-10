@@ -1,4 +1,4 @@
-use crate::app::{AppState, AssembleProbeInput};
+use crate::app::{ActiveWizard, AppState, AssembleProbeInput};
 use crate::ui::theme::palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -22,8 +22,8 @@ const ASSEMBLY_BILL: &[&str] = &[
 ];
 
 pub(crate) fn render_assemble_probe_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let AssembleProbeInput::PickContainers { manny_name, containers, selected, cursor, error, .. } =
-        &state.assemble_probe
+    let ActiveWizard::AssembleProbe(AssembleProbeInput::PickContainers { manny_name, containers, selected, cursor, error, .. }) =
+        &state.active_wizard
     else {
         return;
     };
