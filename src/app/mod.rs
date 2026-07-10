@@ -11,6 +11,7 @@ mod mannies;
 mod map;
 mod message;
 mod mode;
+mod queue;
 mod scan;
 #[cfg(test)]
 mod tests;
@@ -27,6 +28,7 @@ pub use journal::*;
 pub use map::*;
 pub use message::*;
 pub use mode::*;
+pub use queue::*;
 pub use scan::*;
 pub use waypoints::*;
 
@@ -161,6 +163,14 @@ pub struct AppState {
     /// Follow-up refresh a completed action requested via `finish_action`,
     /// drained + dispatched by the event loop (which owns the client + sender).
     pub pending_refetch: Option<Refetch>,
+    // ── Production queue (#197) ─────────────────────────────────────────
+    /// The crafting queue: sequential steps, one running at a time.
+    pub craft_queue: Vec<QueuedCraft>,
+    /// Whether the executor is actively advancing the queue (explicit run).
+    pub queue_running: bool,
+    /// A craft the executor wants spawned; drained by the event loop (mirrors
+    /// `pending_fire`, since the state layer owns no client/sender).
+    pub queue_fire: Option<CraftFire>,
 }
 
 impl AppState {

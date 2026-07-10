@@ -584,4 +584,11 @@ pub enum ActiveWizard {
     Waypoints(WaypointsInput),
     Mine(MineInput),
     RemoteMine(RemoteMineInput),
+    Queue(QueueInput),
+}
+
+/// The production-queue overlay (#197): a manage view over `craft_queue`, opened
+/// with `:queue`. Not a step wizard — just a cursor over the steps.
+pub enum QueueInput {
+    Browsing { selection: usize },
 }
