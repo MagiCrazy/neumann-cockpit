@@ -4,7 +4,6 @@
 //! later blocs. U1 only wires the state and its default (`Normal`); the
 //! `Menu`/`Command` payloads are populated by blocs U5/U6. The `Prompt`
 //! variant (wrapping the existing `*Input` wizards) is added in U5.
-#![allow(dead_code)]
 
 /// An action a contextual menu item can fire. Each maps to launching one of
 /// the existing wizards (bloc U5 wires the Mannies pane; more panes follow).
