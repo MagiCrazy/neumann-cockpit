@@ -210,6 +210,7 @@ fn render_catalog(frame: &mut Frame, area: Rect, state: &AppState, selection: us
         &[
             FooterKey::nav("[↑/↓]", "select"),
             commit,
+            FooterKey::nav("[q]", "queue"),
             FooterKey::nav("[Esc]", "cancel"),
         ],
     );
