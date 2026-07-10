@@ -325,6 +325,29 @@ impl AppState {
         self.pending_journal.push(ev);
     }
 
+    /// The ship's-log flow shown in the pane: locally-captured actions merged
+    /// with reconstructed server events (alerts + damage warnings), newest
+    /// first, capped at the memory window. Server events live on the server and
+    /// are re-sent on each fetch, so they're projected fresh here rather than
+    /// persisted locally (no dedup needed — this recomputes per render).
+    pub fn ship_log_entries(&self) -> Vec<LogEvent> {
+        fn project(a: &ProbeAlert) -> LogEvent {
+            LogEvent {
+                occurred_at: a.scheduled_at.or(a.created_at).unwrap_or_else(Utc::now),
+                kind: crate::app::kind::ALERT.to_string(),
+                probe_id: None,
+                summary: a.message.clone(),
+                data: serde_json::Value::Null,
+            }
+        }
+        let mut all = self.journal.clone();
+        all.extend(self.alerts.iter().map(project));
+        all.extend(self.damage_warnings.iter().map(project));
+        all.sort_by_key(|e| std::cmp::Reverse(e.occurred_at));
+        all.truncate(crate::store::JOURNAL_WINDOW);
+        all
+    }
+
     /// Toast message while fresh (< 5 s); expired toasts are not shown.
     pub fn active_toast(&self) -> Option<&str> {
         self.toast

@@ -568,14 +568,16 @@ fn render_ship_log(frame: &mut Frame, area: Rect, state: &AppState, active: bool
     let dim = Style::default().fg(p.dim);
     let mut lines = Vec::new();
     let mut sel_line = None;
-    if state.journal.is_empty() {
+    // Actions merged with reconstructed server events (alerts / warnings).
+    let entries = state.ship_log_entries();
+    if entries.is_empty() {
         lines.push(Line::styled("ship's log empty — your actions will appear here", dim));
     } else {
         let cur = cursor(state, Pane::Missions);
         // Compact: truncate each line to the pane width with an ellipsis.
         // Zoomed: full width, so the whole captain's-log sentence reads out.
         let width = area.width.saturating_sub(2) as usize;
-        for (i, e) in state.journal.iter().enumerate() {
+        for (i, e) in entries.iter().enumerate() {
             if i == cur {
                 sel_line = Some(lines.len());
             }
