@@ -15,6 +15,11 @@ use crate::api::types::{MannyLocationType, MannyTask};
 /// `[Q]` never silently balloons into hundreds of API calls.
 pub const QUEUE_MAX: usize = 32;
 
+/// While the queue runs, the event loop polls at least this often (seconds) to
+/// catch a craft finishing — the server offers no push, so completion is only
+/// visible on the next fetch.
+pub const QUEUE_POLL_SECS: u64 = 4;
+
 #[derive(Clone, PartialEq)]
 pub enum StepState {
     /// Not started.
@@ -22,7 +27,9 @@ pub enum StepState {
     /// A repeat iteration is in flight. `observed_busy` guards the fire→busy
     /// lag: the builder reads idle for a beat after the order is accepted, so we
     /// only treat idle as *completion* once we have first seen it go busy.
-    Running { observed_busy: bool },
+    Running {
+        observed_busy: bool,
+    },
     Done,
     /// Halted here; carries the API error. The `completed` counter is kept so
     /// the overlay can show e.g. "✗ 3/10".
@@ -67,9 +74,7 @@ impl QueuedCraft {
     /// Two steps merge when they are the same recipe by the same target — so
     /// consecutive `[Q]` presses on a base element stack into one `×N` step.
     pub fn coalesces_with(&self, o: &QueuedCraft) -> bool {
-        self.fabricator == o.fabricator
-            && self.recipe_id == o.recipe_id
-            && self.builder_manny_id == o.builder_manny_id
+        self.fabricator == o.fabricator && self.recipe_id == o.recipe_id && self.builder_manny_id == o.builder_manny_id
     }
 
     pub fn is_running(&self) -> bool {
@@ -206,7 +211,11 @@ impl AppState {
             return;
         }
         // Nothing running: start the next pending step, or stop if drained.
-        if let Some(idx) = self.craft_queue.iter().position(|s| matches!(s.state, StepState::Pending)) {
+        if let Some(idx) = self
+            .craft_queue
+            .iter()
+            .position(|s| matches!(s.state, StepState::Pending))
+        {
             let step = &mut self.craft_queue[idx];
             step.state = StepState::Running { observed_busy: false };
             let f = fire_of(step);

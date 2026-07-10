@@ -52,9 +52,11 @@ pub(crate) fn render_queue_overlay(frame: &mut Frame, area: Rect, state: &AppSta
                 StepState::Done => ("✓", p.good),
                 StepState::Failed(_) => ("✗", p.crit),
             };
-            let name_style = Style::default()
-                .fg(p.text)
-                .add_modifier(if i == selection { Modifier::BOLD } else { Modifier::empty() });
+            let name_style = Style::default().fg(p.text).add_modifier(if i == selection {
+                Modifier::BOLD
+            } else {
+                Modifier::empty()
+            });
             let builder = step.builder_manny_name.as_deref().unwrap_or("atomic printer");
             let mut spans = vec![
                 Span::styled(if i == selection { "› " } else { "  " }, Style::default().fg(p.accent)),

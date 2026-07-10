@@ -142,7 +142,13 @@ fn enqueue_recipe(selection: usize, state: &mut AppState) {
                 None
             };
             let mannies = state.collect_idle_onboard_mannies();
-            let builder = prefilled.or_else(|| if mannies.len() == 1 { mannies.first().cloned() } else { None });
+            let builder = prefilled.or_else(|| {
+                if mannies.len() == 1 {
+                    mannies.first().cloned()
+                } else {
+                    None
+                }
+            });
             match builder {
                 Some((id, name)) => {
                     state.enqueue_craft(QueuedCraft::new(fab, recipe_id, recipe_name, Some(id), Some(name)));

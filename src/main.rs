@@ -11,11 +11,11 @@ use std::io;
 use tokio::sync::mpsc;
 
 use neumann_cockpit::api::tasks::{
-    fetch_all, fetch_api_version, fetch_crafting_recipes, fetch_mannies, fetch_messages, fetch_missions,
-    fetch_sent_messages,
+    fetch_all, fetch_api_version, fetch_atomic_printer_craft, fetch_craft, fetch_crafting_recipes, fetch_mannies,
+    fetch_messages, fetch_missions, fetch_sent_messages,
 };
 use neumann_cockpit::app::{
-    ActiveWizard, ApiMessage, AppState, ColorMode, MessagesInput, MissionsInput, Refetch, RemoteMineInput,
+    ActiveWizard, ApiMessage, AppState, ColorMode, Fabricator, MessagesInput, MissionsInput, Refetch, RemoteMineInput,
     ScutNetworkInput,
 };
 use neumann_cockpit::input::handle_event;
@@ -142,6 +142,25 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
             state.journal.truncate(store::JOURNAL_WINDOW);
         }
 
+        // Production queue: advance the executor, then spawn any craft it staged
+        // (the event loop owns the client + sender). A fresh mannies fetch lets
+        // the next tick detect the craft going busy, then idle → complete.
+        state.advance_queue();
+        if let Some(fire) = state.queue_fire.take() {
+            match fire.fabricator {
+                Fabricator::Manny => {
+                    if let Some(builder) = fire.builder_manny_id {
+                        fetch_craft(builder, fire.recipe_id, client.clone(), tx.clone());
+                    }
+                }
+                Fabricator::AtomicPrinter => {
+                    fetch_atomic_printer_craft(fire.recipe_id, client.clone(), tx.clone());
+                }
+            }
+            fetch_mannies(client.clone(), tx.clone());
+            state.loading = true;
+        }
+
         terminal.draw(|f| ui::render(f, &state))?;
 
         let deadline = state.next_refresh_instant();
@@ -245,11 +264,23 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         state.finish_action("jettisoned", Refetch::All);
                     }
                     ApiMessage::JettisonError(e) => state.set_wizard_error(e),
+                    // A craft can be wizard-fired (fabrication overlay open) or
+                    // queue-fired (no wizard). Only the wizard case toasts/closes;
+                    // a queued craft advances quietly (its refresh is already
+                    // scheduled by the fire path).
                     ApiMessage::CraftStarted => {
-                        state.close_wizard();
-                        state.finish_action("craft order sent", Refetch::Mannies);
+                        if matches!(state.active_wizard, ActiveWizard::Fabrication(_)) {
+                            state.close_wizard();
+                            state.finish_action("craft order sent", Refetch::Mannies);
+                        }
                     }
-                    ApiMessage::CraftError(e) => state.set_wizard_error(e),
+                    ApiMessage::CraftError(e) => {
+                        if matches!(state.active_wizard, ActiveWizard::Fabrication(_)) {
+                            state.set_wizard_error(e);
+                        } else {
+                            state.fail_queue(e);
+                        }
+                    }
                     ApiMessage::SalvageStarted => {
                         state.close_wizard();
                         state.finish_action("salvage order sent", Refetch::Mannies);
@@ -315,10 +346,18 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                     }
                     ApiMessage::DeployError(e) => state.set_wizard_error(e),
                     ApiMessage::AtomicPrinterCraftStarted => {
-                        state.close_wizard();
-                        state.finish_action("atomic printer craft started", Refetch::All);
+                        if matches!(state.active_wizard, ActiveWizard::Fabrication(_)) {
+                            state.close_wizard();
+                            state.finish_action("atomic printer craft started", Refetch::All);
+                        }
                     }
-                    ApiMessage::AtomicPrinterCraftError(e) => state.set_wizard_error(e),
+                    ApiMessage::AtomicPrinterCraftError(e) => {
+                        if matches!(state.active_wizard, ActiveWizard::Fabrication(_)) {
+                            state.set_wizard_error(e);
+                        } else {
+                            state.fail_queue(e);
+                        }
+                    }
                     ApiMessage::RecipesFetched(recipes) => state.recipes = recipes,
                     ApiMessage::ProbeImprovementsFetched(improvements) => {
                         state.probe_improvements = improvements;

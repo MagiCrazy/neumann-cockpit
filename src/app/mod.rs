@@ -457,13 +457,19 @@ impl AppState {
     }
 
     pub fn next_refresh_instant(&self) -> Instant {
-        match self.movement_arrival {
+        let base = match self.movement_arrival {
             Some(arrival) => {
                 let remaining = (arrival - Utc::now()).to_std().unwrap_or(std::time::Duration::ZERO);
                 Instant::now() + remaining
             }
             None => Instant::now() + std::time::Duration::from_secs(86400),
+        };
+        // While the production queue runs, poll briskly so a finished craft is
+        // detected within a few seconds (the server has no push).
+        if self.queue_running {
+            return base.min(Instant::now() + std::time::Duration::from_secs(QUEUE_POLL_SECS));
         }
+        base
     }
 
     pub fn seconds_until_refresh(&self) -> Option<i64> {
