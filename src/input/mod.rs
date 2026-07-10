@@ -10,7 +10,7 @@ use crate::app::{
     MessagesInput, MissionsInput, ObjectActionInput, RecallInput, RecoverInput, RefuelInput,
     RemoteMineInput, RenameContainerInput, RenameMannyInput, RepairInput, SalvageInput, ScanMode,
     GotoVisitedInput, ImproveInput, InputMode, ProbeSwitchInput, RenameProbeInput, ScutNetworkInput,
-    ScutRelayInput, StorageMoveInput, TravelInput, WaypointsInput,
+    ScutRelayInput, StorageMoveInput, TransferDeuteriumInput, TravelInput, WaypointsInput,
 };
 mod alerts;
 mod assemble;
@@ -39,7 +39,9 @@ use containers::{
     handle_container_rules_event, handle_rename_container_event,
 };
 use craft::handle_fabrication_event;
-use fleet::{handle_probe_switch_event, handle_rename_probe_event};
+use fleet::{
+    handle_probe_switch_event, handle_rename_probe_event, handle_transfer_deuterium_event,
+};
 use geometry::face_d2;
 use improve::handle_improve_event;
 use jettison::handle_jettison_event;
@@ -81,6 +83,7 @@ const WIZARD_INPUTS: &[(WizardGuard, WizardHandler)] = &[
     (|s| !matches!(s.salvage, SalvageInput::Inactive), handle_salvage_event),
     (|s| !matches!(s.recall, RecallInput::Inactive), handle_recall_event),
     (|s| !matches!(s.refuel, RefuelInput::Inactive), handle_refuel_event),
+    (|s| !matches!(s.transfer_deuterium, TransferDeuteriumInput::Inactive), handle_transfer_deuterium_event),
     (|s| !matches!(s.mind_snapshot, MindSnapshotInput::Inactive), handle_mind_snapshot_event),
     (|s| !matches!(s.scut_relay, ScutRelayInput::Inactive), handle_scut_relay_event),
     (|s| !matches!(s.scut_network, ScutNetworkInput::Inactive), handle_scut_network_event),

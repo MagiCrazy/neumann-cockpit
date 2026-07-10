@@ -21,7 +21,7 @@ use crate::app::{
     CommandLine, DropStorageContainerInput, DrillLevel, InputMode, InspectInput, MenuAction,
     MessagesInput,
     MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput, Pane, RecallInput, RecoverInput,
-    GotoVisitedInput, ProbeSwitchInput, RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput,
+    GotoVisitedInput, ProbeSwitchInput, RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput, TransferDeuteriumInput,
     RenameProbeInput,
     RepairInput, SalvageInput, ScanMode, ScutNetworkInput, StorageMoveInput, TravelInput,
     WaypointsInput,
@@ -653,6 +653,19 @@ fn fire_menu_action(
                 state.refuel = RefuelInput::Confirm { manny_id: id, manny_name: name, error: None };
             } else {
                 state.error = Some("no deuterium refuel station in this sector".into());
+            }
+        }
+        MenuAction::TransferDeuterium if can => {
+            let targets = state.transfer_deuterium_targets();
+            if targets.is_empty() {
+                state.error = Some("no other probe in the fleet".into());
+            } else {
+                state.transfer_deuterium = TransferDeuteriumInput::PickTarget {
+                    manny_id: id,
+                    manny_name: name,
+                    targets,
+                    selection: 0,
+                };
             }
         }
         MenuAction::DropCargo if waiting_space => {

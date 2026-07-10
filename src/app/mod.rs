@@ -118,6 +118,7 @@ pub struct AppState {
     pub salvage: SalvageInput,
     pub recall: RecallInput,
     pub refuel: RefuelInput,
+    pub transfer_deuterium: TransferDeuteriumInput,
     pub mind_snapshot: MindSnapshotInput,
     pub scut_relay: ScutRelayInput,
     pub scut_network: ScutNetworkInput,

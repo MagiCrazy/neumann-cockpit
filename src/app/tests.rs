@@ -1474,6 +1474,44 @@ fn menu_item(menu: &ContextMenu, action: MenuAction) -> &MenuItem {
     menu.items.iter().find(|i| i.action == action).expect("menu item")
 }
 
+fn probe_summary(id: u64, name: &str, is_default: bool) -> crate::api::types::ProbeSummary {
+    crate::api::types::ProbeSummary {
+        id,
+        name: name.to_string(),
+        status: crate::api::types::ProbeStatus::Idle,
+        is_default,
+        is_reachable: true,
+    }
+}
+
+#[test]
+fn transfer_deuterium_targets_exclude_the_piloted_probe() {
+    let mut state = AppState::default();
+    state.fleet = vec![
+        probe_summary(1, "Anchor", true),
+        probe_summary(2, "Scout", false),
+        probe_summary(3, "Rover", false),
+    ];
+    state.default_probe_id = Some(1);
+
+    // Piloting the default (active_probe_id = None → falls back to default 1):
+    // the two drones are eligible, the source is excluded.
+    let targets = state.transfer_deuterium_targets();
+    assert_eq!(targets, vec![(2, "Scout".to_string()), (3, "Rover".to_string())]);
+
+    // Piloting a drone: the anchor and the other drone are eligible.
+    state.active_probe_id = Some(2);
+    let ids: Vec<u64> = state.transfer_deuterium_targets().iter().map(|(id, _)| *id).collect();
+    assert_eq!(ids, vec![1, 3]);
+
+    // The Mannies menu enables the action on an idle Manny once a target exists.
+    state.active_probe_id = None;
+    state.active_pane = Pane::Mannies;
+    state.mannies = Some(vec![make_manny("m1", "probe_rack", true, None)]);
+    let menu = state.build_context_menu().expect("mannies menu");
+    assert!(menu_item(&menu, MenuAction::TransferDeuterium).enabled);
+}
+
 #[test]
 fn mannies_context_menu_reflects_manny_state() {
     let mut state = AppState::default();
@@ -1491,6 +1529,7 @@ fn mannies_context_menu_reflects_manny_state() {
     assert!(menu_item(&menu, MenuAction::Rename).enabled);
     assert!(!menu_item(&menu, MenuAction::Recall).enabled);
     assert!(!menu_item(&menu, MenuAction::Refuel).enabled); // no station
+    assert!(!menu_item(&menu, MenuAction::TransferDeuterium).enabled); // single probe
     assert!(!menu_item(&menu, MenuAction::DropCargo).enabled); // not waiting
     // Cursor lands on the first enabled item.
     assert!(menu.items[menu.cursor].enabled);

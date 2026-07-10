@@ -162,6 +162,15 @@ impl LogEvent {
         Self::action(kind::REFUEL, "Sent a manny to refill the deuterium tank.".to_string(), probe_id)
     }
 
+    /// "Dispatched a manny to ferry {amount}% deuterium to «target»."
+    pub fn transfer_deuterium(target: &str, amount: f64, probe_id: Option<u64>) -> Self {
+        Self::action(
+            kind::TRANSFER,
+            format!("Dispatched a manny to ferry {amount:.0}% deuterium to «{target}»."),
+            probe_id,
+        )
+    }
+
     pub fn assemble_probe(probe_id: Option<u64>) -> Self {
         Self::action(kind::ASSEMBLE, "Began assembling a new drone (~3h).".to_string(), probe_id)
     }
@@ -212,6 +221,7 @@ pub mod kind {
     pub const IMPROVE: &str = "improve";
     pub const INSPECT: &str = "inspect";
     pub const REFUEL: &str = "refuel";
+    pub const TRANSFER: &str = "transfer";
     pub const ASSEMBLE: &str = "assemble";
     pub const DROP_CARGO: &str = "drop_cargo";
     pub const MIND_SNAPSHOT: &str = "mind_snapshot";

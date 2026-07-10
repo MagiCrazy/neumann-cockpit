@@ -479,6 +479,25 @@ pub fn fetch_refill_deuterium(manny_id: String, client: ApiClient, tx: mpsc::Sen
     });
 }
 
+pub fn fetch_transfer_deuterium(
+    manny_id: String,
+    target_probe_id: u64,
+    amount: f64,
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+) {
+    tokio::spawn(async move {
+        let msg = match client
+            .transfer_deuterium_to_probe(&manny_id, target_probe_id, amount)
+            .await
+        {
+            Ok(_) => ApiMessage::DeuteriumTransferStarted,
+            Err(e) => ApiMessage::DeuteriumTransferError(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
 pub fn fetch_scut_network(network_id: i64, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     tokio::spawn(async move {
         let msg = match client.get_scut_network(network_id).await {
