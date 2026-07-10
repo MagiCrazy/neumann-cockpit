@@ -72,6 +72,8 @@ pub fn handle_cockpit_event(
         KeyCode::Char('z') => state.toggle_zoom(),
         KeyCode::Char(':') => state.mode = InputMode::Command(CommandLine::default()),
         KeyCode::Char('?') => state.help_open = true,
+        // Jump to the next idle Manny (focuses the Mannies pane).
+        KeyCode::Char('i') => state.cycle_to_next_idle_manny(),
         KeyCode::F(1) => state.hints_visible = !state.hints_visible,
         // Esc backs out one step: leave zoom first, then drill up.
         KeyCode::Esc => {
