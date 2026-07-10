@@ -216,7 +216,7 @@ impl super::AppState {
             // mission: its steps. Otherwise (Missions category): the list.
             Pane::Missions => match drill {
                 None => MissionsCategory::ALL.len(),
-                Some(DrillLevel::MissionsCat(MissionsCategory::ShipsLog)) => self.journal.len(),
+                Some(DrillLevel::MissionsCat(MissionsCategory::ShipsLog)) => self.ship_log_entries().len(),
                 Some(DrillLevel::Mission(id)) => self
                     .missions
                     .iter()
@@ -596,6 +596,27 @@ mod tests {
         assert_eq!(s.missions_category(), Some(MissionsCategory::ShipsLog));
         assert_eq!(s.pane_item_count(Pane::Missions), 2);
         assert_eq!(s.breadcrumb(), vec!["COCKPIT", "MISSIONS", "Ship's log"]);
+    }
+
+    #[test]
+    fn ship_log_merges_actions_and_server_alerts_newest_first() {
+        use crate::app::LogEvent;
+        let mut s = crate::app::AppState::default();
+        // A local action stamped now (2026+).
+        s.journal = vec![LogEvent::action("test", "did a thing", None)];
+        // A server alert dated far in the past.
+        let alert: crate::api::types::ProbeAlert = serde_json::from_str(
+            r#"{"id": 1, "type": "anomaly_detected", "status": "unread",
+                "message": "anomaly detected", "phase": "detection",
+                "createdAt": "2000-01-01T00:00:00+00:00"}"#,
+        )
+        .unwrap();
+        s.alerts = vec![alert];
+        let entries = s.ship_log_entries();
+        assert_eq!(entries.len(), 2, "action + alert merged");
+        assert_eq!(entries[0].summary, "did a thing", "newest (now) first");
+        assert_eq!(entries[1].summary, "anomaly detected");
+        assert_eq!(entries[1].kind, crate::app::kind::ALERT, "alert tagged as server event");
     }
 
     #[test]
