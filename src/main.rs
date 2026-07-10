@@ -23,7 +23,7 @@ use neumann_cockpit::app::{
     RefuelInput,
     RemoteMineInput,
     RenameContainerInput, RenameMannyInput, RenameProbeInput, RepairInput, SalvageInput,
-    ScutNetworkInput, ScutRelayInput, StorageMoveInput,
+    ScutNetworkInput, ScutRelayInput, StorageMoveInput, TransferDeuteriumInput,
 };
 use neumann_cockpit::input::handle_event;
 use neumann_cockpit::preflight;
@@ -277,6 +277,12 @@ async fn run(
                         fetch_all(client.clone(), tx.clone());
                     }
                     ApiMessage::DeuteriumRefuelError(e) => state.set_refuel_error(e),
+                    ApiMessage::DeuteriumTransferStarted => {
+                        state.transfer_deuterium = TransferDeuteriumInput::Inactive;
+                        state.set_toast("deuterium transfer order sent");
+                        fetch_all(client.clone(), tx.clone());
+                    }
+                    ApiMessage::DeuteriumTransferError(e) => state.set_transfer_deuterium_error(e),
                     ApiMessage::MindSnapshotReassigned(probe) => {
                         state.mind_snapshot = MindSnapshotInput::Inactive;
                         state.update_probe(probe);

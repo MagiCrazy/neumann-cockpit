@@ -28,7 +28,9 @@ pub(crate) use containers::{render_container_rules_overlay, render_rename_contai
 pub(crate) use craft::render_fabrication_overlay;
 pub(crate) use improve::render_improve_overlay;
 pub(crate) use drop_container::render_drop_container_overlay;
-pub(crate) use fleet::{render_probe_switch_overlay, render_rename_probe_overlay};
+pub(crate) use fleet::{
+    render_probe_switch_overlay, render_rename_probe_overlay, render_transfer_deuterium_overlay,
+};
 pub(crate) use help::{help_row_count, render_help_overlay};
 pub(crate) use inventory_detail::render_inventory_detail_overlay;
 pub(crate) use jettison::render_jettison_overlay;
@@ -58,7 +60,7 @@ use crate::app::{
     ProbeSwitchInput, RenameProbeInput,
     RecallInput, RecoverInput, RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput,
     RepairInput, SalvageInput, ScanMode, ScutNetworkInput, ScutRelayInput, StorageMoveInput,
-    TravelInput, WaypointsInput, RESOURCE_LABELS,
+    TransferDeuteriumInput, TravelInput, WaypointsInput, RESOURCE_LABELS,
 };
 use crate::api::types::DangerLevel;
 use crate::ui::theme::{palette, Palette};
@@ -94,6 +96,7 @@ const WIZARD_OVERLAYS: &[(OverlayGuard, OverlayRender)] = &[
     (|s| !matches!(s.salvage, SalvageInput::Inactive), render_salvage_overlay),
     (|s| !matches!(s.recall, RecallInput::Inactive), render_recall_overlay),
     (|s| !matches!(s.refuel, RefuelInput::Inactive), render_refuel_overlay),
+    (|s| !matches!(s.transfer_deuterium, TransferDeuteriumInput::Inactive), render_transfer_deuterium_overlay),
     (|s| !matches!(s.mind_snapshot, MindSnapshotInput::Inactive), render_mind_snapshot_overlay),
     (|s| !matches!(s.missions_input, MissionsInput::Inactive), render_missions_overlay),
     (|s| !matches!(s.messages_input, MessagesInput::Inactive), render_messages_overlay),

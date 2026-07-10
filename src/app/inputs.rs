@@ -420,6 +420,34 @@ pub enum RefuelInput {
     },
 }
 
+/// Deuterium-transfer wizard (API v86): a Manny ferries a reserved deuterium
+/// amount from the current probe to another fleet probe in the same sector.
+/// Two steps — pick the destination probe (the source is excluded), then enter
+/// the percentage to transfer. The same-sector constraint is server-validated
+/// (the roster carries no coordinates), so a wrong target surfaces as an error
+/// in `EnterAmount`.
+#[derive(Default)]
+pub enum TransferDeuteriumInput {
+    #[default]
+    Inactive,
+    /// Choose the destination probe from the roster (id, name pairs).
+    PickTarget {
+        manny_id: String,
+        manny_name: String,
+        targets: Vec<(u64, String)>,
+        selection: usize,
+    },
+    /// Enter the deuterium percentage to reserve and transfer.
+    EnterAmount {
+        manny_id: String,
+        manny_name: String,
+        target_id: u64,
+        target_name: String,
+        buf: String,
+        error: Option<String>,
+    },
+}
+
 #[derive(Default)]
 pub enum MindSnapshotInput {
     #[default]

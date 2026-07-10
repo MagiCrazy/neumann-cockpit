@@ -19,6 +19,7 @@ pub enum MenuAction {
     Recover,
     Detach,
     Refuel,
+    TransferDeuterium,
     DropCargo,
     Recall,
     Rename,
@@ -421,6 +422,19 @@ impl super::AppState {
                 } else {
                     (!has_station).then(|| "no station".to_string())
                 },
+            },
+            {
+                let has_targets = !self.transfer_deuterium_targets().is_empty();
+                MenuItem {
+                    action: MenuAction::TransferDeuterium,
+                    label: "Transfer deuterium…".into(),
+                    enabled: can && has_targets,
+                    disabled_reason: if !can {
+                        busy.clone()
+                    } else {
+                        (!has_targets).then(|| "no other probe".to_string())
+                    },
+                }
             },
             MenuItem {
                 action: MenuAction::DropCargo,

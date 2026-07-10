@@ -111,6 +111,25 @@ impl AppState {
         }
     }
 
+    /// Fleet probes eligible as a deuterium-transfer destination: every probe
+    /// except the one currently piloted (the source). The same-sector
+    /// constraint is enforced server-side, since the roster carries no
+    /// coordinates (API v86).
+    pub fn transfer_deuterium_targets(&self) -> Vec<(u64, String)> {
+        let source = self.active_probe_id.or(self.default_probe_id);
+        self.fleet
+            .iter()
+            .filter(|p| Some(p.id) != source)
+            .map(|p| (p.id, p.name.clone()))
+            .collect()
+    }
+
+    pub fn set_transfer_deuterium_error(&mut self, msg: String) {
+        if let TransferDeuteriumInput::EnterAmount { ref mut error, .. } = self.transfer_deuterium {
+            *error = Some(msg);
+        }
+    }
+
     pub fn set_mind_snapshot_error(&mut self, msg: String) {
         if let MindSnapshotInput::Confirm { ref mut error } = self.mind_snapshot {
             *error = Some(msg);

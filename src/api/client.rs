@@ -369,6 +369,33 @@ impl ApiClient {
         Ok(self.post::<Resp, _>(&path, &serde_json::json!({})).await?.manny)
     }
 
+    /// Start a five-minute Manny task that transfers a reserved deuterium
+    /// amount from the current probe to another fleet probe in the same sector
+    /// (`POST /api/probe/mannies/{id}/transfer-deuterium-to-probe`, API v86).
+    /// `amount` is a percentage-point reserve, strictly below the source
+    /// reserve; on completion the target is topped up only to its capacity and
+    /// any surplus returns to the source.
+    pub async fn transfer_deuterium_to_probe(
+        &self,
+        manny_id: &str,
+        target_probe_id: u64,
+        amount: f64,
+    ) -> Result<Manny> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Body {
+            target_probe_id: u64,
+            amount: f64,
+        }
+        #[derive(Deserialize)]
+        struct Resp { manny: Manny }
+        let path = self.probe_path(&format!("/mannies/{manny_id}/transfer-deuterium-to-probe"));
+        Ok(self
+            .post::<Resp, _>(&path, &Body { target_probe_id, amount })
+            .await?
+            .manny)
+    }
+
     /// List the probe's active missions (`GET /api/probe/missions`).
     pub async fn get_missions(&self) -> Result<Vec<Mission>> {
         #[derive(Deserialize)]
