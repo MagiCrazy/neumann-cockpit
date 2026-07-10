@@ -114,13 +114,13 @@ One unified phosphor theme (there is no classic/retro split any more). `theme.rs
  ↑↓ move · hl drill · z zoom · Enter act · ertdfgcvb pane · F1 hints
 ```
 
-**Keys** — `e r t d f g c v b` activate a pane · `j`/`k` (`↑`/`↓`) move the cursor · `l`/`→` drill in, `h`/`←` drill out (Missions → steps, Comms → message) · `Enter` opens the contextual action menu · `z` zooms the active pane full-screen · `Tab`/`Shift+Tab` cycle panes · `:` command mode · `F1` toggle hints · `F2` cycle color mode · `F5` refresh · `?` help · `q` quit · `Esc` closes menu / leaves zoom / drills up.
+**Keys** — `e r t d f g c v b` activate a pane · `j`/`k` (`↑`/`↓`) move the cursor · `l`/`→` drill in, `h`/`←` drill out (Missions → steps, Comms → message) · `Enter` opens the contextual action menu · `z` zooms the active pane full-screen · `Tab`/`Shift+Tab` cycle panes · `:` command mode · `i` jump to the next idle Manny (focuses the Mannies pane) · `F1` toggle hints · `F2` cycle color mode · `F5` refresh · `?` help · `q` quit · `Esc` closes menu / leaves zoom / drills up.
 
 **Contextual menu** (`Enter`) — built per active pane + selection (`build_context_menu` → `Vec<MenuItem>`, disabled items shown with a reason). Firing an item launches the existing wizard (`MenuAction` → the matching `*Input`). Panes with rich wizards (Missions, Comms, Storage, Sector objects) reuse their legacy overlays instead of the popup.
 
 **Responsive** — `grid::visible_panes` fits `rows × cols` whole panes (each 1..=3 from a minimum cell size) and slides the window to keep the active pane visible: 3×3 on a large terminal, 2×2 on a half-screen, a single row on a short wide split, one pane when tiny. A position mini-map in the status bar (the nine keys in three groups) shows where the active pane sits whenever the grid is reduced.
 
-**Status bar** — `[MODE]` tag (NAV / MENU / CMD, or ZOOM) · breadcrumb (`COCKPIT › PANE › …`) · transient error (crit) or success toast · right-aligned meta (`⟳` while loading, active probe `⏻ name` when the fleet has >1 probe or the pilot is off the default — accented when non-default, `⚠` when unreachable, `≣ SCUT`, unread `! n`, `API vN`, clock). A second **hints line** (toggle `F1`) shows the keys valid for the active pane.
+**Status bar** — `[MODE]` tag (NAV / MENU / CMD, or ZOOM) · breadcrumb (`COCKPIT › PANE › …`) · transient error (crit) or success toast · right-aligned meta (`⟳` while loading, active probe `⏻ name` when the fleet has >1 probe or the pilot is off the default — accented when non-default, `⚠` when unreachable, `≣ SCUT`, `⚙ N idle` (idle Mannies, bold warn — `i` cycles to the next), unread `! n`, `API vN`, clock). A second **hints line** (toggle `F1`) shows the keys valid for the active pane.
 
 **Boot** (`src/app/boot.rs` + `cockpit_v2::render_boot`) — on startup the probe core boots first (centre pane self-check), then the eight subsystems come online centre-out, each typing a themed teletype self-check (SUDDAR array, SCUT link, autofactory, manny bay…). Once done it holds on `ANY KEY TO CONTINUE` in the centre pane; any key drops into the live cockpit (or skips the animation). Driven by the bounded boot tick.
 
