@@ -1,5 +1,5 @@
 use crate::ui::theme::palette;
-use crate::app::{AppState, ObjectActionInput};
+use crate::app::{ActiveWizard, AppState, ObjectActionInput};
 use ratatui::{
     layout::Rect,
     Frame,
@@ -7,7 +7,8 @@ use ratatui::{
 
 use super::render_pick_list;
 pub(crate) fn render_object_action_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    match &state.object_action {
+    let ActiveWizard::ObjectAction(object_action) = &state.active_wizard else { return };
+    match object_action {
         ObjectActionInput::PickAction { object_name, actions, selection, .. } => {
             let labels: Vec<&str> = actions.iter().map(|a| a.label()).collect();
             let height = (actions.len() as u16 + 6).min(14);
@@ -21,7 +22,6 @@ pub(crate) fn render_object_action_overlay(frame: &mut Frame, area: Rect, state:
             render_pick_list(frame, area, palette(state.color_mode), &format!(" {object_name} "), 46, height,
                 Some(&prompt), &names, *selection, None, "confirm");
         }
-        ObjectActionInput::Inactive => {}
     }
 }
 

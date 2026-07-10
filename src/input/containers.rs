@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
 use crate::api::tasks::{fetch_rename_container, fetch_update_container_rules};
-use crate::app::{ApiMessage, AppState, ContainerRulesInput, LogEvent, RenameContainerInput};
+use crate::app::{ActiveWizard, ApiMessage, AppState, ContainerRulesInput, LogEvent, RenameContainerInput};
 
 use super::geometry::list_nav;
 
@@ -43,25 +43,25 @@ pub(super) fn handle_rename_container_event(
     client: &ApiClient,
     tx: &mpsc::Sender<ApiMessage>,
 ) {
-    if !matches!(state.rename_container, RenameContainerInput::Typing { .. }) {
+    if !matches!(state.active_wizard, ActiveWizard::RenameContainer(RenameContainerInput::Typing { .. })) {
         return;
     }
     match code {
-        KeyCode::Esc => state.rename_container = RenameContainerInput::Inactive,
+        KeyCode::Esc => state.close_wizard(),
         KeyCode::Tab => {
             let s = state.next_name_suggestion();
-            if let RenameContainerInput::Typing { buf, .. } = &mut state.rename_container {
+            if let ActiveWizard::RenameContainer(RenameContainerInput::Typing { buf, .. }) = &mut state.active_wizard {
                 *buf = s;
             }
         }
         KeyCode::Backspace => {
-            if let RenameContainerInput::Typing { buf, .. } = &mut state.rename_container {
+            if let ActiveWizard::RenameContainer(RenameContainerInput::Typing { buf, .. }) = &mut state.active_wizard {
                 buf.pop();
             }
         }
         KeyCode::Enter => {
             let (id, label) = {
-                let RenameContainerInput::Typing { container_id, buf, .. } = &state.rename_container
+                let ActiveWizard::RenameContainer(RenameContainerInput::Typing { container_id, buf, .. }) = &state.active_wizard
                 else {
                     return;
                 };
@@ -76,7 +76,7 @@ pub(super) fn handle_rename_container_event(
             state.log_event(LogEvent::rename_container(&new_label, state.active_probe_id));
         }
         KeyCode::Char(c) => {
-            if let RenameContainerInput::Typing { buf, error, .. } = &mut state.rename_container {
+            if let ActiveWizard::RenameContainer(RenameContainerInput::Typing { buf, error, .. }) = &mut state.active_wizard {
                 if buf.chars().count() < 80 {
                     buf.push(c);
                     *error = None;
@@ -93,16 +93,16 @@ pub(super) fn handle_container_rules_event(
     client: &ApiClient,
     tx: &mpsc::Sender<ApiMessage>,
 ) {
-    let ContainerRulesInput::Editing { selection, types, .. } = &state.container_rules else {
+    let ActiveWizard::ContainerRules(ContainerRulesInput::Editing { selection, types, .. }) = &state.active_wizard else {
         return;
     };
     let sel = *selection;
     let count = types.len();
     match code {
-        KeyCode::Esc => state.container_rules = ContainerRulesInput::Inactive,
+        KeyCode::Esc => state.close_wizard(),
         KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
             if let Some(ns) = list_nav(code, sel, count) {
-                if let ContainerRulesInput::Editing { selection, .. } = &mut state.container_rules {
+                if let ActiveWizard::ContainerRules(ContainerRulesInput::Editing { selection, .. }) = &mut state.active_wizard {
                     *selection = ns;
                 }
             }
@@ -115,9 +115,9 @@ pub(super) fn handle_container_rules_event(
         }
         KeyCode::Delete | KeyCode::Backspace => {
             // Clear the selected type back to "none".
-            if let ContainerRulesInput::Editing {
+            if let ActiveWizard::ContainerRules(ContainerRulesInput::Editing {
                 types, priority, exclusion, strict_exclusion, selection, ..
-            } = &mut state.container_rules
+            }) = &mut state.active_wizard
             {
                 if let Some(ty) = types.get(*selection).cloned() {
                     priority.retain(|t| t != &ty);
@@ -128,9 +128,9 @@ pub(super) fn handle_container_rules_event(
         }
         KeyCode::Enter => {
             let (id, p, e, s, label) = {
-                let ContainerRulesInput::Editing {
+                let ActiveWizard::ContainerRules(ContainerRulesInput::Editing {
                     container_id, priority, exclusion, strict_exclusion, container_label, ..
-                } = &state.container_rules
+                }) = &state.active_wizard
                 else {
                     return;
                 };
@@ -150,9 +150,9 @@ pub(super) fn handle_container_rules_event(
 }
 
 fn cycle_selected(state: &mut AppState, backward: bool) {
-    if let ContainerRulesInput::Editing {
+    if let ActiveWizard::ContainerRules(ContainerRulesInput::Editing {
         types, priority, exclusion, strict_exclusion, selection, ..
-    } = &mut state.container_rules
+    }) = &mut state.active_wizard
     {
         if let Some(ty) = types.get(*selection).cloned() {
             cycle_assignment(&ty, priority, exclusion, strict_exclusion, backward);

@@ -8,7 +8,7 @@ use ratatui::{
 };
 
 use crate::api::types::{ProbeSector, ScutRelayStatus};
-use crate::app::{AppState, ScutNetworkInput};
+use crate::app::{ActiveWizard, AppState, ScutNetworkInput};
 
 use super::{centered_rect, render_footer, render_pick_list, FooterKey};
 
@@ -21,7 +21,8 @@ fn rel(sector: &ProbeSector) -> String {
 
 pub(crate) fn render_scut_network_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    match &state.scut_network {
+    let ActiveWizard::ScutNetwork(scut_network) = &state.active_wizard else { return };
+    match scut_network {
         ScutNetworkInput::Picking { networks, selection } => {
             let items: Vec<&str> = networks.iter().map(|(_, name)| name.as_str()).collect();
             let height = (items.len() as u16) + 4;
@@ -104,6 +105,5 @@ pub(crate) fn render_scut_network_overlay(frame: &mut Frame, area: Rect, state: 
             frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), rows[0]);
             render_footer(frame, rows[1], p, &[FooterKey::nav("[Esc]", "close")]);
         }
-        ScutNetworkInput::Inactive => {}
     }
 }

@@ -1,12 +1,12 @@
 use crate::ui::theme::palette;
-use crate::app::{AppState, DropStorageContainerInput};
+use crate::app::{ActiveWizard, AppState, DropStorageContainerInput};
 use ratatui::{layout::Rect, Frame};
 
 use super::render_pick_list;
 
 pub(crate) fn render_drop_container_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    match &state.drop_container {
-        DropStorageContainerInput::Inactive => {}
+    let ActiveWizard::DropContainer(drop_container) = &state.active_wizard else { return };
+    match drop_container {
         DropStorageContainerInput::PickContainer { containers, selection, .. } => {
             let names: Vec<&str> = containers.iter().map(|(_, n)| n.as_str()).collect();
             let height = (containers.len() as u16 + 6).min(18);

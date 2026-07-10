@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 use crate::api::client::ApiClient;
 use crate::api::tasks::fetch_mine;
 use crate::app::{
-    ApiMessage, AppState, LogEvent, MineInput, RemoteMineInput, RESOURCE_TYPES,
+    ActiveWizard, ApiMessage, AppState, LogEvent, MineInput, RemoteMineInput, RESOURCE_TYPES,
 };
 use super::geometry::list_nav;
 
@@ -63,23 +63,23 @@ pub(super) fn handle_mine_event(
     client: &ApiClient,
     tx: &mpsc::Sender<ApiMessage>,
 ) {
-    match &state.mine {
-        MineInput::PickAsteroid { selection, candidates, .. } => {
+    match &state.active_wizard {
+        ActiveWizard::Mine(MineInput::PickAsteroid { selection, candidates, .. }) => {
             let sel = *selection;
             let count = candidates.len();
             match code {
-                KeyCode::Esc => state.mine = MineInput::Inactive,
+                KeyCode::Esc => state.close_wizard(),
                 KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
                     if let Some(new_sel) = list_nav(code, sel, count) {
-                        if let MineInput::PickAsteroid { ref mut selection, .. } = state.mine {
+                        if let ActiveWizard::Mine(MineInput::PickAsteroid { selection, .. }) = &mut state.active_wizard {
                             *selection = new_sel;
                         }
                     }
                 }
                 KeyCode::Enter => {
                     let (manny_id, manny_name, object_id, object_name) = {
-                        let MineInput::PickAsteroid { ref manny_id, ref manny_name, ref candidates, selection } = state.mine else { return };
-                        let (id, name) = candidates[selection].clone();
+                        let ActiveWizard::Mine(MineInput::PickAsteroid { manny_id, manny_name, candidates, selection }) = &state.active_wizard else { return };
+                        let (id, name) = candidates[*selection].clone();
                         (manny_id.clone(), manny_name.clone(), id, name)
                     };
                     // Preselect the resources the target actually holds; fall
@@ -89,26 +89,26 @@ pub(super) fn handle_mine_event(
                         .map(|(flags, _)| flags)
                         .filter(|f| f.iter().any(|&x| x))
                         .unwrap_or([false, true, false, false]);
-                    state.mine = MineInput::Configure {
+                    state.active_wizard = ActiveWizard::Mine(MineInput::Configure {
                         manny_id, manny_name, object_id, object_name,
                         resources,
                         amount_buf: "0.30".into(),
                         amount_mode: false,
                         target_container: None,
                         error: None,
-                    };
+                    });
                 }
                 _ => {}
             }
         }
-        MineInput::Configure { amount_mode, object_id, resources, .. } => {
+        ActiveWizard::Mine(MineInput::Configure { amount_mode, object_id, resources, .. }) => {
             let am = *amount_mode;
             let obj_id = object_id.clone();
             let res = *resources;
             match code {
-                KeyCode::Esc => state.mine = MineInput::Inactive,
+                KeyCode::Esc => state.close_wizard(),
                 KeyCode::Tab => {
-                    if let MineInput::Configure { ref mut amount_mode, ref mut error, .. } = state.mine {
+                    if let ActiveWizard::Mine(MineInput::Configure { amount_mode, error, .. }) = &mut state.active_wizard {
                         *amount_mode = !am;
                         *error = None;
                     }
@@ -121,7 +121,7 @@ pub(super) fn handle_mine_event(
                         .map(|(flags, _)| flags[idx])
                         .unwrap_or(true);
                     if present {
-                        if let MineInput::Configure { ref mut resources, ref mut error, .. } = state.mine {
+                        if let ActiveWizard::Mine(MineInput::Configure { resources, error, .. }) = &mut state.active_wizard {
                             resources[idx] = !resources[idx];
                             *error = None;
                         }
@@ -129,13 +129,13 @@ pub(super) fn handle_mine_event(
                 }
                 KeyCode::Char('m') | KeyCode::Char('M') if am => {
                     let max = state.mine_reserve_max(&obj_id, res);
-                    if let MineInput::Configure { ref mut amount_buf, ref mut error, .. } = state.mine {
+                    if let ActiveWizard::Mine(MineInput::Configure { amount_buf, error, .. }) = &mut state.active_wizard {
                         *amount_buf = format!("{:.4}", max);
                         *error = None;
                     }
                 }
                 KeyCode::Char(c) if am && (c.is_ascii_digit() || c == '.') => {
-                    if let MineInput::Configure { ref mut amount_buf, ref mut error, .. } = state.mine {
+                    if let ActiveWizard::Mine(MineInput::Configure { amount_buf, error, .. }) = &mut state.active_wizard {
                         if !(c == '.' && amount_buf.contains('.')) {
                             amount_buf.push(c);
                             *error = None;
@@ -143,20 +143,20 @@ pub(super) fn handle_mine_event(
                     }
                 }
                 KeyCode::Backspace if am => {
-                    if let MineInput::Configure { ref mut amount_buf, .. } = state.mine {
+                    if let ActiveWizard::Mine(MineInput::Configure { amount_buf, .. }) = &mut state.active_wizard {
                         amount_buf.pop();
                     }
                 }
                 KeyCode::Char('c') => {
                     let containers = state.collect_detached_containers();
-                    if let MineInput::Configure { ref mut target_container, ref mut error, .. } = state.mine {
+                    if let ActiveWizard::Mine(MineInput::Configure { target_container, error, .. }) = &mut state.active_wizard {
                         *target_container = next_target_container(target_container.as_ref(), &containers);
                         *error = None;
                     }
                 }
                 KeyCode::Enter => {
                     let (manny_id, object_id, selected_resources, amount, container_id, destination) = {
-                        let MineInput::Configure { ref manny_id, ref object_id, resources, ref amount_buf, ref target_container, .. } = state.mine else { return };
+                        let ActiveWizard::Mine(MineInput::Configure { manny_id, object_id, resources, amount_buf, target_container, .. }) = &state.active_wizard else { return };
                         let selected: Vec<String> = RESOURCE_TYPES.iter().enumerate()
                             .filter(|(i, _)| resources[*i])
                             .map(|(_, &t)| t.to_string())
@@ -177,7 +177,7 @@ pub(super) fn handle_mine_event(
                 _ => {}
             }
         }
-        MineInput::Inactive => {}
+        _ => {}
     }
 }
 
@@ -187,32 +187,34 @@ pub(super) fn handle_remote_mine_event(
     client: &ApiClient,
     tx: &mpsc::Sender<ApiMessage>,
 ) {
-    match &state.remote_mine {
-        RemoteMineInput::Loading { .. } => {
+    match &state.active_wizard {
+        ActiveWizard::RemoteMine(RemoteMineInput::Loading { .. }) => {
             if code == KeyCode::Esc {
-                state.remote_mine = RemoteMineInput::Inactive;
+                state.close_wizard();
             }
         }
-        RemoteMineInput::PickAsteroid { selection, candidates, .. } => {
+        ActiveWizard::RemoteMine(RemoteMineInput::PickAsteroid { selection, candidates, .. }) => {
             let sel = *selection;
             let count = candidates.len();
             match code {
-                KeyCode::Esc => state.remote_mine = RemoteMineInput::Inactive,
+                KeyCode::Esc => state.close_wizard(),
                 KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
                     if let Some(new_sel) = list_nav(code, sel, count) {
-                        if let RemoteMineInput::PickAsteroid { ref mut selection, .. } = state.remote_mine {
+                        if let ActiveWizard::RemoteMine(RemoteMineInput::PickAsteroid { selection, .. }) = &mut state.active_wizard {
                             *selection = new_sel;
                         }
                     }
                 }
                 KeyCode::Enter => {
-                    let RemoteMineInput::PickAsteroid {
-                        ref manny_id, ref manny_name, x, y, z, ref candidates, selection,
-                    } = state.remote_mine else { return };
-                    let (object_id, object_name) = candidates[selection].clone();
-                    state.remote_mine = RemoteMineInput::Configure {
-                        manny_id: manny_id.clone(),
-                        manny_name: manny_name.clone(),
+                    let ActiveWizard::RemoteMine(RemoteMineInput::PickAsteroid {
+                        manny_id, manny_name, x, y, z, candidates, selection,
+                    }) = &state.active_wizard else { return };
+                    let (object_id, object_name) = candidates[*selection].clone();
+                    let (manny_id, manny_name, x, y, z) =
+                        (manny_id.clone(), manny_name.clone(), *x, *y, *z);
+                    state.active_wizard = ActiveWizard::RemoteMine(RemoteMineInput::Configure {
+                        manny_id,
+                        manny_name,
                         x, y, z,
                         object_id,
                         object_name,
@@ -220,30 +222,30 @@ pub(super) fn handle_remote_mine_event(
                         amount_buf: "0.30".into(),
                         amount_mode: false,
                         error: None,
-                    };
+                    });
                 }
                 _ => {}
             }
         }
-        RemoteMineInput::Configure { amount_mode, .. } => {
+        ActiveWizard::RemoteMine(RemoteMineInput::Configure { amount_mode, .. }) => {
             let am = *amount_mode;
             match code {
-                KeyCode::Esc => state.remote_mine = RemoteMineInput::Inactive,
+                KeyCode::Esc => state.close_wizard(),
                 KeyCode::Tab => {
-                    if let RemoteMineInput::Configure { ref mut amount_mode, ref mut error, .. } = state.remote_mine {
+                    if let ActiveWizard::RemoteMine(RemoteMineInput::Configure { amount_mode, error, .. }) = &mut state.active_wizard {
                         *amount_mode = !am;
                         *error = None;
                     }
                 }
                 KeyCode::Char(c @ '1'..='4') if !am => {
                     let idx = (c as u8 - b'1') as usize;
-                    if let RemoteMineInput::Configure { ref mut resources, ref mut error, .. } = state.remote_mine {
+                    if let ActiveWizard::RemoteMine(RemoteMineInput::Configure { resources, error, .. }) = &mut state.active_wizard {
                         resources[idx] = !resources[idx];
                         *error = None;
                     }
                 }
                 KeyCode::Char(c) if am && (c.is_ascii_digit() || c == '.') => {
-                    if let RemoteMineInput::Configure { ref mut amount_buf, ref mut error, .. } = state.remote_mine {
+                    if let ActiveWizard::RemoteMine(RemoteMineInput::Configure { amount_buf, error, .. }) = &mut state.active_wizard {
                         if !(c == '.' && amount_buf.contains('.')) {
                             amount_buf.push(c);
                             *error = None;
@@ -251,19 +253,19 @@ pub(super) fn handle_remote_mine_event(
                     }
                 }
                 KeyCode::Backspace if am => {
-                    if let RemoteMineInput::Configure { ref mut amount_buf, .. } = state.remote_mine {
+                    if let ActiveWizard::RemoteMine(RemoteMineInput::Configure { amount_buf, .. }) = &mut state.active_wizard {
                         amount_buf.pop();
                     }
                 }
                 KeyCode::Enter => {
                     let (manny_id, object_id, resources, amount, coords) = {
-                        let RemoteMineInput::Configure {
-                            ref manny_id, ref object_id, resources, ref amount_buf, x, y, z, ..
-                        } = state.remote_mine else { return };
+                        let ActiveWizard::RemoteMine(RemoteMineInput::Configure {
+                            manny_id, object_id, resources, amount_buf, x, y, z, ..
+                        }) = &state.active_wizard else { return };
                         if !resources.iter().any(|&r| r) { return }
                         let Ok(amount) = amount_buf.parse::<f64>() else { return };
                         if amount <= 0.0 { return }
-                        (manny_id.clone(), object_id.clone(), resources, amount, (x, y, z))
+                        (manny_id.clone(), object_id.clone(), *resources, amount, (*x, *y, *z))
                     };
                     let containers = state
                         .sector_observation_at(coords.0, coords.1, coords.2)
@@ -275,7 +277,7 @@ pub(super) fn handle_remote_mine_event(
                         );
                         return;
                     }
-                    state.remote_mine = RemoteMineInput::PickContainer {
+                    state.active_wizard = ActiveWizard::RemoteMine(RemoteMineInput::PickContainer {
                         manny_id,
                         object_id,
                         resources,
@@ -283,33 +285,33 @@ pub(super) fn handle_remote_mine_event(
                         containers,
                         selection: 0,
                         error: None,
-                    };
+                    });
                 }
                 _ => {}
             }
         }
-        RemoteMineInput::PickContainer { selection, containers, .. } => {
+        ActiveWizard::RemoteMine(RemoteMineInput::PickContainer { selection, containers, .. }) => {
             let sel = *selection;
             let count = containers.len();
             match code {
-                KeyCode::Esc => state.remote_mine = RemoteMineInput::Inactive,
+                KeyCode::Esc => state.close_wizard(),
                 KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
                     if let Some(new_sel) = list_nav(code, sel, count) {
-                        if let RemoteMineInput::PickContainer { ref mut selection, .. } = state.remote_mine {
+                        if let ActiveWizard::RemoteMine(RemoteMineInput::PickContainer { selection, .. }) = &mut state.active_wizard {
                             *selection = new_sel;
                         }
                     }
                 }
                 KeyCode::Enter => {
                     let (manny_id, object_id, selected_resources, amount, container_id, destination) = {
-                        let RemoteMineInput::PickContainer {
-                            ref manny_id, ref object_id, resources, amount, ref containers, selection, ..
-                        } = state.remote_mine else { return };
+                        let ActiveWizard::RemoteMine(RemoteMineInput::PickContainer {
+                            manny_id, object_id, resources, amount, containers, selection, ..
+                        }) = &state.active_wizard else { return };
                         let selected: Vec<String> = RESOURCE_TYPES.iter().enumerate()
                             .filter(|(i, _)| resources[*i])
                             .map(|(_, &t)| t.to_string())
                             .collect();
-                        (manny_id.clone(), object_id.clone(), selected, amount, containers[selection].0.clone(), containers[selection].1.clone())
+                        (manny_id.clone(), object_id.clone(), selected, *amount, containers[*selection].0.clone(), containers[*selection].1.clone())
                     };
                     let resources_label = selected_resources.join(", ");
                     fetch_mine(manny_id, object_id, selected_resources, amount, Some(container_id), client.clone(), tx.clone());
@@ -318,6 +320,6 @@ pub(super) fn handle_remote_mine_event(
                 _ => {}
             }
         }
-        RemoteMineInput::Inactive => {}
+        _ => {}
     }
 }

@@ -1,4 +1,4 @@
-use crate::app::{AppState, TravelInput};
+use crate::app::{ActiveWizard, AppState, TravelInput};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -11,6 +11,7 @@ use crate::ui::theme::{format_duration, palette};
 use super::{centered_rect, render_footer, FooterKey};
 pub(crate) fn render_travel_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
+    let ActiveWizard::Travel(travel) = &state.active_wizard else { return };
     let popup = centered_rect(46, 11, area);
     frame.render_widget(Clear, popup);
 
@@ -29,9 +30,7 @@ pub(crate) fn render_travel_overlay(frame: &mut Frame, area: Rect, state: &AppSt
     let body = rows[0];
     let hint_area = rows[1];
 
-    match &state.travel {
-        TravelInput::Inactive => {}
-
+    match travel {
         TravelInput::Typing(buf) => {
             let mut lines: Vec<Line> = Vec::new();
 

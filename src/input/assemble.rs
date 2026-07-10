@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
 use crate::api::tasks::fetch_assemble_probe;
-use crate::app::{ApiMessage, AppState, AssembleProbeInput, LogEvent};
+use crate::app::{ActiveWizard, ApiMessage, AppState, AssembleProbeInput, LogEvent};
 
 use super::geometry::list_nav;
 
@@ -17,10 +17,10 @@ pub(super) fn handle_assemble_probe_event(
     tx: &mpsc::Sender<ApiMessage>,
 ) {
     match code {
-        KeyCode::Esc => state.assemble_probe = AssembleProbeInput::Inactive,
+        KeyCode::Esc => state.close_wizard(),
         KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
-            if let AssembleProbeInput::PickContainers { containers, cursor, .. } =
-                &mut state.assemble_probe
+            if let ActiveWizard::AssembleProbe(AssembleProbeInput::PickContainers { containers, cursor, .. }) =
+                &mut state.active_wizard
             {
                 if let Some(ns) = list_nav(code, *cursor, containers.len()) {
                     *cursor = ns;
@@ -28,8 +28,8 @@ pub(super) fn handle_assemble_probe_event(
             }
         }
         KeyCode::Char(' ') => {
-            if let AssembleProbeInput::PickContainers { selected, cursor, error, .. } =
-                &mut state.assemble_probe
+            if let ActiveWizard::AssembleProbe(AssembleProbeInput::PickContainers { selected, cursor, error, .. }) =
+                &mut state.active_wizard
             {
                 let cur = *cursor;
                 if let Some(pos) = selected.iter().position(|&i| i == cur) {
@@ -45,8 +45,8 @@ pub(super) fn handle_assemble_probe_event(
         }
         KeyCode::Enter => {
             // Extract the order without holding a borrow across the fire.
-            let order = match &state.assemble_probe {
-                AssembleProbeInput::PickContainers { manny_id, containers, selected, .. }
+            let order = match &state.active_wizard {
+                ActiveWizard::AssembleProbe(AssembleProbeInput::PickContainers { manny_id, containers, selected, .. })
                     if selected.len() == 2 =>
                 {
                     let ids: Vec<String> =
@@ -57,13 +57,13 @@ pub(super) fn handle_assemble_probe_event(
             };
             match order {
                 Some((manny, ids)) => {
-                    state.assemble_probe = AssembleProbeInput::Inactive;
+                    state.close_wizard();
                     fetch_assemble_probe(manny, ids, client.clone(), tx.clone());
                     state.log_event(LogEvent::assemble_probe(state.active_probe_id));
                 }
                 None => {
-                    if let AssembleProbeInput::PickContainers { error, .. } =
-                        &mut state.assemble_probe
+                    if let ActiveWizard::AssembleProbe(AssembleProbeInput::PickContainers { error, .. }) =
+                        &mut state.active_wizard
                     {
                         *error = Some("select exactly two empty containers".into());
                     }

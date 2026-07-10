@@ -1,4 +1,4 @@
-use crate::app::{AppState, ImproveInput};
+use crate::app::{ActiveWizard, AppState, ImproveInput};
 use crate::ui::theme::palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -12,21 +12,21 @@ use super::{centered_rect, render_footer, render_pick_list, FooterKey, KeyTone};
 
 /// Render whichever step of the probe-improvement wizard is active.
 pub(crate) fn render_improve_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    match state.improve {
-        ImproveInput::PickImprovement { selection, ref error } => {
-            render_catalog(frame, area, state, selection, error.as_deref());
+    let ActiveWizard::Improve(improve) = &state.active_wizard else { return };
+    match improve {
+        ImproveInput::PickImprovement { selection, error } => {
+            render_catalog(frame, area, state, *selection, error.as_deref());
         }
-        ImproveInput::PickBuilder { ref improvement_name, ref mannies, selection, ref error, .. } => {
+        ImproveInput::PickBuilder { improvement_name, mannies, selection, error, .. } => {
             let p = palette(state.color_mode);
             let names: Vec<&str> = mannies.iter().map(|(_, n)| n.as_str()).collect();
             let prompt = format!("Install {improvement_name} with:");
             let height = (names.len() as u16 + 6).clamp(8, 20);
             render_pick_list(
                 frame, area, p, " IMPROVE PROBE — SELECT BUILDER ", 48, height,
-                Some(&prompt), &names, selection, error.as_deref(), "BUILD",
+                Some(&prompt), &names, *selection, error.as_deref(), "BUILD",
             );
         }
-        ImproveInput::Inactive => {}
     }
 }
 

@@ -41,7 +41,7 @@ impl AppState {
     }
 
     pub fn repair_type_char(&mut self, c: char) {
-        if let RepairInput::Typing { ref mut buf, ref mut error, .. } = self.repair {
+        if let ActiveWizard::Repair(RepairInput::Typing { buf, error, .. }) = &mut self.active_wizard {
             if c.is_ascii_digit() || (c == '.' && !buf.contains('.')) {
                 buf.push(c);
                 *error = None;
@@ -50,63 +50,65 @@ impl AppState {
     }
 
     pub fn repair_backspace(&mut self) {
-        if let RepairInput::Typing { ref mut buf, .. } = self.repair {
+        if let ActiveWizard::Repair(RepairInput::Typing { buf, .. }) = &mut self.active_wizard {
             buf.pop();
         }
     }
 
     pub fn repair_fill_max(&mut self) {
         let max = self.repair_max_percent();
-        if let RepairInput::Typing { ref mut buf, ref mut error, .. } = self.repair {
+        if let ActiveWizard::Repair(RepairInput::Typing { buf, error, .. }) = &mut self.active_wizard {
             *buf = format!("{:.2}", max);
             *error = None;
         }
     }
 
     pub fn set_repair_error(&mut self, msg: String) {
-        if let RepairInput::Typing { ref mut error, .. } = self.repair {
+        if let ActiveWizard::Repair(RepairInput::Typing { error, .. }) = &mut self.active_wizard {
             *error = Some(msg);
         }
     }
 
     pub fn set_mine_error(&mut self, msg: String) {
-        if let MineInput::Configure { ref mut error, .. } = self.mine {
+        if let ActiveWizard::Mine(MineInput::Configure { error, .. }) = &mut self.active_wizard {
             *error = Some(msg);
         }
     }
 
     /// Surface a craft failure on whichever fabrication step is active.
     pub fn set_fabrication_error(&mut self, msg: String) {
-        match self.fabrication {
-            FabricationInput::PickRecipe { ref mut error, .. } => *error = Some(msg),
-            FabricationInput::PickBuilder { ref mut error, .. } => *error = Some(msg),
-            FabricationInput::Inactive => {}
+        if let ActiveWizard::Fabrication(fab) = &mut self.active_wizard {
+            match fab {
+                FabricationInput::PickRecipe { error, .. } => *error = Some(msg),
+                FabricationInput::PickBuilder { error, .. } => *error = Some(msg),
+            }
         }
     }
 
     /// Surface a probe-improvement failure on whichever step is active.
     pub fn set_improve_error(&mut self, msg: String) {
-        match self.improve {
-            ImproveInput::PickImprovement { ref mut error, .. } => *error = Some(msg),
-            ImproveInput::PickBuilder { ref mut error, .. } => *error = Some(msg),
-            ImproveInput::Inactive => {}
+        if let ActiveWizard::Improve(improve) = &mut self.active_wizard {
+            match improve {
+                ImproveInput::PickImprovement { error, .. } => *error = Some(msg),
+                ImproveInput::PickBuilder { error, .. } => *error = Some(msg),
+            }
         }
     }
 
     pub fn set_salvage_error(&mut self, msg: String) {
-        if let SalvageInput::Confirm { ref mut error, .. } = self.salvage {
+        if let ActiveWizard::Salvage(SalvageInput::Confirm { error, .. }) = &mut self.active_wizard {
             *error = Some(msg);
         }
     }
 
     pub fn set_recall_error(&mut self, msg: String) {
-        if let RecallInput::Confirm { ref mut error, .. } = self.recall {
+        if let ActiveWizard::Recall(RecallInput::Confirm { error, .. }) = &mut self.active_wizard {
             *error = Some(msg);
         }
     }
 
     pub fn set_refuel_error(&mut self, msg: String) {
-        if let RefuelInput::Confirm { ref mut error, .. } = self.refuel {
+        if let ActiveWizard::Refuel(RefuelInput::Confirm { error, .. }) = &mut self.active_wizard {
             *error = Some(msg);
         }
     }
@@ -125,31 +127,31 @@ impl AppState {
     }
 
     pub fn set_transfer_deuterium_error(&mut self, msg: String) {
-        if let TransferDeuteriumInput::EnterAmount { ref mut error, .. } = self.transfer_deuterium {
+        if let ActiveWizard::TransferDeuterium(TransferDeuteriumInput::EnterAmount { error, .. }) = &mut self.active_wizard {
             *error = Some(msg);
         }
     }
 
     pub fn set_mind_snapshot_error(&mut self, msg: String) {
-        if let MindSnapshotInput::Confirm { ref mut error } = self.mind_snapshot {
+        if let ActiveWizard::MindSnapshot(MindSnapshotInput::Confirm { error }) = &mut self.active_wizard {
             *error = Some(msg);
         }
     }
 
     pub fn set_scut_relay_error(&mut self, msg: String) {
-        if let ScutRelayInput::EnterNetworkName { ref mut error, .. } = self.scut_relay {
+        if let ActiveWizard::ScutRelay(ScutRelayInput::EnterNetworkName { error, .. }) = &mut self.active_wizard {
             *error = Some(msg);
         }
     }
 
     pub fn set_mission_abandon_error(&mut self, msg: String) {
-        if let MissionsInput::ConfirmAbandon { ref mut error, .. } = self.missions_input {
+        if let ActiveWizard::Missions(MissionsInput::ConfirmAbandon { error, .. }) = &mut self.active_wizard {
             *error = Some(msg);
         }
     }
 
     pub fn set_message_send_error(&mut self, msg: String) {
-        if let MessagesInput::Compose { ref mut error, .. } = self.messages_input {
+        if let ActiveWizard::Messages(MessagesInput::Compose { error, .. }) = &mut self.active_wizard {
             *error = Some(msg);
         }
     }
@@ -299,19 +301,19 @@ impl AppState {
     }
 
     pub fn set_deploy_error(&mut self, msg: String) {
-        if let DeployInput::EnterName { ref mut error, .. } = self.deploy {
+        if let ActiveWizard::Deploy(DeployInput::EnterName { error, .. }) = &mut self.active_wizard {
             *error = Some(msg);
         }
     }
 
     pub fn set_rename_manny_error(&mut self, msg: String) {
-        if let RenameMannyInput::Typing { ref mut error, .. } = self.rename_manny {
+        if let ActiveWizard::RenameManny(RenameMannyInput::Typing { error, .. }) = &mut self.active_wizard {
             *error = Some(msg);
         }
     }
 
     pub fn rename_manny_type_char(&mut self, c: char) {
-        if let RenameMannyInput::Typing { ref mut buf, .. } = self.rename_manny {
+        if let ActiveWizard::RenameManny(RenameMannyInput::Typing { buf, .. }) = &mut self.active_wizard {
             if buf.len() < 40 {
                 buf.push(c);
             }
@@ -319,13 +321,13 @@ impl AppState {
     }
 
     pub fn rename_manny_backspace(&mut self) {
-        if let RenameMannyInput::Typing { ref mut buf, .. } = self.rename_manny {
+        if let ActiveWizard::RenameManny(RenameMannyInput::Typing { buf, .. }) = &mut self.active_wizard {
             buf.pop();
         }
     }
 
     pub fn deploy_type_char(&mut self, c: char) {
-        if let DeployInput::EnterName { ref mut name_buf, .. } = self.deploy {
+        if let ActiveWizard::Deploy(DeployInput::EnterName { name_buf, .. }) = &mut self.active_wizard {
             if name_buf.len() < 80 {
                 name_buf.push(c);
             }
@@ -333,7 +335,7 @@ impl AppState {
     }
 
     pub fn deploy_backspace(&mut self) {
-        if let DeployInput::EnterName { ref mut name_buf, .. } = self.deploy {
+        if let ActiveWizard::Deploy(DeployInput::EnterName { name_buf, .. }) = &mut self.active_wizard {
             name_buf.pop();
         }
     }
@@ -402,7 +404,7 @@ impl AppState {
     }
 
     pub fn set_inspect_error(&mut self, msg: String) {
-        if let InspectInput::PickTarget { ref mut error, .. } = self.inspect {
+        if let ActiveWizard::Inspect(InspectInput::PickTarget { error, .. }) = &mut self.active_wizard {
             *error = Some(msg);
         } else {
             // Inspect was dispatched without the picker overlay (single
@@ -412,7 +414,7 @@ impl AppState {
     }
 
     pub fn set_recover_error(&mut self, msg: String) {
-        if let RecoverInput::PickContainer { ref mut error, .. } = self.recover {
+        if let ActiveWizard::Recover(RecoverInput::PickContainer { error, .. }) = &mut self.active_wizard {
             *error = Some(msg);
         } else {
             self.error = Some(format!("recover: {msg}"));
@@ -420,10 +422,12 @@ impl AppState {
     }
 
     pub fn set_detach_error(&mut self, msg: String) {
-        match self.detach {
-            DetachInput::PickMode { ref mut error, .. } => *error = Some(msg),
-            DetachInput::PickAsteroid { ref mut error, .. } => *error = Some(msg),
-            _ => {}
+        if let ActiveWizard::Detach(detach) = &mut self.active_wizard {
+            match detach {
+                DetachInput::PickMode { error, .. } => *error = Some(msg),
+                DetachInput::PickAsteroid { error, .. } => *error = Some(msg),
+                _ => {}
+            }
         }
     }
 
@@ -481,8 +485,8 @@ impl AppState {
     /// When the awaited remote sector arrives, advance the remote-mine wizard
     /// to asteroid selection (or abort with an error if it has no asteroids).
     pub fn remote_mine_sector_loaded(&mut self, x: i32, y: i32, z: i32) {
-        let (manny_id, manny_name) = match &self.remote_mine {
-            RemoteMineInput::Loading { manny_id, manny_name, x: lx, y: ly, z: lz }
+        let (manny_id, manny_name) = match &self.active_wizard {
+            ActiveWizard::RemoteMine(RemoteMineInput::Loading { manny_id, manny_name, x: lx, y: ly, z: lz })
                 if (*lx, *ly, *lz) == (x, y, z) =>
             {
                 (manny_id.clone(), manny_name.clone())
@@ -494,11 +498,11 @@ impl AppState {
             None => return,
         };
         if candidates.is_empty() {
-            self.remote_mine = RemoteMineInput::Inactive;
+            self.close_wizard();
             self.error = Some("no mineable asteroid in the Manny's sector".into());
             return;
         }
-        self.remote_mine = RemoteMineInput::PickAsteroid {
+        self.active_wizard = ActiveWizard::RemoteMine(RemoteMineInput::PickAsteroid {
             manny_id,
             manny_name,
             x,
@@ -506,14 +510,16 @@ impl AppState {
             z,
             candidates,
             selection: 0,
-        };
+        });
     }
 
     pub fn set_remote_mine_error(&mut self, msg: String) {
-        match self.remote_mine {
-            RemoteMineInput::Configure { ref mut error, .. } => *error = Some(msg),
-            RemoteMineInput::PickContainer { ref mut error, .. } => *error = Some(msg),
-            _ => {}
+        if let ActiveWizard::RemoteMine(rm) = &mut self.active_wizard {
+            match rm {
+                RemoteMineInput::Configure { error, .. } => *error = Some(msg),
+                RemoteMineInput::PickContainer { error, .. } => *error = Some(msg),
+                _ => {}
+            }
         }
     }
 

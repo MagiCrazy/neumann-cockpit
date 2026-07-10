@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
 use crate::api::tasks::{fetch_atomic_printer_craft, fetch_craft};
-use crate::app::{ApiMessage, AppState, Fabricator, FabricationInput, LogEvent};
+use crate::app::{ActiveWizard, ApiMessage, AppState, Fabricator, FabricationInput, LogEvent};
 use super::geometry::list_nav;
 
 /// Drive the unified fabrication wizard. `PickRecipe` browses the sectioned
@@ -16,20 +16,20 @@ pub(super) fn handle_fabrication_event(
     client: &ApiClient,
     tx: &mpsc::Sender<ApiMessage>,
 ) {
-    match state.fabrication {
-        FabricationInput::PickRecipe { selection, .. } => {
+    match state.active_wizard {
+        ActiveWizard::Fabrication(FabricationInput::PickRecipe { selection, .. }) => {
             let count = state.fabrication_recipes().len();
             if count == 0 {
                 if code == KeyCode::Esc {
-                    state.fabrication = FabricationInput::Inactive;
+                    state.close_wizard();
                 }
                 return;
             }
             match code {
-                KeyCode::Esc => state.fabrication = FabricationInput::Inactive,
+                KeyCode::Esc => state.close_wizard(),
                 KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
                     if let Some(new_sel) = list_nav(code, selection, count) {
-                        if let FabricationInput::PickRecipe { ref mut selection, .. } = state.fabrication {
+                        if let ActiveWizard::Fabrication(FabricationInput::PickRecipe { ref mut selection, .. }) = state.active_wizard {
                             *selection = new_sel;
                         }
                     }
@@ -38,19 +38,19 @@ pub(super) fn handle_fabrication_event(
                 _ => {}
             }
         }
-        FabricationInput::PickBuilder { selection, ref mannies, .. } => {
+        ActiveWizard::Fabrication(FabricationInput::PickBuilder { selection, ref mannies, .. }) => {
             let count = mannies.len();
             match code {
-                KeyCode::Esc => state.fabrication = FabricationInput::Inactive,
+                KeyCode::Esc => state.close_wizard(),
                 KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
                     if let Some(new_sel) = list_nav(code, selection, count) {
-                        if let FabricationInput::PickBuilder { ref mut selection, .. } = state.fabrication {
+                        if let ActiveWizard::Fabrication(FabricationInput::PickBuilder { ref mut selection, .. }) = state.active_wizard {
                             *selection = new_sel;
                         }
                     }
                 }
                 KeyCode::Enter => {
-                    let picked = if let FabricationInput::PickBuilder { ref mannies, selection, ref recipe_id, ref recipe_name, .. } = state.fabrication {
+                    let picked = if let ActiveWizard::Fabrication(FabricationInput::PickBuilder { ref mannies, selection, ref recipe_id, ref recipe_name, .. }) = state.active_wizard {
                         mannies.get(selection).map(|(id, _)| (id.clone(), recipe_id.clone(), recipe_name.clone()))
                     } else {
                         None
@@ -63,7 +63,7 @@ pub(super) fn handle_fabrication_event(
                 _ => {}
             }
         }
-        FabricationInput::Inactive => {}
+        _ => {}
     }
 }
 
@@ -89,7 +89,7 @@ fn commit_recipe(
             }
         }
         Fabricator::Manny => {
-            let prefilled = if let FabricationInput::PickRecipe { ref prefilled_manny, .. } = state.fabrication {
+            let prefilled = if let ActiveWizard::Fabrication(FabricationInput::PickRecipe { ref prefilled_manny, .. }) = state.active_wizard {
                 prefilled_manny.clone()
             } else {
                 None
@@ -108,13 +108,13 @@ fn commit_recipe(
                     state.log_event(LogEvent::craft(&recipe_name, false, state.active_probe_id));
                 }
                 _ => {
-                    state.fabrication = FabricationInput::PickBuilder {
+                    state.active_wizard = ActiveWizard::Fabrication(FabricationInput::PickBuilder {
                         recipe_id,
                         recipe_name,
                         mannies,
                         selection: 0,
                         error: None,
-                    };
+                    });
                 }
             }
         }

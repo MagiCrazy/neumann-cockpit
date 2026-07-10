@@ -1,4 +1,4 @@
-use crate::app::{AppState, RepairInput};
+use crate::app::{ActiveWizard, AppState, RepairInput};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::Style,
@@ -11,7 +11,7 @@ use crate::ui::theme::{format_duration, palette};
 use super::{centered_rect, render_footer, FooterKey, KeyTone};
 pub(crate) fn render_repair_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let RepairInput::Typing { ref manny_name, ref buf, ref error, .. } = state.repair else { return };
+    let ActiveWizard::Repair(RepairInput::Typing { manny_name, buf, error, .. }) = &state.active_wizard else { return };
 
     let max_pct = state.repair_max_percent();
     let metals_stock = state.repair_metals_stock();

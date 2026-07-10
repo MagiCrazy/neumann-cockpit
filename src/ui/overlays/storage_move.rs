@@ -1,5 +1,5 @@
 use crate::ui::theme::{palette, Palette};
-use crate::app::{AppState, StorageMoveInput, MOVE_RESOURCE_TYPES};
+use crate::app::{ActiveWizard, AppState, StorageMoveInput, MOVE_RESOURCE_TYPES};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -54,8 +54,8 @@ fn field_row(p: Palette, label: &str, value: String, active: bool, editing: bool
 
 pub(crate) fn render_storage_move_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    match &state.storage_move {
-        StorageMoveInput::Inactive => {}
+    let ActiveWizard::StorageMove(storage_move) = &state.active_wizard else { return };
+    match storage_move {
         StorageMoveInput::PickManny { mannies, selection } => {
             let names: Vec<&str> = mannies.iter().map(|(_, n)| n.as_str()).collect();
             let height = (mannies.len() as u16 + 6).min(18);

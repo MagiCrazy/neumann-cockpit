@@ -191,7 +191,7 @@ impl AppState {
             "travel" => {
                 // Accept "x y z" or "+dx dy dz" (commas tolerated).
                 let buf = args.join(" ").replace(',', " ");
-                self.travel = TravelInput::Typing(buf);
+                self.active_wizard = ActiveWizard::Travel(TravelInput::Typing(buf));
                 self.travel_submit();
             }
             "goto" => match parse_coords(&args) {
@@ -236,11 +236,11 @@ impl AppState {
                     self.set_toast("recipes loading — F5 to refresh");
                 } else if args.is_empty() {
                     // Bare `:craft` opens the wizard (unchanged).
-                    self.fabrication = FabricationInput::PickRecipe {
+                    self.active_wizard = ActiveWizard::Fabrication(FabricationInput::PickRecipe {
                         prefilled_manny: None,
                         selection: 0,
                         error: None,
-                    };
+                    });
                 } else {
                     // `:craft <recipe>` fires directly.
                     self.craft_command(&args.join(" "));
@@ -311,13 +311,13 @@ impl AppState {
                     }
                     // Ambiguous builder → let the pilot pick in the wizard.
                     _ => {
-                        self.fabrication = FabricationInput::PickBuilder {
+                        self.active_wizard = ActiveWizard::Fabrication(FabricationInput::PickBuilder {
                             recipe_id,
                             recipe_name,
                             mannies,
                             selection: 0,
                             error: None,
-                        };
+                        });
                     }
                 }
             }
@@ -344,7 +344,7 @@ impl AppState {
             0 => self.set_toast("no mineable objects in current sector — scan first"),
             1 => {
                 let (object_id, object_name) = candidates.into_iter().next().unwrap();
-                self.mine = MineInput::Configure {
+                self.active_wizard = ActiveWizard::Mine(MineInput::Configure {
                     manny_id,
                     manny_name,
                     object_id,
@@ -354,10 +354,10 @@ impl AppState {
                     amount_mode: false,
                     target_container: None,
                     error: None,
-                };
+                });
             }
             _ => {
-                self.mine = MineInput::PickAsteroid { manny_id, manny_name, candidates, selection: 0 };
+                self.active_wizard = ActiveWizard::Mine(MineInput::PickAsteroid { manny_id, manny_name, candidates, selection: 0 });
             }
         }
     }

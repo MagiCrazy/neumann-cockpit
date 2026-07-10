@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
 use crate::api::tasks::{fetch_storage_move, StorageMoveArgs};
-use crate::app::{ApiMessage, AppState, LogEvent, StorageMoveInput, MOVE_RESOURCE_TYPES};
+use crate::app::{ActiveWizard, ApiMessage, AppState, LogEvent, StorageMoveInput, MOVE_RESOURCE_TYPES};
 
 use super::geometry::list_nav;
 
@@ -20,48 +20,48 @@ pub(super) fn handle_storage_move_event(
     client: &ApiClient,
     tx: &mpsc::Sender<ApiMessage>,
 ) {
-    match &state.storage_move {
-        StorageMoveInput::PickManny { selection, mannies } => {
+    match &state.active_wizard {
+        ActiveWizard::StorageMove(StorageMoveInput::PickManny { selection, mannies }) => {
             let (sel, count) = (*selection, mannies.len());
             match code {
-                KeyCode::Esc => state.storage_move = StorageMoveInput::Inactive,
+                KeyCode::Esc => state.close_wizard(),
                 KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
                     if let Some(ns) = list_nav(code, sel, count) {
-                        if let StorageMoveInput::PickManny { selection, .. } = &mut state.storage_move {
+                        if let ActiveWizard::StorageMove(StorageMoveInput::PickManny { selection, .. }) = &mut state.active_wizard {
                             *selection = ns;
                         }
                     }
                 }
                 KeyCode::Enter => {
                     let (id, name) = {
-                        let StorageMoveInput::PickManny { mannies, selection } = &state.storage_move
+                        let ActiveWizard::StorageMove(StorageMoveInput::PickManny { mannies, selection }) = &state.active_wizard
                         else { return };
                         mannies[*selection].clone()
                     };
-                    state.storage_move = StorageMoveInput::PickKind {
+                    state.active_wizard = ActiveWizard::StorageMove(StorageMoveInput::PickKind {
                         actor_manny_id: id,
                         actor_manny_name: name,
                         selection: 0,
-                    };
+                    });
                 }
                 _ => {}
             }
         }
-        StorageMoveInput::PickKind { selection, .. } => {
+        ActiveWizard::StorageMove(StorageMoveInput::PickKind { selection, .. }) => {
             let sel = *selection;
             match code {
-                KeyCode::Esc => state.storage_move = StorageMoveInput::Inactive,
+                KeyCode::Esc => state.close_wizard(),
                 KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
                     if let Some(ns) = list_nav(code, sel, 2) {
-                        if let StorageMoveInput::PickKind { selection, .. } = &mut state.storage_move {
+                        if let ActiveWizard::StorageMove(StorageMoveInput::PickKind { selection, .. }) = &mut state.active_wizard {
                             *selection = ns;
                         }
                     }
                 }
                 KeyCode::Enter => {
                     let (id, name) = {
-                        let StorageMoveInput::PickKind { actor_manny_id, actor_manny_name, .. } =
-                            &state.storage_move else { return };
+                        let ActiveWizard::StorageMove(StorageMoveInput::PickKind { actor_manny_id, actor_manny_name, .. }) =
+                            &state.active_wizard else { return };
                         (actor_manny_id.clone(), actor_manny_name.clone())
                     };
                     if sel == 0 {
@@ -73,20 +73,20 @@ pub(super) fn handle_storage_move_event(
                 _ => {}
             }
         }
-        StorageMoveInput::ConfigureResource { .. } => handle_resource(code, state, client, tx),
-        StorageMoveInput::ConfigureItem { .. } => handle_item(code, state, client, tx),
-        StorageMoveInput::Inactive => {}
+        ActiveWizard::StorageMove(StorageMoveInput::ConfigureResource { .. }) => handle_resource(code, state, client, tx),
+        ActiveWizard::StorageMove(StorageMoveInput::ConfigureItem { .. }) => handle_item(code, state, client, tx),
+        _ => {}
     }
 }
 
 fn enter_resource(state: &mut AppState, actor_manny_id: String, actor_manny_name: String) {
     let containers = state.collect_move_containers();
     if containers.len() < 2 {
-        state.storage_move = StorageMoveInput::Inactive;
+        state.close_wizard();
         state.error = Some("need at least two containers to move resources".into());
         return;
     }
-    state.storage_move = StorageMoveInput::ConfigureResource {
+    state.active_wizard = ActiveWizard::StorageMove(StorageMoveInput::ConfigureResource {
         actor_manny_id,
         actor_manny_name,
         containers,
@@ -96,13 +96,13 @@ fn enter_resource(state: &mut AppState, actor_manny_id: String, actor_manny_name
         amount_buf: "0.10".into(),
         field: 0,
         error: None,
-    };
+    });
 }
 
 fn enter_item(state: &mut AppState, actor_manny_id: String, actor_manny_name: String) {
     let containers = state.collect_move_containers();
     if containers.is_empty() {
-        state.storage_move = StorageMoveInput::Inactive;
+        state.close_wizard();
         state.error = Some("no containers available".into());
         return;
     }
@@ -112,11 +112,11 @@ fn enter_item(state: &mut AppState, actor_manny_id: String, actor_manny_name: St
         .map(|(id, label)| (id, label, false))
         .collect();
     if items.is_empty() {
-        state.storage_move = StorageMoveInput::Inactive;
+        state.close_wizard();
         state.error = Some("no movable items in inventory".into());
         return;
     }
-    state.storage_move = StorageMoveInput::ConfigureItem {
+    state.active_wizard = ActiveWizard::StorageMove(StorageMoveInput::ConfigureItem {
         actor_manny_id,
         actor_manny_name,
         containers,
@@ -125,7 +125,7 @@ fn enter_item(state: &mut AppState, actor_manny_id: String, actor_manny_name: St
         item_cursor: 0,
         field: 0,
         error: None,
-    };
+    });
 }
 
 fn handle_resource(
@@ -134,15 +134,15 @@ fn handle_resource(
     client: &ApiClient,
     tx: &mpsc::Sender<ApiMessage>,
 ) {
-    let StorageMoveInput::ConfigureResource {
+    let ActiveWizard::StorageMove(StorageMoveInput::ConfigureResource {
         actor_manny_id, containers, resource_idx, from_sel, to_sel, amount_buf, field, ..
-    } = &mut state.storage_move
+    }) = &mut state.active_wizard
     else {
         return;
     };
     let clen = containers.len();
     match code {
-        KeyCode::Esc => state.storage_move = StorageMoveInput::Inactive,
+        KeyCode::Esc => state.close_wizard(),
         KeyCode::Up | KeyCode::BackTab => *field = wrap_prev(*field as usize, 4) as u8,
         KeyCode::Down | KeyCode::Tab => *field = wrap_next(*field as usize, 4) as u8,
         KeyCode::Left | KeyCode::Char('h') => match field {
@@ -208,16 +208,16 @@ fn handle_item(
     client: &ApiClient,
     tx: &mpsc::Sender<ApiMessage>,
 ) {
-    let StorageMoveInput::ConfigureItem {
+    let ActiveWizard::StorageMove(StorageMoveInput::ConfigureItem {
         actor_manny_id, containers, items, to_sel, item_cursor, field, ..
-    } = &mut state.storage_move
+    }) = &mut state.active_wizard
     else {
         return;
     };
     let clen = containers.len();
     let ilen = items.len();
     match code {
-        KeyCode::Esc => state.storage_move = StorageMoveInput::Inactive,
+        KeyCode::Esc => state.close_wizard(),
         KeyCode::Tab => *field = if *field == 0 { 1 } else { 0 },
         KeyCode::Up | KeyCode::Char('k') if *field == 0 => *item_cursor = wrap_prev(*item_cursor, ilen),
         KeyCode::Down | KeyCode::Char('j') if *field == 0 => *item_cursor = wrap_next(*item_cursor, ilen),

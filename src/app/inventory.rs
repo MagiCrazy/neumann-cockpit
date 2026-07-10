@@ -140,7 +140,7 @@ impl AppState {
     }
 
     pub fn jettison_type_char(&mut self, c: char) {
-        if let JettisonInput::EnterAmount { ref mut buf, .. } = self.jettison {
+        if let ActiveWizard::Jettison(JettisonInput::EnterAmount { buf, .. }) = &mut self.active_wizard {
             if c.is_ascii_digit() || (c == '.' && !buf.contains('.')) {
                 buf.push(c);
             }
@@ -148,13 +148,13 @@ impl AppState {
     }
 
     pub fn jettison_backspace(&mut self) {
-        if let JettisonInput::EnterAmount { ref mut buf, .. } = self.jettison {
+        if let ActiveWizard::Jettison(JettisonInput::EnterAmount { buf, .. }) = &mut self.active_wizard {
             buf.pop();
         }
     }
 
     pub fn jettison_fill_max(&mut self) {
-        if let JettisonInput::EnterAmount { ref mut buf, max_amount, ref mut error, .. } = self.jettison {
+        if let ActiveWizard::Jettison(JettisonInput::EnterAmount { buf, max_amount, error, .. }) = &mut self.active_wizard {
             *buf = format!("{max_amount:.4}");
             *error = None;
         }
@@ -167,11 +167,13 @@ impl AppState {
     }
 
     pub fn set_jettison_error(&mut self, msg: String) {
-        match self.jettison {
-            JettisonInput::ConfirmManny { ref mut error, .. } => *error = Some(msg),
-            JettisonInput::ConfirmRelay { ref mut error, .. } => *error = Some(msg),
-            JettisonInput::EnterAmount { ref mut error, .. } => *error = Some(msg),
-            _ => {}
+        if let ActiveWizard::Jettison(jettison) = &mut self.active_wizard {
+            match jettison {
+                JettisonInput::ConfirmManny { error, .. } => *error = Some(msg),
+                JettisonInput::ConfirmRelay { error, .. } => *error = Some(msg),
+                JettisonInput::EnterAmount { error, .. } => *error = Some(msg),
+                _ => {}
+            }
         }
     }
 

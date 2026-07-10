@@ -117,9 +117,9 @@ fn probe_sector_coords_rounds_floats() {
 #[test]
 fn travel_submit_even_sum_no_error() {
     let mut state = AppState::default();
-    state.travel = TravelInput::Typing("2 0 -2".into());
+    state.active_wizard = ActiveWizard::Travel(TravelInput::Typing("2 0 -2".into()));
     state.travel_submit();
-    if let TravelInput::Confirming { x, y, z, error, .. } = &state.travel {
+    if let ActiveWizard::Travel(TravelInput::Confirming { x, y, z, error, .. }) = &state.active_wizard {
         assert_eq!((*x, *y, *z), (2, 0, -2));
         assert!(error.is_none(), "expected no error, got {error:?}");
     } else {
@@ -130,9 +130,9 @@ fn travel_submit_even_sum_no_error() {
 #[test]
 fn travel_submit_odd_sum_sets_error() {
     let mut state = AppState::default();
-    state.travel = TravelInput::Typing("1 0 0".into());
+    state.active_wizard = ActiveWizard::Travel(TravelInput::Typing("1 0 0".into()));
     state.travel_submit();
-    if let TravelInput::Confirming { error, .. } = &state.travel {
+    if let ActiveWizard::Travel(TravelInput::Confirming { error, .. }) = &state.active_wizard {
         assert!(error.is_some(), "expected parity error");
         assert!(error.as_ref().unwrap().contains("even"));
     } else {
@@ -144,25 +144,25 @@ fn travel_submit_odd_sum_sets_error() {
 fn travel_submit_not_typing_is_noop() {
     let mut state = AppState::default();
     state.travel_submit();
-    assert!(matches!(state.travel, TravelInput::Inactive));
+    assert!(matches!(state.active_wizard, ActiveWizard::None));
 }
 
 #[test]
 fn travel_submit_invalid_input_is_noop() {
     let mut state = AppState::default();
-    state.travel = TravelInput::Typing("abc".into());
+    state.active_wizard = ActiveWizard::Travel(TravelInput::Typing("abc".into()));
     state.travel_submit();
-    assert!(matches!(state.travel, TravelInput::Typing(_)));
+    assert!(matches!(state.active_wizard, ActiveWizard::Travel(TravelInput::Typing(_))));
 }
 
 #[test]
 fn travel_relative_input_resolves_from_probe_position() {
     let mut state = AppState::default();
     state.probe = Some(make_probe(7.0, 2.0, 0.0, -2.0));
-    state.travel = TravelInput::Typing("+2 0 -2".into());
+    state.active_wizard = ActiveWizard::Travel(TravelInput::Typing("+2 0 -2".into()));
     assert_eq!(state.resolve_travel_target(), Some((4, 0, -4)));
     state.travel_submit();
-    if let TravelInput::Confirming { x, y, z, error, .. } = &state.travel {
+    if let ActiveWizard::Travel(TravelInput::Confirming { x, y, z, error, .. }) = &state.active_wizard {
         assert_eq!((*x, *y, *z), (4, 0, -4));
         assert!(error.is_none());
     } else {
@@ -173,20 +173,20 @@ fn travel_relative_input_resolves_from_probe_position() {
 #[test]
 fn travel_relative_without_probe_position_is_noop() {
     let mut state = AppState::default();
-    state.travel = TravelInput::Typing("+2 0 0".into());
+    state.active_wizard = ActiveWizard::Travel(TravelInput::Typing("+2 0 0".into()));
     assert_eq!(state.resolve_travel_target(), None);
     state.travel_submit();
-    assert!(matches!(state.travel, TravelInput::Typing(_)));
+    assert!(matches!(state.active_wizard, ActiveWizard::Travel(TravelInput::Typing(_))));
 }
 
 #[test]
 fn travel_plus_only_accepted_as_first_char() {
     let mut state = AppState::default();
-    state.travel = TravelInput::Typing(String::new());
+    state.active_wizard = ActiveWizard::Travel(TravelInput::Typing(String::new()));
     state.travel_type_char('+');
     state.travel_type_char('2');
     state.travel_type_char('+'); // rejected mid-buffer
-    if let TravelInput::Typing(ref buf) = state.travel {
+    if let ActiveWizard::Travel(TravelInput::Typing(ref buf)) = state.active_wizard {
         assert_eq!(buf, "+2");
     } else {
         panic!("expected Typing variant");
@@ -346,7 +346,7 @@ fn jettison_for_selected_stock_enters_amount() {
             assert_eq!(item_name, "Metals");
             assert_eq!(max_amount, 0.5);
         }
-        other => panic!("expected EnterAmount, got {:?}", std::mem::discriminant(&other.unwrap_or_default())),
+        other => panic!("expected Ok(EnterAmount), got a different result: {}", other.is_ok()),
     }
 }
 
@@ -384,15 +384,15 @@ fn jettison_for_selected_passive_group_errors() {
 #[test]
 fn jettison_fill_max_sets_buffer() {
     let mut state = AppState::default();
-    state.jettison = JettisonInput::EnterAmount {
+    state.active_wizard = ActiveWizard::Jettison(JettisonInput::EnterAmount {
         item_id: "stock-metals".into(),
         item_name: "Metals".into(),
         max_amount: 0.5,
         buf: "0.1".into(),
         error: Some("previous".into()),
-    };
+    });
     state.jettison_fill_max();
-    if let JettisonInput::EnterAmount { ref buf, ref error, .. } = state.jettison {
+    if let ActiveWizard::Jettison(JettisonInput::EnterAmount { ref buf, ref error, .. }) = state.active_wizard {
         assert_eq!(buf, "0.5000");
         assert!(error.is_none());
     } else {
@@ -910,11 +910,11 @@ fn busy_or_too_far_manny_not_remote_minable() {
 #[test]
 fn remote_mine_advances_to_pick_asteroid_when_sector_loads() {
     let mut state = AppState::default();
-    state.remote_mine = RemoteMineInput::Loading {
+    state.active_wizard = ActiveWizard::RemoteMine(RemoteMineInput::Loading {
         manny_id: "mny_remote".into(),
         manny_name: "manny-r".into(),
         x: 2, y: 0, z: -2,
-    };
+    });
     state.scan_history = vec![make_sector_with_objects(2., 0., -2., r#"[
         {
             "id": "ast-9", "type": "asteroid", "name": "Rock", "summary": null,
@@ -926,7 +926,7 @@ fn remote_mine_advances_to_pick_asteroid_when_sector_loads() {
         }
     ]"#)];
     state.remote_mine_sector_loaded(2, 0, -2);
-    assert!(matches!(state.remote_mine, RemoteMineInput::PickAsteroid { .. }));
+    assert!(matches!(state.active_wizard, ActiveWizard::RemoteMine(RemoteMineInput::PickAsteroid { .. })));
 }
 
 #[test]
@@ -1920,7 +1920,7 @@ fn run_command_travel_and_goto() {
     state.probe = Some(probe_at(0., 0., 0.));
     // even-sum target → travel confirm
     state.run_command("travel 2 0 -2");
-    assert!(matches!(state.travel, TravelInput::Confirming { x: 2, y: 0, z: -2, .. }));
+    assert!(matches!(state.active_wizard, ActiveWizard::Travel(TravelInput::Confirming { x: 2, y: 0, z: -2, .. })));
 
     state.run_command("goto 1 1 0");
     assert!(state.map.open);
@@ -2013,7 +2013,7 @@ fn mine_bare_opens_configure_from_context() {
     let mut state = mineable_state();
     assert!(!state.run_command("mine"));
     assert!(
-        matches!(state.mine, MineInput::Configure { ref object_id, ref manny_id, .. }
+        matches!(state.active_wizard, ActiveWizard::Mine(MineInput::Configure { ref object_id, ref manny_id, .. })
             if object_id == "ast-1" && manny_id == "m1"),
         "bare :mine opens the wizard on the sole manny + asteroid"
     );
@@ -2117,7 +2117,7 @@ fn craft_bare_still_opens_wizard() {
     )
     .unwrap()];
     state.run_command("craft");
-    assert!(matches!(state.fabrication, FabricationInput::PickRecipe { .. }));
+    assert!(matches!(state.active_wizard, ActiveWizard::Fabrication(FabricationInput::PickRecipe { .. })));
     assert!(state.pending_fire.is_none());
 }
 

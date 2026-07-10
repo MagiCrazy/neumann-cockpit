@@ -8,8 +8,8 @@ use crate::api::tasks::{
     fetch_recover, fetch_rename_manny, fetch_salvage,
 };
 use crate::app::{
-    ApiMessage, AppState, DeployInput, DetachInput, DropCargoInput, DropStorageContainerInput,
-    InspectInput, LogEvent, MindSnapshotInput, RecallInput, RefuelInput,
+    ActiveWizard, ApiMessage, AppState, DeployInput, DetachInput, DropCargoInput,
+    DropStorageContainerInput, InspectInput, LogEvent, RecallInput, RefuelInput,
     RecoverInput, RenameMannyInput, SalvageInput, DETACH_MODES,
 };
 use super::geometry::list_move;
@@ -19,31 +19,31 @@ pub(super) fn handle_salvage_event(
     client: &ApiClient,
     tx: &mpsc::Sender<ApiMessage>,
 ) {
-    if let SalvageInput::PickTarget { selection, candidates, .. } = &mut state.salvage {
+    if let ActiveWizard::Salvage(SalvageInput::PickTarget { selection, candidates, .. }) = &mut state.active_wizard {
         if list_move(code, selection, candidates.len()) {
             return;
         }
     }
-    match &state.salvage {
-        SalvageInput::PickTarget { .. } => match code {
-            KeyCode::Esc => state.salvage = SalvageInput::Inactive,
+    match &state.active_wizard {
+        ActiveWizard::Salvage(SalvageInput::PickTarget { .. }) => match code {
+            KeyCode::Esc => state.close_wizard(),
             KeyCode::Enter => {
                 let (manny_id, manny_name, object_id, object_name) = {
-                    let SalvageInput::PickTarget { ref manny_id, ref manny_name, ref candidates, selection } = state.salvage else { return };
-                    let (id, name) = candidates[selection].clone();
+                    let ActiveWizard::Salvage(SalvageInput::PickTarget { manny_id, manny_name, candidates, selection }) = &state.active_wizard else { return };
+                    let (id, name) = candidates[*selection].clone();
                     (manny_id.clone(), manny_name.clone(), id, name)
                 };
-                state.salvage = SalvageInput::Confirm {
+                state.active_wizard = ActiveWizard::Salvage(SalvageInput::Confirm {
                     manny_id, manny_name, object_id, object_name, error: None,
-                };
+                });
             }
             _ => {}
         },
-        SalvageInput::Confirm { .. } => match code {
-            KeyCode::Esc => state.salvage = SalvageInput::Inactive,
+        ActiveWizard::Salvage(SalvageInput::Confirm { .. }) => match code {
+            KeyCode::Esc => state.close_wizard(),
             KeyCode::Enter => {
                 let (manny_id, object_id, object_name) = {
-                    let SalvageInput::Confirm { ref manny_id, ref object_id, ref object_name, .. } = state.salvage else { return };
+                    let ActiveWizard::Salvage(SalvageInput::Confirm { manny_id, object_id, object_name, .. }) = &state.active_wizard else { return };
                     (manny_id.clone(), object_id.clone(), object_name.clone())
                 };
                 fetch_salvage(manny_id, object_id, client.clone(), tx.clone());
@@ -51,7 +51,7 @@ pub(super) fn handle_salvage_event(
             }
             _ => {}
         },
-        SalvageInput::Inactive => {}
+        _ => {}
     }
 }
 
@@ -62,11 +62,11 @@ pub(super) fn handle_recall_event(
     tx: &mpsc::Sender<ApiMessage>,
 ) {
     match code {
-        KeyCode::Esc => state.recall = RecallInput::Inactive,
+        KeyCode::Esc => state.close_wizard(),
         KeyCode::Enter => {
             let (manny_id, manny_name, remote) = {
-                let RecallInput::Confirm { ref manny_id, ref manny_name, remote, .. } = state.recall else { return };
-                (manny_id.clone(), manny_name.clone(), remote)
+                let ActiveWizard::Recall(RecallInput::Confirm { manny_id, manny_name, remote, .. }) = &state.active_wizard else { return };
+                (manny_id.clone(), manny_name.clone(), *remote)
             };
             fetch_recall(manny_id, client.clone(), tx.clone());
             state.log_event(LogEvent::recall(&manny_name, remote, state.active_probe_id));
@@ -82,10 +82,10 @@ pub(super) fn handle_refuel_event(
     tx: &mpsc::Sender<ApiMessage>,
 ) {
     match code {
-        KeyCode::Esc | KeyCode::Char('n') => state.refuel = RefuelInput::Inactive,
+        KeyCode::Esc | KeyCode::Char('n') => state.close_wizard(),
         KeyCode::Enter | KeyCode::Char('y') => {
             let manny_id = {
-                let RefuelInput::Confirm { ref manny_id, .. } = state.refuel else { return };
+                let ActiveWizard::Refuel(RefuelInput::Confirm { manny_id, .. }) = &state.active_wizard else { return };
                 manny_id.clone()
             };
             fetch_refill_deuterium(manny_id, client.clone(), tx.clone());
@@ -102,7 +102,7 @@ pub(super) fn handle_mind_snapshot_event(
     tx: &mpsc::Sender<ApiMessage>,
 ) {
     match code {
-        KeyCode::Esc | KeyCode::Char('n') => state.mind_snapshot = MindSnapshotInput::Inactive,
+        KeyCode::Esc | KeyCode::Char('n') => state.close_wizard(),
         KeyCode::Enter | KeyCode::Char('y') => {
             fetch_reassign_mind_snapshot(client.clone(), tx.clone());
             state.log_event(LogEvent::mind_snapshot(state.active_probe_id));
@@ -117,50 +117,50 @@ pub(super) fn handle_drop_container_event(
     client: &ApiClient,
     tx: &mpsc::Sender<ApiMessage>,
 ) {
-    match &mut state.drop_container {
-        DropStorageContainerInput::PickContainer { selection, containers, .. } => {
+    match &mut state.active_wizard {
+        ActiveWizard::DropContainer(DropStorageContainerInput::PickContainer { selection, containers, .. }) => {
             if list_move(code, selection, containers.len()) {
                 return;
             }
         }
-        DropStorageContainerInput::PickPlanet { selection, planets, .. } => {
+        ActiveWizard::DropContainer(DropStorageContainerInput::PickPlanet { selection, planets, .. }) => {
             if list_move(code, selection, planets.len()) {
                 return;
             }
         }
-        DropStorageContainerInput::Inactive => {}
+        _ => {}
     }
-    match &state.drop_container {
-        DropStorageContainerInput::PickContainer { .. } => match code {
-            KeyCode::Esc => state.drop_container = DropStorageContainerInput::Inactive,
+    match &state.active_wizard {
+        ActiveWizard::DropContainer(DropStorageContainerInput::PickContainer { .. }) => match code {
+            KeyCode::Esc => state.close_wizard(),
             KeyCode::Enter => {
                 let (manny_id, manny_name, container_id, container_name) = {
-                    let DropStorageContainerInput::PickContainer {
+                    let ActiveWizard::DropContainer(DropStorageContainerInput::PickContainer {
                         manny_id, manny_name, containers, selection,
-                    } = &state.drop_container else { return };
+                    }) = &state.active_wizard else { return };
                     let (id, name) = containers[*selection].clone();
                     (manny_id.clone(), manny_name.clone(), id, name)
                 };
                 let planets = state.collect_planet_candidates();
                 if planets.is_empty() {
-                    state.drop_container = DropStorageContainerInput::Inactive;
+                    state.close_wizard();
                     state.error = Some("no planet in current sector — scan first".into());
                     return;
                 }
-                state.drop_container = DropStorageContainerInput::PickPlanet {
+                state.active_wizard = ActiveWizard::DropContainer(DropStorageContainerInput::PickPlanet {
                     manny_id, manny_name, container_id, container_name,
                     planets, selection: 0, error: None,
-                };
+                });
             }
             _ => {}
         },
-        DropStorageContainerInput::PickPlanet { .. } => match code {
-            KeyCode::Esc => state.drop_container = DropStorageContainerInput::Inactive,
+        ActiveWizard::DropContainer(DropStorageContainerInput::PickPlanet { .. }) => match code {
+            KeyCode::Esc => state.close_wizard(),
             KeyCode::Enter => {
                 let (manny_id, container_id, planet_id, container_name, planet_name) = {
-                    let DropStorageContainerInput::PickPlanet {
+                    let ActiveWizard::DropContainer(DropStorageContainerInput::PickPlanet {
                         manny_id, container_id, container_name, planets, selection, ..
-                    } = &state.drop_container else { return };
+                    }) = &state.active_wizard else { return };
                     (
                         manny_id.clone(),
                         container_id.clone(),
@@ -174,7 +174,7 @@ pub(super) fn handle_drop_container_event(
             }
             _ => {}
         },
-        DropStorageContainerInput::Inactive => {}
+        _ => {}
     }
 }
 
@@ -185,10 +185,10 @@ pub(super) fn handle_drop_cargo_event(
     tx: &mpsc::Sender<ApiMessage>,
 ) {
     match code {
-        KeyCode::Esc | KeyCode::Char('n') => state.drop_cargo = DropCargoInput::Inactive,
+        KeyCode::Esc | KeyCode::Char('n') => state.close_wizard(),
         KeyCode::Enter | KeyCode::Char('y') => {
             let manny_id = {
-                let DropCargoInput::Confirm { ref manny_id, .. } = state.drop_cargo else { return };
+                let ActiveWizard::DropCargo(DropCargoInput::Confirm { manny_id, .. }) = &state.active_wizard else { return };
                 manny_id.clone()
             };
             fetch_drop_manny_cargo(manny_id, client.clone(), tx.clone());
@@ -204,61 +204,61 @@ pub(super) fn handle_deploy_event(
     client: &ApiClient,
     tx: &mpsc::Sender<ApiMessage>,
 ) {
-    match &mut state.deploy {
-        DeployInput::PickManny { selection, mannies } => {
+    match &mut state.active_wizard {
+        ActiveWizard::Deploy(DeployInput::PickManny { selection, mannies }) => {
             if list_move(code, selection, mannies.len()) {
                 return;
             }
         }
-        DeployInput::PickObject { selection, candidates, .. } => {
+        ActiveWizard::Deploy(DeployInput::PickObject { selection, candidates, .. }) => {
             if list_move(code, selection, candidates.len()) {
                 return;
             }
         }
         _ => {}
     }
-    match &state.deploy {
-        DeployInput::PickManny { .. } => match code {
-            KeyCode::Esc => state.deploy = DeployInput::Inactive,
+    match &state.active_wizard {
+        ActiveWizard::Deploy(DeployInput::PickManny { .. }) => match code {
+            KeyCode::Esc => state.close_wizard(),
             KeyCode::Enter => {
                 let manny_id = {
-                    let DeployInput::PickManny { ref mannies, selection } = state.deploy else { return };
-                    mannies[selection].0.clone()
+                    let ActiveWizard::Deploy(DeployInput::PickManny { mannies, selection }) = &state.active_wizard else { return };
+                    mannies[*selection].0.clone()
                 };
                 let candidates = state.collect_deploy_candidates();
                 if candidates.is_empty() {
-                    state.deploy = DeployInput::Inactive;
+                    state.close_wizard();
                     state.error = Some("no targets in current sector".into());
                 } else if candidates.len() == 1 {
                     let (object_id, object_name) = candidates.into_iter().next().unwrap();
-                    state.deploy = DeployInput::EnterName { manny_id, object_id, object_name, name_buf: String::new(), error: None };
+                    state.active_wizard = ActiveWizard::Deploy(DeployInput::EnterName { manny_id, object_id, object_name, name_buf: String::new(), error: None });
                 } else {
-                    state.deploy = DeployInput::PickObject { manny_id, candidates, selection: 0 };
+                    state.active_wizard = ActiveWizard::Deploy(DeployInput::PickObject { manny_id, candidates, selection: 0 });
                 }
             }
             _ => {}
         },
-        DeployInput::PickObject { .. } => match code {
-            KeyCode::Esc => state.deploy = DeployInput::Inactive,
+        ActiveWizard::Deploy(DeployInput::PickObject { .. }) => match code {
+            KeyCode::Esc => state.close_wizard(),
             KeyCode::Enter => {
                 let (manny_id, object_id, object_name) = {
-                    let DeployInput::PickObject { ref manny_id, ref candidates, selection } = state.deploy else { return };
-                    let (id, name) = candidates[selection].clone();
+                    let ActiveWizard::Deploy(DeployInput::PickObject { manny_id, candidates, selection }) = &state.active_wizard else { return };
+                    let (id, name) = candidates[*selection].clone();
                     (manny_id.clone(), id, name)
                 };
-                state.deploy = DeployInput::EnterName {
+                state.active_wizard = ActiveWizard::Deploy(DeployInput::EnterName {
                     manny_id, object_id, object_name, name_buf: String::new(), error: None,
-                };
+                });
             }
             _ => {}
         },
-        DeployInput::EnterName { .. } => match code {
-            KeyCode::Esc => state.deploy = DeployInput::Inactive,
+        ActiveWizard::Deploy(DeployInput::EnterName { .. }) => match code {
+            KeyCode::Esc => state.close_wizard(),
             KeyCode::Backspace => state.deploy_backspace(),
             KeyCode::Char(c) => state.deploy_type_char(c),
             KeyCode::Enter => {
                 let (manny_id, object_id, name) = {
-                    let DeployInput::EnterName { ref manny_id, ref object_id, ref name_buf, .. } = state.deploy else { return };
+                    let ActiveWizard::Deploy(DeployInput::EnterName { manny_id, object_id, name_buf, .. }) = &state.active_wizard else { return };
                     if name_buf.is_empty() { return }
                     (manny_id.clone(), object_id.clone(), name_buf.clone())
                 };
@@ -268,7 +268,7 @@ pub(super) fn handle_deploy_event(
             }
             _ => {}
         },
-        DeployInput::Inactive => {}
+        _ => {}
     }
 }
 
@@ -279,10 +279,10 @@ pub(super) fn handle_rename_manny_event(
     tx: &mpsc::Sender<ApiMessage>,
 ) {
     match code {
-        KeyCode::Esc => state.rename_manny = RenameMannyInput::Inactive,
+        KeyCode::Esc => state.close_wizard(),
         KeyCode::Tab => {
             let s = state.next_name_suggestion();
-            if let RenameMannyInput::Typing { buf, .. } = &mut state.rename_manny {
+            if let ActiveWizard::RenameManny(RenameMannyInput::Typing { buf, .. }) = &mut state.active_wizard {
                 *buf = s;
             }
         }
@@ -290,7 +290,7 @@ pub(super) fn handle_rename_manny_event(
         KeyCode::Char(c) => state.rename_manny_type_char(c),
         KeyCode::Enter => {
             let (manny_id, name, old_name) = {
-                let RenameMannyInput::Typing { ref manny_id, ref buf, ref manny_name, .. } = state.rename_manny else { return };
+                let ActiveWizard::RenameManny(RenameMannyInput::Typing { manny_id, buf, manny_name, .. }) = &state.active_wizard else { return };
                 if buf.is_empty() { return }
                 (manny_id.clone(), buf.clone(), manny_name.clone())
             };
@@ -308,17 +308,17 @@ pub(super) fn handle_inspect_event(
     client: &ApiClient,
     tx: &mpsc::Sender<ApiMessage>,
 ) {
-    if let InspectInput::PickTarget { selection, candidates, .. } = &mut state.inspect {
+    if let ActiveWizard::Inspect(InspectInput::PickTarget { selection, candidates, .. }) = &mut state.active_wizard {
         if list_move(code, selection, candidates.len()) {
             return;
         }
     }
     match code {
-        KeyCode::Esc => state.inspect = InspectInput::Inactive,
+        KeyCode::Esc => state.close_wizard(),
         KeyCode::Enter => {
             let (manny_id, object_id, object_name) = {
-                let InspectInput::PickTarget { ref manny_id, ref candidates, selection, .. } = state.inspect else { return };
-                (manny_id.clone(), candidates[selection].0.clone(), candidates[selection].1.clone())
+                let ActiveWizard::Inspect(InspectInput::PickTarget { manny_id, candidates, selection, .. }) = &state.active_wizard else { return };
+                (manny_id.clone(), candidates[*selection].0.clone(), candidates[*selection].1.clone())
             };
             fetch_inspect(manny_id, object_id, client.clone(), tx.clone());
             state.log_event(LogEvent::inspect(&object_name, state.active_probe_id));
@@ -333,17 +333,17 @@ pub(super) fn handle_recover_event(
     client: &ApiClient,
     tx: &mpsc::Sender<ApiMessage>,
 ) {
-    if let RecoverInput::PickContainer { selection, candidates, .. } = &mut state.recover {
+    if let ActiveWizard::Recover(RecoverInput::PickContainer { selection, candidates, .. }) = &mut state.active_wizard {
         if list_move(code, selection, candidates.len()) {
             return;
         }
     }
     match code {
-        KeyCode::Esc => state.recover = RecoverInput::Inactive,
+        KeyCode::Esc => state.close_wizard(),
         KeyCode::Enter => {
             let (manny_id, object_id, container_name) = {
-                let RecoverInput::PickContainer { ref manny_id, ref candidates, selection, .. } = state.recover else { return };
-                (manny_id.clone(), candidates[selection].0.clone(), candidates[selection].1.clone())
+                let ActiveWizard::Recover(RecoverInput::PickContainer { manny_id, candidates, selection, .. }) = &state.active_wizard else { return };
+                (manny_id.clone(), candidates[*selection].0.clone(), candidates[*selection].1.clone())
             };
             fetch_recover(manny_id, object_id, client.clone(), tx.clone());
             state.log_event(LogEvent::recover(&container_name, state.active_probe_id));
@@ -358,43 +358,43 @@ pub(super) fn handle_detach_event(
     client: &ApiClient,
     tx: &mpsc::Sender<ApiMessage>,
 ) {
-    match &mut state.detach {
-        DetachInput::PickContainer { selection, containers, .. } => {
+    match &mut state.active_wizard {
+        ActiveWizard::Detach(DetachInput::PickContainer { selection, containers, .. }) => {
             if list_move(code, selection, containers.len()) {
                 return;
             }
         }
-        DetachInput::PickMode { selection, .. } => {
+        ActiveWizard::Detach(DetachInput::PickMode { selection, .. }) => {
             if list_move(code, selection, DETACH_MODES.len()) {
                 return;
             }
         }
-        DetachInput::PickAsteroid { selection, asteroids, .. } => {
+        ActiveWizard::Detach(DetachInput::PickAsteroid { selection, asteroids, .. }) => {
             if list_move(code, selection, asteroids.len()) {
                 return;
             }
         }
-        DetachInput::Inactive => {}
+        _ => {}
     }
-    match &state.detach {
-        DetachInput::PickContainer { .. } => match code {
-            KeyCode::Esc => state.detach = DetachInput::Inactive,
+    match &state.active_wizard {
+        ActiveWizard::Detach(DetachInput::PickContainer { .. }) => match code {
+            KeyCode::Esc => state.close_wizard(),
             KeyCode::Enter => {
                 let (manny_id, manny_name, container_id, container_name) = {
-                    let DetachInput::PickContainer { ref manny_id, ref manny_name, ref containers, selection } = state.detach else { return };
-                    let (id, name) = containers[selection].clone();
+                    let ActiveWizard::Detach(DetachInput::PickContainer { manny_id, manny_name, containers, selection }) = &state.active_wizard else { return };
+                    let (id, name) = containers[*selection].clone();
                     (manny_id.clone(), manny_name.clone(), id, name)
                 };
-                state.detach = DetachInput::PickMode { manny_id, manny_name, container_id, container_name, selection: 0, error: None };
+                state.active_wizard = ActiveWizard::Detach(DetachInput::PickMode { manny_id, manny_name, container_id, container_name, selection: 0, error: None });
             }
             _ => {}
         },
-        DetachInput::PickMode { .. } => match code {
-            KeyCode::Esc => state.detach = DetachInput::Inactive,
+        ActiveWizard::Detach(DetachInput::PickMode { .. }) => match code {
+            KeyCode::Esc => state.close_wizard(),
             KeyCode::Enter => {
                 let (manny_id, manny_name, container_id, container_name, sel) = {
-                    let DetachInput::PickMode { ref manny_id, ref manny_name, ref container_id, ref container_name, selection, .. } = state.detach else { return };
-                    (manny_id.clone(), manny_name.clone(), container_id.clone(), container_name.clone(), selection)
+                    let ActiveWizard::Detach(DetachInput::PickMode { manny_id, manny_name, container_id, container_name, selection, .. }) = &state.active_wizard else { return };
+                    (manny_id.clone(), manny_name.clone(), container_id.clone(), container_name.clone(), *selection)
                 };
                 let mode = DETACH_MODES[sel].0;
                 if mode == "hidden_on_asteroid" {
@@ -402,7 +402,7 @@ pub(super) fn handle_detach_event(
                     if asteroids.is_empty() {
                         state.set_detach_error("no asteroids in current sector — scan first".into());
                     } else {
-                        state.detach = DetachInput::PickAsteroid { manny_id, manny_name, container_id, container_name, asteroids, selection: 0, error: None };
+                        state.active_wizard = ActiveWizard::Detach(DetachInput::PickAsteroid { manny_id, manny_name, container_id, container_name, asteroids, selection: 0, error: None });
                     }
                 } else {
                     fetch_detach(manny_id, container_id, "drifting".into(), None, client.clone(), tx.clone());
@@ -411,18 +411,18 @@ pub(super) fn handle_detach_event(
             }
             _ => {}
         },
-        DetachInput::PickAsteroid { .. } => match code {
-            KeyCode::Esc => state.detach = DetachInput::Inactive,
+        ActiveWizard::Detach(DetachInput::PickAsteroid { .. }) => match code {
+            KeyCode::Esc => state.close_wizard(),
             KeyCode::Enter => {
                 let (manny_id, container_id, object_id, container_name) = {
-                    let DetachInput::PickAsteroid { ref manny_id, ref container_id, ref container_name, ref asteroids, selection, .. } = state.detach else { return };
-                    (manny_id.clone(), container_id.clone(), asteroids[selection].0.clone(), container_name.clone())
+                    let ActiveWizard::Detach(DetachInput::PickAsteroid { manny_id, container_id, container_name, asteroids, selection, .. }) = &state.active_wizard else { return };
+                    (manny_id.clone(), container_id.clone(), asteroids[*selection].0.clone(), container_name.clone())
                 };
                 fetch_detach(manny_id, container_id, "hidden_on_asteroid".into(), Some(object_id), client.clone(), tx.clone());
                 state.log_event(LogEvent::detach_container(&container_name, true, state.active_probe_id));
             }
             _ => {}
         },
-        DetachInput::Inactive => {}
+        _ => {}
     }
 }

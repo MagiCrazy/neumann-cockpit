@@ -8,7 +8,7 @@ use ratatui::{
 };
 
 use crate::api::types::{Mission, MissionStatus, MissionStepStatus};
-use crate::app::{AppState, MissionsInput};
+use crate::app::{ActiveWizard, AppState, MissionsInput};
 
 use super::{centered_rect, render_footer, FooterKey};
 
@@ -67,10 +67,10 @@ fn mission_lines(m: &Mission, selected: bool, p: Palette) -> Vec<Line<'static>> 
 
 pub(crate) fn render_missions_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
-    let selection = match state.missions_input {
-        MissionsInput::Browsing { selection } => selection,
-        MissionsInput::ConfirmAbandon { selection, .. } => selection,
-        MissionsInput::Inactive => return,
+    let selection = match &state.active_wizard {
+        ActiveWizard::Missions(MissionsInput::Browsing { selection }) => *selection,
+        ActiveWizard::Missions(MissionsInput::ConfirmAbandon { selection, .. }) => *selection,
+        _ => return,
     };
 
     let popup = centered_rect(78, 80, area);
@@ -108,7 +108,7 @@ pub(crate) fn render_missions_overlay(frame: &mut Frame, area: Rect, state: &App
         FooterKey::nav("[Esc]", "close"),
     ]);
 
-    if let MissionsInput::ConfirmAbandon { ref mission_title, ref error, .. } = state.missions_input {
+    if let ActiveWizard::Missions(MissionsInput::ConfirmAbandon { mission_title, error, .. }) = &state.active_wizard {
         render_abandon_confirm(frame, area, mission_title, error.as_deref(), p);
     }
 }

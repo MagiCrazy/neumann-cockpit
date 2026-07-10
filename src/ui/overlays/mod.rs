@@ -54,13 +54,7 @@ pub(crate) use travel::render_travel_overlay;
 pub(crate) use waypoints::render_waypoints_overlay;
 
 use crate::app::{
-    AlertsInput, AppState, AssembleProbeInput, ContainerRulesInput, FabricationInput, ImproveInput, DeployInput,
-    DetachInput, DropCargoInput, DropStorageContainerInput, GotoVisitedInput, InspectInput,
-    JettisonInput, MessagesInput, MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput,
-    ProbeSwitchInput, RenameProbeInput,
-    RecallInput, RecoverInput, RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput,
-    RepairInput, SalvageInput, ScanMode, ScutNetworkInput, ScutRelayInput, StorageMoveInput,
-    TransferDeuteriumInput, TravelInput, WaypointsInput, RESOURCE_LABELS,
+    ActiveWizard, AppState, GotoVisitedInput, ProbeSwitchInput, ScanMode, RESOURCE_LABELS,
 };
 use crate::api::types::DangerLevel;
 use crate::ui::theme::{palette, Palette};
@@ -83,37 +77,37 @@ type OverlayRender = fn(&mut Frame, Rect, &AppState);
 /// matching the state), so the caller must gate them.
 #[allow(clippy::type_complexity)]
 const WIZARD_OVERLAYS: &[(OverlayGuard, OverlayRender)] = &[
-    (|s| !matches!(s.assemble_probe, AssembleProbeInput::Inactive), render_assemble_probe_overlay),
-    (|s| !matches!(s.rename_probe, RenameProbeInput::Inactive), render_rename_probe_overlay),
-    (|s| !matches!(s.alerts_input, AlertsInput::Inactive), render_alerts_overlay),
-    (|s| !matches!(s.travel, TravelInput::Inactive), render_travel_overlay),
-    (|s| !matches!(s.repair, RepairInput::Inactive), render_repair_overlay),
-    (|s| !matches!(s.mine, MineInput::Inactive), render_mine_overlay),
-    (|s| !matches!(s.remote_mine, RemoteMineInput::Inactive), render_remote_mine_overlay),
-    (|s| !matches!(s.jettison, JettisonInput::Inactive), render_jettison_overlay),
-    (|s| !matches!(s.fabrication, FabricationInput::Inactive), render_fabrication_overlay),
-    (|s| !matches!(s.improve, ImproveInput::Inactive), render_improve_overlay),
-    (|s| !matches!(s.salvage, SalvageInput::Inactive), render_salvage_overlay),
-    (|s| !matches!(s.recall, RecallInput::Inactive), render_recall_overlay),
-    (|s| !matches!(s.refuel, RefuelInput::Inactive), render_refuel_overlay),
-    (|s| !matches!(s.transfer_deuterium, TransferDeuteriumInput::Inactive), render_transfer_deuterium_overlay),
-    (|s| !matches!(s.mind_snapshot, MindSnapshotInput::Inactive), render_mind_snapshot_overlay),
-    (|s| !matches!(s.missions_input, MissionsInput::Inactive), render_missions_overlay),
-    (|s| !matches!(s.messages_input, MessagesInput::Inactive), render_messages_overlay),
-    (|s| !matches!(s.scut_relay, ScutRelayInput::Inactive), render_scut_relay_overlay),
-    (|s| !matches!(s.scut_network, ScutNetworkInput::Inactive), render_scut_network_overlay),
-    (|s| !matches!(s.drop_cargo, DropCargoInput::Inactive), render_drop_cargo_overlay),
-    (|s| !matches!(s.deploy, DeployInput::Inactive), render_deploy_overlay),
-    (|s| !matches!(s.rename_manny, RenameMannyInput::Inactive), render_rename_manny_overlay),
-    (|s| !matches!(s.inspect, InspectInput::Inactive), render_inspect_overlay),
-    (|s| !matches!(s.recover, RecoverInput::Inactive), render_recover_overlay),
-    (|s| !matches!(s.detach, DetachInput::Inactive), render_detach_overlay),
-    (|s| !matches!(s.drop_container, DropStorageContainerInput::Inactive), render_drop_container_overlay),
-    (|s| !matches!(s.object_action, ObjectActionInput::Inactive), render_object_action_overlay),
-    (|s| !matches!(s.waypoints, WaypointsInput::Inactive), render_waypoints_overlay),
-    (|s| !matches!(s.rename_container, RenameContainerInput::Inactive), render_rename_container_overlay),
-    (|s| !matches!(s.container_rules, ContainerRulesInput::Inactive), render_container_rules_overlay),
-    (|s| !matches!(s.storage_move, StorageMoveInput::Inactive), render_storage_move_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::AssembleProbe(_)), render_assemble_probe_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::RenameProbe(_)), render_rename_probe_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::Alerts(_)), render_alerts_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::Travel(_)), render_travel_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::Repair(_)), render_repair_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::Mine(_)), render_mine_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::RemoteMine(_)), render_remote_mine_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::Jettison(_)), render_jettison_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::Fabrication(_)), render_fabrication_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::Improve(_)), render_improve_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::Salvage(_)), render_salvage_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::Recall(_)), render_recall_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::Refuel(_)), render_refuel_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::TransferDeuterium(_)), render_transfer_deuterium_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::MindSnapshot(_)), render_mind_snapshot_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::Missions(_)), render_missions_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::Messages(_)), render_messages_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::ScutRelay(_)), render_scut_relay_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::ScutNetwork(_)), render_scut_network_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::DropCargo(_)), render_drop_cargo_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::Deploy(_)), render_deploy_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::RenameManny(_)), render_rename_manny_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::Inspect(_)), render_inspect_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::Recover(_)), render_recover_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::Detach(_)), render_detach_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::DropContainer(_)), render_drop_container_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::ObjectAction(_)), render_object_action_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::Waypoints(_)), render_waypoints_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::RenameContainer(_)), render_rename_container_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::ContainerRules(_)), render_container_rules_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::StorageMove(_)), render_storage_move_overlay),
 ];
 
 /// Render whichever wizard overlays are active, on top of the cockpit grid.
@@ -332,7 +326,7 @@ pub(crate) fn render_pick_list(
 #[cfg(test)]
 mod tests {
     use super::{object_pick_label, render_active_overlays, DangerLevel};
-    use crate::app::{AppState, TravelInput};
+    use crate::app::{ActiveWizard, AppState, TravelInput};
     use ratatui::{backend::TestBackend, Terminal};
 
     #[test]
@@ -381,7 +375,7 @@ mod tests {
     #[test]
     fn active_wizard_frame_renders() {
         let mut state = AppState::default();
-        state.travel = TravelInput::Typing(String::new());
+        state.active_wizard = ActiveWizard::Travel(TravelInput::Typing(String::new()));
         assert!(rendered_text(&state).contains("TRAVEL"), "active travel wizard renders its frame");
     }
 
@@ -397,7 +391,7 @@ mod tests {
                 "ingredients":[],"durationSeconds":300,
                 "output":{"type":"steel_plate","name":"Steel plate","containerSpace":0.01,"containerSpaceUnit":"ECE","capacityBonus":null}}"#).unwrap(),
         ];
-        state.fabrication = FabricationInput::PickRecipe { prefilled_manny: None, selection: 0, error: None };
+        state.active_wizard = ActiveWizard::Fabrication(FabricationInput::PickRecipe { prefilled_manny: None, selection: 0, error: None });
         let text = rendered_text(&state);
         assert!(text.contains("FABRICATION"), "unified title renders");
         assert!(text.contains("ATOMIC PRINTER"), "atomic section header renders");

@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 use crate::api::client::ApiClient;
 use crate::api::tasks::{fetch_rename_probe, fetch_transfer_deuterium};
 use crate::app::{
-    ApiMessage, AppState, LogEvent, ProbeSwitchInput, RenameProbeInput, TransferDeuteriumInput,
+    ActiveWizard, ApiMessage, AppState, LogEvent, ProbeSwitchInput, RenameProbeInput, TransferDeuteriumInput,
 };
 
 use super::geometry::list_nav;
@@ -51,31 +51,31 @@ pub(super) fn handle_transfer_deuterium_event(
     tx: &mpsc::Sender<ApiMessage>,
 ) {
     // Step 1 — destination picker.
-    if let TransferDeuteriumInput::PickTarget { targets, selection, .. } = &state.transfer_deuterium {
+    if let ActiveWizard::TransferDeuterium(TransferDeuteriumInput::PickTarget { targets, selection, .. }) = &state.active_wizard {
         let (count, sel) = (targets.len(), *selection);
         match code {
-            KeyCode::Esc => state.transfer_deuterium = TransferDeuteriumInput::Inactive,
+            KeyCode::Esc => state.close_wizard(),
             KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
-                if let (Some(ns), TransferDeuteriumInput::PickTarget { selection, .. }) =
-                    (list_nav(code, sel, count), &mut state.transfer_deuterium)
+                if let (Some(ns), ActiveWizard::TransferDeuterium(TransferDeuteriumInput::PickTarget { selection, .. })) =
+                    (list_nav(code, sel, count), &mut state.active_wizard)
                 {
                     *selection = ns;
                 }
             }
             KeyCode::Enter => {
-                if let TransferDeuteriumInput::PickTarget {
+                if let ActiveWizard::TransferDeuterium(TransferDeuteriumInput::PickTarget {
                     manny_id, manny_name, targets, selection,
-                } = &state.transfer_deuterium
+                }) = &state.active_wizard
                 {
                     if let Some((target_id, target_name)) = targets.get(*selection).cloned() {
-                        state.transfer_deuterium = TransferDeuteriumInput::EnterAmount {
+                        state.active_wizard = ActiveWizard::TransferDeuterium(TransferDeuteriumInput::EnterAmount {
                             manny_id: manny_id.clone(),
                             manny_name: manny_name.clone(),
                             target_id,
                             target_name,
                             buf: String::new(),
                             error: None,
-                        };
+                        });
                     }
                 }
             }
@@ -86,22 +86,22 @@ pub(super) fn handle_transfer_deuterium_event(
 
     // Step 2 — amount entry. Each arm takes its own borrow so reassigning the
     // wizard state never overlaps the mutable buffer borrow.
-    if !matches!(state.transfer_deuterium, TransferDeuteriumInput::EnterAmount { .. }) {
+    if !matches!(state.active_wizard, ActiveWizard::TransferDeuterium(TransferDeuteriumInput::EnterAmount { .. })) {
         return;
     }
     match code {
-        KeyCode::Esc => state.transfer_deuterium = TransferDeuteriumInput::Inactive,
+        KeyCode::Esc => state.close_wizard(),
         KeyCode::Backspace => {
-            if let TransferDeuteriumInput::EnterAmount { buf, error, .. } =
-                &mut state.transfer_deuterium
+            if let ActiveWizard::TransferDeuterium(TransferDeuteriumInput::EnterAmount { buf, error, .. }) =
+                &mut state.active_wizard
             {
                 buf.pop();
                 *error = None;
             }
         }
         KeyCode::Char(c) if c.is_ascii_digit() || c == '.' => {
-            if let TransferDeuteriumInput::EnterAmount { buf, error, .. } =
-                &mut state.transfer_deuterium
+            if let ActiveWizard::TransferDeuterium(TransferDeuteriumInput::EnterAmount { buf, error, .. }) =
+                &mut state.active_wizard
             {
                 if c == '.' && buf.contains('.') {
                     return;
@@ -111,9 +111,9 @@ pub(super) fn handle_transfer_deuterium_event(
             }
         }
         KeyCode::Enter => {
-            let TransferDeuteriumInput::EnterAmount {
+            let ActiveWizard::TransferDeuterium(TransferDeuteriumInput::EnterAmount {
                 manny_id, target_id, target_name, buf, ..
-            } = &state.transfer_deuterium else { return };
+            }) = &state.active_wizard else { return };
             match buf.trim().parse::<f64>() {
                 Ok(amount) if amount > 0.0 => {
                     let (mid, tid, tname) = (manny_id.clone(), *target_id, target_name.clone());
@@ -142,26 +142,26 @@ pub(super) fn handle_rename_probe_event(
     tx: &mpsc::Sender<ApiMessage>,
 ) {
     match code {
-        KeyCode::Esc => state.rename_probe = RenameProbeInput::Inactive,
+        KeyCode::Esc => state.close_wizard(),
         KeyCode::Tab => {
             let s = state.next_name_suggestion();
-            if let RenameProbeInput::Typing { buf, .. } = &mut state.rename_probe {
+            if let ActiveWizard::RenameProbe(RenameProbeInput::Typing { buf, .. }) = &mut state.active_wizard {
                 *buf = s;
             }
         }
         KeyCode::Backspace => {
-            if let RenameProbeInput::Typing { buf, .. } = &mut state.rename_probe {
+            if let ActiveWizard::RenameProbe(RenameProbeInput::Typing { buf, .. }) = &mut state.active_wizard {
                 buf.pop();
             }
         }
         KeyCode::Char(c) => {
-            if let RenameProbeInput::Typing { buf, .. } = &mut state.rename_probe {
+            if let ActiveWizard::RenameProbe(RenameProbeInput::Typing { buf, .. }) = &mut state.active_wizard {
                 buf.push(c);
             }
         }
         KeyCode::Enter => {
-            let order = match &state.rename_probe {
-                RenameProbeInput::Typing { probe_id, buf, .. } if !buf.trim().is_empty() => {
+            let order = match &state.active_wizard {
+                ActiveWizard::RenameProbe(RenameProbeInput::Typing { probe_id, buf, .. }) if !buf.trim().is_empty() => {
                     Some((*probe_id, buf.trim().to_string()))
                 }
                 _ => None,
