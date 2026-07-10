@@ -23,6 +23,7 @@ use tokio::time::timeout;
 
 use crate::api::client::ApiClient;
 use crate::api::types::SectorObservation;
+use crate::app::LogEvent;
 use crate::app::ColorMode;
 use crate::config::{self, Config, ConfigStatus, DEFAULT_BASE_URL};
 use crate::store;
@@ -71,6 +72,7 @@ pub struct Ready {
     pub client: ApiClient,
     pub conn: Option<Connection>,
     pub scan_history: Vec<SectorObservation>,
+    pub journal: Vec<LogEvent>,
     pub api_version: Option<u32>,
     pub link_ok: bool,
 }
@@ -128,23 +130,24 @@ pub async fn run(terminal: &mut Term, color: ColorMode) -> Result<Outcome> {
     // ── ARCHIVE (local SQLite store) ────────────────────────────────────
     log.begin("ARCHIVE");
     redraw(terminal, &log, None, None, color)?;
-    let (conn, scan_history) = match store::open(&config::db_path()) {
+    let (conn, scan_history, journal) = match store::open(&config::db_path()) {
         Ok(mut conn) => {
             let outcome = store::migrate_legacy_json(&mut conn, &config::history_path())
                 .unwrap_or(store::MigrationOutcome::NoLegacyFile);
             let history = store::load_observations(&conn);
+            let journal = store::load_events(&conn);
             let msg = match outcome {
                 store::MigrationOutcome::Imported(n) => {
                     format!("{} sectors · migrated {n}", history.len())
                 }
-                _ => format!("{} sectors", history.len()),
+                _ => format!("{} sectors · {} log", history.len(), journal.len()),
             };
             log.set(Status::Ok(msg));
-            (Some(conn), history)
+            (Some(conn), history, journal)
         }
         Err(e) => {
             log.set(Status::Warn(format!("disabled: {e}")));
-            (None, Vec::new())
+            (None, Vec::new(), Vec::new())
         }
     };
 
@@ -189,6 +192,7 @@ pub async fn run(terminal: &mut Term, color: ColorMode) -> Result<Outcome> {
         client,
         conn,
         scan_history,
+        journal,
         api_version,
         link_ok,
     })))

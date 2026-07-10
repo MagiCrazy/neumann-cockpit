@@ -89,7 +89,7 @@ async fn run(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     ready: preflight::Ready,
 ) -> Result<()> {
-    let preflight::Ready { config, client, conn, scan_history, api_version, link_ok } = ready;
+    let preflight::Ready { config, client, conn, scan_history, journal, api_version, link_ok } = ready;
     // Mutable so a probe switch can retarget every subsequent call (auto-refresh
     // + actions) at the newly-active probe — see the reconcile after handle_event.
     let mut client = client;
@@ -99,6 +99,7 @@ async fn run(
         color_mode: config.color_mode(),
         booting: config.boot,
         scan_history,
+        journal,
         api_version,
         ..Default::default()
     };
@@ -129,6 +130,20 @@ async fn run(
     state.loading = true;
 
     loop {
+        // Drain ship's-log entries staged by the previous tick's handlers:
+        // persist each and prepend to the in-memory journal (newest first,
+        // capped), mirroring how sector observations are persisted.
+        if !state.pending_journal.is_empty() {
+            let staged: Vec<_> = state.pending_journal.drain(..).collect();
+            for ev in staged {
+                if let Some(tx) = &persist_tx {
+                    let _ = tx.send(store::PersistMsg::AppendEvent(ev.clone()));
+                }
+                state.journal.insert(0, ev);
+            }
+            state.journal.truncate(store::JOURNAL_WINDOW);
+        }
+
         terminal.draw(|f| ui::render(f, &state))?;
 
         let deadline = state.next_refresh_instant();

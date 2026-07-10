@@ -10,7 +10,7 @@ use crate::api::types::{
     Manny, MannyLocationType, MannyTaskVisibility, MissionStatus, MissionStepStatus, SectorObject,
     SectorObjectType,
 };
-use crate::app::{AppState, CommsCategory, DrillLevel, Pane};
+use crate::app::{AppState, CommsCategory, DrillLevel, MissionsCategory, Pane};
 use crate::ui::panels::mannies::{
     manny_artificial_detection, manny_mining_detail, manny_task_eta, manny_task_label, manny_task_progress,
 };
@@ -18,6 +18,7 @@ use crate::ui::panels::scanner::{resource_shares_line, sector_object_lines};
 use crate::ui::theme::{
     block_gauge_line, object_color, object_icon, object_type_label, pane_block, ratio_color, Palette,
 };
+use chrono::Local;
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
@@ -442,6 +443,11 @@ fn solar_system_zoom_lines(obj: &SectorObject, p: Palette) -> Vec<Line<'static>>
 }
 
 pub fn render_missions(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {
+    match state.missions_category() {
+        None => return render_missions_root(frame, area, state, active, p),
+        Some(MissionsCategory::ShipsLog) => return render_ship_log(frame, area, state, active, p),
+        Some(MissionsCategory::Missions) => {}
+    }
     if let Some(DrillLevel::Mission(id)) = state.pane_nav[Pane::Missions.index()].drill.last() {
         return render_mission_detail(frame, area, state, id, active, p);
     }
@@ -510,6 +516,138 @@ fn render_mission_detail(frame: &mut Frame, area: Rect, state: &AppState, id: &s
         ]));
     }
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+}
+
+/// Missions root: two selectable rows (active missions, ship's log) with counts
+/// and a one-line preview of the latest entry, mirroring the Comms root.
+fn render_missions_root(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {
+    let dim = Style::default().fg(p.dim);
+    let text = Style::default().fg(p.text);
+    let cur = cursor(state, Pane::Missions);
+    let active_missions = state
+        .missions
+        .iter()
+        .filter(|m| matches!(m.status, MissionStatus::Active))
+        .count();
+    let mission_preview = state.missions.first().map(|m| format!("▸ {}", comms_preview(&m.title)));
+    let log_preview = state
+        .journal
+        .first()
+        .map(|e| format!("· {}", comms_preview(&e.summary.replace(['«', '»'], ""))));
+    let rows = [
+        ("Missions", state.missions.len(), Some(active_missions), mission_preview),
+        ("Ship's log", state.journal.len(), None, log_preview),
+    ];
+    let mut lines = Vec::new();
+    let mut sel_line = None;
+    for (i, (label, total, active_count, preview)) in rows.iter().enumerate() {
+        if i == cur {
+            sel_line = Some(lines.len());
+        }
+        let mut spans = vec![
+            Span::styled(format!("{label:<11} "), row_style(active, i == cur).patch(text)),
+            Span::styled(format!("{total}"), dim),
+        ];
+        if let Some(n) = active_count {
+            if *n > 0 {
+                spans.push(Span::styled(format!("  ({n} active)"), Style::default().fg(p.accent)));
+            }
+        }
+        lines.push(Line::from(spans));
+        let preview = preview.clone().unwrap_or_else(|| "—".to_string());
+        lines.push(Line::from(Span::styled(format!("  {preview}"), dim)));
+    }
+    render_body(frame, area, " MISSIONS ", active, p, lines, sel_line);
+}
+
+/// The ship's log: newest-first captain's-log lines. The timestamp is dimmed,
+/// entities (wrapped in `«…»` by the constructors) take the accent colour, and
+/// server-reconstructed events render in the warning colour. Scrolls with the
+/// cursor.
+fn render_ship_log(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {
+    let dim = Style::default().fg(p.dim);
+    let mut lines = Vec::new();
+    let mut sel_line = None;
+    if state.journal.is_empty() {
+        lines.push(Line::styled("ship's log empty — your actions will appear here", dim));
+    } else {
+        let cur = cursor(state, Pane::Missions);
+        // Compact: truncate each line to the pane width with an ellipsis.
+        // Zoomed: full width, so the whole captain's-log sentence reads out.
+        let width = area.width.saturating_sub(2) as usize;
+        for (i, e) in state.journal.iter().enumerate() {
+            if i == cur {
+                sel_line = Some(lines.len());
+            }
+            let ts = e.occurred_at.with_timezone(&Local).format("%H:%M").to_string();
+            let server = e.kind == crate::app::kind::ALERT;
+            let base = Style::default().fg(if server { p.warn } else { p.text });
+            let accent = Style::default().fg(if server { p.warn } else { p.accent });
+            let mut spans = vec![Span::styled(format!("{ts} — "), dim)];
+            spans.extend(narrative_spans(&e.summary, base, accent));
+            if !state.zoomed {
+                spans = truncate_spans(spans, width);
+            }
+            lines.push(Line::from(spans));
+        }
+    }
+    render_body(frame, area, " SHIP'S LOG ", active, p, lines, sel_line);
+}
+
+/// Truncate a styled line to `max` display columns, appending an ellipsis when
+/// it overflows, while preserving each span's colour.
+fn truncate_spans(spans: Vec<Span<'static>>, max: usize) -> Vec<Span<'static>> {
+    let total: usize = spans.iter().map(|s| s.content.chars().count()).sum();
+    if total <= max || max == 0 {
+        return spans;
+    }
+    let budget = max.saturating_sub(1); // leave a column for the ellipsis
+    let mut out: Vec<Span<'static>> = Vec::new();
+    let mut used = 0usize;
+    for s in spans {
+        let len = s.content.chars().count();
+        if used + len <= budget {
+            used += len;
+            out.push(s);
+        } else {
+            let remaining = budget - used;
+            if remaining > 0 {
+                let clipped: String = s.content.chars().take(remaining).collect();
+                out.push(Span::styled(clipped, s.style));
+            }
+            out.push(Span::styled("…".to_string(), s.style));
+            break;
+        }
+    }
+    out
+}
+
+/// Split a captain's-log summary on `«…»` markers into styled spans: plain text
+/// in `base`, the wrapped entities in `accent`.
+fn narrative_spans(summary: &str, base: Style, accent: Style) -> Vec<Span<'static>> {
+    let mut spans = Vec::new();
+    let mut rest = summary;
+    while let Some(open) = rest.find('«') {
+        if open > 0 {
+            spans.push(Span::styled(rest[..open].to_string(), base));
+        }
+        rest = &rest[open + '«'.len_utf8()..];
+        match rest.find('»') {
+            Some(close) => {
+                spans.push(Span::styled(rest[..close].to_string(), accent));
+                rest = &rest[close + '»'.len_utf8()..];
+            }
+            None => {
+                spans.push(Span::styled(rest.to_string(), base));
+                rest = "";
+                break;
+            }
+        }
+    }
+    if !rest.is_empty() {
+        spans.push(Span::styled(rest.to_string(), base));
+    }
+    spans
 }
 
 pub fn render_storage(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {

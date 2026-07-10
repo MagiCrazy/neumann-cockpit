@@ -10,15 +10,18 @@
 //! verbatim in `data` as JSON. This keeps the row faithful to what the API
 //! returns and forward-compatible with API drift (new fields ride along in the
 //! payload, exactly like the serde `Unknown` fallbacks elsewhere) while still
-//! giving clean columns to query and sort on. Room is left for an
-//! `action_audit` table later.
+//! giving clean columns to query and sort on. The `events` table holds the
+//! ship's log — an append-only action/event journal kept in full for long-term
+//! stats; only the most recent [`JOURNAL_WINDOW`] rows are loaded into memory.
 
 use std::path::Path;
 use std::sync::mpsc::{self, Receiver, Sender};
 
+use chrono::{DateTime, Utc};
 use rusqlite::Connection;
 
 use crate::api::types::SectorObservation;
+use crate::app::LogEvent;
 
 /// Table + index DDL, shared by `open` and the tests.
 const SCHEMA: &str = "
@@ -39,7 +42,24 @@ CREATE TABLE IF NOT EXISTS sector_observations (
 );
 CREATE INDEX IF NOT EXISTS idx_sector_scanned_at
     ON sector_observations (scanned_at);
+
+CREATE TABLE IF NOT EXISTS events (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    occurred_at  TEXT NOT NULL,
+    kind         TEXT NOT NULL,
+    probe_id     INTEGER,
+    summary      TEXT NOT NULL,
+    data         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_events_occurred_at
+    ON events (occurred_at);
 ";
+
+/// How many recent ship's-log entries the cockpit loads into memory and keeps
+/// in `AppState::journal`. The `events` table itself is never trimmed — the
+/// full history is retained for long-term stats; this only bounds the in-memory
+/// working set and what the pane can scroll through.
+pub const JOURNAL_WINDOW: usize = 1000;
 
 /// Additive column migrations for databases that predate a column. `CREATE
 /// TABLE IF NOT EXISTS` never alters an existing table, so a new promoted
@@ -55,6 +75,8 @@ fn ensure_columns(conn: &Connection) {
 pub enum PersistMsg {
     /// Upsert the latest observation for a sector (keyed by coordinates).
     UpsertObservation(SectorObservation),
+    /// Append a ship's-log entry (append-only, trimmed to the retention cap).
+    AppendEvent(LogEvent),
 }
 
 /// What `migrate_legacy_json` did, so the boot preflight can report it.
@@ -143,6 +165,56 @@ pub fn load_observations(conn: &Connection) -> Vec<SectorObservation> {
         .collect()
 }
 
+/// Append a ship's-log entry. The journal is append-only and never trimmed —
+/// the full history is kept for long-term stats (queried straight off the table).
+pub fn append_event(conn: &Connection, ev: &LogEvent) -> rusqlite::Result<()> {
+    let data = serde_json::to_string(&ev.data).unwrap_or_else(|_| "null".to_string());
+    conn.execute(
+        "INSERT INTO events (occurred_at, kind, probe_id, summary, data)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params![
+            ev.occurred_at.to_rfc3339(),
+            ev.kind,
+            ev.probe_id.map(|v| v as i64),
+            ev.summary,
+            data,
+        ],
+    )?;
+    Ok(())
+}
+
+/// Load the most recent [`JOURNAL_WINDOW`] ship's-log entries, newest first —
+/// matching the in-memory `AppState::journal` ordering. The stored RFC 3339
+/// timestamp is reparsed; best-effort, any error yields an empty log.
+pub fn load_events(conn: &Connection) -> Vec<LogEvent> {
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT occurred_at, kind, probe_id, summary, data
+         FROM events ORDER BY id DESC LIMIT ?1",
+    ) else {
+        return Vec::new();
+    };
+    let Ok(rows) = stmt.query_map(rusqlite::params![JOURNAL_WINDOW as i64], |row| {
+        let occurred_at = row
+            .get::<_, String>(0)?
+            .parse::<DateTime<Utc>>()
+            .unwrap_or_else(|_| Utc::now());
+        Ok(LogEvent {
+            occurred_at,
+            kind: row.get(1)?,
+            probe_id: row.get::<_, Option<i64>>(2)?.map(|v| v as u64),
+            summary: row.get(3)?,
+            data: row
+                .get::<_, String>(4)
+                .ok()
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or(serde_json::Value::Null),
+        })
+    }) else {
+        return Vec::new();
+    };
+    rows.filter_map(Result::ok).collect()
+}
+
 /// One-time migration of the legacy `scan_history.json`: while the table is
 /// still empty, import every observation, then delete the JSON so it stops
 /// lingering. The import runs in a transaction and the file is removed **only
@@ -186,6 +258,9 @@ pub fn spawn_writer(conn: Connection) -> Sender<PersistMsg> {
             match msg {
                 PersistMsg::UpsertObservation(obs) => {
                     let _ = upsert_observation(&conn, &obs);
+                }
+                PersistMsg::AppendEvent(ev) => {
+                    let _ = append_event(&conn, &ev);
                 }
             }
         }
@@ -293,6 +368,24 @@ mod tests {
         let loaded = load_observations(&conn);
         assert_eq!(loaded.len(), 2);
         assert_eq!(loaded[0].relative_coordinates.x as i64, 2, "newest first");
+    }
+
+    #[test]
+    fn events_are_kept_in_full_and_loaded_within_the_window() {
+        let conn = mem();
+        let n = JOURNAL_WINDOW + 5;
+        for i in 0..n {
+            append_event(&conn, &LogEvent::action("test", format!("entry {i}"), None)).unwrap();
+        }
+        // The table keeps the full history (append-only, never trimmed).
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count as usize, n, "events are append-only, not trimmed");
+        // Loading returns only the most recent window, newest first.
+        let loaded = load_events(&conn);
+        assert_eq!(loaded.len(), JOURNAL_WINDOW);
+        assert_eq!(loaded[0].summary, format!("entry {}", n - 1), "newest first");
     }
 
     #[test]

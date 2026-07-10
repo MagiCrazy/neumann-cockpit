@@ -5,6 +5,7 @@ mod containers;
 mod grid;
 mod inputs;
 mod inventory;
+mod journal;
 mod mannies;
 mod map;
 mod message;
@@ -21,6 +22,7 @@ pub use command::{command_usage, CommandFire, COMMANDS};
 pub use grid::*;
 pub use inputs::*;
 pub use inventory::*;
+pub use journal::*;
 pub use map::*;
 pub use message::*;
 pub use mode::*;
@@ -54,6 +56,12 @@ pub struct AppState {
     pub mannies_selection: usize,
     pub inventory_selection: usize,
     pub scan_history: Vec<SectorObservation>,
+    /// Ship's log — most-recent-first, the recent `store::JOURNAL_WINDOW` window
+    /// (the `events` table keeps the full history for stats).
+    pub journal: Vec<LogEvent>,
+    /// Log entries staged by action handlers this tick, drained by the event
+    /// loop to persist + prepend to `journal` (mirrors `pending_fire`).
+    pub pending_journal: Vec<LogEvent>,
     pub scan_history_idx: usize,
     pub scan_loading: bool,
     pub scan_mode: ScanMode,
@@ -308,6 +316,13 @@ impl AppState {
 
     pub fn set_toast(&mut self, msg: impl Into<String>) {
         self.toast = Some((msg.into(), Local::now()));
+    }
+
+    /// Stage a ship's-log entry for this tick. The event loop drains
+    /// `pending_journal` — persisting each entry and prepending it to `journal`
+    /// (mirrors how `pending_fire` is drained by the input layer).
+    pub fn log_event(&mut self, ev: LogEvent) {
+        self.pending_journal.push(ev);
     }
 
     /// Toast message while fresh (< 5 s); expired toasts are not shown.

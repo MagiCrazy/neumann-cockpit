@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
 use crate::api::tasks::fetch_storage_move;
-use crate::app::{ApiMessage, AppState, StorageMoveInput, MOVE_RESOURCE_TYPES};
+use crate::app::{ApiMessage, AppState, LogEvent, StorageMoveInput, MOVE_RESOURCE_TYPES};
 
 use super::geometry::list_nav;
 
@@ -180,18 +180,21 @@ fn handle_resource(
             let actor = actor_manny_id.clone();
             let resource = MOVE_RESOURCE_TYPES[*resource_idx].to_string();
             let from_id = containers[*from_sel].0.clone();
+            let from_name = containers[*from_sel].1.clone();
             let to_id = containers[*to_sel].0.clone();
+            let to_name = containers[*to_sel].1.clone();
             fetch_storage_move(
                 actor,
                 "resource".into(),
                 to_id,
                 Some(from_id),
-                Some(resource),
+                Some(resource.clone()),
                 Some(amount),
                 None,
                 client.clone(),
                 tx.clone(),
             );
+            state.log_event(LogEvent::storage_move_resource(amount, &resource, &from_name, &to_name, state.active_probe_id));
         }
         _ => {}
     }
@@ -232,6 +235,8 @@ fn handle_item(
             }
             let actor = actor_manny_id.clone();
             let to_id = containers[*to_sel].0.clone();
+            let to_name = containers[*to_sel].1.clone();
+            let count = ids.len();
             fetch_storage_move(
                 actor,
                 "item".into(),
@@ -243,6 +248,7 @@ fn handle_item(
                 client.clone(),
                 tx.clone(),
             );
+            state.log_event(LogEvent::storage_move_items(count, &to_name, state.active_probe_id));
         }
         _ => {}
     }

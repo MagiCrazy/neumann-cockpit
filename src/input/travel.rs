@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 use crate::api::client::ApiClient;
 use crate::api::tasks::fetch_move;
 use crate::app::{
-    ApiMessage, AppState, TravelInput,
+    ApiMessage, AppState, LogEvent, TravelInput,
 };
 pub(super) fn handle_travel_event(
     code: KeyCode,
@@ -26,6 +26,7 @@ pub(super) fn handle_travel_event(
                 KeyCode::Esc => state.travel = TravelInput::Inactive,
                 KeyCode::Enter if !has_error => {
                     fetch_move(x, y, z, client.clone(), tx.clone());
+                    state.log_event(LogEvent::travel(x, y, z, state.active_probe_id));
                 }
                 _ => {}
             }
