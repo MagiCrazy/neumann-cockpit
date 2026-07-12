@@ -14,7 +14,6 @@ pub(crate) mod mine;
 pub(crate) mod missions;
 pub(crate) mod object_actions;
 pub(crate) mod pickers;
-pub(crate) mod queue;
 pub(crate) mod remote_mine;
 pub(crate) mod repair;
 pub(crate) mod scanner;
@@ -43,7 +42,6 @@ pub(crate) use pickers::{
     render_mind_snapshot_overlay, render_recall_overlay, render_recover_overlay, render_refuel_overlay,
     render_rename_manny_overlay, render_salvage_overlay, render_scut_relay_overlay,
 };
-pub(crate) use queue::render_queue_overlay;
 pub(crate) use remote_mine::render_remote_mine_overlay;
 pub(crate) use repair::render_repair_overlay;
 pub(crate) use scanner::render_scan_input_overlay;
@@ -106,7 +104,6 @@ const WIZARD_OVERLAYS: &[(OverlayGuard, OverlayRender)] = &[
     (|s| matches!(s.active_wizard, ActiveWizard::RenameContainer(_)), render_rename_container_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::ContainerRules(_)), render_container_rules_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::StorageMove(_)), render_storage_move_overlay),
-    (|s| matches!(s.active_wizard, ActiveWizard::Queue(_)), render_queue_overlay),
 ];
 
 /// Render whichever wizard overlays are active, on top of the cockpit grid.
@@ -419,11 +416,7 @@ mod tests {
                 "ingredients":[],"durationSeconds":300,
                 "output":{"type":"steel_plate","name":"Steel plate","containerSpace":0.01,"containerSpaceUnit":"ECE","capacityBonus":null}}"#).unwrap(),
         ];
-        state.active_wizard = ActiveWizard::Fabrication(FabricationInput::PickRecipe {
-            prefilled_manny: None,
-            selection: 0,
-            error: None,
-        });
+        state.active_wizard = ActiveWizard::Fabrication(FabricationInput::pick_recipe(None));
         let text = rendered_text(&state);
         assert!(text.contains("FABRICATION"), "unified title renders");
         assert!(text.contains("ATOMIC PRINTER"), "atomic section header renders");

@@ -330,6 +330,17 @@ fn render_status_line(frame: &mut Frame, area: Rect, state: &AppState, p: Palett
             Style::default().fg(p.warn).add_modifier(Modifier::BOLD),
         ));
     }
+    // Production queue: visible even with the console closed, since it auto-runs
+    // in the background (`:queue` opens it).
+    let (q_done, q_total) = state.queue_progress();
+    if q_total > 0 {
+        let (label, style) = if state.queue_paused {
+            (format!("⛭‖ {q_done}/{q_total}"), dim)
+        } else {
+            (format!("⛭ {q_done}/{q_total}"), Style::default().fg(p.accent))
+        };
+        meta.push((label, style));
+    }
     let unread = state.unread_alert_count();
     if unread > 0 {
         // Urgency signal: crit_style survives the mono palettes (bold+REVERSED).

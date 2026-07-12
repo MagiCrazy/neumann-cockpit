@@ -1,0 +1,8 @@
+feat(journal): capture the remaining pilot actions
+
+Log the rest of the mutating actions to the ship's log: repair, craft
+(manny + atomic printer), salvage, recall/abandon, recover, rename
+(manny/container/probe), set-default probe, improve, inspect, refuel,
+assemble drone, drop cargo, mind-snapshot reassign, mission abandon,
+turn-on relay, send message, routing rules, remote mine, and the one-shot
+:mine/:craft command paths. Adds the matching narrative constructors.

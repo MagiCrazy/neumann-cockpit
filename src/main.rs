@@ -264,23 +264,11 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         state.finish_action("jettisoned", Refetch::All);
                     }
                     ApiMessage::JettisonError(e) => state.set_wizard_error(e),
-                    // A craft can be wizard-fired (fabrication overlay open) or
-                    // queue-fired (no wizard). Only the wizard case toasts/closes;
-                    // a queued craft advances quietly (its refresh is already
-                    // scheduled by the fire path).
-                    ApiMessage::CraftStarted => {
-                        if matches!(state.active_wizard, ActiveWizard::Fabrication(_)) {
-                            state.close_wizard();
-                            state.finish_action("craft order sent", Refetch::Mannies);
-                        }
-                    }
-                    ApiMessage::CraftError(e) => {
-                        if matches!(state.active_wizard, ActiveWizard::Fabrication(_)) {
-                            state.set_wizard_error(e);
-                        } else {
-                            state.fail_queue(e);
-                        }
-                    }
+                    // Every craft now flows through the production queue, so a
+                    // start is quiet (the fire path already refreshed mannies)
+                    // and an error halts the queue.
+                    ApiMessage::CraftStarted => {}
+                    ApiMessage::CraftError(e) => state.fail_queue(e),
                     ApiMessage::SalvageStarted => {
                         state.close_wizard();
                         state.finish_action("salvage order sent", Refetch::Mannies);
@@ -345,19 +333,8 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         state.finish_action("waypoint deploy order sent", Refetch::All);
                     }
                     ApiMessage::DeployError(e) => state.set_wizard_error(e),
-                    ApiMessage::AtomicPrinterCraftStarted => {
-                        if matches!(state.active_wizard, ActiveWizard::Fabrication(_)) {
-                            state.close_wizard();
-                            state.finish_action("atomic printer craft started", Refetch::All);
-                        }
-                    }
-                    ApiMessage::AtomicPrinterCraftError(e) => {
-                        if matches!(state.active_wizard, ActiveWizard::Fabrication(_)) {
-                            state.set_wizard_error(e);
-                        } else {
-                            state.fail_queue(e);
-                        }
-                    }
+                    ApiMessage::AtomicPrinterCraftStarted => {}
+                    ApiMessage::AtomicPrinterCraftError(e) => state.fail_queue(e),
                     ApiMessage::RecipesFetched(recipes) => state.recipes = recipes,
                     ApiMessage::ProbeImprovementsFetched(improvements) => {
                         state.probe_improvements = improvements;

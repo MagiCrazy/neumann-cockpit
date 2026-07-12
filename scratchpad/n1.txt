@@ -1,0 +1,6 @@
+feat(naming): suggest Culture-style names in the rename wizards
+
+The rename wizards (probe / Manny / storage container) now open pre-filled
+with a Culture-style suggestion from a new lexicon (src/app/lexicon.rs); Tab
+regenerates, Enter applies, editing is free-form, Esc keeps the current name.
+next_name_suggestion() cycles the bank via a per-session seed.

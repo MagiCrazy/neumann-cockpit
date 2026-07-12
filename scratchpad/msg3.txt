@@ -1,0 +1,8 @@
+fix(mine): make the ETA preview destination-aware
+
+The pre-launch mining estimate used a 0.30 ECE per-trip cargo cap; the API
+value is 0.05, underestimating trips ~6x. Correct it and deduct per-trip
+travel when mining into a container hidden on the mined asteroid (the server
+charges miningTravelSeconds = 0), keeping travel for the probe or a container
+elsewhere. The authoritative ETA still comes from task_estimated_end_time in
+the Mannies pane once the task starts.

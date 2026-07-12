@@ -1,0 +1,7 @@
+feat(journal): ship's log view in the Missions pane
+
+Turn the Missions pane into a root with two categories (Missions / Ship's log),
+mirroring Comms. The log renders newest-first captain's-log lines — dimmed
+timestamp, entities in the accent colour, server events in warn. Lines truncate
+to the pane width when compact and read out in full when zoomed. Modular so it
+can graduate to its own pane later.

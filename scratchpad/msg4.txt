@@ -1,0 +1,7 @@
+fix(fabrication): convert deuterium tank level to ECE
+
+The game author confirmed 100% of a size-1 fuel tank equals 1.0 ECE, so the
+tank level (a percentage, 0..maxDeuterium) maps to ECE by dividing by 100.
+Apply that in recipe_ingredient_have so the have/need readout and
+affordability for deuterium are exact rather than a stopgap. It scales with
+tank upgrades since maxDeuterium grows with capacity.

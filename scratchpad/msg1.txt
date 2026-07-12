@@ -1,0 +1,9 @@
+fix(fabrication): source deuterium from the fuel tank, not resource stocks
+
+The fabrication catalog read deuterium from inventory.resource_stocks,
+where it never lives, so recipes needing it always showed 0.0 and were
+greyed out. Read it from the fuel tank instead: the tank level is a
+percentage (0..maxDeuterium) where 100% of a size-1 tank holds 1.0 ECE,
+so divide by 100 to get the ECE amount recipes are costed in.
+Also add ProbeFuel.maxDeuterium and scale the FUEL gauge by it instead of
+a hardcoded /100, which was wrong for improved probes.

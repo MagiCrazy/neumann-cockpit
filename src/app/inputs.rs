@@ -239,23 +239,68 @@ pub enum ImproveInput {
 /// atomic printer and Manny craft. `PickRecipe` lists every recipe sectioned by
 /// fabricator; selecting a Manny recipe with no pre-chosen builder advances to
 /// `PickBuilder`, atomic recipes fire straight away.
+/// Which panel of the fabrication console has the keyboard focus.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum FabFocus {
+    /// The recipe catalog (adjust qty, Enter to queue).
+    Catalog,
+    /// The live production queue (move the cursor, remove/clear steps).
+    Queue,
+}
+
 pub enum FabricationInput {
+    /// The production console: the recipe catalog on the left, the live queue on
+    /// the right. `Enter` on the catalog adds the highlighted recipe ×`qty` to
+    /// the queue; `Tab` moves focus to the queue to manage it.
     PickRecipe {
         /// A builder Manny (id, name) pre-chosen when the catalog was opened
         /// from the Mannies pane on an orderable Manny. Manny recipes skip the
         /// builder-selection step when this is set; atomic recipes ignore it.
         prefilled_manny: Option<(String, String)>,
         selection: usize,
+        /// Quantity to enqueue for the highlighted recipe (`+`/`-`, `h`/`l`).
+        qty: u32,
+        focus: FabFocus,
+        /// Cursor into the queue panel when `focus == Queue`.
+        queue_sel: usize,
         error: Option<String>,
     },
-    /// Choosing which idle onboard Manny builds the selected Manny recipe.
+    /// Choosing which idle onboard Manny builds the selected Manny recipe before
+    /// it is enqueued (`qty` carries the chosen quantity through).
     PickBuilder {
         recipe_id: String,
         recipe_name: String,
+        qty: u32,
         mannies: Vec<(String, String)>, // (id, name)
         selection: usize,
         error: Option<String>,
     },
+}
+
+impl FabricationInput {
+    /// Open the console on the catalog with qty 1.
+    pub fn pick_recipe(prefilled_manny: Option<(String, String)>) -> Self {
+        FabricationInput::PickRecipe {
+            prefilled_manny,
+            selection: 0,
+            qty: 1,
+            focus: FabFocus::Catalog,
+            queue_sel: 0,
+            error: None,
+        }
+    }
+
+    /// The builder-selection step for a Manny recipe, carrying its quantity.
+    pub fn pick_builder(recipe_id: String, recipe_name: String, qty: u32, mannies: Vec<(String, String)>) -> Self {
+        FabricationInput::PickBuilder {
+            recipe_id,
+            recipe_name,
+            qty,
+            mannies,
+            selection: 0,
+            error: None,
+        }
+    }
 }
 
 pub enum MineInput {
@@ -584,11 +629,4 @@ pub enum ActiveWizard {
     Waypoints(WaypointsInput),
     Mine(MineInput),
     RemoteMine(RemoteMineInput),
-    Queue(QueueInput),
-}
-
-/// The production-queue overlay (#197): a manage view over `craft_queue`, opened
-/// with `:queue`. Not a step wizard — just a cursor over the steps.
-pub enum QueueInput {
-    Browsing { selection: usize },
 }

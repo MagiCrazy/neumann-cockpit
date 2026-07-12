@@ -164,10 +164,11 @@ pub struct AppState {
     /// drained + dispatched by the event loop (which owns the client + sender).
     pub pending_refetch: Option<Refetch>,
     // ── Production queue (#197) ─────────────────────────────────────────
-    /// The crafting queue: sequential steps, one running at a time.
+    /// The crafting queue: sequential steps, one running at a time. Auto-runs
+    /// (drains as steps complete) unless paused.
     pub craft_queue: Vec<QueuedCraft>,
-    /// Whether the executor is actively advancing the queue (explicit run).
-    pub queue_running: bool,
+    /// Whether the executor is paused. Default `false` — the queue runs itself.
+    pub queue_paused: bool,
     /// A craft the executor wants spawned; drained by the event loop (mirrors
     /// `pending_fire`, since the state layer owns no client/sender).
     pub queue_fire: Option<CraftFire>,
@@ -464,9 +465,9 @@ impl AppState {
             }
             None => Instant::now() + std::time::Duration::from_secs(86400),
         };
-        // While the production queue runs, poll briskly so a finished craft is
-        // detected within a few seconds (the server has no push).
-        if self.queue_running {
+        // While the production queue is working, poll briskly so a finished
+        // craft is detected within a few seconds (the server has no push).
+        if self.queue_active() {
             return base.min(Instant::now() + std::time::Duration::from_secs(QUEUE_POLL_SECS));
         }
         base

@@ -1,0 +1,3 @@
+docs(mannies): document the idle-Manny indicator and key in CLAUDE.md
+
+Note the "⚙ N idle" status-bar indicator and the `i` next-idle-Manny key.

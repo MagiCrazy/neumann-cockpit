@@ -1,0 +1,14 @@
+Ship's log — PR3: merge reconstructed server events (stacked on #189).
+
+The ship's log now folds server-side alerts and damage warnings into the
+captured-action flow via AppState::ship_log_entries(): projected fresh from
+memory each render (not persisted — the server keeps them, so no dedup),
+sorted newest-first and capped at the memory window. The Missions pane and its
+cursor count read through it; server events render in the warning colour.
+
+Missions are excluded (the API's Mission type carries no timestamps, and they
+already have their own category).
+
+Base: feat/ship-log-pr2 (rebase down the stack as #188/#189 merge).
+
+277 tests pass.

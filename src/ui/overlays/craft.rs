@@ -1,4 +1,4 @@
-use crate::app::{ActiveWizard, AppState, FabricationInput, Fabricator};
+use crate::app::{ActiveWizard, AppState, FabFocus, FabricationInput, Fabricator, StepState};
 use crate::ui::theme::{palette, Palette};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -10,14 +10,30 @@ use ratatui::{
 
 use super::{centered_rect, render_footer, render_pick_list, FooterKey, KeyTone};
 
-/// Render whichever step of the unified fabrication wizard is active.
+/// Render whichever step of the production console is active.
 pub(crate) fn render_fabrication_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let ActiveWizard::Fabrication(fabrication) = &state.active_wizard else {
         return;
     };
     match fabrication {
-        FabricationInput::PickRecipe { selection, error, .. } => {
-            render_catalog(frame, area, state, *selection, error.as_deref());
+        FabricationInput::PickRecipe {
+            selection,
+            qty,
+            focus,
+            queue_sel,
+            error,
+            ..
+        } => {
+            render_console(
+                frame,
+                area,
+                state,
+                *selection,
+                *qty,
+                *focus,
+                *queue_sel,
+                error.as_deref(),
+            );
         }
         FabricationInput::PickBuilder {
             recipe_name,
@@ -41,26 +57,44 @@ pub(crate) fn render_fabrication_overlay(frame: &mut Frame, area: Rect, state: &
                 &names,
                 *selection,
                 error.as_deref(),
-                "BUILD",
+                "queue",
             );
         }
     }
 }
 
-/// The item-first catalog: every recipe sectioned by fabricator, with a detail
-/// block (output, duration, per-ingredient have/need + the builder/assistant it
-/// will use) for the selected recipe.
-fn render_catalog(frame: &mut Frame, area: Rect, state: &AppState, selection: usize, error: Option<&str>) {
+/// The production console: recipe catalog | selected-recipe detail | live queue.
+/// The catalog sets a recipe + quantity (`Enter` queues it); `Tab` moves focus to
+/// the queue panel to manage it.
+#[allow(clippy::too_many_arguments)]
+fn render_console(
+    frame: &mut Frame,
+    area: Rect,
+    state: &AppState,
+    selection: usize,
+    qty: u32,
+    focus: FabFocus,
+    queue_sel: usize,
+    error: Option<&str>,
+) {
     let p = palette(state.color_mode);
     let rows = state.fabrication_recipes();
     let sel = rows.get(selection);
 
-    // Roomy two-panel modal: the catalog grows long once both sections are
-    // shown, so the list scrolls on the left while the detail stays pinned right.
-    let popup = centered_rect(76, area.height.saturating_sub(4).clamp(12, 30), area);
+    let popup = centered_rect(96, area.height.saturating_sub(4).clamp(12, 30), area);
     frame.render_widget(Clear, popup);
+
+    // Title banner reflects the queue's run state.
+    let (done, total) = state.queue_progress();
+    let banner = if total == 0 {
+        String::new()
+    } else if state.queue_paused {
+        " · ‖ paused".into()
+    } else {
+        format!(" · ▶ {done}/{total}")
+    };
     let block = Block::default()
-        .title(" FABRICATION ".to_owned())
+        .title(format!(" PRODUCTION{banner} "))
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
         .border_style(Style::default().fg(p.accent));
@@ -73,16 +107,57 @@ fn render_catalog(frame: &mut Frame, area: Rect, state: &AppState, selection: us
         .split(inner);
     let panels = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(46), Constraint::Percentage(54)])
+        .constraints([
+            Constraint::Percentage(38),
+            Constraint::Percentage(34),
+            Constraint::Percentage(28),
+        ])
         .split(layout[0]);
-    let list_area = panels[0];
 
+    render_catalog_list(frame, panels[0], state, selection, qty, focus);
+    render_detail(frame, panels[1], state, sel, error, &p);
+    render_queue_panel(frame, panels[2], state, queue_sel, focus, &p);
+
+    // Focus-dependent footer.
+    let footer: Vec<FooterKey> = if focus == FabFocus::Catalog {
+        let can = sel.map(|(_, r)| state.recipe_affordable(r)).unwrap_or(false);
+        let add = if can {
+            FooterKey::commit("[Enter]", "add")
+        } else {
+            FooterKey {
+                key: "[Enter]",
+                label: "add",
+                tone: KeyTone::Disabled,
+            }
+        };
+        vec![
+            FooterKey::nav("[↑↓]", "recipe"),
+            FooterKey::nav("[+/-]", "qty"),
+            add,
+            FooterKey::nav("[Tab]", "queue"),
+            FooterKey::nav("[p]", if state.queue_paused { "resume" } else { "pause" }),
+            FooterKey::nav("[Esc]", "close"),
+        ]
+    } else {
+        vec![
+            FooterKey::nav("[↑↓]", "step"),
+            FooterKey::nav("[+/-]", "repeat"),
+            FooterKey::danger("[x]", "remove"),
+            FooterKey::danger("[c]", "clear"),
+            FooterKey::nav("[Tab]", "catalog"),
+            FooterKey::nav("[Esc]", "close"),
+        ]
+    };
+    render_footer(frame, layout[1], p, &footer);
+}
+
+/// Left panel: the sectioned recipe list, scrolled to keep the cursor in view.
+fn render_catalog_list(frame: &mut Frame, area: Rect, state: &AppState, selection: usize, qty: u32, focus: FabFocus) {
+    let p = palette(state.color_mode);
+    let rows = state.fabrication_recipes();
     let dim = Style::default().fg(p.dim);
     let text = Style::default().fg(p.text);
 
-    // ── Left panel: the sectioned recipe list, scrolled to keep the cursor in
-    // view. `sel_line` tracks where the selected row lands among the rendered
-    // lines (headers + gaps included) so we can compute the scroll offset.
     let mut lines: Vec<Line> = Vec::new();
     let mut sel_line = 0usize;
     if rows.is_empty() {
@@ -103,6 +178,14 @@ fn render_catalog(frame: &mut Frame, area: Rect, state: &AppState, selection: us
         }
         let affordable = state.recipe_affordable(recipe);
         let (mark, mark_color) = if affordable { ("✓", p.good) } else { ("✗", p.crit) };
+        // The cursor is only "live" while the catalog holds focus.
+        let cursor = if selected && focus == FabFocus::Catalog {
+            " ▶ "
+        } else if selected {
+            " · "
+        } else {
+            "   "
+        };
         let name_style = if selected {
             Style::default().fg(p.text).add_modifier(Modifier::BOLD)
         } else if affordable {
@@ -110,27 +193,45 @@ fn render_catalog(frame: &mut Frame, area: Rect, state: &AppState, selection: us
         } else {
             dim
         };
-        lines.push(Line::from(vec![
-            Span::styled(if selected { " ▶ " } else { "   " }, Style::default().fg(p.accent)),
+        let mut spans = vec![
+            Span::styled(cursor, Style::default().fg(p.accent)),
             Span::styled(format!("{mark} "), Style::default().fg(mark_color)),
             Span::styled(format!("{:<16}", recipe.name), name_style),
-            Span::styled(format!(" {}m", recipe.duration_seconds / 60), dim),
-        ]));
+        ];
+        // Show the quantity-to-add on the highlighted row.
+        if selected {
+            spans.push(Span::styled(
+                format!(" ×{qty}"),
+                Style::default().fg(p.accent).add_modifier(Modifier::BOLD),
+            ));
+        } else {
+            spans.push(Span::styled(format!(" {}m", recipe.duration_seconds / 60), dim));
+        }
+        lines.push(Line::from(spans));
     }
-    let visible = list_area.height as usize;
+    let visible = area.height as usize;
     let scroll = if sel_line >= visible {
         (sel_line - visible + 1) as u16
     } else {
         0
     };
-    frame.render_widget(Paragraph::new(lines).scroll((scroll, 0)), list_area);
+    frame.render_widget(Paragraph::new(lines).scroll((scroll, 0)), area);
+}
 
-    // ── Right panel: the selected recipe's detail, divided by a left border.
-    let detail_block = Block::default()
-        .borders(Borders::LEFT)
-        .border_style(Style::default().fg(p.dim));
-    let detail_area = detail_block.inner(panels[1]);
-    frame.render_widget(detail_block, panels[1]);
+/// Middle panel: the selected recipe's detail (output, duration, ingredients).
+fn render_detail(
+    frame: &mut Frame,
+    area: Rect,
+    state: &AppState,
+    sel: Option<&(Fabricator, &crate::api::types::CraftingRecipe)>,
+    error: Option<&str>,
+    p: &Palette,
+) {
+    let dim = Style::default().fg(p.dim);
+    let text = Style::default().fg(p.text);
+    let block = Block::default().borders(Borders::LEFT).border_style(dim);
+    let detail_area = block.inner(area);
+    frame.render_widget(block, area);
 
     let mut detail: Vec<Line> = Vec::new();
     if let Some((fab, recipe)) = sel {
@@ -138,15 +239,12 @@ fn render_catalog(frame: &mut Frame, area: Rect, state: &AppState, selection: us
             recipe.name.as_str(),
             Style::default().fg(p.accent).add_modifier(Modifier::BOLD),
         )));
-        detail.push(builder_line(*fab, state, p));
+        detail.push(builder_line(*fab, state, *p));
         detail.push(Line::default());
-        let mut out = vec![Span::styled("→ ", dim), Span::styled(recipe.output.name.as_str(), text)];
-        if let Some(bonus) = recipe.output.capacity_bonus {
-            if bonus != 0.0 {
-                out.push(Span::styled(format!("  +{bonus:.2} cap"), dim));
-            }
-        }
-        detail.push(Line::from(out));
+        detail.push(Line::from(vec![
+            Span::styled("→ ", dim),
+            Span::styled(recipe.output.name.as_str(), text),
+        ]));
         detail.push(Line::from(Span::styled(
             format!("⏲ {} min", recipe.duration_seconds / 60),
             dim,
@@ -174,7 +272,7 @@ fn render_catalog(frame: &mut Frame, area: Rect, state: &AppState, selection: us
                     if ok { "✓ " } else { "✗ " },
                     Style::default().fg(if ok { p.good } else { p.crit }),
                 ),
-                Span::styled(format!("{:<19}", ing.ingredient_type), text),
+                Span::styled(format!("{:<16}", ing.ingredient_type), text),
                 Span::styled(
                     format!("{have_str}/{need}"),
                     Style::default().fg(if ok { p.text } else { p.crit }),
@@ -190,35 +288,52 @@ fn render_catalog(frame: &mut Frame, area: Rect, state: &AppState, selection: us
         )));
     }
     frame.render_widget(Paragraph::new(detail), detail_area);
+}
 
-    // Footer — Enter dimmed when the selected recipe isn't affordable. Manny
-    // recipes may advance to a builder step, so the label reflects that.
-    let can = sel.map(|(_, r)| state.recipe_affordable(r)).unwrap_or(false);
-    let commit = if can {
-        FooterKey::commit("[Enter]", "FABRICATE")
-    } else {
-        FooterKey {
-            key: "[Enter]",
-            label: "FABRICATE",
-            tone: KeyTone::Disabled,
+/// Right panel: the live production queue.
+fn render_queue_panel(frame: &mut Frame, area: Rect, state: &AppState, queue_sel: usize, focus: FabFocus, p: &Palette) {
+    let dim = Style::default().fg(p.dim);
+    let block = Block::default()
+        .title(" QUEUE ")
+        .borders(Borders::LEFT)
+        .border_style(if focus == FabFocus::Queue {
+            Style::default().fg(p.accent)
+        } else {
+            dim
+        });
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let mut lines: Vec<Line> = Vec::new();
+    if state.craft_queue.is_empty() {
+        lines.push(Line::from(Span::styled("empty — Enter a recipe", dim)));
+    }
+    for (i, step) in state.craft_queue.iter().enumerate() {
+        let (icon, icon_color) = match &step.state {
+            StepState::Pending => ("⏳", p.dim),
+            StepState::Running { .. } => ("▶", p.accent),
+            StepState::Done => ("✓", p.good),
+            StepState::Failed(_) => ("✗", p.crit),
+        };
+        let here = focus == FabFocus::Queue && i == queue_sel;
+        let name_style =
+            Style::default()
+                .fg(p.text)
+                .add_modifier(if here { Modifier::BOLD } else { Modifier::empty() });
+        let mut spans = vec![
+            Span::styled(if here { "›" } else { " " }, Style::default().fg(p.accent)),
+            Span::styled(format!("{icon} "), Style::default().fg(icon_color)),
+            Span::styled(step.recipe_name.clone(), name_style),
+        ];
+        if step.repeat > 1 {
+            spans.push(Span::styled(format!(" {}/{}", step.completed, step.repeat), dim));
         }
-    };
-    render_footer(
-        frame,
-        layout[1],
-        p,
-        &[
-            FooterKey::nav("[↑/↓]", "select"),
-            commit,
-            FooterKey::nav("[q]", "queue"),
-            FooterKey::nav("[Esc]", "cancel"),
-        ],
-    );
+        lines.push(Line::from(spans));
+    }
+    frame.render_widget(Paragraph::new(lines), inner);
 }
 
 fn section_header(fab: Fabricator, p: Palette) -> Line<'static> {
-    // The "reserves/occupies a manny" nuance lives in the detail panel's builder
-    // line; the header stays short so it fits the narrow list column.
     let (glyph, name) = match fab {
         Fabricator::AtomicPrinter => ("⚛", "ATOMIC PRINTER"),
         Fabricator::Manny => ("⚙", "MANNY FABRICATION"),
@@ -235,21 +350,14 @@ fn builder_line(fab: Fabricator, state: &AppState, p: Palette) -> Line<'static> 
     match fab {
         Fabricator::AtomicPrinter => {
             if !state.has_atomic_printer() {
-                Line::from(Span::styled(
-                    "⚠ no atomic printer in inventory",
-                    Style::default().fg(p.crit),
-                ))
+                Line::from(Span::styled("⚠ no atomic printer", Style::default().fg(p.crit)))
             } else if state.collect_idle_onboard_mannies().is_empty() {
-                Line::from(Span::styled(
-                    "⚠ no idle manny to assist the printer",
-                    Style::default().fg(p.warn),
-                ))
+                Line::from(Span::styled("⚠ no idle manny to assist", Style::default().fg(p.warn)))
             } else {
-                Line::from(Span::styled("⚛ printer reserves an idle manny as assistant", dim))
+                Line::from(Span::styled("⚛ printer reserves a manny", dim))
             }
         }
         Fabricator::Manny => {
-            // A pre-chosen builder (opened from the Mannies pane) wins.
             if let ActiveWizard::Fabrication(FabricationInput::PickRecipe {
                 prefilled_manny: Some((_, name)),
                 ..
@@ -262,7 +370,7 @@ fn builder_line(fab: Fabricator, state: &AppState, p: Palette) -> Line<'static> 
             }
             match state.collect_idle_onboard_mannies().len() {
                 0 => Line::from(Span::styled("⚠ no idle manny on board", Style::default().fg(p.warn))),
-                1 => Line::from(Span::styled("⚙ built by the idle manny on board", dim)),
+                1 => Line::from(Span::styled("⚙ built by the idle manny", dim)),
                 n => Line::from(Span::styled(format!("⚙ choose 1 of {n} idle mannies"), dim)),
             }
         }

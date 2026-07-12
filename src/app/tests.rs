@@ -2353,7 +2353,7 @@ fn mine_one_shot_at_no_match_toasts_without_firing() {
 }
 
 #[test]
-fn craft_one_shot_stages_manny_fire() {
+fn craft_one_shot_enqueues_on_the_sole_builder() {
     let mut state = AppState::default();
     state.recipes = vec![serde_json::from_str(
         r#"{"id":"r1","name":"Widget","craftableBy":["manny"],
@@ -2363,13 +2363,11 @@ fn craft_one_shot_stages_manny_fire() {
     .unwrap()];
     state.mannies = Some(vec![make_manny("m1", "probe", true, None)]);
     state.run_command("craft widget"); // case-insensitive
-    assert_eq!(
-        state.pending_fire,
-        Some(CommandFire::MannyCraft {
-            manny_id: "m1".into(),
-            recipe_id: "r1".into()
-        })
-    );
+                                       // `:craft <recipe>` now enqueues on the sole idle builder (no direct fire).
+    assert_eq!(state.craft_queue.len(), 1);
+    assert_eq!(state.craft_queue[0].recipe_id, "r1");
+    assert_eq!(state.craft_queue[0].builder_manny_id.as_deref(), Some("m1"));
+    assert!(state.pending_fire.is_none());
 }
 
 #[test]
@@ -2547,8 +2545,8 @@ fn queue_caps_at_max() {
 fn queue_executor_completes_a_step_then_stops() {
     let mut s = AppState::default();
     s.enqueue_craft(queued_manny_craft("steel_plate", "m1"));
-    s.queue_toggle_run();
-    assert!(s.queue_running);
+    // The queue auto-runs (not paused); no explicit start needed.
+    assert!(s.queue_active());
 
     // Start: the pending step fires.
     s.advance_queue();
@@ -2581,9 +2579,9 @@ fn queue_executor_completes_a_step_then_stops() {
     assert_eq!(s.craft_queue[0].completed, 1);
     assert!(s.queue_fire.is_none(), "nothing new fired");
 
-    // Nothing left → the queue stops on its own.
+    // Nothing left → the queue goes idle on its own.
     s.advance_queue();
-    assert!(!s.queue_running);
+    assert!(!s.queue_active(), "idle once drained");
 }
 
 #[test]
@@ -2592,7 +2590,6 @@ fn queue_executor_repeats_a_step_n_times() {
     let mut c = queued_manny_craft("steel_plate", "m1");
     c.repeat = 3;
     s.enqueue_craft(c);
-    s.queue_toggle_run();
 
     let mut fires = 0;
     for _ in 0..20 {
@@ -2620,11 +2617,10 @@ fn queue_halts_on_failure_keeping_the_counter() {
     c.repeat = 5;
     c.completed = 2;
     s.enqueue_craft(c);
-    s.queue_toggle_run();
     s.advance_queue();
     s.queue_fire.take();
     s.fail_queue("insufficient metals".into());
-    assert!(!s.queue_running, "a failed craft halts the queue");
+    assert!(s.queue_paused, "a failed craft pauses the queue");
     match &s.craft_queue[0].state {
         StepState::Failed(e) => assert!(e.contains("insufficient")),
         _ => panic!("expected Failed"),

@@ -1,0 +1,4 @@
+docs(journal): note server-event reconstruction in CLAUDE.md
+
+Record that the Missions-pane view merges captured actions with alerts and
+damage warnings via AppState::ship_log_entries (projected, not persisted).

@@ -300,11 +300,7 @@ fn fire_menu_action(action: MenuAction, state: &mut AppState, client: &ApiClient
             if state.fabrication_recipes().is_empty() {
                 state.error = Some("recipes not loaded yet — F5 to refresh".into());
             } else {
-                state.active_wizard = ActiveWizard::Fabrication(FabricationInput::PickRecipe {
-                    prefilled_manny: None,
-                    selection: 0,
-                    error: None,
-                });
+                state.active_wizard = ActiveWizard::Fabrication(FabricationInput::pick_recipe(None));
             }
             return;
         }
@@ -512,11 +508,7 @@ fn fire_menu_action(action: MenuAction, state: &mut AppState, client: &ApiClient
             if state.fabrication_recipes().is_empty() {
                 state.error = Some("recipes not loaded yet — F5 to refresh".into());
             } else {
-                state.active_wizard = ActiveWizard::Fabrication(FabricationInput::PickRecipe {
-                    prefilled_manny: Some((id, name)),
-                    selection: 0,
-                    error: None,
-                });
+                state.active_wizard = ActiveWizard::Fabrication(FabricationInput::pick_recipe(Some((id, name))));
             }
         }
         MenuAction::AssembleProbe if can => {

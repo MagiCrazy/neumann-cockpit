@@ -1,0 +1,8 @@
+feat(journal): record pilot actions to a persistent ship's log
+
+Add an append-only `events` table (SQLite) holding the full action history for
+long-term stats, plus a LogEvent type; the most recent JOURNAL_WINDOW (1000)
+load into AppState.journal at boot. Actions stage a pre-rendered captain's-log
+line into a pending_journal buffer (mirroring pending_fire), drained by the
+event loop to persist and prepend to the journal. First set of captured
+actions: travel, mine, deploy waypoint, drop/detach container, storage move.

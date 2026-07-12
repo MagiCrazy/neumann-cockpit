@@ -1,0 +1,7 @@
+feat(journal): merge server events into the ship's log
+
+ship_log_entries() folds alerts and damage warnings into the captured-action
+journal, newest first, capped at the memory window. Server events are
+projected fresh from memory (not persisted — the server keeps them and
+re-sends on fetch, so no dedup is needed). The Missions pane and its cursor
+count read through it; server events render in the warning colour.

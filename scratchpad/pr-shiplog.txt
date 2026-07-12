@@ -1,0 +1,16 @@
+Phase 1 — ship's log (captain's-log journal), the first slice of the event-store work.
+
+- Persistence: an append-only `events` table (SQLite) keeps the full action
+  history for long-term stats; the most recent 1000 load into memory at boot.
+- Capture: actions stage a pre-rendered narrative line into a pending_journal
+  buffer (mirroring pending_fire), drained by the event loop. First set:
+  travel, mine, deploy, drop/detach container, storage move.
+- UI: the Missions pane becomes a two-category root (Missions / Ship's log),
+  mirroring Comms. Captain's-log flow with accent-highlighted entities; lines
+  truncate to width when compact and read out in full when zoomed.
+
+Follow-up (PR2): capture the remaining actions (recover, repair, craft, salvage,
+rename, refuel, assemble, improve, acks, messages, remote/one-shot mine) and
+fold in reconstructed server events (alerts / warnings / missions).
+
+276 tests pass; each commit compiles in isolation.
