@@ -2550,7 +2550,8 @@ fn queue_executor_completes_a_step_then_stops() {
 
     // Start: the pending step fires.
     s.advance_queue();
-    assert!(s.queue_fire.take().is_some(), "first step fired");
+    assert!(!s.queue_fire.is_empty(), "first step fired");
+    s.queue_fire.clear();
     assert!(matches!(
         s.craft_queue[0].state,
         StepState::Running { observed_busy: false }
@@ -2577,7 +2578,7 @@ fn queue_executor_completes_a_step_then_stops() {
     s.advance_queue();
     assert!(matches!(s.craft_queue[0].state, StepState::Done));
     assert_eq!(s.craft_queue[0].completed, 1);
-    assert!(s.queue_fire.is_none(), "nothing new fired");
+    assert!(s.queue_fire.is_empty(), "nothing new fired");
 
     // Nothing left → the queue goes idle on its own.
     s.advance_queue();
@@ -2594,8 +2595,9 @@ fn queue_executor_repeats_a_step_n_times() {
     let mut fires = 0;
     for _ in 0..20 {
         s.advance_queue();
-        if s.queue_fire.take().is_some() {
+        if !s.queue_fire.is_empty() {
             fires += 1;
+            s.queue_fire.clear();
         }
         s.mannies = Some(vec![make_manny("m1", "probe", false, Some("crafting"))]);
         s.advance_queue(); // observe busy
@@ -2618,7 +2620,7 @@ fn queue_halts_on_failure_keeping_the_counter() {
     c.completed = 2;
     s.enqueue_craft(c);
     s.advance_queue();
-    s.queue_fire.take();
+    s.queue_fire.clear();
     s.fail_queue("insufficient metals".into());
     assert!(s.queue_paused, "a failed craft pauses the queue");
     match &s.craft_queue[0].state {
@@ -2626,6 +2628,35 @@ fn queue_halts_on_failure_keeping_the_counter() {
         _ => panic!("expected Failed"),
     }
     assert_eq!(s.craft_queue[0].completed, 2, "the completed counter is kept");
+}
+
+#[test]
+fn queue_runs_lanes_in_parallel() {
+    let mut s = AppState::default();
+    // Two crafts on two different idle builders.
+    s.enqueue_craft(queued_manny_craft("steel_plate", "m2"));
+    s.enqueue_craft(queued_manny_craft("integrated_circuit", "m3"));
+    s.mannies = Some(vec![
+        make_manny("m2", "probe", true, None),
+        make_manny("m3", "probe", true, None),
+    ]);
+    s.advance_queue();
+    // Both lanes start the same tick → two crafts in flight at once.
+    assert_eq!(s.queue_fire.len(), 2, "both idle builders start in parallel");
+    assert!(s.craft_queue.iter().all(|st| st.is_running()));
+}
+
+#[test]
+fn queue_same_builder_stays_sequential() {
+    let mut s = AppState::default();
+    s.enqueue_craft(queued_manny_craft("steel_plate", "m2"));
+    s.enqueue_craft(queued_manny_craft("steel_bar", "m2")); // same lane, no coalesce
+    s.mannies = Some(vec![make_manny("m2", "probe", true, None)]);
+    s.advance_queue();
+    // One craft per builder at a time: only the first starts.
+    assert_eq!(s.queue_fire.len(), 1, "a lane runs one craft at a time");
+    assert!(s.craft_queue[0].is_running());
+    assert!(matches!(s.craft_queue[1].state, StepState::Pending));
 }
 
 #[test]

@@ -328,6 +328,9 @@ fn render_queue_panel(frame: &mut Frame, area: Rect, state: &AppState, queue_sel
         if step.repeat > 1 {
             spans.push(Span::styled(format!(" {}/{}", step.completed, step.repeat), dim));
         }
+        // The lane (builder Manny, or printer) — this is what runs in parallel.
+        let lane = step.builder_manny_name.as_deref().unwrap_or("printer");
+        spans.push(Span::styled(format!(" ·{lane}"), dim));
         lines.push(Line::from(spans));
     }
     frame.render_widget(Paragraph::new(lines), inner);

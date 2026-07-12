@@ -146,17 +146,20 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
         // (the event loop owns the client + sender). A fresh mannies fetch lets
         // the next tick detect the craft going busy, then idle → complete.
         state.advance_queue();
-        if let Some(fire) = state.queue_fire.take() {
-            match fire.fabricator {
-                Fabricator::Manny => {
-                    if let Some(builder) = fire.builder_manny_id {
-                        fetch_craft(builder, fire.recipe_id, client.clone(), tx.clone());
+        if !state.queue_fire.is_empty() {
+            for fire in state.queue_fire.drain(..) {
+                match fire.fabricator {
+                    Fabricator::Manny => {
+                        if let Some(builder) = fire.builder_manny_id {
+                            fetch_craft(builder, fire.recipe_id, client.clone(), tx.clone());
+                        }
+                    }
+                    Fabricator::AtomicPrinter => {
+                        fetch_atomic_printer_craft(fire.recipe_id, client.clone(), tx.clone());
                     }
                 }
-                Fabricator::AtomicPrinter => {
-                    fetch_atomic_printer_craft(fire.recipe_id, client.clone(), tx.clone());
-                }
             }
+            // One roster refresh lets the next tick see the builders go busy.
             fetch_mannies(client.clone(), tx.clone());
             state.loading = true;
         }

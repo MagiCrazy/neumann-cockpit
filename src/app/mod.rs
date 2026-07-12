@@ -169,9 +169,10 @@ pub struct AppState {
     pub craft_queue: Vec<QueuedCraft>,
     /// Whether the executor is paused. Default `false` — the queue runs itself.
     pub queue_paused: bool,
-    /// A craft the executor wants spawned; drained by the event loop (mirrors
-    /// `pending_fire`, since the state layer owns no client/sender).
-    pub queue_fire: Option<CraftFire>,
+    /// Crafts the executor wants spawned this tick (one per free lane); drained
+    /// by the event loop (mirrors `pending_fire`, since the state layer owns no
+    /// client/sender).
+    pub queue_fire: Vec<CraftFire>,
 }
 
 impl AppState {
