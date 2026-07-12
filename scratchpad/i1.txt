@@ -1,0 +1,7 @@
+feat(mannies): idle-Manny indicator and cycling key
+
+The status bar shows a bold "⚙ N idle" nudge when Mannies are onboard and
+awaiting orders; `i` focuses the Mannies pane and cycles to the next idle one
+(wrapping). Backed by idle_manny_count / cycle_to_next_idle_manny. Also add
+`i` — and the pre-existing PgUp/PgDn + Home/End paging keys — to the help
+overlay, which had drifted from the actual bindings.

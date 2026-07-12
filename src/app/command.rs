@@ -2,8 +2,8 @@ use super::*;
 
 /// Command verbs recognised by `:` mode. Kept as a table so the input layer can
 /// offer Tab-completion and a `:help`-style listing.
-pub const COMMANDS: [&str; 12] = [
-    "focus", "travel", "goto", "filter", "refresh", "theme", "zoom", "craft", "mine", "probe", "help", "quit",
+pub const COMMANDS: [&str; 13] = [
+    "focus", "travel", "goto", "filter", "refresh", "theme", "zoom", "craft", "mine", "queue", "probe", "help", "quit",
 ];
 
 /// One-line argument usage for a verb, shown as inline ghost-text while typing
@@ -27,10 +27,6 @@ pub fn command_usage(verb: &str) -> Option<&'static str> {
 /// it (`input/command.rs`) with the client + channel in hand.
 #[derive(Debug, Clone, PartialEq)]
 pub enum CommandFire {
-    /// `atomic-printer/craft` (the printer auto-reserves a Manny).
-    AtomicCraft { recipe_id: String },
-    /// A Manny recipe on a resolved builder.
-    MannyCraft { manny_id: String, recipe_id: String },
     /// A local mine on the probe's current sector.
     Mine {
         manny_id: String,
@@ -246,14 +242,10 @@ impl AppState {
                 if self.recipes.is_empty() {
                     self.set_toast("recipes loading — F5 to refresh");
                 } else if args.is_empty() {
-                    // Bare `:craft` opens the wizard (unchanged).
-                    self.active_wizard = ActiveWizard::Fabrication(FabricationInput::PickRecipe {
-                        prefilled_manny: None,
-                        selection: 0,
-                        error: None,
-                    });
+                    // Bare `:craft` opens the production console.
+                    self.active_wizard = ActiveWizard::Fabrication(FabricationInput::pick_recipe(None));
                 } else {
-                    // `:craft <recipe>` fires directly.
+                    // `:craft <recipe>` enqueues it (×1).
                     self.craft_command(&args.join(" "));
                 }
             }
@@ -264,6 +256,8 @@ impl AppState {
                     self.mine_command(&args);
                 }
             }
+            // `:queue` and `:craft` open the same production console.
+            "queue" => self.active_wizard = ActiveWizard::Fabrication(FabricationInput::pick_recipe(None)),
             "help" => self.help_open = true,
             "q" | "quit" => self.set_quit(),
             other => self.set_toast(format!("unknown command: {other}")),
@@ -310,7 +304,7 @@ impl AppState {
         match fab {
             Fabricator::AtomicPrinter => {
                 if self.has_atomic_printer() {
-                    self.pending_fire = Some(CommandFire::AtomicCraft { recipe_id });
+                    self.enqueue_craft(QueuedCraft::new(fab, recipe_id, recipe_name, None, None));
                 } else {
                     self.set_toast("no atomic printer in inventory");
                 }
@@ -320,18 +314,17 @@ impl AppState {
                 match mannies.len() {
                     0 => self.set_toast("no idle Manny on board"),
                     1 => {
-                        let (manny_id, _) = mannies.into_iter().next().unwrap();
-                        self.pending_fire = Some(CommandFire::MannyCraft { manny_id, recipe_id });
+                        let (id, name) = mannies.into_iter().next().unwrap();
+                        self.enqueue_craft(QueuedCraft::new(fab, recipe_id, recipe_name, Some(id), Some(name)));
                     }
-                    // Ambiguous builder → let the pilot pick in the wizard.
+                    // Ambiguous builder → let the pilot pick in the console.
                     _ => {
-                        self.active_wizard = ActiveWizard::Fabrication(FabricationInput::PickBuilder {
+                        self.active_wizard = ActiveWizard::Fabrication(FabricationInput::pick_builder(
                             recipe_id,
                             recipe_name,
+                            1,
                             mannies,
-                            selection: 0,
-                            error: None,
-                        });
+                        ));
                     }
                 }
             }

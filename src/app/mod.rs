@@ -11,6 +11,7 @@ mod mannies;
 mod map;
 mod message;
 mod mode;
+mod queue;
 mod scan;
 #[cfg(test)]
 mod tests;
@@ -27,6 +28,7 @@ pub use journal::*;
 pub use map::*;
 pub use message::*;
 pub use mode::*;
+pub use queue::*;
 pub use scan::*;
 pub use waypoints::*;
 
@@ -161,6 +163,16 @@ pub struct AppState {
     /// Follow-up refresh a completed action requested via `finish_action`,
     /// drained + dispatched by the event loop (which owns the client + sender).
     pub pending_refetch: Option<Refetch>,
+    // ── Production queue (#197) ─────────────────────────────────────────
+    /// The crafting queue: sequential steps, one running at a time. Auto-runs
+    /// (drains as steps complete) unless paused.
+    pub craft_queue: Vec<QueuedCraft>,
+    /// Whether the executor is paused. Default `false` — the queue runs itself.
+    pub queue_paused: bool,
+    /// Crafts the executor wants spawned this tick (one per free lane); drained
+    /// by the event loop (mirrors `pending_fire`, since the state layer owns no
+    /// client/sender).
+    pub queue_fire: Vec<CraftFire>,
 }
 
 impl AppState {
@@ -447,13 +459,19 @@ impl AppState {
     }
 
     pub fn next_refresh_instant(&self) -> Instant {
-        match self.movement_arrival {
+        let base = match self.movement_arrival {
             Some(arrival) => {
                 let remaining = (arrival - Utc::now()).to_std().unwrap_or(std::time::Duration::ZERO);
                 Instant::now() + remaining
             }
             None => Instant::now() + std::time::Duration::from_secs(86400),
+        };
+        // While the production queue is working, poll briskly so a finished
+        // craft is detected within a few seconds (the server has no push).
+        if self.queue_active() {
+            return base.min(Instant::now() + std::time::Duration::from_secs(QUEUE_POLL_SECS));
         }
+        base
     }
 
     pub fn seconds_until_refresh(&self) -> Option<i64> {

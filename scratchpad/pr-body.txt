@@ -1,0 +1,13 @@
+Phase 0 fixes for the cockpit TUI.
+
+- fabrication: deuterium read from resource_stocks (always 0.0, recipes greyed
+  out); now sourced from the fuel tank and converted to ECE (100% of a size-1
+  tank = 1.0 ECE → /100), scaling with tank upgrades. Adds ProbeFuel.maxDeuterium
+  and fixes the FUEL gauge for improved probes.
+- sector: detached containers nest under their host asteroid (indented);
+  drifting ones sink to the bottom.
+- mine: ETA preview corrected (0.05 cargo cap, was 0.30) and made destination-
+  aware — travel deducted when mining into a container on the mined asteroid.
+- jettison: resource jettison now requires an explicit confirmation step.
+
+274 tests pass. Recommend squash-merge (deuterium has a follow-up refinement commit).

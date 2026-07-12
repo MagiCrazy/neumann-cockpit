@@ -1,0 +1,15 @@
+Ship's log — PR2: capture the remaining pilot actions (stacked on #188).
+
+Extends the ship's log from PR1's first set to nearly every mutating action:
+repair, craft (manny + atomic printer), salvage, recall/abandon, recover,
+rename (manny/container/probe), set-default probe, improve, inspect, refuel,
+assemble drone, drop cargo, mind-snapshot reassign, mission abandon, turn-on
+relay, send message, routing rules, remote mine, and the one-shot :mine/:craft
+command paths. Each gets a narrative captain's-log constructor.
+
+Base: feat/ship-log (rebase onto main once #188 merges).
+
+Follow-up (PR3): fold reconstructed server events (alerts / warnings /
+missions) into the flow.
+
+276 tests pass.

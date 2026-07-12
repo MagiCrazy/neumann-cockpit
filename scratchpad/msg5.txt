@@ -1,0 +1,6 @@
+fix(jettison): confirm before jettisoning resources
+
+Jettisoning a resource stock is irreversible but fired straight from the
+amount entry, unlike drop-cargo. Insert a Confirm step: entering the amount
+now advances to a confirmation showing the quantity and item, and only Enter
+there commits the (possibly full-stock) jettison.

@@ -464,11 +464,7 @@ mod tests {
         let mut state = AppState::default();
         state.recipes = vec![manny_recipe("solar_panel")];
         state.mannies = Some(vec![idle_onboard_manny("m1"), idle_onboard_manny("m2")]);
-        state.active_wizard = ActiveWizard::Fabrication(FabricationInput::PickRecipe {
-            prefilled_manny: None,
-            selection: 0,
-            error: None,
-        });
+        state.active_wizard = ActiveWizard::Fabrication(FabricationInput::pick_recipe(None));
         press(&mut state, KeyCode::Enter);
         match &state.active_wizard {
             ActiveWizard::Fabrication(FabricationInput::PickBuilder { recipe_id, mannies, .. }) => {
@@ -485,11 +481,7 @@ mod tests {
         let mut state = AppState::default();
         state.recipes = vec![manny_recipe("solar_panel")];
         state.mannies = Some(vec![]);
-        state.active_wizard = ActiveWizard::Fabrication(FabricationInput::PickRecipe {
-            prefilled_manny: None,
-            selection: 0,
-            error: None,
-        });
+        state.active_wizard = ActiveWizard::Fabrication(FabricationInput::pick_recipe(None));
         press(&mut state, KeyCode::Enter);
         match &state.active_wizard {
             ActiveWizard::Fabrication(FabricationInput::PickRecipe { error, .. }) => {

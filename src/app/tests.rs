@@ -2353,7 +2353,7 @@ fn mine_one_shot_at_no_match_toasts_without_firing() {
 }
 
 #[test]
-fn craft_one_shot_stages_manny_fire() {
+fn craft_one_shot_enqueues_on_the_sole_builder() {
     let mut state = AppState::default();
     state.recipes = vec![serde_json::from_str(
         r#"{"id":"r1","name":"Widget","craftableBy":["manny"],
@@ -2363,13 +2363,11 @@ fn craft_one_shot_stages_manny_fire() {
     .unwrap()];
     state.mannies = Some(vec![make_manny("m1", "probe", true, None)]);
     state.run_command("craft widget"); // case-insensitive
-    assert_eq!(
-        state.pending_fire,
-        Some(CommandFire::MannyCraft {
-            manny_id: "m1".into(),
-            recipe_id: "r1".into()
-        })
-    );
+                                       // `:craft <recipe>` now enqueues on the sole idle builder (no direct fire).
+    assert_eq!(state.craft_queue.len(), 1);
+    assert_eq!(state.craft_queue[0].recipe_id, "r1");
+    assert_eq!(state.craft_queue[0].builder_manny_id.as_deref(), Some("m1"));
+    assert!(state.pending_fire.is_none());
 }
 
 #[test]
@@ -2507,4 +2505,168 @@ fn probe_menu_offers_switch_and_default_when_multi() {
         .find(|i| i.label.contains("Set as default"))
         .expect("set-default item");
     assert!(set_default.enabled);
+}
+
+// ── Production queue (#197) ─────────────────────────────────────────────────
+
+/// A Manny craft of `recipe` by builder `id`, for the queue tests.
+fn queued_manny_craft(recipe: &str, builder: &str) -> QueuedCraft {
+    QueuedCraft::new(
+        Fabricator::Manny,
+        recipe.into(),
+        recipe.into(),
+        Some(builder.into()),
+        Some(builder.into()),
+    )
+}
+
+#[test]
+fn queue_coalesces_identical_trailing_crafts() {
+    let mut s = AppState::default();
+    s.enqueue_craft(queued_manny_craft("steel_plate", "m1"));
+    s.enqueue_craft(queued_manny_craft("steel_plate", "m1"));
+    assert_eq!(s.craft_queue.len(), 1, "identical trailing steps merge");
+    assert_eq!(s.craft_queue[0].repeat, 2);
+    // A different recipe does not merge.
+    s.enqueue_craft(queued_manny_craft("steel_bar", "m1"));
+    assert_eq!(s.craft_queue.len(), 2);
+}
+
+#[test]
+fn queue_caps_at_max() {
+    let mut s = AppState::default();
+    for i in 0..(QUEUE_MAX + 3) {
+        s.enqueue_craft(queued_manny_craft(&format!("r{i}"), "m1"));
+    }
+    assert_eq!(s.craft_queue.len(), QUEUE_MAX, "enqueue past the cap is dropped");
+}
+
+#[test]
+fn queue_executor_completes_a_step_then_stops() {
+    let mut s = AppState::default();
+    s.enqueue_craft(queued_manny_craft("steel_plate", "m1"));
+    // The queue auto-runs (not paused); no explicit start needed.
+    assert!(s.queue_active());
+
+    // Start: the pending step fires.
+    s.advance_queue();
+    assert!(!s.queue_fire.is_empty(), "first step fired");
+    s.queue_fire.clear();
+    assert!(matches!(
+        s.craft_queue[0].state,
+        StepState::Running { observed_busy: false }
+    ));
+
+    // Builder still idle (order not yet picked up) → not complete.
+    s.mannies = Some(vec![make_manny("m1", "probe", true, None)]);
+    s.advance_queue();
+    assert!(matches!(
+        s.craft_queue[0].state,
+        StepState::Running { observed_busy: false }
+    ));
+
+    // Builder busy → observed.
+    s.mannies = Some(vec![make_manny("m1", "probe", false, Some("crafting"))]);
+    s.advance_queue();
+    assert!(matches!(
+        s.craft_queue[0].state,
+        StepState::Running { observed_busy: true }
+    ));
+
+    // Builder idle again → the step is done.
+    s.mannies = Some(vec![make_manny("m1", "probe", true, None)]);
+    s.advance_queue();
+    assert!(matches!(s.craft_queue[0].state, StepState::Done));
+    assert_eq!(s.craft_queue[0].completed, 1);
+    assert!(s.queue_fire.is_empty(), "nothing new fired");
+
+    // Nothing left → the queue goes idle on its own.
+    s.advance_queue();
+    assert!(!s.queue_active(), "idle once drained");
+}
+
+#[test]
+fn queue_executor_repeats_a_step_n_times() {
+    let mut s = AppState::default();
+    let mut c = queued_manny_craft("steel_plate", "m1");
+    c.repeat = 3;
+    s.enqueue_craft(c);
+
+    let mut fires = 0;
+    for _ in 0..20 {
+        s.advance_queue();
+        if !s.queue_fire.is_empty() {
+            fires += 1;
+            s.queue_fire.clear();
+        }
+        s.mannies = Some(vec![make_manny("m1", "probe", false, Some("crafting"))]);
+        s.advance_queue(); // observe busy
+        s.mannies = Some(vec![make_manny("m1", "probe", true, None)]);
+        s.advance_queue(); // idle → iteration complete
+        if matches!(s.craft_queue[0].state, StepState::Done) {
+            break;
+        }
+    }
+    assert!(matches!(s.craft_queue[0].state, StepState::Done));
+    assert_eq!(s.craft_queue[0].completed, 3);
+    assert_eq!(fires, 3, "one fire per repeat iteration");
+}
+
+#[test]
+fn queue_halts_on_failure_keeping_the_counter() {
+    let mut s = AppState::default();
+    let mut c = queued_manny_craft("steel_plate", "m1");
+    c.repeat = 5;
+    c.completed = 2;
+    s.enqueue_craft(c);
+    s.advance_queue();
+    s.queue_fire.clear();
+    s.fail_queue("insufficient metals".into());
+    assert!(s.queue_paused, "a failed craft pauses the queue");
+    match &s.craft_queue[0].state {
+        StepState::Failed(e) => assert!(e.contains("insufficient")),
+        _ => panic!("expected Failed"),
+    }
+    assert_eq!(s.craft_queue[0].completed, 2, "the completed counter is kept");
+}
+
+#[test]
+fn queue_runs_lanes_in_parallel() {
+    let mut s = AppState::default();
+    // Two crafts on two different idle builders.
+    s.enqueue_craft(queued_manny_craft("steel_plate", "m2"));
+    s.enqueue_craft(queued_manny_craft("integrated_circuit", "m3"));
+    s.mannies = Some(vec![
+        make_manny("m2", "probe", true, None),
+        make_manny("m3", "probe", true, None),
+    ]);
+    s.advance_queue();
+    // Both lanes start the same tick → two crafts in flight at once.
+    assert_eq!(s.queue_fire.len(), 2, "both idle builders start in parallel");
+    assert!(s.craft_queue.iter().all(|st| st.is_running()));
+}
+
+#[test]
+fn queue_same_builder_stays_sequential() {
+    let mut s = AppState::default();
+    s.enqueue_craft(queued_manny_craft("steel_plate", "m2"));
+    s.enqueue_craft(queued_manny_craft("steel_bar", "m2")); // same lane, no coalesce
+    s.mannies = Some(vec![make_manny("m2", "probe", true, None)]);
+    s.advance_queue();
+    // One craft per builder at a time: only the first starts.
+    assert_eq!(s.queue_fire.len(), 1, "a lane runs one craft at a time");
+    assert!(s.craft_queue[0].is_running());
+    assert!(matches!(s.craft_queue[1].state, StepState::Pending));
+}
+
+#[test]
+fn queue_bump_never_below_one_and_remove() {
+    let mut s = AppState::default();
+    s.enqueue_craft(queued_manny_craft("steel_plate", "m1"));
+    s.queue_bump(0, 4);
+    assert_eq!(s.craft_queue[0].repeat, 5);
+    s.queue_bump(0, -10);
+    assert_eq!(s.craft_queue[0].repeat, 1, "repeat floors at 1");
+    s.queue_remove(0);
+    assert!(s.craft_queue.is_empty());
 }

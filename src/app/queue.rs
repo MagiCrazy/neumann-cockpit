@@ -1,0 +1,276 @@
+//! Production queue (#197) — a queue of **crafts** (Manny or atomic-printer)
+//! organised into **lanes**: one lane per builder Manny, plus one for the atomic
+//! printer. A lane runs one craft at a time, but lanes run in **parallel**, so an
+//! idle Manny starts its next craft while another is still working. Completion is
+//! detected by polling (the server has no push): a Manny craft is done when its
+//! builder is idle again, an atomic craft when no onboard Manny is still assisting
+//! the printer. It auto-runs (drains as steps complete) but every step is a real
+//! API call the pilot added, so it halts (pauses) on the first failure and is
+//! capped.
+//!
+//! The `repeat`/executor shape is a primitive #198 (scripting) and #199 (rules)
+//! can reuse, but only the crafting surface is built here.
+
+use super::*;
+use crate::api::types::{MannyLocationType, MannyTask};
+
+/// Cap on queue length; enqueuing past it is dropped with a toast so a runaway
+/// `[Q]` never silently balloons into hundreds of API calls.
+pub const QUEUE_MAX: usize = 32;
+
+/// While the queue runs, the event loop polls at least this often (seconds) to
+/// catch a craft finishing — the server offers no push, so completion is only
+/// visible on the next fetch.
+pub const QUEUE_POLL_SECS: u64 = 4;
+
+#[derive(Clone, PartialEq)]
+pub enum StepState {
+    /// Not started.
+    Pending,
+    /// A repeat iteration is in flight. `observed_busy` guards the fire→busy
+    /// lag: the builder reads idle for a beat after the order is accepted, so we
+    /// only treat idle as *completion* once we have first seen it go busy.
+    Running {
+        observed_busy: bool,
+    },
+    Done,
+    /// Halted here; carries the API error. The `completed` counter is kept so
+    /// the overlay can show e.g. "✗ 3/10".
+    Failed(String),
+}
+
+/// One crafting step: a recipe built `repeat` times by one target.
+#[derive(Clone)]
+pub struct QueuedCraft {
+    pub fabricator: Fabricator,
+    pub recipe_id: String,
+    pub recipe_name: String,
+    /// Builder Manny for a Manny craft; `None` for an atomic-printer craft
+    /// (the printer auto-reserves a Manny).
+    pub builder_manny_id: Option<String>,
+    pub builder_manny_name: Option<String>,
+    pub repeat: u32,
+    pub completed: u32,
+    pub state: StepState,
+}
+
+impl QueuedCraft {
+    pub fn new(
+        fabricator: Fabricator,
+        recipe_id: String,
+        recipe_name: String,
+        builder_manny_id: Option<String>,
+        builder_manny_name: Option<String>,
+    ) -> Self {
+        Self {
+            fabricator,
+            recipe_id,
+            recipe_name,
+            builder_manny_id,
+            builder_manny_name,
+            repeat: 1,
+            completed: 0,
+            state: StepState::Pending,
+        }
+    }
+
+    /// Two steps merge when they are the same recipe by the same target — so
+    /// consecutive `[Q]` presses on a base element stack into one `×N` step.
+    pub fn coalesces_with(&self, o: &QueuedCraft) -> bool {
+        self.fabricator == o.fabricator && self.recipe_id == o.recipe_id && self.builder_manny_id == o.builder_manny_id
+    }
+
+    pub fn is_running(&self) -> bool {
+        matches!(self.state, StepState::Running { .. })
+    }
+
+    pub fn is_terminal(&self) -> bool {
+        matches!(self.state, StepState::Done | StepState::Failed(_))
+    }
+}
+
+/// A craft the executor wants spawned, drained by the event loop (which owns the
+/// `ApiClient` + sender) — mirrors `pending_fire`.
+#[derive(Clone)]
+pub struct CraftFire {
+    pub fabricator: Fabricator,
+    pub builder_manny_id: Option<String>,
+    pub recipe_id: String,
+}
+
+fn fire_of(step: &QueuedCraft) -> CraftFire {
+    CraftFire {
+        fabricator: step.fabricator,
+        builder_manny_id: step.builder_manny_id.clone(),
+        recipe_id: step.recipe_id.clone(),
+    }
+}
+
+/// `(recipe_name, is_atomic)` for the ship's-log entry when a craft fires.
+fn log_of(step: &QueuedCraft) -> (String, bool) {
+    (
+        step.recipe_name.clone(),
+        matches!(step.fabricator, Fabricator::AtomicPrinter),
+    )
+}
+
+impl AppState {
+    /// Add a craft to the queue: coalesce with the last step if identical
+    /// (bumping its `repeat`), else push — unless the cap is hit.
+    pub fn enqueue_craft(&mut self, craft: QueuedCraft) {
+        if let Some(last) = self.craft_queue.last_mut() {
+            if !last.is_terminal() && last.coalesces_with(&craft) {
+                last.repeat += craft.repeat;
+                let (name, n) = (last.recipe_name.clone(), last.repeat);
+                self.set_toast(format!("queued {name} ×{n}"));
+                return;
+            }
+        }
+        if self.craft_queue.len() >= QUEUE_MAX {
+            self.set_toast(format!("queue full ({QUEUE_MAX}) — step dropped"));
+            return;
+        }
+        let name = craft.recipe_name.clone();
+        self.craft_queue.push(craft);
+        self.set_toast(format!("queued {name}"));
+    }
+
+    /// Pause or resume the queue. The queue auto-runs whenever it has work, so
+    /// this is the only run control the pilot needs.
+    pub fn queue_toggle_pause(&mut self) {
+        self.queue_paused = !self.queue_paused;
+        self.set_toast(if self.queue_paused {
+            "queue paused"
+        } else {
+            "queue running"
+        });
+    }
+
+    pub fn queue_remove(&mut self, idx: usize) {
+        if idx < self.craft_queue.len() {
+            self.craft_queue.remove(idx);
+        }
+    }
+
+    pub fn queue_clear(&mut self) {
+        self.craft_queue.clear();
+    }
+
+    /// Adjust a step's repeat count (never below what's already done, min 1).
+    pub fn queue_bump(&mut self, idx: usize, delta: i32) {
+        if let Some(s) = self.craft_queue.get_mut(idx) {
+            let floor = s.completed.max(1) as i32;
+            s.repeat = (s.repeat as i32 + delta).max(floor) as u32;
+        }
+    }
+
+    /// Whether this craft's target is currently busy on the server — a Manny
+    /// builder not accepting orders, or (atomic) any onboard Manny assisting the
+    /// printer.
+    fn craft_target_busy(&self, craft: &QueuedCraft) -> bool {
+        let Some(ms) = &self.mannies else { return false };
+        match &craft.builder_manny_id {
+            Some(id) => ms.iter().any(|m| &m.id == id && !m.can_receive_orders),
+            None => ms.iter().any(|m| {
+                m.location.location_type == MannyLocationType::Probe
+                    && matches!(m.current_task, Some(MannyTask::AssistingAtomicPrinter))
+            }),
+        }
+    }
+
+    /// Advance the queue. Each **lane** (a builder Manny, or the atomic printer)
+    /// runs one craft at a time, but lanes run in **parallel** — an idle Manny
+    /// starts its next craft while another is still working. Completion is the
+    /// per-lane busy→idle transition; started crafts are staged in `queue_fire`.
+    /// Cheap and idempotent — called every loop tick.
+    pub fn advance_queue(&mut self) {
+        if self.queue_paused {
+            return;
+        }
+        let mut fires: Vec<(CraftFire, String, bool)> = Vec::new();
+
+        // A) Completion: advance every running step whose target went idle.
+        let running: Vec<usize> = self
+            .craft_queue
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.is_running())
+            .map(|(i, _)| i)
+            .collect();
+        for idx in running {
+            let busy = self.craft_target_busy(&self.craft_queue[idx]);
+            let step = &mut self.craft_queue[idx];
+            if let StepState::Running { observed_busy } = &mut step.state {
+                if !*observed_busy {
+                    // Waiting for the target to pick up the order.
+                    if busy {
+                        *observed_busy = true;
+                    }
+                } else if !busy {
+                    // This iteration finished.
+                    step.completed += 1;
+                    if step.completed >= step.repeat {
+                        step.state = StepState::Done;
+                    } else {
+                        step.state = StepState::Running { observed_busy: false };
+                        fires.push((fire_of(step), step.recipe_name.clone(), log_of(step).1));
+                    }
+                }
+            }
+        }
+
+        // B) Start the first pending step of every free lane: a lane is free
+        // when it has no running step and its builder is idle (or the printer is
+        // free). Different builders fire together → parallel execution.
+        let mut i = 0;
+        while i < self.craft_queue.len() {
+            if matches!(self.craft_queue[i].state, StepState::Pending) {
+                let lane = self.craft_queue[i].builder_manny_id.clone();
+                let lane_running = self
+                    .craft_queue
+                    .iter()
+                    .any(|s| s.is_running() && s.builder_manny_id == lane);
+                let builder_free = !self.craft_target_busy(&self.craft_queue[i]);
+                if !lane_running && builder_free {
+                    let step = &mut self.craft_queue[i];
+                    step.state = StepState::Running { observed_busy: false };
+                    fires.push((fire_of(step), step.recipe_name.clone(), log_of(step).1));
+                }
+            }
+            i += 1;
+        }
+
+        for (f, name, atomic) in fires {
+            self.queue_fire.push(f);
+            self.log_event(LogEvent::craft(&name, atomic, self.active_probe_id));
+        }
+    }
+
+    /// Halt on a craft failure. With lanes running in parallel the erroring step
+    /// can't be attributed from the (generic) error message, so this pauses the
+    /// whole queue and marks the oldest running step failed — the pilot inspects,
+    /// fixes, and resumes.
+    pub fn fail_queue(&mut self, msg: String) {
+        if let Some(step) = self.craft_queue.iter_mut().find(|s| s.is_running()) {
+            step.state = StepState::Failed(msg);
+        }
+        self.queue_paused = true;
+    }
+
+    /// Whether the queue is actively working (unpaused with a pending/running
+    /// step) — drives the faster poll cadence and the status-bar indicator.
+    pub fn queue_active(&self) -> bool {
+        !self.queue_paused
+            && self
+                .craft_queue
+                .iter()
+                .any(|s| matches!(s.state, StepState::Pending | StepState::Running { .. }))
+    }
+
+    /// `(done, total)` step counts across the queue, for the status-bar chip.
+    /// `done` counts terminal steps; `total` all steps.
+    pub fn queue_progress(&self) -> (usize, usize) {
+        let done = self.craft_queue.iter().filter(|s| s.is_terminal()).count();
+        (done, self.craft_queue.len())
+    }
+}

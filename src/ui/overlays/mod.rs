@@ -416,11 +416,7 @@ mod tests {
                 "ingredients":[],"durationSeconds":300,
                 "output":{"type":"steel_plate","name":"Steel plate","containerSpace":0.01,"containerSpaceUnit":"ECE","capacityBonus":null}}"#).unwrap(),
         ];
-        state.active_wizard = ActiveWizard::Fabrication(FabricationInput::PickRecipe {
-            prefilled_manny: None,
-            selection: 0,
-            error: None,
-        });
+        state.active_wizard = ActiveWizard::Fabrication(FabricationInput::pick_recipe(None));
         let text = rendered_text(&state);
         assert!(text.contains("FABRICATION"), "unified title renders");
         assert!(text.contains("ATOMIC PRINTER"), "atomic section header renders");

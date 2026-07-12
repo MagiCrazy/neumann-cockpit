@@ -11,11 +11,11 @@ use std::io;
 use tokio::sync::mpsc;
 
 use neumann_cockpit::api::tasks::{
-    fetch_all, fetch_api_version, fetch_crafting_recipes, fetch_mannies, fetch_messages, fetch_missions,
-    fetch_sent_messages,
+    fetch_all, fetch_api_version, fetch_atomic_printer_craft, fetch_craft, fetch_crafting_recipes, fetch_mannies,
+    fetch_messages, fetch_missions, fetch_sent_messages,
 };
 use neumann_cockpit::app::{
-    ActiveWizard, ApiMessage, AppState, ColorMode, MessagesInput, MissionsInput, Refetch, RemoteMineInput,
+    ActiveWizard, ApiMessage, AppState, ColorMode, Fabricator, MessagesInput, MissionsInput, Refetch, RemoteMineInput,
     ScutNetworkInput,
 };
 use neumann_cockpit::input::handle_event;
@@ -142,6 +142,28 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
             state.journal.truncate(store::JOURNAL_WINDOW);
         }
 
+        // Production queue: advance the executor, then spawn any craft it staged
+        // (the event loop owns the client + sender). A fresh mannies fetch lets
+        // the next tick detect the craft going busy, then idle → complete.
+        state.advance_queue();
+        if !state.queue_fire.is_empty() {
+            for fire in state.queue_fire.drain(..) {
+                match fire.fabricator {
+                    Fabricator::Manny => {
+                        if let Some(builder) = fire.builder_manny_id {
+                            fetch_craft(builder, fire.recipe_id, client.clone(), tx.clone());
+                        }
+                    }
+                    Fabricator::AtomicPrinter => {
+                        fetch_atomic_printer_craft(fire.recipe_id, client.clone(), tx.clone());
+                    }
+                }
+            }
+            // One roster refresh lets the next tick see the builders go busy.
+            fetch_mannies(client.clone(), tx.clone());
+            state.loading = true;
+        }
+
         terminal.draw(|f| ui::render(f, &state))?;
 
         let deadline = state.next_refresh_instant();
@@ -245,11 +267,11 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         state.finish_action("jettisoned", Refetch::All);
                     }
                     ApiMessage::JettisonError(e) => state.set_wizard_error(e),
-                    ApiMessage::CraftStarted => {
-                        state.close_wizard();
-                        state.finish_action("craft order sent", Refetch::Mannies);
-                    }
-                    ApiMessage::CraftError(e) => state.set_wizard_error(e),
+                    // Every craft now flows through the production queue, so a
+                    // start is quiet (the fire path already refreshed mannies)
+                    // and an error halts the queue.
+                    ApiMessage::CraftStarted => {}
+                    ApiMessage::CraftError(e) => state.fail_queue(e),
                     ApiMessage::SalvageStarted => {
                         state.close_wizard();
                         state.finish_action("salvage order sent", Refetch::Mannies);
@@ -314,11 +336,8 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         state.finish_action("waypoint deploy order sent", Refetch::All);
                     }
                     ApiMessage::DeployError(e) => state.set_wizard_error(e),
-                    ApiMessage::AtomicPrinterCraftStarted => {
-                        state.close_wizard();
-                        state.finish_action("atomic printer craft started", Refetch::All);
-                    }
-                    ApiMessage::AtomicPrinterCraftError(e) => state.set_wizard_error(e),
+                    ApiMessage::AtomicPrinterCraftStarted => {}
+                    ApiMessage::AtomicPrinterCraftError(e) => state.fail_queue(e),
                     ApiMessage::RecipesFetched(recipes) => state.recipes = recipes,
                     ApiMessage::ProbeImprovementsFetched(improvements) => {
                         state.probe_improvements = improvements;

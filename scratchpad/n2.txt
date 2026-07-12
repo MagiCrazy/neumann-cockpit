@@ -1,0 +1,4 @@
+docs(naming): document the naming ceremony in CLAUDE.md
+
+Note the lexicon module, next_name_suggestion, the pre-fill + Tab-regenerate
+flow, and that naming is always a post-hoc rename (no name-at-creation API).

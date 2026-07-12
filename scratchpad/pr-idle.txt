@@ -1,0 +1,10 @@
+Phase 1 — P1.4: idle-Manny indicator and cycling (last of Phase 1).
+
+- Status bar shows a bold "⚙ N idle" nudge when Mannies are onboard and free to
+  take an order.
+- `i` focuses the Mannies pane and jumps to the next idle Manny, wrapping.
+- Backed by idle_manny_count / cycle_to_next_idle_manny.
+- Help overlay audit: added `i`, and the pre-existing PgUp/PgDn + Home/End
+  paging keys that had drifted out of the help screen.
+
+278 tests pass. Completes Phase 1 (journal #188-190 merged, naming #192, this).

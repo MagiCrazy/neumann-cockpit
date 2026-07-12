@@ -1,0 +1,5 @@
+docs(journal): document the ship's log in CLAUDE.md
+
+Note the append-only events table + JOURNAL_WINDOW, the pending_journal capture
+pattern, the journal.rs module, and the Missions pane's two-category root
+(Missions / Ship's log).

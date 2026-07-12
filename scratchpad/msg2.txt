@@ -1,0 +1,7 @@
+fix(sector): nest detached containers under their host asteroid
+
+Detached containers rendered as a flat list with no hint of where they
+sit. Reorder scanner_objects into an asteroid→hosted-container hierarchy:
+a container hidden on an asteroid (mode + targetObjectId) surfaces indented
+right under its host, while drifting containers sink to the bottom. The
+ordering drives both the Sector pane layout and cursor navigation.
