@@ -1,5 +1,13 @@
 # Changelog
 
+## [86.1.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v86.0.0...neumann-cockpit-v86.1.0) (2026-07-14)
+
+
+### Features
+
+* **queue:** production queue for crafting ([#226](https://github.com/MagiCrazy/neumann-cockpit/issues/226)) ([6dae9b2](https://github.com/MagiCrazy/neumann-cockpit/commit/6dae9b28650fa0b1c0b2a4aa731b51e1ebe1245e))
+* **script:** vim-style action scripting + headless runner ([#198](https://github.com/MagiCrazy/neumann-cockpit/issues/198)) ([#230](https://github.com/MagiCrazy/neumann-cockpit/issues/230)) ([c522059](https://github.com/MagiCrazy/neumann-cockpit/commit/c522059d956bbba92f7b52491644d2826fc044da))
+
 ## [86.0.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v81.2.0...neumann-cockpit-v86.0.0) (2026-07-10)
 
 
