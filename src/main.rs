@@ -34,6 +34,15 @@ fn restore_terminal() -> io::Result<()> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Headless script runner: `--script <file>` plays a script with no TUI and
+    // streams the ship's-log to stdout (see `headless`). A bare launch is the
+    // interactive cockpit, unchanged.
+    let args: Vec<String> = std::env::args().collect();
+    if let Some(path) = neumann_cockpit::headless::script_arg(&args) {
+        let code = neumann_cockpit::headless::run(std::path::Path::new(&path)).await?;
+        std::process::exit(code);
+    }
+
     // Enter the alternate screen FIRST — before any fallible startup. A missing
     // or keyless config used to error out of `main` before the terminal was set
     // up, which on a double-clicked Windows binary flashed a console and
