@@ -589,8 +589,27 @@ pub enum DetachInput {
     },
 }
 
+/// The action-scripting console (#198). Vim-style modal editor over the session
+/// script: `Insert` types a new command line (`Enter` commits it via
+/// `parse_script_line`), `Normal` navigates/manages the step list (`j`/`k`,
+/// `x` remove, `c` clear, `R` run, `p` pause).
+pub enum ScriptInput {
+    Normal { selection: usize },
+    Insert { buf: String, error: Option<String> },
+}
+
+impl ScriptInput {
+    /// Open ready to type the first line.
+    pub fn editing() -> Self {
+        ScriptInput::Insert {
+            buf: String::new(),
+            error: None,
+        }
+    }
+}
+
 /// The single modal wizard the cockpit currently has open — a sum type over the
-/// 31 mutually-exclusive wizards, replacing 31 coexisting `*Input` fields on
+/// mutually-exclusive wizards, replacing coexisting `*Input` fields on
 /// `AppState`. Because only one variant can be held at a time, "two wizards open
 /// at once" is now unrepresentable (the invariant is a compile-time fact, not a
 /// convention). `None` is the sole idle state (it replaced every `*Input::Inactive`).
@@ -629,4 +648,5 @@ pub enum ActiveWizard {
     Waypoints(WaypointsInput),
     Mine(MineInput),
     RemoteMine(RemoteMineInput),
+    Script(ScriptInput),
 }

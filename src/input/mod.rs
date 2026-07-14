@@ -21,6 +21,7 @@ mod missions;
 mod pickers;
 mod repair;
 mod scanner;
+mod script;
 mod storage_move;
 mod travel;
 
@@ -45,6 +46,7 @@ use pickers::{
 };
 use repair::handle_repair_event;
 use scanner::{handle_object_action_event, handle_scut_network_event, handle_scut_relay_event, handle_waypoints_event};
+use script::handle_script_event;
 use storage_move::handle_storage_move_event;
 use travel::handle_travel_event;
 
@@ -100,6 +102,7 @@ const WIZARD_INPUTS: &[(WizardGuard, WizardHandler)] = &[
     (|s| matches!(s.active_wizard, ActiveWizard::Repair(_)), handle_repair_event),
     (|s| matches!(s.active_wizard, ActiveWizard::Mine(_)), handle_mine_event),
     (|s| matches!(s.active_wizard, ActiveWizard::RemoteMine(_)), handle_remote_mine_event),
+    (|s| matches!(s.active_wizard, ActiveWizard::Script(_)), |c, s, _, _| handle_script_event(c, s)),
 ];
 
 /// Route a key to the first active wizard. Returns `true` if one consumed it.

@@ -17,6 +17,7 @@ pub(crate) mod pickers;
 pub(crate) mod remote_mine;
 pub(crate) mod repair;
 pub(crate) mod scanner;
+pub(crate) mod script;
 pub(crate) mod scut_network;
 pub(crate) mod storage_move;
 pub(crate) mod travel;
@@ -45,6 +46,7 @@ pub(crate) use pickers::{
 pub(crate) use remote_mine::render_remote_mine_overlay;
 pub(crate) use repair::render_repair_overlay;
 pub(crate) use scanner::render_scan_input_overlay;
+pub(crate) use script::render_script_overlay;
 pub(crate) use scut_network::render_scut_network_overlay;
 pub(crate) use storage_move::render_storage_move_overlay;
 pub(crate) use travel::render_travel_overlay;
@@ -104,6 +106,7 @@ const WIZARD_OVERLAYS: &[(OverlayGuard, OverlayRender)] = &[
     (|s| matches!(s.active_wizard, ActiveWizard::RenameContainer(_)), render_rename_container_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::ContainerRules(_)), render_container_rules_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::StorageMove(_)), render_storage_move_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::Script(_)), render_script_overlay),
 ];
 
 /// Render whichever wizard overlays are active, on top of the cockpit grid.
@@ -402,6 +405,22 @@ mod tests {
             rendered_text(&state).contains("TRAVEL"),
             "active travel wizard renders its frame"
         );
+    }
+
+    #[test]
+    fn script_console_renders_in_both_modes() {
+        use crate::app::ScriptInput;
+        // Insert mode with a couple of composed steps.
+        let mut state = AppState::default();
+        state.enqueue_script_line("detach box by Alpha").unwrap();
+        state.enqueue_script_line("mine metals 500 by all").unwrap();
+        state.active_wizard = ActiveWizard::Script(ScriptInput::editing());
+        let text = rendered_text(&state);
+        assert!(text.contains("ACTION SCRIPT"), "script console frame renders");
+        assert!(text.contains("mine metals 500 by all"), "composed lines are shown");
+        // Normal (management) mode renders too.
+        state.active_wizard = ActiveWizard::Script(ScriptInput::Normal { selection: 0 });
+        assert!(rendered_text(&state).contains("ACTION SCRIPT"));
     }
 
     #[test]

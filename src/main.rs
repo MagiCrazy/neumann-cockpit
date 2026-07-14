@@ -11,12 +11,13 @@ use std::io;
 use tokio::sync::mpsc;
 
 use neumann_cockpit::api::tasks::{
-    fetch_all, fetch_api_version, fetch_atomic_printer_craft, fetch_craft, fetch_crafting_recipes, fetch_mannies,
-    fetch_messages, fetch_missions, fetch_sent_messages,
+    fetch_all, fetch_api_version, fetch_atomic_printer_craft, fetch_craft, fetch_crafting_recipes, fetch_detach,
+    fetch_mannies, fetch_messages, fetch_mine, fetch_missions, fetch_move, fetch_recover, fetch_repair, fetch_salvage,
+    fetch_sent_messages,
 };
 use neumann_cockpit::app::{
     ActiveWizard, ApiMessage, AppState, ColorMode, Fabricator, MessagesInput, MissionsInput, Refetch, RemoteMineInput,
-    ScutNetworkInput,
+    ScriptAction, ScutNetworkInput,
 };
 use neumann_cockpit::input::handle_event;
 use neumann_cockpit::preflight;
@@ -164,6 +165,51 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
             state.loading = true;
         }
 
+        // Action script (#198): the sequential executor, then spawn the single
+        // action it staged this tick. Same drain pattern as the queue; a roster
+        // refresh primes busy→idle completion detection.
+        state.advance_script();
+        if !state.script_fire.is_empty() {
+            for action in state.script_fire.drain(..) {
+                match action {
+                    ScriptAction::Travel { x, y, z } => fetch_move(x, y, z, client.clone(), tx.clone()),
+                    ScriptAction::Mine {
+                        manny_id,
+                        object_id,
+                        resources,
+                        amount,
+                        container_id,
+                    } => fetch_mine(
+                        manny_id,
+                        object_id,
+                        resources,
+                        amount,
+                        container_id,
+                        client.clone(),
+                        tx.clone(),
+                    ),
+                    ScriptAction::Repair {
+                        manny_id,
+                        integrity_percent,
+                    } => fetch_repair(manny_id, integrity_percent, client.clone(), tx.clone()),
+                    ScriptAction::Salvage { manny_id, object_id } => {
+                        fetch_salvage(manny_id, object_id, client.clone(), tx.clone())
+                    }
+                    ScriptAction::Detach {
+                        manny_id,
+                        container_id,
+                        mode,
+                        object_id,
+                    } => fetch_detach(manny_id, container_id, mode, object_id, client.clone(), tx.clone()),
+                    ScriptAction::Recover { manny_id, object_id } => {
+                        fetch_recover(manny_id, object_id, client.clone(), tx.clone())
+                    }
+                }
+            }
+            fetch_mannies(client.clone(), tx.clone());
+            state.loading = true;
+        }
+
         terminal.draw(|f| ui::render(f, &state))?;
 
         let deadline = state.next_refresh_instant();
@@ -246,7 +292,10 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         state.apply_movement(mv);
                         state.set_toast("travel order sent");
                     }
-                    ApiMessage::MoveError(e) => state.set_travel_error(e),
+                    ApiMessage::MoveError(e) => {
+                        state.script_note_error(&e);
+                        state.set_travel_error(e);
+                    }
                     ApiMessage::RepairStarted => {
                         state.close_wizard();
                         state.finish_action("repair order sent", Refetch::Mannies);

@@ -341,6 +341,17 @@ fn render_status_line(frame: &mut Frame, area: Rect, state: &AppState, p: Palett
         };
         meta.push((label, style));
     }
+    // Action script (#198): shown while it has steps, so progress is visible with
+    // the console closed (`:script` opens it). `≡` marks the sequencer.
+    let (s_done, s_total) = state.script_progress();
+    if s_total > 0 {
+        let (label, style) = if state.script_running {
+            (format!("≡ {s_done}/{s_total}"), Style::default().fg(p.accent))
+        } else {
+            (format!("≡‖ {s_done}/{s_total}"), dim)
+        };
+        meta.push((label, style));
+    }
     let unread = state.unread_alert_count();
     if unread > 0 {
         // Urgency signal: crit_style survives the mono palettes (bold+REVERSED).

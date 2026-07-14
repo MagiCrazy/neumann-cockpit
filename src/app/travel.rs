@@ -19,7 +19,7 @@ impl AppState {
 
     /// Parse a travel destination buffer: absolute "x y z", or relative
     /// "+dx dy dz" applied to `current`.
-    fn parse_travel_buf(buf: &str, current: Option<(i32, i32, i32)>) -> Option<(i32, i32, i32)> {
+    pub(super) fn parse_travel_buf(buf: &str, current: Option<(i32, i32, i32)>) -> Option<(i32, i32, i32)> {
         let trimmed = buf.trim();
         let (relative, rest) = match trimmed.strip_prefix('+') {
             Some(r) => (true, r),
