@@ -88,6 +88,7 @@ const RIGHT: &[Section] = &[
             (":probe", "<id|name> — pilot a fleet probe"),
             (":craft", "[recipe] — production console / queue it"),
             (":queue", "open the production console"),
+            (":script", "open the action-scripting console"),
             (":mine", "[res] [amt] [by/at/to …] — wizard or fire"),
             (":theme", "<mono-green|mono-amber|…>"),
             (":refresh", "reload all data"),
@@ -105,6 +106,18 @@ const RIGHT: &[Section] = &[
             ("+ -", "(on queue) adjust a step's repeat"),
             ("x  c", "(on queue) remove step · clear"),
             ("p", "pause / resume — the queue auto-runs"),
+        ],
+    ),
+    (
+        "Action script  ( :script )",
+        &[
+            ("i", "insert a command line"),
+            ("Enter", "add the line (Esc → manage)"),
+            ("j k", "move · x remove · c clear"),
+            ("R", "run — steps fire in sequence"),
+            ("p", "pause / resume"),
+            ("verbs", "travel mine repair salvage detach recover"),
+            ("mine by all", "fan-out: many Mannies, join before next"),
         ],
     ),
 ];
