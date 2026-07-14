@@ -1,0 +1,22 @@
+[book]
+title = "neumann-cockpit"
+description = "User guide for the neumann-cockpit terminal UI — a cockpit for the Von Neumann Game."
+authors = ["MagiCrazy"]
+language = "en"
+src = "src"
+
+[rust]
+edition = "2021"
+
+[output.html]
+default-theme = "ayu"
+preferred-dark-theme = "ayu"
+git-repository-url = "https://github.com/MagiCrazy/neumann-cockpit"
+edit-url-template = "https://github.com/MagiCrazy/neumann-cockpit/edit/main/docs/{path}"
+
+[output.html.search]
+enable = true
+
+[output.html.fold]
+enable = true
+level = 1

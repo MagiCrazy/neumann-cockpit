@@ -4,8 +4,11 @@
 [![Release](https://img.shields.io/github/v/release/MagiCrazy/neumann-cockpit)](https://github.com/MagiCrazy/neumann-cockpit/releases/latest)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org/)
+[![Docs](https://img.shields.io/badge/docs-user%20guide-blue.svg)](https://magicrazy.github.io/neumann-cockpit/)
 
 A terminal UI cockpit for [Von Neumann Game](https://github.com/gnieark/Von-Neumann-Game) — control your probe and its mannies from the command line.
+
+📖 **[User guide](https://magicrazy.github.io/neumann-cockpit/)** — install, configure, the cockpit, and automation (queue, scripting, headless).
 
 The official game instance runs at **[https://neumann-probe.net](https://neumann-probe.net)** (default endpoint).
 
