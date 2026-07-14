@@ -1,5 +1,12 @@
 # Changelog
 
+## [86.1.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v86.1.0...neumann-cockpit-v86.1.1) (2026-07-14)
+
+
+### Documentation
+
+* add mdBook user guide + GitHub Pages deploy ([#231](https://github.com/MagiCrazy/neumann-cockpit/issues/231)) ([8600d72](https://github.com/MagiCrazy/neumann-cockpit/commit/8600d725047c220cc693cda15cf8460a275d9764))
+
 ## [86.1.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v86.0.0...neumann-cockpit-v86.1.0) (2026-07-14)
 
 
