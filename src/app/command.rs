@@ -2,8 +2,9 @@ use super::*;
 
 /// Command verbs recognised by `:` mode. Kept as a table so the input layer can
 /// offer Tab-completion and a `:help`-style listing.
-pub const COMMANDS: [&str; 13] = [
-    "focus", "travel", "goto", "filter", "refresh", "theme", "zoom", "craft", "mine", "queue", "probe", "help", "quit",
+pub const COMMANDS: [&str; 14] = [
+    "focus", "travel", "goto", "filter", "refresh", "theme", "zoom", "craft", "mine", "queue", "script", "probe",
+    "help", "quit",
 ];
 
 /// One-line argument usage for a verb, shown as inline ghost-text while typing
@@ -39,7 +40,7 @@ pub enum CommandFire {
 
 /// Map a `:mine` resource token to its API name. Accepts the short `carbon`
 /// alias for `carbon_compounds`.
-fn mine_resource(token: &str) -> Option<&'static str> {
+pub(super) fn mine_resource(token: &str) -> Option<&'static str> {
     Some(match token.to_lowercase().as_str() {
         "deuterium" => "deuterium",
         "metals" => "metals",
@@ -97,7 +98,7 @@ fn filter_from_name(name: &str) -> Option<ScanFilter> {
 
 /// Parse `x y z` (also accepting commas or a leading `+` for relative) into a
 /// coordinate triple, joined from whatever arg tokens were given.
-fn parse_coords(args: &[&str]) -> Option<(i32, i32, i32)> {
+pub(super) fn parse_coords(args: &[&str]) -> Option<(i32, i32, i32)> {
     let joined = args.join(" ").replace(',', " ");
     let parts: Vec<i32> = joined.split_whitespace().filter_map(|s| s.parse().ok()).collect();
     match parts.as_slice() {
@@ -258,6 +259,8 @@ impl AppState {
             }
             // `:queue` and `:craft` open the same production console.
             "queue" => self.active_wizard = ActiveWizard::Fabrication(FabricationInput::pick_recipe(None)),
+            // `:script` opens the action-scripting console (#198).
+            "script" => self.active_wizard = ActiveWizard::Script(ScriptInput::editing()),
             "help" => self.help_open = true,
             "q" | "quit" => self.set_quit(),
             other => self.set_toast(format!("unknown command: {other}")),
@@ -267,7 +270,7 @@ impl AppState {
 
     /// Idle onboard Mannies matching a query: exact id, then case-insensitive
     /// exact name, then case-insensitive substring. `None` when unresolved.
-    fn resolve_idle_manny(&self, query: &str) -> Option<(String, String)> {
+    pub(super) fn resolve_idle_manny(&self, query: &str) -> Option<(String, String)> {
         let mannies = self.collect_idle_onboard_mannies();
         if let Some(m) = mannies.iter().find(|(id, _)| id == query) {
             return Some(m.clone());
@@ -378,29 +381,69 @@ impl AppState {
     /// — a local mine fired directly. Missing manny/asteroid default to the sole
     /// context candidate; `to` defaults to the probe.
     fn mine_command(&mut self, args: &[&str]) {
-        // Split into the positional head (resources + amount) and the by/at/to
-        // keyword buckets. Keyword values run to the next keyword, so names may
-        // contain spaces.
-        let (mut positional, mut by, mut at, mut to) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
-        let mut bucket = 0u8; // 0 positional · 1 by · 2 at · 3 to
-        for &tok in args {
-            match tok {
-                "by" => bucket = 1,
-                "at" => bucket = 2,
-                "to" => bucket = 3,
-                _ => match bucket {
-                    1 => by.push(tok),
-                    2 => at.push(tok),
-                    3 => to.push(tok),
-                    _ => positional.push(tok),
-                },
+        match self.resolve_mine(args) {
+            Ok(m) => {
+                self.pending_fire = Some(CommandFire::Mine {
+                    manny_id: m.manny_id,
+                    object_id: m.object_id,
+                    resources: m.resources,
+                    amount: m.amount,
+                    container_id: m.container_id,
+                })
             }
+            Err(msg) => self.set_toast(msg),
         }
+    }
 
+    /// Resolve a `:mine`/scripted-mine argument line against the live state — the
+    /// builder Manny, asteroid, resources/amount, and optional destination
+    /// container — or return the reason it could not (`Err`). Shared by the
+    /// `:mine` command (which toasts the error) and the scripting engine (which
+    /// fails the step). Resolution is deliberately **late**: it reads the current
+    /// sector/roster, so a scripted mine binds to the sector the probe is in when
+    /// the step runs, not when the line was typed.
+    pub(super) fn resolve_mine(&self, args: &[&str]) -> Result<MineResolved, String> {
+        let (positional, by, at, to) = mine_buckets(args);
+
+        // Builder: `by` override, else the sole idle onboard Manny.
+        let (manny_id, _manny_name) = if by.is_empty() {
+            let mannies = self.collect_idle_onboard_mannies();
+            match mannies.len() {
+                0 => return Err("no idle Manny on board".into()),
+                1 => mannies.into_iter().next().unwrap(),
+                _ => return Err("multiple idle Mannies — add by <manny>".into()),
+            }
+        } else {
+            match self.resolve_idle_manny(&by.join(" ")) {
+                Some(m) => m,
+                None => return Err(format!("no idle Manny matching \"{}\"", by.join(" "))),
+            }
+        };
+
+        let target = self.resolve_mine_target(&positional, &at, &to)?;
+        Ok(MineResolved {
+            manny_id,
+            object_id: target.object_id,
+            resources: target.resources,
+            amount: target.amount,
+            container_id: target.container_id,
+        })
+    }
+
+    /// The builder-independent half of a mine order: resources + amount from the
+    /// positional tokens, the asteroid from `at` (or the sole one), and the
+    /// optional destination container from `to`. Shared by `:mine` (one builder)
+    /// and the scripting fan-out (many builders on the same target).
+    pub(super) fn resolve_mine_target(
+        &self,
+        positional: &[&str],
+        at: &[&str],
+        to: &[&str],
+    ) -> Result<MineTarget, String> {
         // Positional tokens: resource list (comma-separated) and/or amount.
         let mut resources: Vec<String> = Vec::new();
         let mut amount: Option<f64> = None;
-        for tok in positional {
+        for &tok in positional {
             if let Ok(n) = tok.parse::<f64>() {
                 amount = Some(n);
                 continue;
@@ -413,10 +456,7 @@ impl AppState {
                             resources.push(name);
                         }
                     }
-                    None => {
-                        self.set_toast(format!("unknown resource \"{r}\""));
-                        return;
-                    }
+                    None => return Err(format!("unknown resource \"{r}\"")),
                 }
             }
         }
@@ -425,56 +465,22 @@ impl AppState {
         }
         let amount = amount.unwrap_or(0.30);
         if amount <= 0.0 {
-            self.set_toast("amount must be positive");
-            return;
+            return Err("amount must be positive".into());
         }
-
-        // Builder: `by` override, else the sole idle onboard Manny.
-        let (manny_id, _manny_name) = if by.is_empty() {
-            let mannies = self.collect_idle_onboard_mannies();
-            match mannies.len() {
-                0 => {
-                    self.set_toast("no idle Manny on board");
-                    return;
-                }
-                1 => mannies.into_iter().next().unwrap(),
-                _ => {
-                    self.set_toast("multiple idle Mannies — add by <manny>");
-                    return;
-                }
-            }
-        } else {
-            match self.resolve_idle_manny(&by.join(" ")) {
-                Some(m) => m,
-                None => {
-                    self.set_toast(format!("no idle Manny matching \"{}\"", by.join(" ")));
-                    return;
-                }
-            }
-        };
 
         // Asteroid: `at` override, else the sole mineable object in the sector.
         let candidates = self.collect_mineable_candidates();
         let (object_id, _object_name) = if at.is_empty() {
             match candidates.len() {
-                0 => {
-                    self.set_toast("no mineable objects in current sector — scan first");
-                    return;
-                }
+                0 => return Err("no mineable objects in current sector — scan first".into()),
                 1 => candidates.into_iter().next().unwrap(),
-                _ => {
-                    self.set_toast("multiple asteroids — add at <asteroid>");
-                    return;
-                }
+                _ => return Err("multiple asteroids — add at <asteroid>".into()),
             }
         } else {
             let q = at.join(" ").to_lowercase();
             match candidates.iter().find(|(_, n)| n.to_lowercase().contains(&q)).cloned() {
                 Some(o) => o,
-                None => {
-                    self.set_toast(format!("no asteroid matching \"{}\"", at.join(" ")));
-                    return;
-                }
+                None => return Err(format!("no asteroid matching \"{}\"", at.join(" "))),
             }
         };
 
@@ -494,20 +500,57 @@ impl AppState {
                     .find(|(_, n)| n.to_lowercase().contains(&q))
                 {
                     Some((id, _)) => Some(id),
-                    None => {
-                        self.set_toast(format!("no container matching \"{target}\""));
-                        return;
-                    }
+                    None => return Err(format!("no container matching \"{target}\"")),
                 }
             }
         };
 
-        self.pending_fire = Some(CommandFire::Mine {
-            manny_id,
+        Ok(MineTarget {
             object_id,
             resources,
             amount,
             container_id,
-        });
+        })
     }
+}
+
+/// Split a mine argument line into the positional head (resources + amount) and
+/// the `by` / `at` / `to` keyword buckets. Keyword values run to the next
+/// keyword, so names may contain spaces. Shared by `:mine` and the scripting
+/// engine.
+pub(super) fn mine_buckets<'a>(args: &[&'a str]) -> (Vec<&'a str>, Vec<&'a str>, Vec<&'a str>, Vec<&'a str>) {
+    let (mut positional, mut by, mut at, mut to) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let mut bucket = 0u8; // 0 positional · 1 by · 2 at · 3 to
+    for &tok in args {
+        match tok {
+            "by" => bucket = 1,
+            "at" => bucket = 2,
+            "to" => bucket = 3,
+            _ => match bucket {
+                1 => by.push(tok),
+                2 => at.push(tok),
+                3 => to.push(tok),
+                _ => positional.push(tok),
+            },
+        }
+    }
+    (positional, by, at, to)
+}
+
+/// The builder-independent target of a mine order (`resolve_mine_target`).
+pub(super) struct MineTarget {
+    pub object_id: String,
+    pub resources: Vec<String>,
+    pub amount: f64,
+    pub container_id: Option<String>,
+}
+
+/// A fully-resolved local mine, produced by `resolve_mine` and consumed by the
+/// `:mine` command staging (`CommandFire::Mine`).
+pub(super) struct MineResolved {
+    pub manny_id: String,
+    pub object_id: String,
+    pub resources: Vec<String>,
+    pub amount: f64,
+    pub container_id: Option<String>,
 }

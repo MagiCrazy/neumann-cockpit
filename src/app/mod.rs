@@ -13,6 +13,7 @@ mod message;
 mod mode;
 mod queue;
 mod scan;
+mod script;
 #[cfg(test)]
 mod tests;
 mod travel;
@@ -30,6 +31,7 @@ pub use message::*;
 pub use mode::*;
 pub use queue::*;
 pub use scan::*;
+pub use script::*;
 pub use waypoints::*;
 
 use crate::api::types::{
@@ -173,6 +175,16 @@ pub struct AppState {
     /// by the event loop (mirrors `pending_fire`, since the state layer owns no
     /// client/sender).
     pub queue_fire: Vec<CraftFire>,
+    // ── Action scripting (#198) ─────────────────────────────────────────
+    /// The action script: a linear sequence of heterogeneous steps run strictly
+    /// one at a time. Session-only.
+    pub script: Vec<ScriptStep>,
+    /// Whether the script is running. Default `false` — unlike the auto-running
+    /// crafting queue, a script is composed then explicitly run (`R`).
+    pub script_running: bool,
+    /// Resolved actions the executor wants spawned this tick; drained by the
+    /// event loop (mirrors `queue_fire` / `pending_fire`).
+    pub script_fire: Vec<ScriptAction>,
 }
 
 impl AppState {
@@ -466,9 +478,10 @@ impl AppState {
             }
             None => Instant::now() + std::time::Duration::from_secs(86400),
         };
-        // While the production queue is working, poll briskly so a finished
-        // craft is detected within a few seconds (the server has no push).
-        if self.queue_active() {
+        // While the production queue or the action script is working, poll
+        // briskly so a finished craft/step is detected within a few seconds (the
+        // server has no push).
+        if self.queue_active() || self.script_active() {
             return base.min(Instant::now() + std::time::Duration::from_secs(QUEUE_POLL_SECS));
         }
         base

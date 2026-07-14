@@ -2670,3 +2670,181 @@ fn queue_bump_never_below_one_and_remove() {
     s.queue_remove(0);
     assert!(s.craft_queue.is_empty());
 }
+
+// ── Action scripting (#198) ────────────────────────────────────────────────
+
+#[test]
+fn script_parser_rejects_unknown_verb() {
+    let s = AppState::default();
+    assert!(s.parse_script_line("teleport 1 2 3").is_err());
+    assert!(s.parse_script_line("travel 2 0 0").is_ok());
+}
+
+#[test]
+fn script_parser_validates_travel_coords() {
+    let s = AppState::default();
+    assert!(s.parse_script_line("travel 2 0 0").is_ok());
+    assert!(s.parse_script_line("travel +1 0 1").is_ok());
+    assert!(s.parse_script_line("travel 2 0").is_err(), "needs three coords");
+    assert!(s.parse_script_line("travel a b c").is_err(), "coords must be ints");
+}
+
+#[test]
+fn script_parser_validates_mine_resources_and_repair_percent() {
+    let s = AppState::default();
+    assert!(s.parse_script_line("mine metals 500").is_ok());
+    assert!(s.parse_script_line("mine metals,ice 500 by all to box").is_ok());
+    assert!(s.parse_script_line("mine unobtanium 500").is_err(), "unknown resource");
+    assert!(s.parse_script_line("repair 80 by Alpha").is_ok());
+    assert!(s.parse_script_line("repair by Alpha").is_ok(), "bare percent defaults");
+    assert!(s.parse_script_line("repair loads").is_err(), "non-numeric percent");
+}
+
+#[test]
+fn script_enqueue_caps_and_removes() {
+    let mut s = AppState::default();
+    for _ in 0..SCRIPT_MAX + 4 {
+        let _ = s.enqueue_script_line("travel 2 0 0");
+    }
+    assert_eq!(s.script.len(), SCRIPT_MAX, "enqueue past the cap is rejected");
+    s.script_remove(0);
+    assert_eq!(s.script.len(), SCRIPT_MAX - 1);
+    s.script_clear();
+    assert!(s.script.is_empty());
+}
+
+#[test]
+fn script_does_not_run_until_started() {
+    let mut s = AppState::default();
+    s.enqueue_script_line("travel 2 0 0").unwrap();
+    // Unlike the auto-running queue, a script stays idle until `script_run`.
+    assert!(!s.script_active());
+    s.advance_script();
+    assert!(s.script_fire.is_empty(), "nothing fires before run");
+    s.script_run();
+    assert!(s.script_active());
+}
+
+#[test]
+fn script_executor_runs_steps_in_order() {
+    let mut s = AppState::default();
+    s.mannies = Some(vec![make_manny("m1", "probe", true, None)]);
+    s.enqueue_script_line("travel 2 0 0").unwrap();
+    s.enqueue_script_line("repair 100 by m1").unwrap();
+    s.script_run();
+
+    // Step 0 (travel) fires first; step 1 stays pending (strict sequence).
+    s.advance_script();
+    assert_eq!(s.script_fire.len(), 1);
+    assert!(matches!(s.script_fire[0], ScriptAction::Travel { x: 2, y: 0, z: 0 }));
+    s.script_fire.clear();
+    assert!(matches!(s.script[0].state, StepState::Running { observed_busy: false }));
+    assert!(matches!(s.script[1].state, StepState::Pending));
+
+    // Travel picked up (probe moving) then arrived (movement cleared) → done.
+    s.movement_arrival = Some(chrono::Utc::now() + chrono::Duration::seconds(60));
+    s.advance_script();
+    assert!(matches!(s.script[0].state, StepState::Running { observed_busy: true }));
+    s.movement_arrival = None;
+    s.advance_script();
+    assert!(matches!(s.script[0].state, StepState::Done));
+
+    // Now step 1 (repair on m1) fires.
+    s.advance_script();
+    assert_eq!(s.script_fire.len(), 1);
+    assert!(matches!(s.script_fire[0], ScriptAction::Repair { .. }));
+    s.script_fire.clear();
+
+    // m1 busy → observed; idle → repair done → whole script finishes.
+    s.mannies = Some(vec![make_manny("m1", "probe", false, Some("repair"))]);
+    s.advance_script();
+    s.mannies = Some(vec![make_manny("m1", "probe", true, None)]);
+    s.advance_script();
+    assert!(matches!(s.script[1].state, StepState::Done));
+    assert!(!s.script_active(), "script stops once all steps are done");
+}
+
+#[test]
+fn script_mine_fans_out_and_joins_on_all_builders() {
+    let mut s = AppState::default();
+    s.mannies = Some(vec![
+        make_manny("m1", "probe", true, None),
+        make_manny("m2", "probe", true, None),
+    ]);
+    s.probe = Some(probe_at(0., 0., 0.));
+    s.scan_history = vec![make_sector_with_objects(
+        0.,
+        0.,
+        0.,
+        r#"[{"id": "ast-1", "type": "asteroid", "name": "Rock",
+            "estimated": false, "summary": null, "mass": null, "massUnit": null,
+            "radius": null, "radiusUnit": null, "dangerLevel": "low", "salvageable": null,
+            "mannyState": null, "mannyUid": null, "cargo": null, "itemType": null,
+            "quantity": null, "containerSpace": null, "mode": null, "targetObjectId": null,
+            "capacity": null, "capacityUnit": null, "mannyMineable": true,
+            "minableTargets": null, "waypointBookmarks": [], "bookmarkTargets": []}]"#,
+    )];
+    s.enqueue_script_line("mine metals 500 by all").unwrap();
+    s.script_run();
+
+    // Fan-out: one mine action per idle Manny, all fired the same tick.
+    s.advance_script();
+    assert_eq!(s.script_fire.len(), 2, "one mine per builder");
+    s.script_fire.clear();
+
+    // Both busy → observed.
+    s.mannies = Some(vec![
+        make_manny("m1", "probe", false, Some("mining")),
+        make_manny("m2", "probe", false, Some("mining")),
+    ]);
+    s.advance_script();
+    assert!(matches!(s.script[0].state, StepState::Running { observed_busy: true }));
+
+    // Barrier: one still mining → the step is NOT complete yet.
+    s.mannies = Some(vec![
+        make_manny("m1", "probe", true, None),
+        make_manny("m2", "probe", false, Some("mining")),
+    ]);
+    s.advance_script();
+    assert!(
+        matches!(s.script[0].state, StepState::Running { .. }),
+        "join waits for all"
+    );
+
+    // All idle → join complete.
+    s.mannies = Some(vec![
+        make_manny("m1", "probe", true, None),
+        make_manny("m2", "probe", true, None),
+    ]);
+    s.advance_script();
+    assert!(matches!(s.script[0].state, StepState::Done));
+}
+
+#[test]
+fn script_fails_when_a_target_cannot_be_resolved() {
+    let mut s = AppState::default();
+    // No idle Manny → the repair step cannot resolve its builder.
+    s.enqueue_script_line("repair 100 by ghost").unwrap();
+    s.script_run();
+    s.advance_script();
+    assert!(!s.script_running, "an unresolvable step halts the script");
+    match &s.script[0].state {
+        StepState::Failed(e) => assert!(e.contains("ghost") || e.contains("Manny")),
+        _ => panic!("expected the step to fail"),
+    }
+}
+
+#[test]
+fn script_note_error_halts_a_running_step() {
+    let mut s = AppState::default();
+    s.enqueue_script_line("travel 2 0 0").unwrap();
+    s.script_run();
+    s.advance_script(); // fires travel → Running
+    s.script_fire.clear();
+    s.script_note_error("server said no");
+    assert!(!s.script_running);
+    match &s.script[0].state {
+        StepState::Failed(e) => assert!(e.contains("server")),
+        _ => panic!("expected the running step to fail"),
+    }
+}
