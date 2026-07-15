@@ -2848,3 +2848,89 @@ fn script_note_error_halts_a_running_step() {
         _ => panic!("expected the running step to fail"),
     }
 }
+
+#[test]
+fn script_completion_completes_the_verb() {
+    let s = AppState::default();
+    assert_eq!(
+        s.script_completions("").unwrap().1.len(),
+        6,
+        "empty stem lists every verb"
+    );
+    assert_eq!(s.script_completions("det").unwrap().1, vec!["detach"]);
+    assert_eq!(s.script_completions("re").unwrap().1, vec!["repair", "recover"]);
+    assert!(s.script_completions("zzz").is_none(), "no verb matches");
+}
+
+#[test]
+fn script_completion_completes_positional_and_keywords() {
+    let s = AppState::default();
+    // Mine positional: resources, matched by the last token.
+    assert_eq!(s.script_completions("mine me").unwrap().1, vec!["metals"]);
+    // Trailing space → the next (empty) slot: repair offers `by`.
+    assert_eq!(s.script_completions("repair 100 ").unwrap().1, vec!["by"]);
+    // Mode values after `mode`.
+    assert_eq!(
+        s.script_completions("detach box mode hidden").unwrap().1,
+        vec!["hidden_on_asteroid"]
+    );
+}
+
+#[test]
+fn script_completion_completes_manny_names_after_by() {
+    let mut s = AppState::default();
+    s.mannies = Some(vec![
+        make_manny("manny-1", "probe", true, None),
+        make_manny("manny-2", "probe", true, None),
+    ]);
+    // `by` on a mine offers `all` plus the idle mannies…
+    let (_, cands) = s.script_completions("mine metals 500 by ").unwrap();
+    assert_eq!(cands, vec!["all", "manny-1", "manny-2"]);
+    // …and filters by the partial value.
+    let (start, filtered) = s.script_completions("mine metals 500 by manny-2").unwrap();
+    assert_eq!(filtered, vec!["manny-2"]);
+    // token_start points at the value, so the cycle replaces just the name.
+    assert_eq!(&"mine metals 500 by manny-2"[start..], "manny-2");
+}
+
+#[test]
+fn script_unnamed_asteroids_differentiate_by_id() {
+    let mut state = AppState::default();
+    state.probe = Some(probe_at(0., 0., 0.));
+    state.scan_history = vec![make_sector_with_objects(
+        0.,
+        0.,
+        0.,
+        r#"[
+        {"id": "ast-1", "type": "asteroid", "name": null,
+         "estimated": false, "summary": null, "mass": null, "massUnit": null,
+         "radius": null, "radiusUnit": null, "dangerLevel": "low", "salvageable": null,
+         "mannyState": null, "mannyUid": null, "cargo": null, "itemType": null,
+         "quantity": null, "containerSpace": null, "mode": null, "targetObjectId": null,
+         "capacity": null, "capacityUnit": null, "mannyMineable": true, "resourceTypes": ["metals"],
+         "minableTargets": null, "waypointBookmarks": [], "bookmarkTargets": []},
+        {"id": "ast-2", "type": "asteroid", "name": null,
+         "estimated": false, "summary": null, "mass": null, "massUnit": null,
+         "radius": null, "radiusUnit": null, "dangerLevel": "low", "salvageable": null,
+         "mannyState": null, "mannyUid": null, "cargo": null, "itemType": null,
+         "quantity": null, "containerSpace": null, "mode": null, "targetObjectId": null,
+         "capacity": null, "capacityUnit": null, "mannyMineable": true, "resourceTypes": ["ice", "carbon_compounds"],
+         "minableTargets": null, "waypointBookmarks": [], "bookmarkTargets": []}
+    ]"#,
+    )];
+
+    // Completion of `at` lists the ids (names are the "unnamed" placeholder).
+    let (_, cands) = state.script_completions("mine metals 500 at ").unwrap();
+    assert_eq!(cands, vec!["ast-1", "ast-2"]);
+
+    // Each id carries a resource hint for the display, `carbon_compounds` shortened.
+    assert_eq!(state.object_resource_hint("ast-1").as_deref(), Some("metals"));
+    assert_eq!(state.object_resource_hint("ast-2").as_deref(), Some("ice, carbon"));
+
+    // A scripted mine resolves the asteroid by its id (what completion inserts).
+    state.mannies = Some(vec![make_manny("m1", "probe", true, None)]);
+    let m = state
+        .resolve_mine(&["metals", "500", "at", "ast-2"])
+        .expect("mine resolves by asteroid id");
+    assert_eq!(m.object_id, "ast-2");
+}

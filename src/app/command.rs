@@ -477,10 +477,22 @@ impl AppState {
                 _ => return Err("multiple asteroids — add at <asteroid>".into()),
             }
         } else {
-            let q = at.join(" ").to_lowercase();
-            match candidates.iter().find(|(_, n)| n.to_lowercase().contains(&q)).cloned() {
+            let target = at.join(" ");
+            let q = target.to_lowercase();
+            // Match the id (exact, then substring) or the name — so a completed
+            // id for an unnamed asteroid resolves.
+            match candidates
+                .iter()
+                .find(|(id, _)| id.eq_ignore_ascii_case(&target))
+                .or_else(|| {
+                    candidates
+                        .iter()
+                        .find(|(id, n)| n.to_lowercase().contains(&q) || id.to_lowercase().contains(&q))
+                })
+                .cloned()
+            {
                 Some(o) => o,
-                None => return Err(format!("no asteroid matching \"{}\"", at.join(" "))),
+                None => return Err(format!("no asteroid matching \"{target}\"")),
             }
         };
 
@@ -494,12 +506,16 @@ impl AppState {
                 None
             } else {
                 let q = target.to_lowercase();
-                match self
-                    .collect_detached_containers()
-                    .into_iter()
-                    .find(|(_, n)| n.to_lowercase().contains(&q))
-                {
-                    Some((id, _)) => Some(id),
+                let containers = self.collect_detached_containers();
+                match containers
+                    .iter()
+                    .find(|(id, _)| id.eq_ignore_ascii_case(&target))
+                    .or_else(|| {
+                        containers
+                            .iter()
+                            .find(|(id, n)| n.to_lowercase().contains(&q) || id.to_lowercase().contains(&q))
+                    }) {
+                    Some((id, _)) => Some(id.clone()),
                     None => return Err(format!("no container matching \"{target}\"")),
                 }
             }

@@ -594,8 +594,16 @@ pub enum DetachInput {
 /// `parse_script_line`), `Normal` navigates/manages the step list (`j`/`k`,
 /// `x` remove, `c` clear, `R` run, `p` pause).
 pub enum ScriptInput {
-    Normal { selection: usize },
-    Insert { buf: String, error: Option<String> },
+    Normal {
+        selection: usize,
+    },
+    Insert {
+        buf: String,
+        error: Option<String>,
+        /// Active Tab-completion cycle over the token under the caret (caret is
+        /// always at the end of `buf`); `None` when not cycling.
+        completion: Option<CompletionState>,
+    },
 }
 
 impl ScriptInput {
@@ -604,6 +612,7 @@ impl ScriptInput {
         ScriptInput::Insert {
             buf: String::new(),
             error: None,
+            completion: None,
         }
     }
 }

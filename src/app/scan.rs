@@ -200,6 +200,40 @@ impl AppState {
         None
     }
 
+    /// A short resource hint (`"metals, ice"`) for an object id in the current
+    /// sector — the asteroid's mineable resource types, so an unnamed asteroid is
+    /// recognisable in the script editor's completion list. `None` when the id
+    /// is unknown or carries no resource types. `carbon_compounds` is shortened
+    /// to `carbon` to match what the pilot types.
+    pub fn object_resource_hint(&self, id: &str) -> Option<String> {
+        let sector = self.probe_current_sector_scan()?;
+        let objects = sector.objects.as_ref()?;
+        let short = |rt: &[String]| {
+            let parts: Vec<&str> = rt
+                .iter()
+                .map(|r| if r == "carbon_compounds" { "carbon" } else { r.as_str() })
+                .collect();
+            (!parts.is_empty()).then(|| parts.join(", "))
+        };
+        for o in objects {
+            if o.id.as_deref() == Some(id) {
+                if let Some(h) = short(&o.resource_types) {
+                    return Some(h);
+                }
+            }
+            for t in o.minable_targets.iter().flatten() {
+                if t.id == id {
+                    if let Some(rt) = &t.resource_types {
+                        if let Some(h) = short(rt) {
+                            return Some(h);
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
     /// Reserves + danger for an object id in the probe's current sector scan,
     /// used by the shared pick-row label. `(None, None)` when not scanned.
     pub fn probe_object_pick_info(&self, object_id: &str) -> ObjectPickInfo {

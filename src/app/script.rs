@@ -181,20 +181,40 @@ fn split_kw<'a>(args: &[&'a str]) -> (Vec<&'a str>, Vec<&'a str>, Vec<&'a str>, 
 }
 
 /// Pick a single target from a candidate list: the sole one when `query` is
-/// empty, else a case-insensitive substring match. `noun` shapes the error.
+/// empty, else a match on the **id** (exact, then substring) or the name
+/// (substring). Matching the id lets Tab-completion insert an id for an unnamed
+/// object and still resolve. `noun` shapes the error.
 fn pick_one(cands: Vec<(String, String)>, query: &str, noun: &str) -> Result<(String, String), String> {
     if query.is_empty() {
-        match cands.len() {
+        return match cands.len() {
             0 => Err(format!("no {noun} in current sector")),
             1 => Ok(cands.into_iter().next().unwrap()),
             _ => Err(format!("multiple {noun}s — name one")),
-        }
+        };
+    }
+    let q = query.to_lowercase();
+    cands
+        .iter()
+        .find(|(id, _)| id.eq_ignore_ascii_case(query))
+        .or_else(|| {
+            cands
+                .iter()
+                .find(|(id, n)| n.to_lowercase().contains(&q) || id.to_lowercase().contains(&q))
+        })
+        .cloned()
+        .ok_or_else(|| format!("no {noun} matching \"{query}\""))
+}
+
+/// Label for an object candidate in the editor: its name, or its id when the
+/// name is a bare placeholder (the game leaves many asteroids/containers
+/// unnamed). The id is unique and resolvable, so several "unnamed" objects stay
+/// distinguishable and selectable.
+fn candidate_label(id: &str, name: &str) -> String {
+    let n = name.trim();
+    if n.is_empty() || n.eq_ignore_ascii_case("unnamed") || n.eq_ignore_ascii_case("unnamed container") {
+        id.to_string()
     } else {
-        let q = query.to_lowercase();
-        cands
-            .into_iter()
-            .find(|(_, n)| n.to_lowercase().contains(&q))
-            .ok_or_else(|| format!("no {noun} matching \"{query}\""))
+        name.to_string()
     }
 }
 
@@ -246,6 +266,29 @@ fn script_log_event(group: &[ScriptAction], probe_id: Option<u64>) -> LogEvent {
         None => ("script", "Ran an empty step.".into()),
     };
     LogEvent::action(k, summary, probe_id)
+}
+
+/// Which slot of a script line the caret sits in, for Tab-completion.
+enum Slot {
+    /// The positional head (before any `by`/`at`/`to`/`mode`).
+    Positional,
+    /// The value region after a keyword (`by`/`at`/`to`/`mode`).
+    Keyword(String),
+}
+
+/// Whitespace-delimited tokens of `s[from..]`, each with its absolute byte
+/// offset in `s`. Trailing whitespace is not a token.
+fn token_offsets(s: &str, from: usize) -> Vec<(usize, &str)> {
+    let mut out = Vec::new();
+    let mut idx = from;
+    for part in s[from..].split_inclusive(char::is_whitespace) {
+        let tok = part.trim_end();
+        if !tok.is_empty() {
+            out.push((idx, tok));
+        }
+        idx += part.len();
+    }
+    out
 }
 
 impl AppState {
@@ -352,6 +395,106 @@ impl AppState {
             ScriptVerb::Salvage | ScriptVerb::Detach | ScriptVerb::Recover => {}
         }
         Ok(ScriptCommand { verb, args })
+    }
+
+    /// Tab-completion candidates for the script insert line (the caret is always
+    /// at the end of `buf`). Returns `(token_start_byte, candidates)` — the same
+    /// contract as `command_completions`, so the input layer reuses one cycle.
+    /// Completes the verb, the `by`/`at`/`to`/`mode` keywords, and their live
+    /// values (manny / asteroid / container names, resources, modes).
+    pub fn script_completions(&self, buf: &str) -> Option<(usize, Vec<String>)> {
+        let lead = buf.len() - buf.trim_start().len();
+        // Still on the first token → complete the verb.
+        let Some(vlen) = buf[lead..].find(char::is_whitespace) else {
+            let stem = buf[lead..].to_lowercase();
+            let cands: Vec<String> = ["travel", "mine", "repair", "salvage", "detach", "recover"]
+                .iter()
+                .filter(|v| v.starts_with(&stem))
+                .map(|v| v.to_string())
+                .collect();
+            return (!cands.is_empty()).then_some((lead, cands));
+        };
+        let verb = ScriptVerb::parse(&buf[lead..lead + vlen])?;
+        let after = lead + vlen;
+
+        // Locate the current slot: the region after the last keyword (a value,
+        // possibly multi-word), else the positional head.
+        let toks = token_offsets(buf, after);
+        let is_kw = |t: &str| matches!(t.to_lowercase().as_str(), "by" | "at" | "to" | "mode");
+        let (slot_start, ctx) = if buf.ends_with(char::is_whitespace) {
+            // A trailing space starts a fresh (empty) token: offer the values of
+            // the keyword just typed, else the positional set.
+            let ctx = match toks.last() {
+                Some((_, t)) if is_kw(t) => Slot::Keyword(t.to_lowercase()),
+                _ => Slot::Positional,
+            };
+            (buf.len(), ctx)
+        } else {
+            match toks.iter().rposition(|(_, t)| is_kw(t)) {
+                Some(k) => {
+                    let start = toks.get(k + 1).map_or(buf.len(), |(b, _)| *b);
+                    (start, Slot::Keyword(toks[k].1.to_lowercase()))
+                }
+                None => {
+                    // Positional: detach's value is a container name (may contain
+                    // spaces) → whole region; otherwise the last token.
+                    let start = if matches!(verb, ScriptVerb::Detach) {
+                        toks.first().map_or(buf.len(), |(b, _)| *b)
+                    } else {
+                        toks.last().map_or(buf.len(), |(b, _)| *b)
+                    };
+                    (start, Slot::Positional)
+                }
+            }
+        };
+        let stem = buf[slot_start..].trim().to_lowercase();
+
+        let names = |v: Vec<(String, String)>| {
+            v.into_iter()
+                .map(|(id, n)| candidate_label(&id, &n))
+                .collect::<Vec<_>>()
+        };
+        let kw = |ks: &[&str]| ks.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let mut cands: Vec<String> = match &ctx {
+            Slot::Keyword(k) => match k.as_str() {
+                "by" => {
+                    let mut m = names(self.collect_idle_onboard_mannies());
+                    if matches!(verb, ScriptVerb::Mine) {
+                        m.insert(0, "all".into());
+                    }
+                    m
+                }
+                // Use the same candidate set the verb's resolution does, so a
+                // completed id always resolves.
+                "at" => match verb {
+                    ScriptVerb::Mine => names(self.collect_mineable_candidates()),
+                    ScriptVerb::Detach => names(self.collect_asteroid_candidates()),
+                    ScriptVerb::Recover => names(self.collect_detached_containers()),
+                    ScriptVerb::Salvage => names(self.collect_salvage_candidates()),
+                    _ => Vec::new(),
+                },
+                "to" => names(self.collect_detached_containers()),
+                "mode" => kw(&["drifting", "hidden_on_asteroid"]),
+                _ => Vec::new(),
+            },
+            Slot::Positional => match verb {
+                ScriptVerb::Mine => {
+                    let mut c: Vec<String> = RESOURCE_LABELS.iter().map(|s| s.to_string()).collect();
+                    c.extend(kw(&["by", "at", "to"]));
+                    c
+                }
+                ScriptVerb::Detach => {
+                    let mut c = names(self.collect_detachable_containers());
+                    c.extend(kw(&["by", "mode", "at"]));
+                    c
+                }
+                ScriptVerb::Repair => kw(&["by"]),
+                ScriptVerb::Salvage | ScriptVerb::Recover => kw(&["by", "at"]),
+                ScriptVerb::Travel => Vec::new(),
+            },
+        };
+        cands.retain(|c| c.to_lowercase().starts_with(&stem));
+        (!cands.is_empty()).then_some((slot_start, cands))
     }
 
     // ── Resolution (late binding) ────────────────────────────────────────────

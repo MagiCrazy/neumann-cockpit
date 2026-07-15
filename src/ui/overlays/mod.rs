@@ -424,6 +424,25 @@ mod tests {
     }
 
     #[test]
+    fn script_console_handles_long_line_and_error() {
+        // Regression: a line longer than the box and an error must render (the
+        // input horizontally scrolls, the error wraps) without panicking.
+        use crate::app::{CompletionState, ScriptInput};
+        let mut state = AppState::default();
+        state.active_wizard = ActiveWizard::Script(ScriptInput::Insert {
+            buf: "detach Metal Container #2 by manny-2 mode hidden_on_asteroid at asteroid #2".into(),
+            error: Some("no idle Manny matching \"manny-2\" — it may be busy on another task".into()),
+            completion: Some(CompletionState {
+                candidates: vec!["manny-1".into(), "manny-2".into()],
+                index: 1,
+                token_start: 0,
+            }),
+        });
+        // Must not panic; the frame renders.
+        assert!(rendered_text(&state).contains("ACTION SCRIPT"));
+    }
+
+    #[test]
     fn fabrication_catalog_renders_both_sections() {
         use crate::app::FabricationInput;
         let mut state = AppState::default();
