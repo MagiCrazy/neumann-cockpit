@@ -26,6 +26,11 @@ pub struct Config {
     /// straight into the live cockpit (handy over tmux/ssh or on relaunch).
     #[serde(default = "default_true")]
     pub boot: bool,
+    /// Emit a desktop notification (OSC 9 + terminal bell) when a long task
+    /// finishes — travel arrival, a Manny completing a long task. Set `false`
+    /// to stay silent (issue #203).
+    #[serde(default = "default_true")]
+    pub notifications: bool,
 }
 
 fn default_true() -> bool {
@@ -55,6 +60,7 @@ struct RawConfig {
     theme: Option<String>,
     hints: Option<bool>,
     boot: Option<bool>,
+    notifications: Option<bool>,
 }
 
 /// The outcome of inspecting the on-disk config at boot.
@@ -97,6 +103,7 @@ fn load_status_at(path: &std::path::Path) -> ConfigStatus {
         theme: raw.theme,
         hints: raw.hints.unwrap_or(true),
         boot: raw.boot.unwrap_or(true),
+        notifications: raw.notifications.unwrap_or(true),
     })
 }
 
@@ -155,6 +162,7 @@ mod tests {
             theme: theme.map(String::from),
             hints: true,
             boot: true,
+            notifications: true,
         }
     }
 

@@ -23,10 +23,12 @@ base_url = "https://neumann-probe.net"
 api_key  = "vng_..."
 theme    = "mono-green"   # color mode (optional)
 hints    = true           # show the contextual hints line (optional)
+notifications = true      # desktop notification on long-task completion (optional)
 ```
 
 - `theme` — cockpit color mode: `mono-green` (default), `mono-amber`, `phosphor-semantic` (green base + green/yellow/red status), or `modern-16` (named ANSI for terminals without truecolor). `F2` cycles it at runtime.
 - `hints` — show the contextual hints line at the bottom (`F1` toggles at runtime). Defaults `true`.
+- `notifications` — emit a desktop notification (OSC 9 + terminal bell, `src/notify.rs`, issue #203) when a long task finishes: a travel arriving, or a Manny completing a long task (mining, crafting, repair, salvage, upgrade…). Completions are detected in `update_probe` / `update_mannies` (busy→idle diff), staged in `AppState::pending_notifications`, and drained by the event loop. Defaults `true`.
 
 Unknown keys are ignored, so legacy configs (`ui`, `phosphor`, `animations`, `theme = "retro"`) still load.
 

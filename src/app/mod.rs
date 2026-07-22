@@ -44,6 +44,24 @@ use crate::api::types::{
 use chrono::{DateTime, Local, Utc};
 use tokio::time::Instant;
 
+/// A short label for a Manny task worth a desktop notification when it
+/// completes, or `None` for quick/uninteresting tasks (moving cargo, returning,
+/// waiting, inspecting…) that would only add noise (issue #203).
+fn long_task_note(task: &crate::api::types::MannyTask) -> Option<&'static str> {
+    use crate::api::types::MannyTask;
+    Some(match task {
+        MannyTask::Mining => "mining",
+        MannyTask::Crafting | MannyTask::AssistingAtomicPrinter => "crafting",
+        MannyTask::Repair => "a repair",
+        MannyTask::Salvage => "salvaging",
+        MannyTask::ImprovingProbe => "a probe upgrade",
+        MannyTask::InstallingWaypointBookmark => "installing a waypoint",
+        MannyTask::RefillingDeuteriumTank => "refueling",
+        MannyTask::TurningOnScutRelay => "activating a relay",
+        _ => return None,
+    })
+}
+
 /// The follow-up refresh a successful action needs. Staged into
 /// `AppState::pending_refetch` by `finish_action` and dispatched once by the
 /// event loop (which owns the `ApiClient` + sender), mirroring how `pending_fire`
@@ -92,6 +110,11 @@ pub struct AppState {
     /// Telemetry samples staged by `update_probe`, drained by the event loop to
     /// persist (mirrors `pending_journal`); already appended to `telemetry`.
     pub pending_telemetry: Vec<TelemetrySample>,
+    /// Desktop-notification messages staged when a long task completes (travel
+    /// arrival, a Manny finishing a long task), drained by the event loop and
+    /// emitted via `notify::desktop_notify` when `config.notifications` is on
+    /// (issue #203).
+    pub pending_notifications: Vec<String>,
     /// Monotonic seed cycling the naming-ceremony lexicon (see
     /// `next_name_suggestion`); bumped each time a rename wizard suggests a name.
     pub name_suggestion_seed: usize,
@@ -198,6 +221,9 @@ pub struct AppState {
 
 impl AppState {
     pub fn update_probe(&mut self, probe: Probe) {
+        // A pending arrival that disappears this sync means the travel ended —
+        // notify (issue #203). Captured before the deadline is recomputed.
+        let was_traveling = self.movement_arrival.is_some();
         self.movement_arrival = probe
             .movement
             .as_ref()
@@ -210,6 +236,28 @@ impl AppState {
         self.error = None;
         self.clamp_inventory_selection();
         self.record_telemetry();
+        if was_traveling && self.movement_arrival.is_none() {
+            self.notify_travel_ended();
+        }
+    }
+
+    /// Stage a desktop notification for a travel that just ended, reading the
+    /// outcome (arrived / failed / destroyed) and destination from the probe's
+    /// movement snapshot.
+    fn notify_travel_ended(&mut self) {
+        use crate::api::types::MovementPhase;
+        let msg = match self.probe.as_ref().and_then(|p| p.movement.as_ref()) {
+            Some(m) => match m.phase.as_ref().unwrap_or(&m.status) {
+                MovementPhase::Failed => "Travel failed".to_string(),
+                MovementPhase::Destroyed => "Probe destroyed in transit".to_string(),
+                _ => format!(
+                    "Probe arrived at ({}, {}, {})",
+                    m.target.x as i64, m.target.y as i64, m.target.z as i64
+                ),
+            },
+            None => "Probe arrived".to_string(),
+        };
+        self.pending_notifications.push(msg);
     }
 
     /// Sample the piloted probe's vital ratios into the telemetry series,
@@ -279,6 +327,25 @@ impl AppState {
         let now = Utc::now();
         for m in &mut mannies {
             m.observed_at = Some(now);
+        }
+        // Notify on a long task completing: a Manny that was running a notable
+        // long task last sync and is now idle (issue #203). Comparing against
+        // the previous roster (by id) before it is replaced; the fire→busy lag
+        // is a None→Some transition, so it never produces a false completion.
+        if let Some(prev) = &self.mannies {
+            for m in &mannies {
+                if m.current_task.is_some() {
+                    continue;
+                }
+                let finished = prev
+                    .iter()
+                    .find(|p| p.id == m.id)
+                    .and_then(|p| p.current_task.as_ref())
+                    .and_then(long_task_note);
+                if let Some(note) = finished {
+                    self.pending_notifications.push(format!("{} finished {note}", m.name));
+                }
+            }
         }
         // Clamp selection in case list shrank.
         if !mannies.is_empty() {

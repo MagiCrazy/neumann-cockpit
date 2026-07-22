@@ -165,6 +165,17 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
             }
         }
 
+        // Desktop notifications staged when a long task completed. Always drain
+        // (so they never accumulate); emit only when the pilot enabled them.
+        if !state.pending_notifications.is_empty() {
+            let staged: Vec<_> = state.pending_notifications.drain(..).collect();
+            if config.notifications {
+                for msg in staged {
+                    neumann_cockpit::notify::desktop_notify(&msg);
+                }
+            }
+        }
+
         // Production queue: advance the executor, then spawn any craft it staged
         // (the event loop owns the client + sender). A fresh mannies fetch lets
         // the next tick detect the craft going busy, then idle → complete.
