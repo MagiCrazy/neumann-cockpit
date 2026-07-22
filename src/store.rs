@@ -15,7 +15,9 @@
 //! stats; only the most recent [`JOURNAL_WINDOW`] rows are loaded into memory.
 
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use rusqlite::Connection;
@@ -318,32 +320,64 @@ pub fn migrate_legacy_json(conn: &mut Connection, json_path: &Path) -> rusqlite:
 }
 
 /// Spawn the writer thread, taking ownership of the connection, and return the
-/// channel to send persistence messages on. `rusqlite` is synchronous, so the
-/// writes run off the tokio runtime on this dedicated thread. Write errors are
-/// best-effort (dropped) until the tracing work lands.
-pub fn spawn_writer(conn: Connection) -> Sender<PersistMsg> {
+/// channel to send persistence messages on plus a shared `degraded` flag.
+/// `rusqlite` is synchronous, so the writes run off the tokio runtime on this
+/// dedicated thread.
+///
+/// A failing write (disk full, corruption, read-only fs) does **not** crash the
+/// thread — it keeps draining so the app never blocks on a full channel — but it
+/// sets the `degraded` flag so the cockpit can warn the pilot that history is no
+/// longer being saved (issue #216). The flag is sticky: once set it stays set
+/// for the session (a single failure means the DB is unhealthy).
+pub fn spawn_writer(conn: Connection) -> (Sender<PersistMsg>, Arc<AtomicBool>) {
     let (tx, rx): (Sender<PersistMsg>, Receiver<PersistMsg>) = mpsc::channel();
+    let degraded = Arc::new(AtomicBool::new(false));
+    let flag = Arc::clone(&degraded);
     std::thread::spawn(move || {
         for msg in rx {
-            match msg {
-                PersistMsg::UpsertObservation(obs) => {
-                    let _ = upsert_observation(&conn, &obs);
-                }
-                PersistMsg::AppendEvent(ev) => {
-                    let _ = append_event(&conn, &ev);
-                }
-                PersistMsg::AppendTelemetry(s) => {
-                    let _ = append_telemetry(&conn, &s);
-                }
+            let result = match msg {
+                PersistMsg::UpsertObservation(obs) => upsert_observation(&conn, &obs),
+                PersistMsg::AppendEvent(ev) => append_event(&conn, &ev),
+                PersistMsg::AppendTelemetry(s) => append_telemetry(&conn, &s),
+            };
+            if result.is_err() {
+                flag.store(true, Ordering::Relaxed);
             }
         }
     });
-    tx
+    (tx, degraded)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn writer_flags_degraded_on_failure_and_keeps_draining() {
+        // A schema-less connection: every INSERT hits a missing table and errors.
+        let conn = Connection::open_in_memory().unwrap();
+        let (tx, degraded) = spawn_writer(conn);
+
+        tx.send(PersistMsg::AppendEvent(LogEvent::action("test", "one", None)))
+            .unwrap();
+        // Wait for the writer to process it and raise the flag (bounded poll).
+        let mut set = false;
+        for _ in 0..200 {
+            if degraded.load(Ordering::Relaxed) {
+                set = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert!(set, "a failing write must set the degraded flag");
+
+        // The thread survived: it is still draining, so a further send succeeds.
+        assert!(
+            tx.send(PersistMsg::AppendEvent(LogEvent::action("test", "two", None)))
+                .is_ok(),
+            "writer thread must survive a failing write and keep draining"
+        );
+    }
 
     fn obs(x: f64, y: f64, z: f64) -> SectorObservation {
         serde_json::from_str(&format!(

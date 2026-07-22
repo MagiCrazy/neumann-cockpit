@@ -52,7 +52,7 @@ The database also holds a **telemetry** time series (`telemetry` table, issue #2
 - **ARCHIVE** — `store::open` + `migrate_legacy_json` (reports `MigrationOutcome`: imported N / already migrated / none) + `load_observations`.
 - **REMOTE LINK** — `get_api_version()` under an 8 s timeout, retried interactively: a bad key or outage shows in the Probe pane with actions — `[R]` retry · `[K]` re-enter key (re-runs onboarding) · `[Enter]` continue offline. Continuing enters **degraded mode** (an error toast; `F5` retries), per the API-KO decision.
 
-Once the link is up (or the pilot continues offline), it hands off to `run()`, which builds `AppState`, spawns the persistence writer from the preflight's connection, and plays the cosmetic boot animation that lights the eight subsystems centre-out (see UI › Boot).
+Once the link is up (or the pilot continues offline), it hands off to `run()`, which builds `AppState`, spawns the persistence writer from the preflight's connection, and plays the cosmetic boot animation that lights the eight subsystems centre-out (see UI › Boot). The writer returns a shared `degraded` flag it raises if any write fails (disk full, corruption); it never crashes the thread (keeps draining), and the event loop mirrors the flag into `AppState::persistence_degraded`, surfaced as a `⚠ save failing` status-bar chip (issue #216).
 
 ### Headless script runner (`src/headless.rs`, #198 extension)
 

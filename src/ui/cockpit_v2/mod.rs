@@ -352,6 +352,14 @@ fn render_status_line(frame: &mut Frame, area: Rect, state: &AppState, p: Palett
         };
         meta.push((label, style));
     }
+    // Persistence degraded: the SQLite writer hit a failing write, so history
+    // is no longer being saved (issue #216). Warn, bold, so it stands out.
+    if state.persistence_degraded {
+        meta.push((
+            "⚠ save failing".to_string(),
+            Style::default().fg(p.warn).add_modifier(Modifier::BOLD),
+        ));
+    }
     let unread = state.unread_alert_count();
     if unread > 0 {
         // Urgency signal: crit_style survives the mono palettes (bold+REVERSED).

@@ -84,7 +84,9 @@ pub async fn run(path: &Path) -> Result<i32> {
         }
         Err(_) => (None, Vec::new()),
     };
-    let persist_tx = conn.map(store::spawn_writer);
+    // Headless does not surface the degraded flag (no status bar); the writer
+    // still survives failing writes. Keep only the sender.
+    let persist_tx = conn.map(|c| store::spawn_writer(c).0);
 
     let (tx, mut rx) = mpsc::channel::<ApiMessage>(32);
     let mut state = AppState {
