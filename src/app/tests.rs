@@ -2934,6 +2934,54 @@ fn script_craft_parse_and_resolve() {
 }
 
 #[test]
+fn script_craft_fans_out_parts_across_builders() {
+    let mut s = AppState::default();
+    s.recipes = vec![
+        manny_recipe("steel_plate", "Steel plate"),
+        manny_recipe("steel_bar", "Steel bar"),
+    ];
+    s.mannies = Some(vec![
+        make_manny("m1", "probe", true, None),
+        make_manny("m2", "probe", true, None),
+        make_manny("m3", "probe", true, None),
+    ]);
+    // 3 parts (steel_plate + 2× steel_bar) fan out one-per-builder with `by all`.
+    s.enqueue_script_line("craft steel_plate,steel_bar,steel_bar by all")
+        .unwrap();
+    s.script_run();
+    s.advance_script();
+    assert_eq!(s.script_fire.len(), 3, "one craft per builder, fired together");
+    // Distinct builders assigned.
+    let builders: Vec<Option<String>> = s
+        .script_fire
+        .iter()
+        .map(|a| match a {
+            ScriptAction::Craft { manny_id, .. } => manny_id.clone(),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(builders.iter().filter(|b| b.is_some()).count(), 3);
+    let uniq: std::collections::HashSet<_> = builders.iter().collect();
+    assert_eq!(uniq.len(), 3, "each part on a distinct builder");
+}
+
+#[test]
+fn script_craft_fanout_needs_enough_builders() {
+    let mut s = AppState::default();
+    s.recipes = vec![
+        manny_recipe("steel_plate", "Steel plate"),
+        manny_recipe("steel_bar", "Steel bar"),
+    ];
+    s.mannies = Some(vec![make_manny("m1", "probe", true, None)]); // only 1 idle
+    s.enqueue_script_line("craft steel_plate,steel_bar,steel_bar by all")
+        .unwrap();
+    s.script_run();
+    s.advance_script(); // resolve fails: 3 parts, 1 builder
+    assert!(matches!(s.script[0].state, StepState::Failed(_)));
+    assert!(!s.script_running);
+}
+
+#[test]
 fn script_craft_unknown_recipe_halts() {
     let mut s = AppState::default();
     s.recipes = vec![manny_recipe("steel_plate", "Steel plate")];
