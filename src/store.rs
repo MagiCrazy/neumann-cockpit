@@ -21,7 +21,7 @@ use chrono::{DateTime, Utc};
 use rusqlite::Connection;
 
 use crate::api::types::SectorObservation;
-use crate::app::LogEvent;
+use crate::app::{LogEvent, TelemetrySample};
 
 /// Table + index DDL, shared by `open` and the tests.
 const SCHEMA: &str = "
@@ -53,6 +53,17 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS idx_events_occurred_at
     ON events (occurred_at);
+
+CREATE TABLE IF NOT EXISTS telemetry (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    occurred_at TEXT NOT NULL,
+    probe_id    INTEGER,
+    fuel        REAL NOT NULL,
+    integrity   REAL NOT NULL,
+    cargo       REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_telemetry_probe
+    ON telemetry (probe_id, id);
 ";
 
 /// How many recent ship's-log entries the cockpit loads into memory and keeps
@@ -60,6 +71,12 @@ CREATE INDEX IF NOT EXISTS idx_events_occurred_at
 /// full history is retained for long-term stats; this only bounds the in-memory
 /// working set and what the pane can scroll through.
 pub const JOURNAL_WINDOW: usize = 1000;
+
+/// How many recent telemetry samples are loaded into memory at boot (across all
+/// probes, newest first then reversed to chronological order). The `telemetry`
+/// table itself is append-only and never trimmed; this only bounds the working
+/// set the sparklines draw from.
+pub const TELEMETRY_WINDOW: usize = 512;
 
 /// Additive column migrations for databases that predate a column. `CREATE
 /// TABLE IF NOT EXISTS` never alters an existing table, so a new promoted
@@ -77,6 +94,8 @@ pub enum PersistMsg {
     UpsertObservation(SectorObservation),
     /// Append a ship's-log entry (append-only, trimmed to the retention cap).
     AppendEvent(LogEvent),
+    /// Append a telemetry sample (append-only vital-ratio time series).
+    AppendTelemetry(TelemetrySample),
 }
 
 /// What `migrate_legacy_json` did, so the boot preflight can report it.
@@ -215,6 +234,55 @@ pub fn load_events(conn: &Connection) -> Vec<LogEvent> {
     rows.filter_map(Result::ok).collect()
 }
 
+/// Append a telemetry sample. The series is append-only and never trimmed —
+/// the full history is kept for long-term stats; only the recent window is
+/// loaded into memory (see [`load_telemetry`]).
+pub fn append_telemetry(conn: &Connection, s: &TelemetrySample) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT INTO telemetry (occurred_at, probe_id, fuel, integrity, cargo)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params![
+            s.occurred_at.to_rfc3339(),
+            s.probe_id.map(|v| v as i64),
+            s.fuel,
+            s.integrity,
+            s.cargo,
+        ],
+    )?;
+    Ok(())
+}
+
+/// Load the most recent [`TELEMETRY_WINDOW`] telemetry samples in chronological
+/// order (oldest first), so the in-memory series can be appended to and the
+/// sparklines read its tail. Best-effort: any error yields an empty series.
+pub fn load_telemetry(conn: &Connection) -> Vec<TelemetrySample> {
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT occurred_at, probe_id, fuel, integrity, cargo
+         FROM telemetry ORDER BY id DESC LIMIT ?1",
+    ) else {
+        return Vec::new();
+    };
+    let Ok(rows) = stmt.query_map(rusqlite::params![TELEMETRY_WINDOW as i64], |row| {
+        let occurred_at = row
+            .get::<_, String>(0)?
+            .parse::<DateTime<Utc>>()
+            .unwrap_or_else(|_| Utc::now());
+        Ok(TelemetrySample {
+            occurred_at,
+            probe_id: row.get::<_, Option<i64>>(1)?.map(|v| v as u64),
+            fuel: row.get(2)?,
+            integrity: row.get(3)?,
+            cargo: row.get(4)?,
+        })
+    }) else {
+        return Vec::new();
+    };
+    // Query is newest-first (by id); reverse to chronological (oldest-first).
+    let mut samples: Vec<_> = rows.filter_map(Result::ok).collect();
+    samples.reverse();
+    samples
+}
+
 /// One-time migration of the legacy `scan_history.json`: while the table is
 /// still empty, import every observation, then delete the JSON so it stops
 /// lingering. The import runs in a transaction and the file is removed **only
@@ -263,6 +331,9 @@ pub fn spawn_writer(conn: Connection) -> Sender<PersistMsg> {
                 }
                 PersistMsg::AppendEvent(ev) => {
                     let _ = append_event(&conn, &ev);
+                }
+                PersistMsg::AppendTelemetry(s) => {
+                    let _ = append_telemetry(&conn, &s);
                 }
             }
         }
@@ -386,6 +457,26 @@ mod tests {
         let loaded = load_events(&conn);
         assert_eq!(loaded.len(), JOURNAL_WINDOW);
         assert_eq!(loaded[0].summary, format!("entry {}", n - 1), "newest first");
+    }
+
+    #[test]
+    fn telemetry_round_trips_in_chronological_order() {
+        let conn = mem();
+        for i in 0..3 {
+            let s = TelemetrySample {
+                occurred_at: format!("2026-07-03T1{i}:00:00+00:00").parse().unwrap(),
+                probe_id: Some(1),
+                fuel: 1.0 - i as f64 * 0.1,
+                integrity: 1.0,
+                cargo: i as f64 * 0.2,
+            };
+            append_telemetry(&conn, &s).unwrap();
+        }
+        let loaded = load_telemetry(&conn);
+        assert_eq!(loaded.len(), 3);
+        // Oldest first: fuel decreases, cargo increases with insertion order.
+        assert!((loaded[0].fuel - 1.0).abs() < 1e-9, "chronological: oldest first");
+        assert!((loaded[2].cargo - 0.4).abs() < 1e-9);
     }
 
     #[test]

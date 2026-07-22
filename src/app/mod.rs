@@ -14,6 +14,7 @@ mod mode;
 mod queue;
 mod scan;
 mod script;
+mod telemetry;
 #[cfg(test)]
 mod tests;
 mod travel;
@@ -32,6 +33,7 @@ pub use mode::*;
 pub use queue::*;
 pub use scan::*;
 pub use script::*;
+pub use telemetry::*;
 pub use waypoints::*;
 
 use crate::api::types::{
