@@ -861,6 +861,11 @@ pub struct SectorObject {
     pub known_function: Option<String>,
     // SCUT relay objects (present only when object_type == ScutRelay).
     pub status: Option<ScutRelayStatus>,
+    /// Whether an active relay carries a scut_transit_beacon (API v96), which
+    /// enables destruction-risk-free SCUT corridors between beacon-equipped
+    /// relays in the same network.
+    #[serde(default)]
+    pub is_transit_beacon: Option<bool>,
     pub coverage_radius_sectors: Option<i64>,
     pub created_by_probe_id: Option<i64>,
     pub created_by_probe_name: Option<String>,
@@ -881,6 +886,34 @@ pub enum ScutRelayStatus {
     Unknown,
 }
 
+impl SectorObservation {
+    /// Distance to this sector from the **active** probe when the per-probe
+    /// breakdown is present (API v89), else the legacy default-probe `distance`.
+    /// `active_probe_id` is `None` for the default probe.
+    pub fn active_distance(&self, active_probe_id: Option<u64>) -> i64 {
+        self.distances
+            .iter()
+            .find(|d| match active_probe_id {
+                Some(id) => d.probe_id == id,
+                None => d.is_default,
+            })
+            .map(|d| d.distance)
+            .unwrap_or(self.distance)
+    }
+}
+
+/// One owned probe's distance to a scanned sector (API v89 `sector.distances`).
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SectorObservationProbeDistance {
+    pub probe_id: u64,
+    pub probe_name: String,
+    pub distance: i64,
+    pub is_default: bool,
+    /// Whether this probe supplied the scan behind the observation.
+    pub used_for_scan: bool,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScutNetworkReference {
@@ -894,6 +927,9 @@ pub struct ScutRelay {
     pub id: i64,
     pub name: String,
     pub status: ScutRelayStatus,
+    /// Equipped with a scut_transit_beacon (API v96).
+    #[serde(default)]
+    pub is_transit_beacon: bool,
     pub sector: ProbeSector,
     pub created_by_probe_name: Option<String>,
     pub coverage_radius_sectors: i64,
@@ -939,7 +975,16 @@ pub struct MinableTarget {
 #[serde(rename_all = "camelCase")]
 pub struct SectorObservation {
     pub relative_coordinates: Vector,
+    /// Legacy distance. On `/api/sector` it is measured from the player's
+    /// **default** probe even when another owned probe supplied the scan; on
+    /// probe-scoped endpoints it is from the observing probe. See `distances`
+    /// for the per-probe breakdown (API v89).
     pub distance: i64,
+    /// Per-owned-probe distances to this sector (API v89). Empty on older
+    /// payloads; lets the cockpit show the distance from the **active** probe
+    /// rather than the default one.
+    #[serde(default)]
+    pub distances: Vec<SectorObservationProbeDistance>,
     pub knowledge_level: KnowledgeLevel,
     pub confidence: f64,
     pub objects: Option<Vec<SectorObject>>,

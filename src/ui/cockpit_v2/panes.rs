@@ -253,7 +253,13 @@ pub fn render_sector(frame: &mut Frame, area: Rect, state: &AppState, active: bo
         return;
     };
     let v = &s.relative_coordinates;
-    let header = format!("({}, {}, {})  d{}", v.x as i32, v.y as i32, v.z as i32, s.distance);
+    let header = format!(
+        "({}, {}, {})  d{}",
+        v.x as i32,
+        v.y as i32,
+        v.z as i32,
+        s.active_distance(state.active_probe_id)
+    );
 
     // Zoom: the science station — full per-object detail. Solar systems get a
     // merged per-body breakdown (star, each planet's class/habitability, each

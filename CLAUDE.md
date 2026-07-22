@@ -159,6 +159,8 @@ The four reused panels (Probe / Inventory / Scanner / Mannies) keep their intern
 <!-- The live server version shows as "API vN" in the status bar; the versioned
      contract lives in api-specs/. Keep this table, but not a hardcoded version. -->
 
+**API tracking (issue #238, live v96).** Latest spec `api-specs/v96.yaml`. Catch-up v86→v96 is **phased**: Phase 1 (done) is additive field tracking + audits — `sector.distances` (v89, per-probe; the Scanner/Map show the **active** probe's distance via `SectorObservation::active_distance`), `ScutRelay.is_transit_beacon` / `SectorObject.is_transit_beacon` (v96), and confirmation that v87 (canonical item names — no client translation), v88 (salvageable tightening — we never surfaced drifting-item salvage), v92 (recall releases components server-side), v95 (new recipe is data-driven) need no code change. Phase 2 (pending, decisions taken) is the new **interactive** endpoints: server logbook CRUD (v90, kept **separate** from the local ship's log), `detach-storage-container` `attach_to_probe` mode (v91), `transfer-to-probe` (v93), `install-scut-transit-beacon` + safe SCUT corridors (v96), plus fleet reconciliation when the **active** probe is destroyed (v94).
+
 
 | Endpoint | Method | Status |
 |---|---|---|
