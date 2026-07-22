@@ -315,7 +315,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         // Persist just the observation that changed (upsert by
                         // coordinates), via the single writer thread.
                         if let (Some(tx), Some(obs)) = (&persist_tx, state.scan_history.first()) {
-                            let _ = tx.send(store::PersistMsg::UpsertObservation(obs.clone()));
+                            let _ = tx.send(store::PersistMsg::UpsertObservation(Box::new(obs.clone())));
                         }
                     }
                     ApiMessage::ScanError(e) => {

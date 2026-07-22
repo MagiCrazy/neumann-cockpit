@@ -25,6 +25,30 @@ fn make_sector(x: f64, y: f64, z: f64) -> SectorObservation {
     .unwrap()
 }
 
+#[test]
+fn active_distance_prefers_active_probe_then_falls_back() {
+    let obs: SectorObservation = serde_json::from_str(
+        r#"{
+        "relativeCoordinates": {"x":1,"y":2,"z":3}, "distance": 10,
+        "knowledgeLevel":"detailed","confidence":1.0,
+        "distances":[
+            {"probeId":1,"probeName":"Main","distance":10,"isDefault":true,"usedForScan":true},
+            {"probeId":7,"probeName":"Drone","distance":3,"isDefault":false,"usedForScan":false}
+        ],
+        "scan":{"currentSectorResidenceSeconds":60,"requiredResidenceSeconds":60,"scanQuality":1.0}
+    }"#,
+    )
+    .unwrap();
+    // Active drone 7 → its own distance; default (None) → the isDefault entry.
+    assert_eq!(obs.active_distance(Some(7)), 3);
+    assert_eq!(obs.active_distance(None), 10);
+    // An id not in the breakdown falls back to the legacy `distance`.
+    assert_eq!(obs.active_distance(Some(99)), 10);
+    // No per-probe breakdown (older payload) → legacy distance regardless.
+    let legacy = make_sector(0.0, 0.0, 0.0);
+    assert_eq!(legacy.active_distance(Some(7)), legacy.distance);
+}
+
 fn make_probe(free_capacity: f64, sector_x: f64, sector_y: f64, sector_z: f64) -> Probe {
     serde_json::from_str(&format!(
         r#"{{

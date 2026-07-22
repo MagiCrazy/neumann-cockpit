@@ -93,7 +93,9 @@ fn ensure_columns(conn: &Connection) {
 /// Messages accepted by the persistence writer thread.
 pub enum PersistMsg {
     /// Upsert the latest observation for a sector (keyed by coordinates).
-    UpsertObservation(SectorObservation),
+    /// Boxed: `SectorObservation` is far larger than the other variants, so
+    /// boxing keeps `PersistMsg` small (clippy `large_enum_variant`).
+    UpsertObservation(Box<SectorObservation>),
     /// Append a ship's-log entry (append-only, trimmed to the retention cap).
     AppendEvent(LogEvent),
     /// Append a telemetry sample (append-only vital-ratio time series).

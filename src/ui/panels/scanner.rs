@@ -65,7 +65,7 @@ pub(crate) fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppSta
                 ListItem::new(Line::from(vec![
                     Span::styled(format!("{sym} "), sym_style),
                     Span::styled(format!("{label:<9}"), Style::default().fg(color)),
-                    Span::styled(format!("d:{}", s.distance), dim),
+                    Span::styled(format!("d:{}", s.active_distance(state.active_probe_id)), dim),
                 ]))
             })
             .collect();
@@ -137,7 +137,7 @@ pub(crate) fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppSta
     lines.push(Line::from(vec![
         Span::styled(format!("({cx},{cy},{cz})"), text),
         Span::raw("  "),
-        Span::styled(format!("d:{}", sector.distance), dim),
+        Span::styled(format!("d:{}", sector.active_distance(state.active_probe_id)), dim),
         Span::raw("  "),
         Span::styled(
             knowledge_label(&sector.knowledge_level),
