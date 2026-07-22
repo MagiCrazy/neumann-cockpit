@@ -25,7 +25,7 @@ Each line is one action. The MVP verbs:
 | `salvage` | `[by <manny>] [at <wreck>]` |
 | `detach` | `<container> [by <manny>] [mode <drifting\|hidden_on_asteroid>] [at <asteroid>]` |
 | `recover` | `[by <manny>] [at <container>]` |
-| `craft` | `<recipe> [by <manny>]` |
+| `craft` | `<recipe[,recipe…]> [by <manny\|all\|A,B>]` |
 
 Targets are matched by **exact id** first, then a **case-insensitive substring** of a name (manny, asteroid, container). Where a target is unambiguous — the sole idle manny, the only asteroid in the sector — you can omit it.
 
@@ -40,6 +40,8 @@ A line is checked for **syntax** when you add it, but its **targets are resolved
 ### Fork/join
 
 A single step can **fan out** to several builders and acts as a **barrier**. A `mine … by all` (every idle manny) or `by Alpha,Bravo` (named) fires one mine per manny in parallel, and the step is complete only once **every** one of them is idle again. The next step waits for that join.
+
+`craft` fans out the same way, but over a **recipe list**: `craft steel_plate,steel_bar,steel_bar by all` assigns **one recipe per builder** (distinct mannies), fires them together, and joins on all — so the parts are produced in parallel, then the next line assembles them.
 
 This is the canonical resupply run:
 
@@ -68,6 +70,14 @@ craft additional_container by Alpha
 ```
 
 Each line fires only once Alpha is idle again, so the parts exist in the probe inventory by the time the container is assembled. (You need enough mined `metals` stocked for the intermediate crafts.) There is no auto-expansion of sub-components — you list them, which keeps what runs explicit and predictable.
+
+To go faster, fan the parts out over several mannies, then assemble once they have all finished:
+
+```text
+# 3 parts in parallel (one manny each), barrier, then the motor
+craft steel_plate,steel_bar,steel_bar by all
+craft electric_motor by manny-8
+```
 
 > The script sequences **manny** and **atomic-printer** recipes alike. A printer craft has no named builder; the step completes when no manny is left assisting the printer.
 

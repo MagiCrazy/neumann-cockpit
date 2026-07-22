@@ -262,7 +262,16 @@ fn script_log_event(group: &[ScriptAction], probe_id: Option<u64>) -> LogEvent {
             (kind::CONTAINER, format!("Detached a storage container, {how}."))
         }
         Some(ScriptAction::Recover { .. }) => (kind::CONTAINER, "Recovered a detached storage container.".into()),
-        Some(ScriptAction::Craft { recipe_id, .. }) => (kind::CRAFT, format!("Started fabricating «{recipe_id}».")),
+        Some(ScriptAction::Craft { recipe_id, .. }) => {
+            if group.len() > 1 {
+                (
+                    kind::CRAFT,
+                    format!("Started fabricating {} parts in parallel.", group.len()),
+                )
+            } else {
+                (kind::CRAFT, format!("Started fabricating «{recipe_id}»."))
+            }
+        }
         None => ("script", "Ran an empty step.".into()),
     };
     LogEvent::action(k, summary, probe_id)
@@ -476,44 +485,98 @@ impl AppState {
             }
             ScriptVerb::Craft => {
                 let (pos, by, _, _) = split_kw(&args);
-                let query = pos.join(" ");
-                if query.is_empty() {
+                let joined = pos.join(" ");
+                // Comma-separated recipe list: `craft A,B,C by all` fans out one
+                // recipe per builder, in parallel, joining on all (like mine).
+                let queries: Vec<String> = joined
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                if queries.is_empty() {
                     return Err("craft: name a recipe".into());
                 }
-                // Resolve the recipe by name (exact, then substring) or by id —
-                // the same catalog the queue uses (`fabrication_recipes`).
-                let recipes = self.fabrication_recipes();
-                let resolved = recipes
-                    .iter()
-                    .find(|(_, r)| r.name.eq_ignore_ascii_case(&query) || r.id.eq_ignore_ascii_case(&query))
-                    .or_else(|| {
-                        let q = query.to_lowercase();
-                        recipes.iter().find(|(_, r)| r.name.to_lowercase().contains(&q))
-                    })
-                    .map(|(fab, r)| (*fab, r.id.clone()));
-                let Some((fabricator, recipe_id)) = resolved else {
-                    return Err(format!("craft: no recipe matching \"{query}\""));
+                // Resolve each query → (fabricator, recipe_id). Scoped so the
+                // `recipes` borrow of self drops before the builder lookups.
+                let resolved: Vec<(Fabricator, String)> = {
+                    let recipes = self.fabrication_recipes();
+                    let resolve_one = |q: &str| -> Result<(Fabricator, String), String> {
+                        recipes
+                            .iter()
+                            .find(|(_, r)| r.name.eq_ignore_ascii_case(q) || r.id.eq_ignore_ascii_case(q))
+                            .or_else(|| {
+                                let ql = q.to_lowercase();
+                                recipes.iter().find(|(_, r)| r.name.to_lowercase().contains(&ql))
+                            })
+                            .map(|(fab, r)| (*fab, r.id.clone()))
+                            .ok_or_else(|| format!("craft: no recipe matching \"{q}\""))
+                    };
+                    queries.iter().map(|q| resolve_one(q)).collect::<Result<_, _>>()?
                 };
-                match fabricator {
-                    Fabricator::AtomicPrinter => {
-                        if !self.has_atomic_printer() {
-                            return Err("craft: no atomic printer in inventory".into());
+
+                // Single recipe: keep the simple path (sole idle builder, or `by`).
+                if resolved.len() == 1 {
+                    let (fabricator, recipe_id) = resolved.into_iter().next().unwrap();
+                    return match fabricator {
+                        Fabricator::AtomicPrinter => {
+                            if !self.has_atomic_printer() {
+                                return Err("craft: no atomic printer in inventory".into());
+                            }
+                            one(ScriptAction::Craft {
+                                fabricator,
+                                manny_id: None,
+                                recipe_id,
+                            })
                         }
-                        one(ScriptAction::Craft {
+                        Fabricator::Manny => {
+                            let (manny_id, _) = self.resolve_builder(&by)?;
+                            one(ScriptAction::Craft {
+                                fabricator,
+                                manny_id: Some(manny_id),
+                                recipe_id,
+                            })
+                        }
+                    };
+                }
+
+                // Fan-out: one recipe per builder. Manny recipes each take a
+                // distinct idle builder; a printer recipe uses the printer lane.
+                let manny_count = resolved.iter().filter(|(f, _)| *f == Fabricator::Manny).count();
+                let printer_count = resolved.len() - manny_count;
+                if printer_count > 1 {
+                    return Err("craft: at most one atomic-printer recipe per parallel step".into());
+                }
+                if printer_count == 1 && !self.has_atomic_printer() {
+                    return Err("craft: no atomic printer in inventory".into());
+                }
+                let builders = self.resolve_builders(&by)?;
+                if builders.len() < manny_count {
+                    return Err(format!(
+                        "craft: need {manny_count} idle Mannies for the parts, have {} — add by all|A,B",
+                        builders.len()
+                    ));
+                }
+                let mut actions = Vec::new();
+                let mut bi = 0;
+                for (fabricator, recipe_id) in resolved {
+                    match fabricator {
+                        Fabricator::Manny => {
+                            let (manny_id, _) = builders[bi].clone();
+                            bi += 1;
+                            actions.push(ScriptAction::Craft {
+                                fabricator,
+                                manny_id: Some(manny_id),
+                                recipe_id,
+                            });
+                        }
+                        Fabricator::AtomicPrinter => actions.push(ScriptAction::Craft {
                             fabricator,
                             manny_id: None,
                             recipe_id,
-                        })
-                    }
-                    Fabricator::Manny => {
-                        let (manny_id, _) = self.resolve_builder(&by)?;
-                        one(ScriptAction::Craft {
-                            fabricator,
-                            manny_id: Some(manny_id),
-                            recipe_id,
-                        })
+                        }),
                     }
                 }
+                Ok(actions)
             }
         }
     }
