@@ -2881,6 +2881,58 @@ fn script_does_not_run_until_started() {
     assert!(s.script_active());
 }
 
+fn manny_recipe(id: &str, name: &str) -> crate::api::types::CraftingRecipe {
+    serde_json::from_str(&format!(
+        r#"{{"id":"{id}","name":"{name}","craftableBy":["manny"],
+        "ingredients":[],"durationSeconds":60,
+        "output":{{"type":"{id}","name":"{name}","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}}}"#
+    ))
+    .unwrap()
+}
+
+#[test]
+fn script_craft_parse_and_resolve() {
+    let mut s = AppState::default();
+    s.recipes = vec![manny_recipe("steel_plate", "Steel plate")];
+    s.mannies = Some(vec![make_manny("m1", "probe", true, None)]);
+
+    // Parse: a recipe token is required.
+    assert!(s.parse_script_line("craft steel_plate").is_ok());
+    assert!(s.parse_script_line("craft steel_plate by m1").is_ok());
+    assert!(s.parse_script_line("craft").is_err(), "recipe token required");
+    assert!(s.parse_script_line("craft by m1").is_err());
+
+    // Resolve + fire: a Manny recipe binds to the sole idle onboard Manny.
+    s.enqueue_script_line("craft steel_plate").unwrap();
+    s.script_run();
+    s.advance_script();
+    assert_eq!(s.script_fire.len(), 1);
+    match &s.script_fire[0] {
+        ScriptAction::Craft {
+            fabricator,
+            manny_id,
+            recipe_id,
+        } => {
+            assert_eq!(*fabricator, crate::app::Fabricator::Manny);
+            assert_eq!(manny_id.as_deref(), Some("m1"));
+            assert_eq!(recipe_id, "steel_plate");
+        }
+        other => panic!("expected Craft, got {other:?}"),
+    }
+}
+
+#[test]
+fn script_craft_unknown_recipe_halts() {
+    let mut s = AppState::default();
+    s.recipes = vec![manny_recipe("steel_plate", "Steel plate")];
+    s.mannies = Some(vec![make_manny("m1", "probe", true, None)]);
+    s.enqueue_script_line("craft nonexistent").unwrap(); // parses (syntactic)
+    s.script_run();
+    s.advance_script(); // resolve fails → step failed, script halts
+    assert!(matches!(s.script[0].state, StepState::Failed(_)));
+    assert!(!s.script_running);
+}
+
 #[test]
 fn script_executor_runs_steps_in_order() {
     let mut s = AppState::default();
