@@ -1,5 +1,13 @@
 # Changelog
 
+## [96.1.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v96.0.0...neumann-cockpit-v96.1.0) (2026-07-22)
+
+
+### Features
+
+* **script:** add a craft verb to the action-script / headless engine ([#259](https://github.com/MagiCrazy/neumann-cockpit/issues/259)) ([3d7b23c](https://github.com/MagiCrazy/neumann-cockpit/commit/3d7b23cb2a91d10f3a6d12230ea67000c48d21f1)), closes [#258](https://github.com/MagiCrazy/neumann-cockpit/issues/258)
+* **script:** id targeting, craft fan-out, quote-aware names + headless fixes ([#265](https://github.com/MagiCrazy/neumann-cockpit/issues/265)) ([4c32c23](https://github.com/MagiCrazy/neumann-cockpit/commit/4c32c23be6538e3f7bc7955e83e7ced54aba6205))
+
 ## [96.0.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v86.1.1...neumann-cockpit-v96.0.0) (2026-07-22)
 
 
