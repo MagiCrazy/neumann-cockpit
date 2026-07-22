@@ -68,6 +68,14 @@ pub enum MannyTask {
     InspectingAsteroid,
     InspectingSectorObject,
     ImprovingProbe,
+    /// Ferrying deuterium to another fleet probe (API v86).
+    TransferringDeuteriumToProbe,
+    /// Transferring the Manny itself to another fleet probe (API v93).
+    TransferringToProbe,
+    /// Equipping an active SCUT relay with a transit beacon (API v96).
+    InstallingScutTransitBeacon,
+    /// Assembling a new probe from two additional containers (API v81).
+    AssemblingProbe,
     Returning,
     WaitingForSpace,
     MovingStockage,

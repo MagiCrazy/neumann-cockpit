@@ -66,6 +66,10 @@ pub(crate) fn manny_task_label(task: Option<&MannyTask>) -> &'static str {
         Some(MannyTask::InspectingAsteroid) => "inspecting",
         Some(MannyTask::InspectingSectorObject) => "inspecting",
         Some(MannyTask::ImprovingProbe) => "improving probe",
+        Some(MannyTask::TransferringDeuteriumToProbe) => "transferring deuterium",
+        Some(MannyTask::TransferringToProbe) => "transferring to probe",
+        Some(MannyTask::InstallingScutTransitBeacon) => "installing beacon",
+        Some(MannyTask::AssemblingProbe) => "assembling probe",
         Some(MannyTask::Returning) => "returning",
         Some(MannyTask::WaitingForSpace) => "waiting for space",
         Some(MannyTask::MovingStockage) => "moving cargo",
@@ -326,6 +330,22 @@ mod tests {
         assert_eq!(truncate_ellipsis("Battery pack", 5), "Batt…");
         assert_eq!(truncate_ellipsis("Battery pack", 1), "…");
         assert_eq!(truncate_ellipsis("Battery pack", 0), "");
+    }
+
+    #[test]
+    fn new_v96_task_states_have_labels_not_placeholder() {
+        use super::manny_task_label;
+        use crate::api::types::MannyTask;
+        for (raw, expected) in [
+            ("transferring_deuterium_to_probe", "transferring deuterium"),
+            ("transferring_to_probe", "transferring to probe"),
+            ("installing_scut_transit_beacon", "installing beacon"),
+            ("assembling_probe", "assembling probe"),
+        ] {
+            let task: MannyTask = serde_json::from_str(&format!("\"{raw}\"")).unwrap();
+            assert_ne!(task, MannyTask::Unknown, "{raw} must not fall back to Unknown");
+            assert_eq!(manny_task_label(Some(&task)), expected);
+        }
     }
 
     #[test]
