@@ -503,6 +503,23 @@ fn update_probe_clamps_inventory_selection() {
     assert_eq!(state.inventory_selection, 0);
 }
 
+#[test]
+fn telemetry_samples_on_change_and_dedupes_identical() {
+    let mut state = AppState::default();
+    // First sync records a sample; an identical second sync is deduped.
+    state.update_probe(probe_with_inventory("[]", STOCK_METALS));
+    state.update_probe(probe_with_inventory("[]", STOCK_METALS));
+    assert_eq!(state.telemetry.len(), 1, "identical vitals are not resampled");
+
+    // A change in fuel produces a new sample, staged for persistence.
+    let mut p = probe_with_inventory("[]", STOCK_METALS);
+    p.fuel.deuterium = Some(50.0);
+    state.update_probe(p);
+    assert_eq!(state.telemetry.len(), 2);
+    assert_eq!(state.pending_telemetry.len(), 2, "both kept samples staged to persist");
+    assert!((state.telemetry[1].fuel - 0.5).abs() < 1e-9);
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────
 
 fn make_manny(id: &str, location_type: &str, can_receive_orders: bool, task: Option<&str>) -> Manny {

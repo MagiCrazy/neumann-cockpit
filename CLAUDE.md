@@ -36,6 +36,8 @@ Scan history is persisted across runs in a local SQLite database (`cockpit.db`, 
 
 The same database holds the **ship's log** — an append-only `events` table recording pilot actions (travel, mine, deploy, drop/detach container, storage move…) as narrated captain's-log entries. Actions stage a pre-rendered line into `AppState::pending_journal` (mirroring `pending_fire`), which the event loop drains to persist and prepend to `AppState::journal`. The table is never trimmed (full history kept for long-term stats); only the most recent `store::JOURNAL_WINDOW` are loaded into memory at boot. The Missions-pane view (`AppState::ship_log_entries`) merges these captured actions with reconstructed server events (alerts + damage warnings, projected fresh from memory rather than persisted, since the server keeps them), newest first.
 
+The database also holds a **telemetry** time series (`telemetry` table, issue #201) — periodic samples of the piloted probe's vital ratios (fuel / integrity / cargo, each `0..1`), tagged by active probe id. `AppState::update_probe` samples on each sync, deduped against the last sample for that probe (idle probes don't flood the series); kept samples stage into `AppState::pending_telemetry` (mirroring `pending_journal`) and the event loop drains them to persist. Append-only, never trimmed; the recent `store::TELEMETRY_WINDOW` load into `AppState::telemetry` at boot. The zoomed Probe pane draws a Unicode sparkline (`theme::text_sparkline`) under each vital gauge from the active probe's tail.
+
 **Naming ceremony**: the rename wizards (probe / Manny / storage container) open pre-filled with a Culture-style name suggestion from `src/app/lexicon.rs` (`AppState::next_name_suggestion` cycles the bank); `Tab` regenerates a suggestion, `Enter` applies, editing is free-form, and `Esc` keeps the current name. The API has no name-at-creation (and an assembled drone only appears ~3 h later), so naming is always a post-hoc rename.
 
 ## Architecture
@@ -95,7 +97,7 @@ All other API calls (move, repair, mine, craft, storage container CRUD, storage 
 
 ### Theme & colours (`src/ui/theme.rs`)
 
-One unified phosphor theme (there is no classic/retro split any more). `theme.rs` holds the shared helpers: `Palette` + `palette(ColorMode)` (accent / dim / text / good / warn / crit per color mode), `pane_block(title, active, palette)` — the double-line (`BorderType::Double`) pane frame used by every pane, coloured accent when active and dim-accent otherwise — plus icons, labels, gauges (`make_line_gauge`, `gauge_color`), and `format_duration` / `format_age`. Color modes: `mono-green` (default), `mono-amber`, `phosphor-semantic`, `modern-16`; `F2` cycles them.
+One unified phosphor theme (there is no classic/retro split any more). `theme.rs` holds the shared helpers: `Palette` + `palette(ColorMode)` (accent / dim / text / good / warn / crit per color mode), `pane_block(title, active, palette)` — the double-line (`BorderType::Double`) pane frame used by every pane, coloured accent when active and dim-accent otherwise — plus icons, labels, gauges (`make_line_gauge`, `gauge_color`), `text_sparkline` (Unicode `▁▂▃▄▅▆▇█` trend line, used by the zoomed Probe telemetry), and `format_duration` / `format_age`. Color modes: `mono-green` (default), `mono-amber`, `phosphor-semantic`, `modern-16`; `F2` cycles them.
 
 ### UI (`src/ui/`)
 

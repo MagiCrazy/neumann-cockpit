@@ -14,6 +14,7 @@ mod mode;
 mod queue;
 mod scan;
 mod script;
+mod telemetry;
 #[cfg(test)]
 mod tests;
 mod travel;
@@ -32,6 +33,7 @@ pub use mode::*;
 pub use queue::*;
 pub use scan::*;
 pub use script::*;
+pub use telemetry::*;
 pub use waypoints::*;
 
 use crate::api::types::{
@@ -83,6 +85,13 @@ pub struct AppState {
     /// Log entries staged by action handlers this tick, drained by the event
     /// loop to persist + prepend to `journal` (mirrors `pending_fire`).
     pub pending_journal: Vec<LogEvent>,
+    /// Vital-ratio time series (fuel / integrity / cargo), chronological, capped
+    /// at `store::TELEMETRY_WINDOW`; the zoomed Probe pane draws sparklines from
+    /// the active probe's tail (issue #201).
+    pub telemetry: Vec<TelemetrySample>,
+    /// Telemetry samples staged by `update_probe`, drained by the event loop to
+    /// persist (mirrors `pending_journal`); already appended to `telemetry`.
+    pub pending_telemetry: Vec<TelemetrySample>,
     /// Monotonic seed cycling the naming-ceremony lexicon (see
     /// `next_name_suggestion`); bumped each time a rename wizard suggests a name.
     pub name_suggestion_seed: usize,
@@ -200,6 +209,31 @@ impl AppState {
         self.consecutive_failures = 0;
         self.error = None;
         self.clamp_inventory_selection();
+        self.record_telemetry();
+    }
+
+    /// Sample the piloted probe's vital ratios into the telemetry series,
+    /// dropping a sample identical to the last one for the same probe so an
+    /// idle probe does not flood the series (issue #201). The kept sample is
+    /// appended to the in-memory series (capped) and staged for persistence.
+    fn record_telemetry(&mut self) {
+        let Some(probe) = &self.probe else { return };
+        let sample = TelemetrySample::from_probe(probe, self.active_probe_id);
+        if self
+            .telemetry
+            .iter()
+            .rev()
+            .find(|s| s.probe_id == sample.probe_id)
+            .is_some_and(|last| last.same_vitals(&sample))
+        {
+            return;
+        }
+        self.telemetry.push(sample.clone());
+        let overflow = self.telemetry.len().saturating_sub(crate::store::TELEMETRY_WINDOW);
+        if overflow > 0 {
+            self.telemetry.drain(0..overflow);
+        }
+        self.pending_telemetry.push(sample);
     }
 
     /// Apply a fleet roster refresh. Records the roster and default id, but
