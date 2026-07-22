@@ -1,5 +1,5 @@
 use crate::api::types::{MovementPhase, SensorMode};
-use crate::app::AppState;
+use crate::app::{AppState, TelemetrySample};
 use chrono::Utc;
 use ratatui::{
     layout::Rect,
@@ -12,8 +12,11 @@ use ratatui::{
 use crate::ui::sigil::sigil_lines;
 use crate::ui::theme::{
     block_gauge_line, format_duration, movement_phase_label, palette, pane_block, probe_status_label,
-    probe_status_style, ratio_color,
+    probe_status_style, ratio_color, text_sparkline,
 };
+
+/// How many recent samples the zoomed telemetry sparklines show.
+const SPARK_WIDTH: usize = 24;
 // ── Probe panel ───────────────────────────────────────────────────────────────
 
 pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState, focused: bool) {
@@ -136,6 +139,31 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
 
     // ── Vital gauges ──
     lines.push(Line::raw(""));
+    // Telemetry sparkline under each gauge when zoomed: the trend of that ratio
+    // over the recent samples for the active probe (issue #201). Needs ≥2
+    // points to read as a trend; aligns under the gauge bar (10-col label).
+    let series = |get: fn(&TelemetrySample) -> f64| -> Vec<f64> {
+        state
+            .telemetry
+            .iter()
+            .filter(|s| s.probe_id == state.active_probe_id)
+            .map(get)
+            .collect()
+    };
+    let spark = |values: Vec<f64>, ratio: f64| -> Option<Line<'static>> {
+        if !state.zoomed {
+            return None;
+        }
+        let s = text_sparkline(&values, SPARK_WIDTH);
+        if s.chars().count() < 2 {
+            return None;
+        }
+        Some(Line::from(vec![
+            Span::raw(" ".repeat(10)),
+            Span::styled(s, Style::default().fg(ratio_color(ratio, p))),
+        ]))
+    };
+
     let max_deuterium = probe.fuel.max_deuterium.unwrap_or(100.0);
     let fuel = probe
         .fuel
@@ -149,6 +177,9 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
         ratio_color(fuel, p),
         p,
     ));
+    if let Some(l) = spark(series(|s| s.fuel), fuel) {
+        lines.push(l);
+    }
     if let Some(sys) = &probe.systems {
         let integ = (sys.integrity_percent.unwrap_or(100.0) / 100.0).clamp(0.0, 1.0);
         lines.push(block_gauge_line(
@@ -158,6 +189,9 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
             ratio_color(integ, p),
             p,
         ));
+        if let Some(l) = spark(series(|s| s.integrity), integ) {
+            lines.push(l);
+        }
     }
     let inv = &probe.inventory;
     let cargo = if inv.capacity > 0.0 {
@@ -172,6 +206,9 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
         p.accent,
         p,
     ));
+    if let Some(l) = spark(series(|s| s.cargo), cargo) {
+        lines.push(l);
+    }
 
     // ── Movement (active) or current sector ──
     let active = probe.movement.as_ref().filter(|mv| {

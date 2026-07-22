@@ -307,6 +307,25 @@ pub(crate) fn block_gauge_line(label: &str, ratio: f64, value: &str, fill: Color
     ])
 }
 
+/// Unicode sparkline over a series of ratios (each clamped to `0.0..=1.0`),
+/// mapping every value to one of eight block glyphs `▁▂▃▄▅▆▇█` and keeping the
+/// last `width` samples. An empty series or zero width yields "". Used for the
+/// zoomed Probe pane's telemetry trends (issue #201).
+pub(crate) fn text_sparkline(values: &[f64], width: usize) -> String {
+    const BARS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+    if values.is_empty() || width == 0 {
+        return String::new();
+    }
+    let start = values.len().saturating_sub(width);
+    values[start..]
+        .iter()
+        .map(|&v| {
+            let idx = (v.clamp(0.0, 1.0) * (BARS.len() - 1) as f64).round() as usize;
+            BARS[idx]
+        })
+        .collect()
+}
+
 pub fn format_duration(secs: i64) -> String {
     if secs <= 0 {
         return "arriving…".to_string();
@@ -327,6 +346,14 @@ pub fn format_duration(secs: i64) -> String {
 mod tests {
     use super::*;
     use crate::app::ColorMode;
+
+    #[test]
+    fn sparkline_maps_extremes_and_keeps_tail() {
+        assert_eq!(text_sparkline(&[], 8), "");
+        assert_eq!(text_sparkline(&[0.0, 1.0], 8), "▁█");
+        // Only the last `width` samples are kept.
+        assert_eq!(text_sparkline(&[0.0, 0.0, 1.0], 1), "█");
+    }
 
     #[test]
     fn crit_style_reverses_only_in_mono() {
