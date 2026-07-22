@@ -102,6 +102,14 @@ impl LogEvent {
         )
     }
 
+    pub fn attach_container_to_probe(container: &str, target: &str, probe_id: Option<u64>) -> Self {
+        Self::action(
+            kind::CONTAINER,
+            format!("Detached container «{container}» to reattach to probe «{target}»."),
+            probe_id,
+        )
+    }
+
     /// "Installed waypoint «name»."
     pub fn deploy_waypoint(name: &str, probe_id: Option<u64>) -> Self {
         Self::action(kind::WAYPOINT, format!("Installed waypoint «{name}»."), probe_id)

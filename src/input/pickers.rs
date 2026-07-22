@@ -513,6 +513,11 @@ pub(super) fn handle_detach_event(
                 return;
             }
         }
+        ActiveWizard::Detach(DetachInput::PickTargetProbe { selection, probes, .. }) => {
+            if list_move(code, selection, probes.len()) {
+                return;
+            }
+        }
         _ => {}
     }
     match &state.active_wizard {
@@ -566,36 +571,54 @@ pub(super) fn handle_detach_event(
                         *selection,
                     )
                 };
-                let mode = DETACH_MODES[sel].0;
-                if mode == "hidden_on_asteroid" {
-                    let asteroids = state.collect_asteroid_candidates();
-                    if asteroids.is_empty() {
-                        state.set_wizard_error("no asteroids in current sector — scan first".into());
-                    } else {
-                        state.active_wizard = ActiveWizard::Detach(DetachInput::PickAsteroid {
-                            manny_id,
-                            manny_name,
-                            container_id,
-                            container_name,
-                            asteroids,
-                            selection: 0,
-                            error: None,
-                        });
+                match DETACH_MODES[sel].0 {
+                    "hidden_on_asteroid" => {
+                        let asteroids = state.collect_asteroid_candidates();
+                        if asteroids.is_empty() {
+                            state.set_wizard_error("no asteroids in current sector — scan first".into());
+                        } else {
+                            state.active_wizard = ActiveWizard::Detach(DetachInput::PickAsteroid {
+                                manny_id,
+                                manny_name,
+                                container_id,
+                                container_name,
+                                asteroids,
+                                selection: 0,
+                                error: None,
+                            });
+                        }
                     }
-                } else {
-                    fetch_detach(
-                        manny_id,
-                        container_id,
-                        "drifting".into(),
-                        None,
-                        client.clone(),
-                        tx.clone(),
-                    );
-                    state.log_event(LogEvent::detach_container(
-                        &container_name,
-                        false,
-                        state.active_probe_id,
-                    ));
+                    "attach_to_probe" => {
+                        let probes = state.other_fleet_probes();
+                        if probes.is_empty() {
+                            state.set_wizard_error("no other probe in the fleet".into());
+                        } else {
+                            state.active_wizard = ActiveWizard::Detach(DetachInput::PickTargetProbe {
+                                manny_id,
+                                manny_name,
+                                container_id,
+                                container_name,
+                                probes,
+                                selection: 0,
+                                error: None,
+                            });
+                        }
+                    }
+                    _ => {
+                        fetch_detach(
+                            manny_id,
+                            container_id,
+                            "drifting".into(),
+                            None,
+                            client.clone(),
+                            tx.clone(),
+                        );
+                        state.log_event(LogEvent::detach_container(
+                            &container_name,
+                            false,
+                            state.active_probe_id,
+                        ));
+                    }
                 }
             }
             _ => {}
@@ -631,6 +654,46 @@ pub(super) fn handle_detach_event(
                     tx.clone(),
                 );
                 state.log_event(LogEvent::detach_container(&container_name, true, state.active_probe_id));
+            }
+            _ => {}
+        },
+        ActiveWizard::Detach(DetachInput::PickTargetProbe { .. }) => match code {
+            KeyCode::Esc => state.close_wizard(),
+            KeyCode::Enter => {
+                let (manny_id, container_id, target_id, target_name, container_name) = {
+                    let ActiveWizard::Detach(DetachInput::PickTargetProbe {
+                        manny_id,
+                        container_id,
+                        container_name,
+                        probes,
+                        selection,
+                        ..
+                    }) = &state.active_wizard
+                    else {
+                        return;
+                    };
+                    let (tid, tname) = probes[*selection].clone();
+                    (
+                        manny_id.clone(),
+                        container_id.clone(),
+                        tid,
+                        tname,
+                        container_name.clone(),
+                    )
+                };
+                fetch_detach(
+                    manny_id,
+                    container_id,
+                    "attach_to_probe".into(),
+                    Some(target_id.to_string()),
+                    client.clone(),
+                    tx.clone(),
+                );
+                state.log_event(LogEvent::attach_container_to_probe(
+                    &container_name,
+                    &target_name,
+                    state.active_probe_id,
+                ));
             }
             _ => {}
         },

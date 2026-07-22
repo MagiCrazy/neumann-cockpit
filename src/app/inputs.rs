@@ -86,9 +86,10 @@ pub const RESOURCE_TYPES: [&str; 4] = ["deuterium", "metals", "ice", "carbon_com
 
 pub const RESOURCE_LABELS: [&str; 4] = ["deuterium", "metals", "ice", "carbon"];
 
-pub const DETACH_MODES: [(&str, &str); 2] = [
+pub const DETACH_MODES: [(&str, &str); 3] = [
     ("drifting", "drifting — leave in sector"),
     ("hidden_on_asteroid", "hidden — attach to asteroid"),
+    ("attach_to_probe", "attach — to another probe"),
 ];
 
 pub enum ObjectActionInput {
@@ -600,6 +601,17 @@ pub enum DetachInput {
         container_id: String,
         container_name: String,
         asteroids: Vec<(String, String)>,
+        selection: usize,
+        error: Option<String>,
+    },
+    /// `attach_to_probe` mode (API v91): pick another owned probe in the same
+    /// sector to reattach the container (and its contents) to.
+    PickTargetProbe {
+        manny_id: String,
+        manny_name: String,
+        container_id: String,
+        container_name: String,
+        probes: Vec<(u64, String)>,
         selection: usize,
         error: Option<String>,
     },

@@ -10,7 +10,7 @@ use ratatui::buffer::Buffer;
 use ratatui::Terminal;
 
 use crate::api::types::Probe;
-use crate::app::{ActiveWizard, AppState, ColorMode, ContainerRulesInput, Pane, TransferProbeInput};
+use crate::app::{ActiveWizard, AppState, ColorMode, ContainerRulesInput, DetachInput, Pane, TransferProbeInput};
 use crate::ui::theme::{palette, ratio_color};
 
 /// Flatten a rendered buffer to text, one line per row, for `contains` checks.
@@ -157,4 +157,23 @@ fn transfer_probe_overlay_lists_targets() {
         text.contains("Falling Outside") && text.contains("Sleeper Service"),
         "targets listed"
     );
+}
+
+#[test]
+fn detach_attach_to_probe_overlay_lists_target_probes() {
+    // attach_to_probe detach mode (API v91): the target-probe picker renders.
+    let mut state = AppState::default();
+    state.active_wizard = ActiveWizard::Detach(DetachInput::PickTargetProbe {
+        manny_id: "m1".into(),
+        manny_name: "Grey Area".into(),
+        container_id: "c1".into(),
+        container_name: "cargo-hold-2".into(),
+        probes: vec![(2, "Falling Outside".into())],
+        selection: 0,
+        error: None,
+    });
+    let text = buffer_text(&render_cockpit(&state, 90, 24));
+    assert!(text.contains("cargo-hold-2"), "container named");
+    assert!(text.contains("Attach to probe"), "prompt shown");
+    assert!(text.contains("Falling Outside"), "target probe listed");
 }
