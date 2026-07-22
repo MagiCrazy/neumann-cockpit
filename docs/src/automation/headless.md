@@ -14,13 +14,13 @@ A bare launch (`neumann-cockpit`, no `--script`) is the interactive cockpit, unc
 
 One command per line — the same grammar as the interactive console. Blank lines and `#` comments are ignored.
 
-A **resupply run** — detach a container, mine it full with every idle manny, bring it back:
+A **resupply run** — detach a container, mine it full with every idle manny, bring it back (quote a name with spaces or a keyword, e.g. `"Metal C #1"`):
 
 ```text
 # resupply run
-detach box by Alpha mode hidden_on_asteroid at Rock
-mine metals 900 by all to box
-recover box by Alpha
+detach "Metal C #1" by Alpha mode hidden_on_asteroid at Rock
+mine metals 900 by all to "Metal C #1"
+recover by Alpha at "Metal C #1"
 ```
 
 A **fabrication run** — build a complex item by crafting its parts first, then assembling (see [`craft`](scripting.md#fabricating-a-complex-item)):

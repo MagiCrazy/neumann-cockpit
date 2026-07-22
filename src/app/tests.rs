@@ -2934,6 +2934,31 @@ fn script_craft_parse_and_resolve() {
 }
 
 #[test]
+fn tokenize_groups_quoted_spans_and_keeps_quotes() {
+    use crate::app::command::{dequote, tokenize};
+    let toks = tokenize(r#"detach "Metal C #1" by manny-1"#);
+    assert_eq!(toks, vec!["detach", "\"Metal C #1\"", "by", "manny-1"]);
+    assert_eq!(dequote("\"Metal C #1\""), "Metal C #1");
+    assert_eq!(dequote("bare"), "bare");
+}
+
+#[test]
+fn quoted_name_with_keyword_stays_one_value() {
+    use crate::app::command::{mine_buckets, tokenize};
+    // A container named "Ready to Go" — the inner `to` must NOT split.
+    let toks = tokenize(r#"metals 0.2 to "Ready to Go""#);
+    let (pos, _by, _at, to) = mine_buckets(&toks);
+    assert_eq!(pos, vec!["metals", "0.2"]);
+    assert_eq!(to.join(" "), "Ready to Go", "quoted keyword is part of the name");
+
+    // Without quotes the inner `to` IS a delimiter and corrupts the name —
+    // documents why keyword-bearing names must be quoted.
+    let bare = tokenize("metals 0.2 to Ready to Go");
+    let (_p, _b, _a, to2) = mine_buckets(&bare);
+    assert_eq!(to2.join(" "), "Ready Go", "bare keyword-in-name is dropped");
+}
+
+#[test]
 fn script_craft_fans_out_parts_across_builders() {
     let mut s = AppState::default();
     s.recipes = vec![
