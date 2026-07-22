@@ -405,6 +405,12 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         state.finish_action("relay turn-on order sent", Refetch::All);
                     }
                     ApiMessage::ScutRelayTurnOnError(e) => state.set_wizard_error(e),
+                    ApiMessage::TransitBeaconStarted => {
+                        state.finish_action("transit beacon install order sent", Refetch::All);
+                    }
+                    // Fired directly from the object-action picker (no wizard open),
+                    // so the failure surfaces as a status-bar error, not a wizard one.
+                    ApiMessage::TransitBeaconError(e) => state.set_error(e),
                     ApiMessage::ScutNetworkFetched(network) => {
                         if matches!(state.active_wizard, ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { .. })) {
                             state.scut_network_view = Some(network);

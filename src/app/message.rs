@@ -84,6 +84,8 @@ pub enum ApiMessage {
     MissionAbandonError(String),
     ScutRelayTurnedOn,
     ScutRelayTurnOnError(String),
+    TransitBeaconStarted,
+    TransitBeaconError(String),
     ScutNetworkFetched(ScutNetwork),
     ScutNetworkError(String),
     MessagesFetched(Vec<ProbeMessage>),

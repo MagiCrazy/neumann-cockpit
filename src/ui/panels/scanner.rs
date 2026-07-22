@@ -379,6 +379,10 @@ pub(crate) fn sector_object_lines<'a>(obj: &'a SectorObject, compact: bool, p: P
     if salvageable {
         main_spans.push(Span::styled("  ⬡ salvageable", Style::default().fg(p.warn)));
     }
+    // Active relay carrying a transit beacon (API v96): marks a safe-corridor node.
+    if obj.object_type == SectorObjectType::ScutRelay && obj.is_transit_beacon == Some(true) {
+        main_spans.push(Span::styled("  ⚡ transit beacon", Style::default().fg(p.good)));
+    }
     if !manny_state.is_empty() {
         main_spans.push(Span::styled(format!("  [{manny_state}]"), dim));
     }

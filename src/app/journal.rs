@@ -235,6 +235,14 @@ impl LogEvent {
         Self::action(kind::RELAY, s, probe_id)
     }
 
+    pub fn install_transit_beacon(relay: &str, probe_id: Option<u64>) -> Self {
+        Self::action(
+            kind::RELAY,
+            format!("Dispatched a manny to fit a transit beacon on relay «{relay}»."),
+            probe_id,
+        )
+    }
+
     pub fn message_sent(recipient: &str, probe_id: Option<u64>) -> Self {
         Self::action(kind::MESSAGE, format!("Sent a message to «{recipient}»."), probe_id)
     }

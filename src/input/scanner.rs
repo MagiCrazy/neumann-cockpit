@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 
 use super::geometry::list_nav;
 use crate::api::client::ApiClient;
-use crate::api::tasks::{fetch_inspect, fetch_recover, fetch_scut_network, fetch_turn_on_relay};
+use crate::api::tasks::{fetch_inspect, fetch_install_beacon, fetch_recover, fetch_scut_network, fetch_turn_on_relay};
 use crate::app::{
     ActiveWizard, ApiMessage, AppState, DeployInput, LogEvent, MineInput, ObjectAction, ObjectActionInput,
     SalvageInput, ScutNetworkInput, ScutRelayInput, WaypointsInput,
@@ -73,6 +73,15 @@ pub(super) fn dispatch_object_action(
                     buf: String::new(),
                     error: None,
                 });
+            }
+            Err(_) => {
+                state.error = Some("relay has an unexpected id format".into());
+            }
+        },
+        ObjectAction::InstallTransitBeacon => match object_id.parse::<i64>() {
+            Ok(relay_id) => {
+                fetch_install_beacon(manny_id, relay_id, client.clone(), tx.clone());
+                state.log_event(LogEvent::install_transit_beacon(&object_name, state.active_probe_id));
             }
             Err(_) => {
                 state.error = Some("relay has an unexpected id format".into());
