@@ -1,5 +1,26 @@
 # Changelog
 
+## [96.0.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v86.1.1...neumann-cockpit-v96.0.0) (2026-07-22)
+
+
+### Features
+
+* **api:** track API v96 — phase 1 (additive fields + audits) ([#250](https://github.com/MagiCrazy/neumann-cockpit/issues/250)) ([b3406df](https://github.com/MagiCrazy/neumann-cockpit/commit/b3406dfc098f756f775b521c35e576adfebd7baa))
+* **fleet:** revert to default when the active probe is destroyed (API v94) ([#255](https://github.com/MagiCrazy/neumann-cockpit/issues/255)) ([548e759](https://github.com/MagiCrazy/neumann-cockpit/commit/548e7594a619d34882764e40fb3648633ea2f74a))
+* **mannies:** show the recipe a Manny is crafting ([#241](https://github.com/MagiCrazy/neumann-cockpit/issues/241)) ([550d02a](https://github.com/MagiCrazy/neumann-cockpit/commit/550d02a95199307fae059dd81433676c14faa0be))
+* **mannies:** transfer a Manny to another fleet probe ([#251](https://github.com/MagiCrazy/neumann-cockpit/issues/251)) ([6fada32](https://github.com/MagiCrazy/neumann-cockpit/commit/6fada32127ba1cc97ad0837991eb1fc28f14300d))
+* **notify:** desktop notification on long-task completion ([#245](https://github.com/MagiCrazy/neumann-cockpit/issues/245)) ([ad3ece5](https://github.com/MagiCrazy/neumann-cockpit/commit/ad3ece5b3a984c96675990f9ffae5a30df4be174)), closes [#203](https://github.com/MagiCrazy/neumann-cockpit/issues/203)
+* **scut:** install a SCUT transit beacon on an active relay (API v96) ([#253](https://github.com/MagiCrazy/neumann-cockpit/issues/253)) ([e150054](https://github.com/MagiCrazy/neumann-cockpit/commit/e1500543238d085129d6be12f17978c2945c4552))
+* **storage:** detach a container by attaching it to another probe (API v91) ([#252](https://github.com/MagiCrazy/neumann-cockpit/issues/252)) ([6b5a650](https://github.com/MagiCrazy/neumann-cockpit/commit/6b5a65058a99c6b5e39d9bccb592d2617712ccd9))
+* **telemetry:** vital-ratio sparklines in the zoomed Probe pane ([#244](https://github.com/MagiCrazy/neumann-cockpit/issues/244)) ([7dc5af4](https://github.com/MagiCrazy/neumann-cockpit/commit/7dc5af44294b8be7cc015abef7d9b5e11b11a935)), closes [#201](https://github.com/MagiCrazy/neumann-cockpit/issues/201)
+
+
+### Bug Fixes
+
+* **mannies:** label the transfer/install/assemble task states (API v81/v86/v93/v96) ([#256](https://github.com/MagiCrazy/neumann-cockpit/issues/256)) ([d1af1cf](https://github.com/MagiCrazy/neumann-cockpit/commit/d1af1cf68218de82c0eed9aea7f217b736c667b1))
+* **store:** surface SQLite writer errors instead of swallowing them ([#248](https://github.com/MagiCrazy/neumann-cockpit/issues/248)) ([71c7065](https://github.com/MagiCrazy/neumann-cockpit/commit/71c70653500d5da4595d3d7d1ee261489f5d96eb)), closes [#216](https://github.com/MagiCrazy/neumann-cockpit/issues/216)
+* **ui:** make container routing-rules editor semantics unambiguous ([#243](https://github.com/MagiCrazy/neumann-cockpit/issues/243)) ([95faae5](https://github.com/MagiCrazy/neumann-cockpit/commit/95faae59c4c00109eaad0f5633c6a4d1a9f73a75)), closes [#234](https://github.com/MagiCrazy/neumann-cockpit/issues/234)
+
 ## [86.1.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v86.1.0...neumann-cockpit-v86.1.1) (2026-07-14)
 
 
