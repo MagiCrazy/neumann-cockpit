@@ -184,7 +184,9 @@ impl AppState {
         if !line.is_empty() && self.command_history.last().map(String::as_str) != Some(line) {
             self.command_history.push(line.to_string());
         }
-        let mut parts = line.split_whitespace();
+        // Quote-aware tokenization so a `:` command target may be quoted
+        // (spaces or a keyword inside a name); args keep quotes, dequoted at use.
+        let mut parts = tokenize(line).into_iter();
         let Some(verb) = parts.next() else { return false };
         let args: Vec<&str> = parts.collect();
 
@@ -246,8 +248,10 @@ impl AppState {
                     // Bare `:craft` opens the production console.
                     self.active_wizard = ActiveWizard::Fabrication(FabricationInput::pick_recipe(None));
                 } else {
-                    // `:craft <recipe>` enqueues it (×1).
-                    self.craft_command(&args.join(" "));
+                    // `:craft <recipe>` enqueues it (×1). Dequote so a quoted
+                    // multi-word recipe name resolves.
+                    let query = args.join(" ");
+                    self.craft_command(dequote(&query));
                 }
             }
             "mine" => {
@@ -533,15 +537,60 @@ pub(super) fn mine_buckets<'a>(args: &[&'a str]) -> (Vec<&'a str>, Vec<&'a str>,
             "by" => bucket = 1,
             "at" => bucket = 2,
             "to" => bucket = 3,
+            // A quoted token (e.g. `"to"`) keeps its quotes here so it never
+            // matches a keyword — dequoted into the bucket as a value.
             _ => match bucket {
-                1 => by.push(tok),
-                2 => at.push(tok),
-                3 => to.push(tok),
-                _ => positional.push(tok),
+                1 => by.push(dequote(tok)),
+                2 => at.push(dequote(tok)),
+                3 => to.push(dequote(tok)),
+                _ => positional.push(dequote(tok)),
             },
         }
     }
     (positional, by, at, to)
+}
+
+/// Split a command line into tokens, treating a **double-quoted span as a single
+/// token** (with its quotes kept, so keyword-matching in `split_kw`/`mine_buckets`
+/// skips it; `dequote` strips them at use). This lets a target name contain
+/// spaces *or* a keyword: `at "Ready to Go"` stays one value, the inner `to` is
+/// not a delimiter. An unterminated quote runs to end of line.
+pub(super) fn tokenize(line: &str) -> Vec<&str> {
+    let b = line.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i].is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        if b[i] == b'"' {
+            i += 1;
+            while i < b.len() && b[i] != b'"' {
+                i += 1;
+            }
+            if i < b.len() {
+                i += 1; // include the closing quote
+            }
+        } else {
+            while i < b.len() && !b[i].is_ascii_whitespace() {
+                i += 1;
+            }
+        }
+        out.push(&line[start..i]);
+    }
+    out
+}
+
+/// Strip one layer of surrounding double quotes from a token, if present.
+pub(super) fn dequote(tok: &str) -> &str {
+    let b = tok.as_bytes();
+    if b.len() >= 2 && b[0] == b'"' && b[b.len() - 1] == b'"' {
+        &tok[1..tok.len() - 1]
+    } else {
+        tok
+    }
 }
 
 /// The builder-independent target of a mine order (`resolve_mine_target`).

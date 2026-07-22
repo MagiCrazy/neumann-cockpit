@@ -19,7 +19,7 @@
 //! probe's `movement` clearing (`movement_arrival`). The `observed_busy` guard
 //! of `StepState::Running` covers the fire→busy lag the same way.
 
-use super::command::{mine_buckets, mine_resource};
+use super::command::{dequote, mine_buckets, mine_resource, tokenize};
 use super::*;
 
 /// Cap on script length, mirroring `QUEUE_MAX` — a runaway script never
@@ -184,11 +184,13 @@ fn split_kw<'a>(args: &[&'a str]) -> (Vec<&'a str>, Vec<&'a str>, Vec<&'a str>, 
             "by" => bucket = 1,
             "at" => bucket = 2,
             "mode" => bucket = 3,
+            // Quoted tokens keep their quotes so they never match a keyword;
+            // dequote strips them as the value goes into its bucket.
             _ => match bucket {
-                1 => by.push(tok),
-                2 => at.push(tok),
-                3 => mode.push(tok),
-                _ => positional.push(tok),
+                1 => by.push(dequote(tok)),
+                2 => at.push(dequote(tok)),
+                3 => mode.push(dequote(tok)),
+                _ => positional.push(dequote(tok)),
             },
         }
     }
@@ -341,10 +343,14 @@ impl AppState {
     /// `resolve` at fire time). Catches an unknown verb, malformed coordinates,
     /// unknown resource names, and a non-numeric repair percent.
     pub fn parse_script_line(&self, line: &str) -> Result<ScriptCommand, String> {
-        let mut it = line.split_whitespace();
+        // Quote-aware: a `"…"` span is one token (keeps its quotes so keyword
+        // matching skips it; dequoted at use). Args are kept verbatim (quotes
+        // included) for `resolve`'s `split_kw`/`mine_buckets`.
+        let mut it = tokenize(line).into_iter();
         let verb_tok = it.next().ok_or("empty line")?;
-        let verb = ScriptVerb::parse(verb_tok)
-            .ok_or_else(|| format!("unknown action \"{verb_tok}\" — travel/mine/repair/salvage/detach/recover"))?;
+        let verb = ScriptVerb::parse(verb_tok).ok_or_else(|| {
+            format!("unknown action \"{verb_tok}\" — travel/mine/repair/salvage/detach/recover/craft")
+        })?;
         let args: Vec<String> = it.map(String::from).collect();
 
         match verb {
