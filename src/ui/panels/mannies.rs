@@ -39,7 +39,7 @@ pub(crate) fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppSta
     let items: Vec<ListItem> = mannies
         .iter()
         .enumerate()
-        .map(|(i, m)| manny_list_item(m, focused && i == sel, p))
+        .map(|(i, m)| manny_list_item(m, focused && i == sel, p, inner.width))
         .collect();
 
     let list = List::new(items)
@@ -119,6 +119,25 @@ pub(crate) fn manny_mining_detail(m: &Manny) -> Option<MiningDetail> {
     })
 }
 
+/// Crafting task detail, extracted from the Manny's `task` payload: the
+/// human-readable recipe name (`recipeName`, falling back to the `recipe` id).
+/// Covers both a Manny crafting on its own and one assisting the atomic
+/// printer — both carry the recipe. `None` unless it is (assisting a) craft
+/// with a visible payload.
+pub(crate) fn manny_crafting_detail(m: &Manny) -> Option<String> {
+    if !matches!(
+        m.current_task,
+        Some(MannyTask::Crafting) | Some(MannyTask::AssistingAtomicPrinter)
+    ) {
+        return None;
+    }
+    let task = m.task.as_ref()?;
+    task.get("recipeName")
+        .or_else(|| task.get("recipe"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+}
+
 /// A hidden artificial object (detached container) a Manny turned up while
 /// mining, extracted from its `task` payload. `None` unless one was detected.
 pub(crate) fn manny_artificial_detection(m: &Manny) -> Option<crate::api::types::ArtificialObjectDetection> {
@@ -152,8 +171,21 @@ pub(crate) fn manny_task_progress(m: &Manny) -> f64 {
     (1.0 - remaining_now / total).clamp(p0, 1.0)
 }
 
-pub(crate) fn manny_list_item(m: &Manny, selected: bool, p: Palette) -> ListItem<'_> {
-    // On the selected row everything is accent so the ETA/% stay legible;
+/// Truncate `s` to at most `max` display columns, appending an ellipsis when
+/// it does not fit. Returns an empty string if `max` is 0.
+fn truncate_ellipsis(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        return s.to_string();
+    }
+    match max {
+        0 => String::new(),
+        1 => "…".to_string(),
+        _ => format!("{}…", s.chars().take(max - 1).collect::<String>()),
+    }
+}
+
+pub(crate) fn manny_list_item(m: &Manny, selected: bool, p: Palette, width: u16) -> ListItem<'_> {
+    // On the selected row everything is accent so the ETA stays legible;
     // otherwise the palette's text for the name/task and dim for the rest.
     let primary = if selected {
         Style::default().fg(p.accent).add_modifier(Modifier::BOLD)
@@ -174,11 +206,8 @@ pub(crate) fn manny_list_item(m: &Manny, selected: bool, p: Palette) -> ListItem
     let task = m.current_task.as_ref();
     let task_style = if task.is_none() { secondary } else { primary };
 
-    let progress = if m.current_task.is_some() {
-        format!(" {:3.0}%", manny_task_progress(m) * 100.0)
-    } else {
-        String::new()
-    };
+    // Time remaining only — the raw % lives in the wider overview/detail views;
+    // the compact row keeps the ETA, which is what the pilot watches.
     let eta = manny_task_eta(m)
         .filter(|_| m.current_task.is_some())
         .map(|d| format!(" · {d}"))
@@ -190,11 +219,34 @@ pub(crate) fn manny_list_item(m: &Manny, selected: bool, p: Palette) -> ListItem
         ""
     };
 
+    // The flexible detail span, mirroring the wider views in brief: the recipe
+    // a Manny is crafting, or what/where it is mining (`{resources} → {dest}`).
+    // It truncates to the width left after the fixed columns and the ETA, so a
+    // long name never pushes the ETA off-row.
+    let label = manny_task_label(task);
+    let detail_text = manny_crafting_detail(m).or_else(|| {
+        manny_mining_detail(m).map(|d| {
+            let what = d.resources.unwrap_or(d.target);
+            format!("{what} → {}", d.destination)
+        })
+    });
+    let detail = detail_text
+        .map(|t| {
+            // Reserved: highlight symbol (2) · "{loc} " (2) · name (12) ·
+            // label · eta · scut · the detail's own leading space (1).
+            let fixed = 2 + 2 + 12 + label.chars().count() + eta.chars().count() + via_scut.chars().count() + 1;
+            let budget = (width as usize).saturating_sub(fixed);
+            truncate_ellipsis(&t, budget)
+        })
+        .filter(|t| !t.is_empty())
+        .map(|t| format!(" {t}"))
+        .unwrap_or_default();
+
     ListItem::new(Line::from(vec![
         Span::styled(format!("{loc} "), secondary),
         Span::styled(format!("{:<12}", m.name), primary),
-        Span::styled(manny_task_label(task), task_style),
-        Span::styled(progress, secondary),
+        Span::styled(label, task_style),
+        Span::styled(detail, secondary),
         Span::styled(eta, secondary),
         Span::styled(via_scut, secondary),
     ]))
@@ -202,7 +254,7 @@ pub(crate) fn manny_list_item(m: &Manny, selected: bool, p: Palette) -> ListItem
 
 #[cfg(test)]
 mod tests {
-    use super::manny_artificial_detection;
+    use super::{manny_artificial_detection, manny_crafting_detail};
     use crate::api::types::Manny;
 
     fn mining_manny(task: &str) -> Manny {
@@ -210,6 +262,18 @@ mod tests {
             r#"{{
             "id":"m1","name":"Manny-1","location":{{"type":"sector","sector":null}},
             "currentTask":"mining","taskProgressPercent":50.0,
+            "cargo":{{"capacity":0.3,"deuterium":0.0,"metals":0.0,"ice":0.0,"organicCompounds":0.0}},
+            "canReceiveOrders":false,"taskEstimatedEndTime":null,"task":{task}
+        }}"#
+        ))
+        .unwrap()
+    }
+
+    fn crafting_manny(current_task: &str, task: &str) -> Manny {
+        serde_json::from_str(&format!(
+            r#"{{
+            "id":"m1","name":"Manny-1","location":{{"type":"probe","sector":null}},
+            "currentTask":"{current_task}","taskProgressPercent":50.0,
             "cargo":{{"capacity":0.3,"deuterium":0.0,"metals":0.0,"ice":0.0,"organicCompounds":0.0}},
             "canReceiveOrders":false,"taskEstimatedEndTime":null,"task":{task}
         }}"#
@@ -231,5 +295,42 @@ mod tests {
     fn no_detection_without_payload() {
         let m = mining_manny(r#"{"objectId":"ast-1"}"#);
         assert!(manny_artificial_detection(&m).is_none());
+    }
+
+    #[test]
+    fn crafting_detail_prefers_recipe_name() {
+        let m = crafting_manny("crafting", r#"{"recipe":"battery_pack","recipeName":"Battery pack"}"#);
+        assert_eq!(manny_crafting_detail(&m).as_deref(), Some("Battery pack"));
+    }
+
+    #[test]
+    fn crafting_detail_falls_back_to_recipe_id() {
+        let m = crafting_manny("crafting", r#"{"recipe":"battery_pack"}"#);
+        assert_eq!(manny_crafting_detail(&m).as_deref(), Some("battery_pack"));
+    }
+
+    #[test]
+    fn crafting_detail_covers_atomic_printer_assist() {
+        let m = crafting_manny(
+            "assisting_atomic_printer",
+            r#"{"recipe":"micro_conductor","recipeName":"Micro-etched conductor"}"#,
+        );
+        assert_eq!(manny_crafting_detail(&m).as_deref(), Some("Micro-etched conductor"));
+    }
+
+    #[test]
+    fn truncate_ellipsis_fits_and_shrinks() {
+        use super::truncate_ellipsis;
+        assert_eq!(truncate_ellipsis("Battery pack", 20), "Battery pack");
+        assert_eq!(truncate_ellipsis("Battery pack", 12), "Battery pack");
+        assert_eq!(truncate_ellipsis("Battery pack", 5), "Batt…");
+        assert_eq!(truncate_ellipsis("Battery pack", 1), "…");
+        assert_eq!(truncate_ellipsis("Battery pack", 0), "");
+    }
+
+    #[test]
+    fn crafting_detail_none_when_not_crafting() {
+        let m = mining_manny(r#"{"recipeName":"Battery pack"}"#);
+        assert!(manny_crafting_detail(&m).is_none());
     }
 }
