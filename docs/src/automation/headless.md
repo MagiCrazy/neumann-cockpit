@@ -12,13 +12,24 @@ A bare launch (`neumann-cockpit`, no `--script`) is the interactive cockpit, unc
 
 ## The script file
 
-One command per line — the same grammar as the interactive console. Blank lines and `#` comments are ignored:
+One command per line — the same grammar as the interactive console. Blank lines and `#` comments are ignored.
+
+A **resupply run** — detach a container, mine it full with every idle manny, bring it back:
 
 ```text
 # resupply run
 detach box by Alpha mode hidden_on_asteroid at Rock
 mine metals 900 by all to box
 recover box by Alpha
+```
+
+A **fabrication run** — build a complex item by crafting its parts first, then assembling (see [`craft`](scripting.md#fabricating-a-complex-item)):
+
+```text
+# additional_container = steel_plate + steel_bar (each from metals)
+craft steel_plate by Alpha
+craft steel_bar by Alpha
+craft additional_container by Alpha
 ```
 
 ## Output

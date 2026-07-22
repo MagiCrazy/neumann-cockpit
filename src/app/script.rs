@@ -36,6 +36,7 @@ pub enum ScriptVerb {
     Salvage,
     Detach,
     Recover,
+    Craft,
 }
 
 impl ScriptVerb {
@@ -47,6 +48,7 @@ impl ScriptVerb {
             "salvage" => Self::Salvage,
             "detach" => Self::Detach,
             "recover" => Self::Recover,
+            "craft" | "fabricate" => Self::Craft,
             _ => return None,
         })
     }
@@ -59,6 +61,7 @@ impl ScriptVerb {
             Self::Salvage => "salvage",
             Self::Detach => "detach",
             Self::Recover => "recover",
+            Self::Craft => "craft",
         }
     }
 
@@ -71,6 +74,7 @@ impl ScriptVerb {
             Self::Salvage => "[by <manny>] [at <wreck>]",
             Self::Detach => "<container> [by <manny>] [mode <drifting|hidden_on_asteroid>] [at <asteroid>]",
             Self::Recover => "[by <manny>] [at <container>]",
+            Self::Craft => "<recipe> [by <manny>]",
         }
     }
 }
@@ -118,6 +122,14 @@ pub enum ScriptAction {
         manny_id: String,
         object_id: String,
     },
+    /// Fabricate a recipe (#258). A Manny recipe carries its builder id (busy→idle
+    /// completion); an atomic-printer recipe has no builder (`None`) and completes
+    /// when no Manny is assisting the printer.
+    Craft {
+        fabricator: Fabricator,
+        manny_id: Option<String>,
+        recipe_id: String,
+    },
 }
 
 impl ScriptAction {
@@ -131,6 +143,9 @@ impl ScriptAction {
             | Self::Salvage { manny_id, .. }
             | Self::Detach { manny_id, .. }
             | Self::Recover { manny_id, .. } => Some(manny_id),
+            // A Manny craft carries its builder; a printer craft has none (its
+            // completion is polled separately, see `action_in_progress`).
+            Self::Craft { manny_id, .. } => manny_id.as_deref(),
         }
     }
 }
@@ -243,6 +258,7 @@ fn script_log_event(group: &[ScriptAction], probe_id: Option<u64>) -> LogEvent {
             (kind::CONTAINER, format!("Detached a storage container, {how}."))
         }
         Some(ScriptAction::Recover { .. }) => (kind::CONTAINER, "Recovered a detached storage container.".into()),
+        Some(ScriptAction::Craft { recipe_id, .. }) => (kind::CRAFT, format!("Started fabricating «{recipe_id}».")),
         None => ("script", "Ran an empty step.".into()),
     };
     LogEvent::action(k, summary, probe_id)
@@ -349,6 +365,12 @@ impl AppState {
                     }
                 }
             }
+            ScriptVerb::Craft => {
+                // Recipe token required; the recipe/builder resolve at fire time.
+                if args.first().is_none_or(|t| t == "by") {
+                    return Err("craft: usage <recipe> [by <manny>]".into());
+                }
+            }
             ScriptVerb::Salvage | ScriptVerb::Detach | ScriptVerb::Recover => {}
         }
         Ok(ScriptCommand { verb, args })
@@ -448,6 +470,47 @@ impl AppState {
                     object_id,
                 })
             }
+            ScriptVerb::Craft => {
+                let (pos, by, _, _) = split_kw(&args);
+                let query = pos.join(" ");
+                if query.is_empty() {
+                    return Err("craft: name a recipe".into());
+                }
+                // Resolve the recipe by name (exact, then substring) or by id —
+                // the same catalog the queue uses (`fabrication_recipes`).
+                let recipes = self.fabrication_recipes();
+                let resolved = recipes
+                    .iter()
+                    .find(|(_, r)| r.name.eq_ignore_ascii_case(&query) || r.id.eq_ignore_ascii_case(&query))
+                    .or_else(|| {
+                        let q = query.to_lowercase();
+                        recipes.iter().find(|(_, r)| r.name.to_lowercase().contains(&q))
+                    })
+                    .map(|(fab, r)| (*fab, r.id.clone()));
+                let Some((fabricator, recipe_id)) = resolved else {
+                    return Err(format!("craft: no recipe matching \"{query}\""));
+                };
+                match fabricator {
+                    Fabricator::AtomicPrinter => {
+                        if !self.has_atomic_printer() {
+                            return Err("craft: no atomic printer in inventory".into());
+                        }
+                        one(ScriptAction::Craft {
+                            fabricator,
+                            manny_id: None,
+                            recipe_id,
+                        })
+                    }
+                    Fabricator::Manny => {
+                        let (manny_id, _) = self.resolve_builder(&by)?;
+                        one(ScriptAction::Craft {
+                            fabricator,
+                            manny_id: Some(manny_id),
+                            recipe_id,
+                        })
+                    }
+                }
+            }
         }
     }
 
@@ -504,6 +567,18 @@ impl AppState {
     /// moving, a Manny action while its builder is busy (not accepting orders).
     /// Mirrors `craft_target_busy`.
     fn action_in_progress(&self, action: &ScriptAction) -> bool {
+        // An atomic-printer craft has no builder of its own; it is in flight while
+        // any Manny is assisting the printer (mirrors the queue's printer lane).
+        if let ScriptAction::Craft {
+            fabricator: Fabricator::AtomicPrinter,
+            ..
+        } = action
+        {
+            return self.mannies.as_ref().is_some_and(|ms| {
+                ms.iter()
+                    .any(|m| m.current_task == Some(crate::api::types::MannyTask::AssistingAtomicPrinter))
+            });
+        }
         match action.manny_id() {
             None => self.movement_arrival.is_some(),
             Some(id) => self

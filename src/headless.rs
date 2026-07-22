@@ -17,8 +17,11 @@ use tokio::sync::mpsc;
 use tokio::time::{interval, MissedTickBehavior};
 
 use crate::api::client::ApiClient;
-use crate::api::tasks::{fetch_all, fetch_detach, fetch_mine, fetch_move, fetch_recover, fetch_repair, fetch_salvage};
-use crate::app::{ApiMessage, AppState, LogEvent, ScriptAction, StepState};
+use crate::api::tasks::{
+    fetch_all, fetch_atomic_printer_craft, fetch_craft, fetch_detach, fetch_mine, fetch_move, fetch_recover,
+    fetch_repair, fetch_salvage,
+};
+use crate::app::{ApiMessage, AppState, Fabricator, LogEvent, ScriptAction, StepState};
 use crate::config::{self, Config, ConfigStatus};
 use crate::store;
 
@@ -225,6 +228,18 @@ fn spawn(action: ScriptAction, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>
             object_id,
         } => fetch_detach(manny_id, container_id, mode, object_id, client.clone(), tx.clone()),
         ScriptAction::Recover { manny_id, object_id } => fetch_recover(manny_id, object_id, client.clone(), tx.clone()),
+        ScriptAction::Craft {
+            fabricator,
+            manny_id,
+            recipe_id,
+        } => match fabricator {
+            Fabricator::Manny => {
+                if let Some(builder) = manny_id {
+                    fetch_craft(builder, recipe_id, client.clone(), tx.clone());
+                }
+            }
+            Fabricator::AtomicPrinter => fetch_atomic_printer_craft(recipe_id, client.clone(), tx.clone()),
+        },
     }
 }
 
@@ -242,7 +257,9 @@ fn dispatch(state: &mut AppState, msg: ApiMessage) {
         | ApiMessage::RepairError(e)
         | ApiMessage::SalvageError(e)
         | ApiMessage::DetachError(e)
-        | ApiMessage::RecoverError(e) => state.script_note_error(&e),
+        | ApiMessage::RecoverError(e)
+        | ApiMessage::CraftError(e)
+        | ApiMessage::AtomicPrinterCraftError(e) => state.script_note_error(&e),
         _ => {}
     }
 }

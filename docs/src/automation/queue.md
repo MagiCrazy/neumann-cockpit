@@ -16,4 +16,4 @@ The queue **auto-runs** — it drains as steps complete, no explicit "go". It is
 
 It **pauses** with `p` (and automatically on a craft failure — inspect, fix, resume), is capped at 32 steps, and is **session-only** (not persisted). A status-bar chip `⛭ done/total` shows progress with the console closed.
 
-> For a sequence of *different* action types (not just crafts) that must run in order, use [action scripting](scripting.md) instead.
+> For a sequence of *different* action types (not just crafts) that must run in order — or to fabricate **unattended** from a file — use [action scripting](scripting.md) instead: its `craft` verb runs recipes one at a time (parts first, then assembly). The queue is the interactive, parallel-lane tool; a script is the sequential, headless-capable one.

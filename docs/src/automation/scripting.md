@@ -25,6 +25,7 @@ Each line is one action. The MVP verbs:
 | `salvage` | `[by <manny>] [at <wreck>]` |
 | `detach` | `<container> [by <manny>] [mode <drifting\|hidden_on_asteroid>] [at <asteroid>]` |
 | `recover` | `[by <manny>] [at <container>]` |
+| `craft` | `<recipe> [by <manny>]` |
 
 Targets are matched by **case-insensitive substring** of a name (manny, asteroid, container), or an exact id. Where a target is unambiguous — the sole idle manny, the only asteroid in the sector — you can omit it.
 
@@ -49,6 +50,34 @@ recover box by Alpha
 1. Alpha detaches the container into the sector.
 2. **All** idle mannies mine into it, in parallel — the step holds until the last finishes.
 3. Only then does the recover run.
+
+## Two worked examples
+
+### Fabricating a complex item
+
+`craft <recipe>` fabricates one recipe. A recipe is matched by name (case-insensitive) or id; a manny recipe binds to a builder (`by <manny>`, else the sole idle onboard manny), an atomic-printer recipe needs no builder. The step waits for that craft to finish before the next line runs — so a **multi-step item is just its parts crafted in order, then the final assembly**:
+
+```text
+# an additional_container is built from a steel plate + a steel bar,
+# each itself crafted from raw metals — so craft the parts first.
+craft steel_plate by Alpha
+craft steel_bar by Alpha
+craft additional_container by Alpha
+```
+
+Each line fires only once Alpha is idle again, so the parts exist in the probe inventory by the time the container is assembled. (You need enough mined `metals` stocked for the intermediate crafts.) There is no auto-expansion of sub-components — you list them, which keeps what runs explicit and predictable.
+
+> The script sequences **manny** and **atomic-printer** recipes alike. A printer craft has no named builder; the step completes when no manny is left assisting the printer.
+
+### A mining resupply run
+
+The canonical fan-out (detach a container, mine it full with the whole fleet, bring it back) — see [Fork/join](#forkjoin) above:
+
+```text
+detach box by Alpha
+mine metals 900 by all to box
+recover box by Alpha
+```
 
 ## When a step fails
 

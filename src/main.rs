@@ -246,6 +246,20 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                     ScriptAction::Recover { manny_id, object_id } => {
                         fetch_recover(manny_id, object_id, client.clone(), tx.clone())
                     }
+                    ScriptAction::Craft {
+                        fabricator,
+                        manny_id,
+                        recipe_id,
+                    } => match fabricator {
+                        Fabricator::Manny => {
+                            if let Some(builder) = manny_id {
+                                fetch_craft(builder, recipe_id, client.clone(), tx.clone());
+                            }
+                        }
+                        Fabricator::AtomicPrinter => {
+                            fetch_atomic_printer_craft(recipe_id, client.clone(), tx.clone());
+                        }
+                    },
                 }
             }
             fetch_mannies(client.clone(), tx.clone());
@@ -351,7 +365,12 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                     // start is quiet (the fire path already refreshed mannies)
                     // and an error halts the queue.
                     ApiMessage::CraftStarted => {}
-                    ApiMessage::CraftError(e) => state.fail_queue(e),
+                    // A craft error can belong to the queue or a scripted craft;
+                    // route to both (each no-ops if it wasn't the one that fired).
+                    ApiMessage::CraftError(e) => {
+                        state.script_note_error(&e);
+                        state.fail_queue(e);
+                    }
                     ApiMessage::SalvageStarted => {
                         state.close_wizard();
                         state.finish_action("salvage order sent", Refetch::Mannies);
@@ -428,7 +447,10 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                     }
                     ApiMessage::DeployError(e) => state.set_wizard_error(e),
                     ApiMessage::AtomicPrinterCraftStarted => {}
-                    ApiMessage::AtomicPrinterCraftError(e) => state.fail_queue(e),
+                    ApiMessage::AtomicPrinterCraftError(e) => {
+                        state.script_note_error(&e);
+                        state.fail_queue(e);
+                    }
                     ApiMessage::RecipesFetched(recipes) => state.recipes = recipes,
                     ApiMessage::ProbeImprovementsFetched(improvements) => {
                         state.probe_improvements = improvements;
