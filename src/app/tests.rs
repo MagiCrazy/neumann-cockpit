@@ -1801,7 +1801,7 @@ fn probe_summary(id: u64, name: &str, is_default: bool) -> crate::api::types::Pr
 }
 
 #[test]
-fn transfer_deuterium_targets_exclude_the_piloted_probe() {
+fn other_fleet_probes_exclude_the_piloted_probe() {
     let mut state = AppState::default();
     state.fleet = vec![
         probe_summary(1, "Anchor", true),
@@ -1812,12 +1812,12 @@ fn transfer_deuterium_targets_exclude_the_piloted_probe() {
 
     // Piloting the default (active_probe_id = None → falls back to default 1):
     // the two drones are eligible, the source is excluded.
-    let targets = state.transfer_deuterium_targets();
+    let targets = state.other_fleet_probes();
     assert_eq!(targets, vec![(2, "Scout".to_string()), (3, "Rover".to_string())]);
 
     // Piloting a drone: the anchor and the other drone are eligible.
     state.active_probe_id = Some(2);
-    let ids: Vec<u64> = state.transfer_deuterium_targets().iter().map(|(id, _)| *id).collect();
+    let ids: Vec<u64> = state.other_fleet_probes().iter().map(|(id, _)| *id).collect();
     assert_eq!(ids, vec![1, 3]);
 
     // The Mannies menu enables the action on an idle Manny once a target exists.

@@ -521,6 +521,15 @@ pub fn fetch_transfer_deuterium(
     );
 }
 
+pub fn fetch_transfer_manny(manny_id: String, target_probe_id: u64, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    spawn_action(
+        tx,
+        async move { client.transfer_manny_to_probe(&manny_id, target_probe_id).await },
+        |_| ApiMessage::MannyTransferStarted,
+        ApiMessage::MannyTransferError,
+    );
+}
+
 pub fn fetch_scut_network(network_id: i64, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     spawn_action(
         tx,

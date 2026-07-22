@@ -497,6 +497,24 @@ impl ApiClient {
             .manny)
     }
 
+    /// Transfer a Manny to another owned probe (`POST .../transfer-to-probe`,
+    /// API v93). The target must be in the Manny's sector (same sector, or a
+    /// SCUT-reachable remote sector); the same-sector requirement is
+    /// server-validated (422). Duration matches a container detachment.
+    pub async fn transfer_manny_to_probe(&self, manny_id: &str, target_probe_id: u64) -> Result<Manny> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Body {
+            target_probe_id: u64,
+        }
+        #[derive(Deserialize)]
+        struct Resp {
+            manny: Manny,
+        }
+        let path = self.probe_path(&format!("/mannies/{manny_id}/transfer-to-probe"));
+        Ok(self.post::<Resp, _>(&path, &Body { target_probe_id }).await?.manny)
+    }
+
     /// List the probe's active missions (`GET /api/probe/missions`).
     pub async fn get_missions(&self) -> Result<Vec<Mission>> {
         #[derive(Deserialize)]

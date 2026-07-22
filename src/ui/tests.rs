@@ -10,7 +10,7 @@ use ratatui::buffer::Buffer;
 use ratatui::Terminal;
 
 use crate::api::types::Probe;
-use crate::app::{ActiveWizard, AppState, ColorMode, ContainerRulesInput, Pane};
+use crate::app::{ActiveWizard, AppState, ColorMode, ContainerRulesInput, Pane, TransferProbeInput};
 use crate::ui::theme::{palette, ratio_color};
 
 /// Flatten a rendered buffer to text, one line per row, for `contains` checks.
@@ -135,5 +135,26 @@ fn container_rules_overlay_shows_directional_wording() {
     assert!(
         text.contains("never placed here"),
         "per-type effect shown in plain language"
+    );
+}
+
+#[test]
+fn transfer_probe_overlay_lists_targets() {
+    // Manny transfer wizard (API v93): the picker shows the title and the
+    // candidate destination probes.
+    let mut state = AppState::default();
+    state.active_wizard = ActiveWizard::TransferProbe(TransferProbeInput::PickTarget {
+        manny_id: "m1".into(),
+        manny_name: "Grey Area".into(),
+        targets: vec![(2, "Falling Outside".into()), (3, "Sleeper Service".into())],
+        selection: 0,
+        error: None,
+    });
+    let text = buffer_text(&render_cockpit(&state, 90, 24));
+    assert!(text.contains("TRANSFER MANNY"), "overlay titled");
+    assert!(text.contains("Grey Area"), "source manny named");
+    assert!(
+        text.contains("Falling Outside") && text.contains("Sleeper Service"),
+        "targets listed"
     );
 }

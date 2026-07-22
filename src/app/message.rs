@@ -75,6 +75,8 @@ pub enum ApiMessage {
     DeuteriumRefuelError(String),
     DeuteriumTransferStarted,
     DeuteriumTransferError(String),
+    MannyTransferStarted,
+    MannyTransferError(String),
     MindSnapshotReassigned(Probe),
     MindSnapshotReassignError(String),
     MissionsFetched(Vec<Mission>),

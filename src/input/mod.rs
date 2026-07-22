@@ -31,7 +31,9 @@ use cockpit::handle_cockpit_event;
 use command::handle_command_event;
 use containers::{handle_container_rules_event, handle_rename_container_event};
 use craft::handle_fabrication_event;
-use fleet::{handle_probe_switch_event, handle_rename_probe_event, handle_transfer_deuterium_event};
+use fleet::{
+    handle_probe_switch_event, handle_rename_probe_event, handle_transfer_deuterium_event, handle_transfer_probe_event,
+};
 use geometry::face_d2;
 use improve::handle_improve_event;
 use jettison::handle_jettison_event;
@@ -80,6 +82,7 @@ const WIZARD_INPUTS: &[(WizardGuard, WizardHandler)] = &[
     (|s| matches!(s.active_wizard, ActiveWizard::Recall(_)), handle_recall_event),
     (|s| matches!(s.active_wizard, ActiveWizard::Refuel(_)), handle_refuel_event),
     (|s| matches!(s.active_wizard, ActiveWizard::TransferDeuterium(_)), handle_transfer_deuterium_event),
+    (|s| matches!(s.active_wizard, ActiveWizard::TransferProbe(_)), handle_transfer_probe_event),
     (|s| matches!(s.active_wizard, ActiveWizard::MindSnapshot(_)), handle_mind_snapshot_event),
     (|s| matches!(s.active_wizard, ActiveWizard::ScutRelay(_)), handle_scut_relay_event),
     (|s| matches!(s.active_wizard, ActiveWizard::ScutNetwork(_)), handle_scut_network_event),

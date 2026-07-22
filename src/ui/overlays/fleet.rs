@@ -6,7 +6,9 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::{ActiveWizard, AppState, ProbeSwitchInput, RenameProbeInput, TransferDeuteriumInput};
+use crate::app::{
+    ActiveWizard, AppState, ProbeSwitchInput, RenameProbeInput, TransferDeuteriumInput, TransferProbeInput,
+};
 use crate::ui::theme::{palette, probe_status_label};
 
 use super::{centered_rect, render_footer, render_pick_list, FooterKey};
@@ -59,6 +61,37 @@ pub(crate) fn render_probe_switch_overlay(frame: &mut Frame, area: Rect, state: 
 /// Deuterium-transfer wizard (API v86). Step 1 picks the destination probe from
 /// the roster; step 2 collects the percentage to ferry. The same-sector rule is
 /// server-validated, so a mismatch surfaces as an error line in step 2.
+pub(crate) fn render_transfer_probe_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
+    let p = palette(state.color_mode);
+    let ActiveWizard::TransferProbe(TransferProbeInput::PickTarget {
+        manny_name,
+        targets,
+        selection,
+        error,
+        ..
+    }) = &state.active_wizard
+    else {
+        return;
+    };
+    let labels: Vec<String> = targets.iter().map(|(id, name)| format!("{name}  ·  #{id}")).collect();
+    let refs: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
+    let height = (refs.len() as u16 + 6).clamp(8, 20);
+    let title = format!(" TRANSFER MANNY — {manny_name} ");
+    render_pick_list(
+        frame,
+        area,
+        p,
+        &title,
+        54,
+        height,
+        Some("Transfer to:"),
+        &refs,
+        *selection,
+        error.as_deref(),
+        "transfer",
+    );
+}
+
 pub(crate) fn render_transfer_deuterium_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = palette(state.color_mode);
     let ActiveWizard::TransferDeuterium(transfer_deuterium) = &state.active_wizard else {
