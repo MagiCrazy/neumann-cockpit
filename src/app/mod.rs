@@ -58,6 +58,10 @@ fn long_task_note(task: &crate::api::types::MannyTask) -> Option<&'static str> {
         MannyTask::InstallingWaypointBookmark => "installing a waypoint",
         MannyTask::RefillingDeuteriumTank => "refueling",
         MannyTask::TurningOnScutRelay => "activating a relay",
+        MannyTask::TransferringDeuteriumToProbe => "a deuterium transfer",
+        MannyTask::TransferringToProbe => "transferring to a probe",
+        MannyTask::InstallingScutTransitBeacon => "installing a transit beacon",
+        MannyTask::AssemblingProbe => "assembling a probe",
         _ => return None,
     })
 }
