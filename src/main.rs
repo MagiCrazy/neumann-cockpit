@@ -259,17 +259,6 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
         tokio::select! {
             Some(event) = events.next() => {
                 handle_event(event?, &mut state, &client, &tx);
-                // A probe switch only sets `state.active_probe_id`; reconcile the
-                // client so all later calls target it, then pull fresh data for
-                // the new probe. Source of truth is the state; the client's
-                // wired target trails it.
-                if client.active_probe_id() != state.active_probe_id {
-                    client = client.with_active_probe(state.active_probe_id);
-                    if !state.loading {
-                        fetch_all(client.clone(), tx.clone());
-                        state.loading = true;
-                    }
-                }
             }
 
             _ = boot_tick.tick(), if state.booting => {
@@ -581,6 +570,19 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                     fetch_all(client.clone(), tx.clone());
                     state.loading = true;
                 }
+            }
+        }
+
+        // Reconcile the client's target with the state's active probe after any
+        // select branch. A probe switch (keyboard) sets `active_probe_id`; a
+        // fleet refresh may *reset* it when the piloted probe was destroyed
+        // (v94, `update_fleet`). Either way the state is the source of truth and
+        // the client's wired target trails it — retarget, then refetch.
+        if client.active_probe_id() != state.active_probe_id {
+            client = client.with_active_probe(state.active_probe_id);
+            if !state.loading {
+                fetch_all(client.clone(), tx.clone());
+                state.loading = true;
             }
         }
 

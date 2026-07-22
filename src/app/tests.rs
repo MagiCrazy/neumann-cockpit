@@ -2596,6 +2596,24 @@ fn update_fleet_never_resets_active_probe() {
 }
 
 #[test]
+fn update_fleet_reverts_when_active_probe_is_destroyed() {
+    // v94: piloting drone 6, which is then destroyed and drops off the roster.
+    let mut state = fleet_state();
+    state.set_active_probe(6);
+    assert_eq!(state.active_probe_id, Some(6));
+    // Refreshed roster no longer lists probe 6 → revert to the default (None).
+    state.update_fleet(crate::api::types::ProbeListResponse {
+        default_probe_id: Some(5),
+        probes: vec![
+            probe_summary(5, "Sonde de Magic", true),
+            probe_summary(7, "Drone Gamma", false),
+        ],
+    });
+    assert_eq!(state.active_probe_id, None, "destroyed active probe reverts to default");
+    assert!(state.active_toast().unwrap().contains("active probe lost"));
+}
+
+#[test]
 fn command_probe_switches_by_id_and_name() {
     let mut state = fleet_state();
     assert!(!state.run_command("probe 6"));

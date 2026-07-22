@@ -295,6 +295,17 @@ impl AppState {
     pub fn update_fleet(&mut self, list: crate::api::types::ProbeListResponse) {
         self.default_probe_id = list.default_probe_id;
         self.fleet = list.probes;
+        // v94: a piloted (non-default) probe can be destroyed/trapped and removed
+        // from the roster server-side. If the active probe is gone, revert to the
+        // default so the client stops targeting a dead `{probeId}` (the event loop
+        // reconciles the ApiClient from `active_probe_id`). The `probe_destroyed`
+        // alert already surfaces the loss in the Comms feed.
+        if let Some(active) = self.active_probe_id {
+            if !self.fleet.iter().any(|p| p.id == active) {
+                self.active_probe_id = None;
+                self.set_toast("active probe lost — reverted to default");
+            }
+        }
     }
 
     /// The probe the cockpit is piloting, if it is present in the roster.
