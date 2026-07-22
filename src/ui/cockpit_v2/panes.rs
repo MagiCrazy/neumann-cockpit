@@ -481,6 +481,9 @@ fn solar_system_zoom_lines(obj: &SectorObject, p: Palette) -> Vec<Line<'static>>
             Span::styled(name, text),
             Span::styled(format!("  {label}"), dim),
         ]));
+        // Object id — copy it into a script's `at <id>` to target this exact
+        // body (nested asteroids are often unnamed).
+        lines.push(Line::styled(format!("      id {id}"), dim));
         if let Some(b) = bt {
             if let Some(h) = b.habitability_score {
                 lines.push(Line::from(vec![

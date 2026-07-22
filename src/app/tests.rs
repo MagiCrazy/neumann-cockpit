@@ -2491,6 +2491,18 @@ fn mine_one_shot_at_no_match_toasts_without_firing() {
 }
 
 #[test]
+fn mine_at_matches_object_id_exactly() {
+    // Targeting by the id shown in the zoomed Sector view — for unnamed
+    // asteroids where a name substring won't do.
+    let mut state = mineable_state();
+    state.run_command("mine metals at ast-1");
+    assert!(
+        matches!(state.pending_fire, Some(CommandFire::Mine { ref object_id, .. }) if object_id == "ast-1"),
+        "`at <id>` resolves the asteroid by exact id"
+    );
+}
+
+#[test]
 fn craft_one_shot_enqueues_on_the_sole_builder() {
     let mut state = AppState::default();
     state.recipes = vec![serde_json::from_str(

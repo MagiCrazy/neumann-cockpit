@@ -160,6 +160,35 @@ fn transfer_probe_overlay_lists_targets() {
 }
 
 #[test]
+fn sector_object_zoom_shows_asteroid_id() {
+    // The id must appear in the zoomed (non-compact) asteroid detail so it can
+    // be copied into a script's `at <id>` (unnamed asteroids).
+    let obj: crate::api::types::SectorObject = serde_json::from_str(
+        r#"{"id":"rock-abc123","type":"asteroid","name":null,
+            "estimated":false,"summary":"Wandering asteroid","resourceTypes":["metals"],
+            "waypointBookmarks":[],"bookmarkTargets":[]}"#,
+    )
+    .unwrap();
+    let p = palette(ColorMode::MonoGreen);
+    let lines = crate::ui::panels::scanner::sector_object_lines(&obj, false, p);
+    let text: String = lines
+        .iter()
+        .flat_map(|l| l.spans.iter().map(|s| s.content.as_ref()))
+        .collect::<Vec<_>>()
+        .join("");
+    assert!(
+        text.contains("id rock-abc123"),
+        "zoom detail shows the asteroid id: {text}"
+    );
+    // Compact view must NOT carry the id line (kept for the zoom only).
+    let compact: String = crate::ui::panels::scanner::sector_object_lines(&obj, true, p)
+        .iter()
+        .flat_map(|l| l.spans.iter().map(|s| s.content.to_string()))
+        .collect();
+    assert!(!compact.contains("id rock-abc123"), "compact line stays terse");
+}
+
+#[test]
 fn detach_attach_to_probe_overlay_lists_target_probes() {
     // attach_to_probe detach mode (API v91): the target-probe picker renders.
     let mut state = AppState::default();
