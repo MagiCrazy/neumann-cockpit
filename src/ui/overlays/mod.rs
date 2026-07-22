@@ -28,7 +28,10 @@ pub(crate) use assemble::render_assemble_probe_overlay;
 pub(crate) use containers::{render_container_rules_overlay, render_rename_container_overlay};
 pub(crate) use craft::render_fabrication_overlay;
 pub(crate) use drop_container::render_drop_container_overlay;
-pub(crate) use fleet::{render_probe_switch_overlay, render_rename_probe_overlay, render_transfer_deuterium_overlay};
+pub(crate) use fleet::{
+    render_probe_switch_overlay, render_rename_probe_overlay, render_transfer_deuterium_overlay,
+    render_transfer_probe_overlay,
+};
 pub(crate) use help::{help_row_count, render_help_overlay};
 pub(crate) use improve::render_improve_overlay;
 pub(crate) use inventory_detail::render_inventory_detail_overlay;
@@ -89,6 +92,7 @@ const WIZARD_OVERLAYS: &[(OverlayGuard, OverlayRender)] = &[
     (|s| matches!(s.active_wizard, ActiveWizard::Recall(_)), render_recall_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::Refuel(_)), render_refuel_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::TransferDeuterium(_)), render_transfer_deuterium_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::TransferProbe(_)), render_transfer_probe_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::MindSnapshot(_)), render_mind_snapshot_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::Missions(_)), render_missions_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::Messages(_)), render_messages_overlay),

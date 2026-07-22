@@ -383,6 +383,11 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         state.finish_action("deuterium transfer order sent", Refetch::All);
                     }
                     ApiMessage::DeuteriumTransferError(e) => state.set_wizard_error(e),
+                    ApiMessage::MannyTransferStarted => {
+                        state.close_wizard();
+                        state.finish_action("manny transfer order sent", Refetch::All);
+                    }
+                    ApiMessage::MannyTransferError(e) => state.set_wizard_error(e),
                     ApiMessage::MindSnapshotReassigned(probe) => {
                         state.close_wizard();
                         state.update_probe(probe);

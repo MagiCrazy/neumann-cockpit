@@ -2,9 +2,10 @@ use crossterm::event::KeyCode;
 use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
-use crate::api::tasks::{fetch_rename_probe, fetch_transfer_deuterium};
+use crate::api::tasks::{fetch_rename_probe, fetch_transfer_deuterium, fetch_transfer_manny};
 use crate::app::{
     ActiveWizard, ApiMessage, AppState, LogEvent, ProbeSwitchInput, RenameProbeInput, TransferDeuteriumInput,
+    TransferProbeInput,
 };
 
 use super::geometry::list_nav;
@@ -140,6 +141,59 @@ pub(super) fn handle_transfer_deuterium_event(
                     state.log_event(LogEvent::transfer_deuterium(&tname, amount, state.active_probe_id));
                 }
                 _ => state.set_wizard_error("enter a positive deuterium percentage".to_string()),
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Manny transfer wizard (API v93): single step — navigate the roster, `Enter`
+/// fires the transfer to the selected probe (duration = a container detach) and
+/// logs it, `Esc` cancels. The same-sector requirement is server-validated, so
+/// a wrong target surfaces as a 422 error in the picker.
+pub(super) fn handle_transfer_probe_event(
+    code: KeyCode,
+    state: &mut AppState,
+    client: &ApiClient,
+    tx: &mpsc::Sender<ApiMessage>,
+) {
+    let ActiveWizard::TransferProbe(TransferProbeInput::PickTarget { targets, selection, .. }) = &state.active_wizard
+    else {
+        return;
+    };
+    let (count, sel) = (targets.len(), *selection);
+    match code {
+        KeyCode::Esc => state.close_wizard(),
+        KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+            if let (Some(ns), ActiveWizard::TransferProbe(TransferProbeInput::PickTarget { selection, .. })) =
+                (list_nav(code, sel, count), &mut state.active_wizard)
+            {
+                *selection = ns;
+            }
+        }
+        KeyCode::Enter => {
+            // Clone everything out first so the log_event mutable borrow does
+            // not overlap the immutable wizard borrow.
+            let (manny_id, manny_name, target) = {
+                let ActiveWizard::TransferProbe(TransferProbeInput::PickTarget {
+                    manny_id,
+                    manny_name,
+                    targets,
+                    selection,
+                    ..
+                }) = &state.active_wizard
+                else {
+                    return;
+                };
+                (manny_id.clone(), manny_name.clone(), targets.get(*selection).cloned())
+            };
+            if let Some((target_id, target_name)) = target {
+                fetch_transfer_manny(manny_id, target_id, client.clone(), tx.clone());
+                state.log_event(LogEvent::transfer_manny(
+                    &manny_name,
+                    &target_name,
+                    state.active_probe_id,
+                ));
             }
         }
         _ => {}

@@ -427,6 +427,7 @@ impl AppState {
             ActiveWizard::Recall(RecallInput::Confirm { error, .. }) => Some(error),
             ActiveWizard::Refuel(RefuelInput::Confirm { error, .. }) => Some(error),
             ActiveWizard::TransferDeuterium(TransferDeuteriumInput::EnterAmount { error, .. }) => Some(error),
+            ActiveWizard::TransferProbe(TransferProbeInput::PickTarget { error, .. }) => Some(error),
             ActiveWizard::MindSnapshot(MindSnapshotInput::Confirm { error }) => Some(error),
             ActiveWizard::ScutRelay(ScutRelayInput::EnterNetworkName { error, .. }) => Some(error),
             ActiveWizard::Missions(MissionsInput::ConfirmAbandon { error, .. }) => Some(error),

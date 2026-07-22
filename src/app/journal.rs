@@ -183,6 +183,14 @@ impl LogEvent {
         )
     }
 
+    pub fn transfer_manny(manny: &str, target: &str, probe_id: Option<u64>) -> Self {
+        Self::action(
+            kind::TRANSFER,
+            format!("Dispatched «{manny}» to transfer to probe «{target}»."),
+            probe_id,
+        )
+    }
+
     pub fn assemble_probe(probe_id: Option<u64>) -> Self {
         Self::action(
             kind::ASSEMBLE,

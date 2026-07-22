@@ -19,6 +19,7 @@ pub enum MenuAction {
     Detach,
     Refuel,
     TransferDeuterium,
+    TransferProbe,
     DropCargo,
     Recall,
     Rename,
@@ -438,10 +439,23 @@ impl super::AppState {
                 },
             },
             {
-                let has_targets = !self.transfer_deuterium_targets().is_empty();
+                let has_targets = !self.other_fleet_probes().is_empty();
                 MenuItem {
                     action: MenuAction::TransferDeuterium,
                     label: "Transfer deuterium…".into(),
+                    enabled: can && has_targets,
+                    disabled_reason: if !can {
+                        busy.clone()
+                    } else {
+                        (!has_targets).then(|| "no other probe".to_string())
+                    },
+                }
+            },
+            {
+                let has_targets = !self.other_fleet_probes().is_empty();
+                MenuItem {
+                    action: MenuAction::TransferProbe,
+                    label: "Transfer Manny…".into(),
                     enabled: can && has_targets,
                     disabled_reason: if !can {
                         busy.clone()

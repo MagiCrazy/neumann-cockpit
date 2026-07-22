@@ -405,12 +405,28 @@ pub enum RefuelInput {
     },
 }
 
+/// Transfer a Manny to another owned probe (API v93). Single step: pick the
+/// destination probe from the roster (the piloted source excluded). The
+/// same-sector requirement is server-validated, so a wrong target surfaces as
+/// a 422 in `error`.
+#[derive(Debug, Clone, PartialEq)]
+pub enum TransferProbeInput {
+    PickTarget {
+        manny_id: String,
+        manny_name: String,
+        targets: Vec<(u64, String)>,
+        selection: usize,
+        error: Option<String>,
+    },
+}
+
 /// Deuterium-transfer wizard (API v86): a Manny ferries a reserved deuterium
 /// amount from the current probe to another fleet probe in the same sector.
 /// Two steps — pick the destination probe (the source is excluded), then enter
 /// the percentage to transfer. The same-sector constraint is server-validated
 /// (the roster carries no coordinates), so a wrong target surfaces as an error
 /// in `EnterAmount`.
+#[derive(Debug, Clone, PartialEq)]
 pub enum TransferDeuteriumInput {
     /// Choose the destination probe from the roster (id, name pairs).
     PickTarget {
@@ -628,6 +644,7 @@ pub enum ActiveWizard {
     Recall(RecallInput),
     Refuel(RefuelInput),
     TransferDeuterium(TransferDeuteriumInput),
+    TransferProbe(TransferProbeInput),
     MindSnapshot(MindSnapshotInput),
     ScutRelay(ScutRelayInput),
     ScutNetwork(ScutNetworkInput),

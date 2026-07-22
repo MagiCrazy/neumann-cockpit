@@ -68,7 +68,11 @@ impl AppState {
     /// except the one currently piloted (the source). The same-sector
     /// constraint is enforced server-side, since the roster carries no
     /// coordinates (API v86).
-    pub fn transfer_deuterium_targets(&self) -> Vec<(u64, String)> {
+    /// Other owned probes (roster minus the piloted source), as `(id, name)` —
+    /// the candidate destinations for deuterium transfer (v86) and Manny
+    /// transfer (v93). The roster carries no coordinates, so the same-sector
+    /// requirement is server-validated per action.
+    pub fn other_fleet_probes(&self) -> Vec<(u64, String)> {
         let source = self.active_probe_id.or(self.default_probe_id);
         self.fleet
             .iter()

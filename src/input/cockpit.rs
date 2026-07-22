@@ -22,7 +22,7 @@ use crate::app::{
     InspectInput, LogEvent, MenuAction, MessagesInput, MindSnapshotInput, MineInput, MissionsCategory, MissionsInput,
     ObjectActionInput, Pane, ProbeSwitchInput, RecallInput, RecoverInput, RefuelInput, RemoteMineInput,
     RenameContainerInput, RenameMannyInput, RenameProbeInput, RepairInput, SalvageInput, ScanMode, ScutNetworkInput,
-    StorageMoveInput, TransferDeuteriumInput, TravelInput, WaypointsInput,
+    StorageMoveInput, TransferDeuteriumInput, TransferProbeInput, TravelInput, WaypointsInput,
 };
 
 pub fn handle_cockpit_event(code: KeyCode, state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
@@ -698,7 +698,7 @@ fn fire_menu_action(action: MenuAction, state: &mut AppState, client: &ApiClient
             }
         }
         MenuAction::TransferDeuterium if can => {
-            let targets = state.transfer_deuterium_targets();
+            let targets = state.other_fleet_probes();
             if targets.is_empty() {
                 state.error = Some("no other probe in the fleet".into());
             } else {
@@ -707,6 +707,20 @@ fn fire_menu_action(action: MenuAction, state: &mut AppState, client: &ApiClient
                     manny_name: name,
                     targets,
                     selection: 0,
+                });
+            }
+        }
+        MenuAction::TransferProbe if can => {
+            let targets = state.other_fleet_probes();
+            if targets.is_empty() {
+                state.error = Some("no other probe in the fleet".into());
+            } else {
+                state.active_wizard = ActiveWizard::TransferProbe(TransferProbeInput::PickTarget {
+                    manny_id: id,
+                    manny_name: name,
+                    targets,
+                    selection: 0,
+                    error: None,
                 });
             }
         }
