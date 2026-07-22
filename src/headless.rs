@@ -18,8 +18,8 @@ use tokio::time::{interval, MissedTickBehavior};
 
 use crate::api::client::ApiClient;
 use crate::api::tasks::{
-    fetch_all, fetch_atomic_printer_craft, fetch_craft, fetch_detach, fetch_mine, fetch_move, fetch_recover,
-    fetch_repair, fetch_salvage,
+    fetch_all, fetch_atomic_printer_craft, fetch_craft, fetch_crafting_recipes, fetch_detach, fetch_mine, fetch_move,
+    fetch_recover, fetch_repair, fetch_salvage,
 };
 use crate::app::{ApiMessage, AppState, Fabricator, LogEvent, ScriptAction, StepState};
 use crate::config::{self, Config, ConfigStatus};
@@ -101,6 +101,9 @@ pub async fn run(path: &Path) -> Result<i32> {
     // binding), and completion polling needs a fresh roster.
     eprintln!("· linking to {} …", config.base_url);
     fetch_all(client.clone(), tx.clone());
+    // The crafting catalog is a separate fetch (not part of fetch_all); a `craft`
+    // step resolves against it, so it must be primed before such a step fires.
+    fetch_crafting_recipes(client.clone(), tx.clone());
     if !wait_until_primed(&mut state, &mut rx, Duration::from_secs(15)).await {
         bail!("remote link failed — no probe data within 15s");
     }
@@ -112,6 +115,17 @@ pub async fn run(path: &Path) -> Result<i32> {
             .map_err(|e| anyhow::anyhow!("line {}: \"{line}\" — {e}", i + 1))?;
     }
     let total = state.script.len();
+    // A craft step needs the recipe catalog; wait for it (bounded) so the step
+    // doesn't fire against an empty catalog and fail spuriously.
+    if state.script.iter().any(|s| s.cmd.verb == crate::app::ScriptVerb::Craft) {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+        while state.recipes.is_empty() {
+            match tokio::time::timeout_at(deadline, rx.recv()).await {
+                Ok(Some(msg)) => dispatch(&mut state, msg),
+                _ => bail!("crafting recipes did not load within 15s"),
+            }
+        }
+    }
     log_line(&format!("script loaded — {total} step(s)"));
     state.script_run();
 
@@ -252,6 +266,7 @@ fn dispatch(state: &mut AppState, msg: ApiMessage) {
         ApiMessage::ProbeUpdated(probe) => state.update_probe(probe),
         ApiMessage::ManniesUpdated(mannies) => state.update_mannies(mannies),
         ApiMessage::SectorUpdated(sector) => state.update_sector(sector),
+        ApiMessage::RecipesFetched(recipes) => state.recipes = recipes,
         ApiMessage::MoveError(e)
         | ApiMessage::MineError(e)
         | ApiMessage::RepairError(e)
