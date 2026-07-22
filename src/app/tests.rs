@@ -2491,6 +2491,18 @@ fn mine_one_shot_at_no_match_toasts_without_firing() {
 }
 
 #[test]
+fn mine_at_matches_object_id_exactly() {
+    // Targeting by the id shown in the zoomed Sector view — for unnamed
+    // asteroids where a name substring won't do.
+    let mut state = mineable_state();
+    state.run_command("mine metals at ast-1");
+    assert!(
+        matches!(state.pending_fire, Some(CommandFire::Mine { ref object_id, .. }) if object_id == "ast-1"),
+        "`at <id>` resolves the asteroid by exact id"
+    );
+}
+
+#[test]
 fn craft_one_shot_enqueues_on_the_sole_builder() {
     let mut state = AppState::default();
     state.recipes = vec![serde_json::from_str(
@@ -2919,6 +2931,79 @@ fn script_craft_parse_and_resolve() {
         }
         other => panic!("expected Craft, got {other:?}"),
     }
+}
+
+#[test]
+fn tokenize_groups_quoted_spans_and_keeps_quotes() {
+    use crate::app::command::{dequote, tokenize};
+    let toks = tokenize(r#"detach "Metal C #1" by manny-1"#);
+    assert_eq!(toks, vec!["detach", "\"Metal C #1\"", "by", "manny-1"]);
+    assert_eq!(dequote("\"Metal C #1\""), "Metal C #1");
+    assert_eq!(dequote("bare"), "bare");
+}
+
+#[test]
+fn quoted_name_with_keyword_stays_one_value() {
+    use crate::app::command::{mine_buckets, tokenize};
+    // A container named "Ready to Go" — the inner `to` must NOT split.
+    let toks = tokenize(r#"metals 0.2 to "Ready to Go""#);
+    let (pos, _by, _at, to) = mine_buckets(&toks);
+    assert_eq!(pos, vec!["metals", "0.2"]);
+    assert_eq!(to.join(" "), "Ready to Go", "quoted keyword is part of the name");
+
+    // Without quotes the inner `to` IS a delimiter and corrupts the name —
+    // documents why keyword-bearing names must be quoted.
+    let bare = tokenize("metals 0.2 to Ready to Go");
+    let (_p, _b, _a, to2) = mine_buckets(&bare);
+    assert_eq!(to2.join(" "), "Ready Go", "bare keyword-in-name is dropped");
+}
+
+#[test]
+fn script_craft_fans_out_parts_across_builders() {
+    let mut s = AppState::default();
+    s.recipes = vec![
+        manny_recipe("steel_plate", "Steel plate"),
+        manny_recipe("steel_bar", "Steel bar"),
+    ];
+    s.mannies = Some(vec![
+        make_manny("m1", "probe", true, None),
+        make_manny("m2", "probe", true, None),
+        make_manny("m3", "probe", true, None),
+    ]);
+    // 3 parts (steel_plate + 2× steel_bar) fan out one-per-builder with `by all`.
+    s.enqueue_script_line("craft steel_plate,steel_bar,steel_bar by all")
+        .unwrap();
+    s.script_run();
+    s.advance_script();
+    assert_eq!(s.script_fire.len(), 3, "one craft per builder, fired together");
+    // Distinct builders assigned.
+    let builders: Vec<Option<String>> = s
+        .script_fire
+        .iter()
+        .map(|a| match a {
+            ScriptAction::Craft { manny_id, .. } => manny_id.clone(),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(builders.iter().filter(|b| b.is_some()).count(), 3);
+    let uniq: std::collections::HashSet<_> = builders.iter().collect();
+    assert_eq!(uniq.len(), 3, "each part on a distinct builder");
+}
+
+#[test]
+fn script_craft_fanout_needs_enough_builders() {
+    let mut s = AppState::default();
+    s.recipes = vec![
+        manny_recipe("steel_plate", "Steel plate"),
+        manny_recipe("steel_bar", "Steel bar"),
+    ];
+    s.mannies = Some(vec![make_manny("m1", "probe", true, None)]); // only 1 idle
+    s.enqueue_script_line("craft steel_plate,steel_bar,steel_bar by all")
+        .unwrap();
+    s.script_run();
+    s.advance_script(); // resolve fails: 3 parts, 1 builder
+    assert!(matches!(s.script[0].state, StepState::Failed(_)));
+    assert!(!s.script_running);
 }
 
 #[test]

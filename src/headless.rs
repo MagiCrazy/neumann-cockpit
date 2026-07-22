@@ -18,8 +18,8 @@ use tokio::time::{interval, MissedTickBehavior};
 
 use crate::api::client::ApiClient;
 use crate::api::tasks::{
-    fetch_all, fetch_atomic_printer_craft, fetch_craft, fetch_detach, fetch_mine, fetch_move, fetch_recover,
-    fetch_repair, fetch_salvage,
+    fetch_all, fetch_atomic_printer_craft, fetch_craft, fetch_crafting_recipes, fetch_detach, fetch_mine, fetch_move,
+    fetch_recover, fetch_repair, fetch_salvage,
 };
 use crate::app::{ApiMessage, AppState, Fabricator, LogEvent, ScriptAction, StepState};
 use crate::config::{self, Config, ConfigStatus};
@@ -49,9 +49,19 @@ fn script_lines(text: &str) -> Vec<String> {
         .collect()
 }
 
+/// Flush stdout so a line reaches a redirected pipe/file immediately. Rust's
+/// stdout is line-buffered on a tty but block-buffered otherwise, so without
+/// this a long run's progress wouldn't appear until the buffer fills or the
+/// process exits — defeating the "streams as it progresses" contract.
+fn flush_stdout() {
+    use std::io::Write;
+    let _ = std::io::stdout().flush();
+}
+
 /// `HH:MM:SS  {msg}` on stdout — the ship's-log line format.
 fn log_line(msg: &str) {
     println!("{}  {msg}", Local::now().format("%H:%M:%S"));
+    flush_stdout();
 }
 
 /// A staged ship's-log entry, stamped with its own occurrence time.
@@ -61,6 +71,7 @@ fn print_event(ev: &LogEvent) {
         ev.occurred_at.with_timezone(&Local).format("%H:%M:%S"),
         ev.summary
     );
+    flush_stdout();
 }
 
 /// Run a script file headlessly. Returns the process exit code: 0 on
@@ -101,6 +112,9 @@ pub async fn run(path: &Path) -> Result<i32> {
     // binding), and completion polling needs a fresh roster.
     eprintln!("· linking to {} …", config.base_url);
     fetch_all(client.clone(), tx.clone());
+    // The crafting catalog is a separate fetch (not part of fetch_all); a `craft`
+    // step resolves against it, so it must be primed before such a step fires.
+    fetch_crafting_recipes(client.clone(), tx.clone());
     if !wait_until_primed(&mut state, &mut rx, Duration::from_secs(15)).await {
         bail!("remote link failed — no probe data within 15s");
     }
@@ -112,6 +126,17 @@ pub async fn run(path: &Path) -> Result<i32> {
             .map_err(|e| anyhow::anyhow!("line {}: \"{line}\" — {e}", i + 1))?;
     }
     let total = state.script.len();
+    // A craft step needs the recipe catalog; wait for it (bounded) so the step
+    // doesn't fire against an empty catalog and fail spuriously.
+    if state.script.iter().any(|s| s.cmd.verb == crate::app::ScriptVerb::Craft) {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+        while state.recipes.is_empty() {
+            match tokio::time::timeout_at(deadline, rx.recv()).await {
+                Ok(Some(msg)) => dispatch(&mut state, msg),
+                _ => bail!("crafting recipes did not load within 15s"),
+            }
+        }
+    }
     log_line(&format!("script loaded — {total} step(s)"));
     state.script_run();
 
@@ -252,6 +277,7 @@ fn dispatch(state: &mut AppState, msg: ApiMessage) {
         ApiMessage::ProbeUpdated(probe) => state.update_probe(probe),
         ApiMessage::ManniesUpdated(mannies) => state.update_mannies(mannies),
         ApiMessage::SectorUpdated(sector) => state.update_sector(sector),
+        ApiMessage::RecipesFetched(recipes) => state.recipes = recipes,
         ApiMessage::MoveError(e)
         | ApiMessage::MineError(e)
         | ApiMessage::RepairError(e)

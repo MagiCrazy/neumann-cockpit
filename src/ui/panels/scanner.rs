@@ -405,6 +405,19 @@ pub(crate) fn sector_object_lines<'a>(obj: &'a SectorObject, compact: bool, p: P
 
     // Scientific detail — zoom only.
     if !compact {
+        // Object id for the targetable objects, so it can be copied into a
+        // script's `at <id>` (asteroids/containers are often unnamed).
+        if matches!(
+            obj.object_type,
+            SectorObjectType::Asteroid | SectorObjectType::DetachedContainer | SectorObjectType::DormantConstruct
+        ) {
+            if let Some(id) = &obj.id {
+                lines.push(Line::from(vec![
+                    Span::styled("  id ", dim),
+                    Span::styled(id.as_str(), dim),
+                ]));
+            }
+        }
         let skip_dimensions = matches!(obj.object_type, SectorObjectType::SolarSystem);
         let has_mass = obj.mass.is_some() && !skip_dimensions;
         let has_radius = obj.radius.is_some() && !skip_dimensions;
