@@ -119,8 +119,12 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
         state.set_error("remote link down — press F5 to retry".into());
     }
     // The persistence writer takes the connection opened during preflight; on a
-    // DB error there we run without persistence (history already empty).
-    let persist_tx = conn.map(store::spawn_writer);
+    // DB error there we run without persistence (history already empty). It also
+    // hands back a `degraded` flag it raises if a write ever fails (issue #216).
+    let (persist_tx, persist_degraded) = match conn.map(store::spawn_writer) {
+        Some((tx, degraded)) => (Some(tx), Some(degraded)),
+        None => (None, None),
+    };
     let mut events = EventStream::new();
 
     // Short-lived tick that drives the boot assembly; runs only while booting.
@@ -140,6 +144,11 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
     state.loading = true;
 
     loop {
+        // Surface a persistence failure raised by the writer thread (#216).
+        if let Some(degraded) = &persist_degraded {
+            state.persistence_degraded = degraded.load(std::sync::atomic::Ordering::Relaxed);
+        }
+
         // Drain ship's-log entries staged by the previous tick's handlers:
         // persist each and prepend to the in-memory journal (newest first,
         // capped), mirroring how sector observations are persisted.

@@ -92,6 +92,10 @@ pub struct AppState {
     pub consecutive_failures: u32,
     pub movement_arrival: Option<DateTime<Utc>>,
     pub error: Option<String>,
+    /// The SQLite writer raised a write failure (disk full, corruption…), so
+    /// history is no longer being saved. Read from the writer's shared flag each
+    /// tick and surfaced as a status-bar warning (issue #216).
+    pub persistence_degraded: bool,
     pub loading: bool,
     pub quit: bool,
     pub mannies_selection: usize,
