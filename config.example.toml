@@ -10,3 +10,7 @@ api_key  = "vng_your_api_key_here"
 # Play the boot self-check animation on startup. Set false to drop straight
 # into the live cockpit (handy over tmux/ssh or on relaunch).
 #boot = true
+# Emit a desktop notification (OSC 9 + terminal bell) when a long task
+# finishes — travel arrival or a Manny completing a long task. Set false
+# to stay silent.
+#notifications = true

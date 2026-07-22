@@ -248,6 +248,7 @@ async fn onboard(
                             theme: None,
                             hints: true,
                             boot: true,
+                            notifications: true,
                         }));
                     }
                     Err(e) => error = Some(format!("write failed: {e}")),

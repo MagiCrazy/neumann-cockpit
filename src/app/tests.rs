@@ -520,6 +520,64 @@ fn telemetry_samples_on_change_and_dedupes_identical() {
     assert!((state.telemetry[1].fuel - 0.5).abs() < 1e-9);
 }
 
+fn probe_with_movement(arrival: &str, phase: &str) -> Probe {
+    serde_json::from_str(&format!(
+        r#"{{
+        "id": 1, "name": "t", "status": "idle",
+        "fuel": {{"deuterium": 100.0}}, "sensorMode": "normal", "sector": null,
+        "movement": {{
+            "status": "{phase}", "origin": {{"x":0,"y":0,"z":0}}, "target": {{"x":1,"y":2,"z":3}},
+            "distance": 3, "fuelCostDeuterium": 1.0,
+            "startedAt": "2026-07-01T00:00:00+00:00", "arrivalAt": "{arrival}", "phase": "{phase}"
+        }},
+        "systems": null,
+        "inventory": {{"capacity":10.0,"usedCapacity":1.0,"freeCapacity":9.0,
+            "items":[],"resourceStocks":[],"externalTanks":[],"containers":[]}}
+    }}"#
+    ))
+    .unwrap()
+}
+
+#[test]
+fn travel_arrival_stages_a_notification() {
+    let mut state = AppState::default();
+    // Departing: a future arrival sets the deadline but is not a completion.
+    state.update_probe(probe_with_movement("2099-01-01T00:00:00+00:00", "cruising"));
+    assert!(state.pending_notifications.is_empty(), "departure is not a completion");
+    // Arriving: the pending arrival is now in the past → notify with the target.
+    state.update_probe(probe_with_movement("2000-01-01T00:00:00+00:00", "arrived"));
+    assert_eq!(
+        state.pending_notifications,
+        vec!["Probe arrived at (1, 2, 3)".to_string()]
+    );
+}
+
+#[test]
+fn manny_long_task_completion_notifies_but_short_and_lag_do_not() {
+    let mut state = AppState::default();
+    // Prime a mining Manny (busy). First roster → no previous to diff against.
+    state.update_mannies(vec![make_manny("m1", "sector", false, Some("mining"))]);
+    assert!(state.pending_notifications.is_empty());
+    // Mining → idle: a long task completed.
+    state.update_mannies(vec![make_manny("m1", "probe", true, None)]);
+    assert_eq!(state.pending_notifications, vec!["m1 finished mining".to_string()]);
+
+    // A short task (moving cargo) completing must not notify.
+    state.pending_notifications.clear();
+    state.update_mannies(vec![make_manny("m2", "probe", false, Some("moving_stockage"))]);
+    state.update_mannies(vec![make_manny("m2", "probe", true, None)]);
+    assert!(state.pending_notifications.is_empty(), "short tasks are not notified");
+
+    // The fire→busy lag (idle → busy) is not a completion.
+    state.pending_notifications.clear();
+    state.update_mannies(vec![make_manny("m3", "probe", true, None)]);
+    state.update_mannies(vec![make_manny("m3", "sector", false, Some("mining"))]);
+    assert!(
+        state.pending_notifications.is_empty(),
+        "starting a task is not a completion"
+    );
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────
 
 fn make_manny(id: &str, location_type: &str, can_receive_orders: bool, task: Option<&str>) -> Manny {
