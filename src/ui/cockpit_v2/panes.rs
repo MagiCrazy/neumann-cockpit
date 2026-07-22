@@ -11,7 +11,8 @@ use crate::api::types::{
 };
 use crate::app::{AppState, CommsCategory, DrillLevel, MissionsCategory, Pane};
 use crate::ui::panels::mannies::{
-    manny_artificial_detection, manny_mining_detail, manny_task_eta, manny_task_label, manny_task_progress,
+    manny_artificial_detection, manny_crafting_detail, manny_mining_detail, manny_task_eta, manny_task_label,
+    manny_task_progress,
 };
 use crate::ui::panels::scanner::{resource_shares_line, sector_object_lines};
 use crate::ui::theme::{
@@ -911,6 +912,13 @@ fn manny_detail_lines(state: &AppState, m: &Manny, p: Palette) -> Vec<Line<'stat
             Span::styled(d.destination, text),
         ]));
     }
+    // Crafting target: which recipe is being fabricated.
+    if let Some(recipe) = manny_crafting_detail(m) {
+        lines.push(Line::from(vec![
+            Span::styled("⚙ ", Style::default().fg(p.accent)),
+            Span::styled(recipe, text),
+        ]));
+    }
     // A hidden container turned up by mining — flag it (recoverable).
     if manny_artificial_detection(m).is_some() {
         lines.push(Line::from(Span::styled(
@@ -1031,6 +1039,10 @@ pub fn render_mannies_overview(frame: &mut Frame, area: Rect, state: &AppState, 
             }
             s.push_str(&format!(" → {}", d.destination));
             lines.push(Line::styled(s, dim));
+        }
+        // Crafting recipe, when visible.
+        if let Some(recipe) = manny_crafting_detail(m) {
+            lines.push(Line::styled(format!("    ⚙ {recipe}"), dim));
         }
         if manny_artificial_detection(m).is_some() {
             lines.push(Line::from(Span::styled(

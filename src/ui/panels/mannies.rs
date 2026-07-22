@@ -119,6 +119,25 @@ pub(crate) fn manny_mining_detail(m: &Manny) -> Option<MiningDetail> {
     })
 }
 
+/// Crafting task detail, extracted from the Manny's `task` payload: the
+/// human-readable recipe name (`recipeName`, falling back to the `recipe` id).
+/// Covers both a Manny crafting on its own and one assisting the atomic
+/// printer — both carry the recipe. `None` unless it is (assisting a) craft
+/// with a visible payload.
+pub(crate) fn manny_crafting_detail(m: &Manny) -> Option<String> {
+    if !matches!(
+        m.current_task,
+        Some(MannyTask::Crafting) | Some(MannyTask::AssistingAtomicPrinter)
+    ) {
+        return None;
+    }
+    let task = m.task.as_ref()?;
+    task.get("recipeName")
+        .or_else(|| task.get("recipe"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+}
+
 /// A hidden artificial object (detached container) a Manny turned up while
 /// mining, extracted from its `task` payload. `None` unless one was detected.
 pub(crate) fn manny_artificial_detection(m: &Manny) -> Option<crate::api::types::ArtificialObjectDetection> {
@@ -190,10 +209,15 @@ pub(crate) fn manny_list_item(m: &Manny, selected: bool, p: Palette) -> ListItem
         ""
     };
 
+    // What it is crafting, when visible, so the generic "crafting" label
+    // names the recipe (mirrors the mining target shown in the wider views).
+    let recipe = manny_crafting_detail(m).map(|r| format!(" {r}")).unwrap_or_default();
+
     ListItem::new(Line::from(vec![
         Span::styled(format!("{loc} "), secondary),
         Span::styled(format!("{:<12}", m.name), primary),
         Span::styled(manny_task_label(task), task_style),
+        Span::styled(recipe, secondary),
         Span::styled(progress, secondary),
         Span::styled(eta, secondary),
         Span::styled(via_scut, secondary),
@@ -202,7 +226,7 @@ pub(crate) fn manny_list_item(m: &Manny, selected: bool, p: Palette) -> ListItem
 
 #[cfg(test)]
 mod tests {
-    use super::manny_artificial_detection;
+    use super::{manny_artificial_detection, manny_crafting_detail};
     use crate::api::types::Manny;
 
     fn mining_manny(task: &str) -> Manny {
@@ -210,6 +234,18 @@ mod tests {
             r#"{{
             "id":"m1","name":"Manny-1","location":{{"type":"sector","sector":null}},
             "currentTask":"mining","taskProgressPercent":50.0,
+            "cargo":{{"capacity":0.3,"deuterium":0.0,"metals":0.0,"ice":0.0,"organicCompounds":0.0}},
+            "canReceiveOrders":false,"taskEstimatedEndTime":null,"task":{task}
+        }}"#
+        ))
+        .unwrap()
+    }
+
+    fn crafting_manny(current_task: &str, task: &str) -> Manny {
+        serde_json::from_str(&format!(
+            r#"{{
+            "id":"m1","name":"Manny-1","location":{{"type":"probe","sector":null}},
+            "currentTask":"{current_task}","taskProgressPercent":50.0,
             "cargo":{{"capacity":0.3,"deuterium":0.0,"metals":0.0,"ice":0.0,"organicCompounds":0.0}},
             "canReceiveOrders":false,"taskEstimatedEndTime":null,"task":{task}
         }}"#
@@ -231,5 +267,32 @@ mod tests {
     fn no_detection_without_payload() {
         let m = mining_manny(r#"{"objectId":"ast-1"}"#);
         assert!(manny_artificial_detection(&m).is_none());
+    }
+
+    #[test]
+    fn crafting_detail_prefers_recipe_name() {
+        let m = crafting_manny("crafting", r#"{"recipe":"battery_pack","recipeName":"Battery pack"}"#);
+        assert_eq!(manny_crafting_detail(&m).as_deref(), Some("Battery pack"));
+    }
+
+    #[test]
+    fn crafting_detail_falls_back_to_recipe_id() {
+        let m = crafting_manny("crafting", r#"{"recipe":"battery_pack"}"#);
+        assert_eq!(manny_crafting_detail(&m).as_deref(), Some("battery_pack"));
+    }
+
+    #[test]
+    fn crafting_detail_covers_atomic_printer_assist() {
+        let m = crafting_manny(
+            "assisting_atomic_printer",
+            r#"{"recipe":"micro_conductor","recipeName":"Micro-etched conductor"}"#,
+        );
+        assert_eq!(manny_crafting_detail(&m).as_deref(), Some("Micro-etched conductor"));
+    }
+
+    #[test]
+    fn crafting_detail_none_when_not_crafting() {
+        let m = mining_manny(r#"{"recipeName":"Battery pack"}"#);
+        assert!(manny_crafting_detail(&m).is_none());
     }
 }
