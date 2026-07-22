@@ -81,7 +81,7 @@ pub(crate) fn render_container_rules_overlay(frame: &mut Frame, area: Rect, stat
     let selection = *selection;
 
     let height = (types.len() as u16 + 8).clamp(10, 24);
-    let popup = centered_rect(58, height, area);
+    let popup = centered_rect(70, height, area);
     frame.render_widget(Clear, popup);
     let block = Block::default()
         .title(format!(" ROUTING RULES — {container_label} "))
@@ -96,16 +96,18 @@ pub(crate) fn render_container_rules_overlay(frame: &mut Frame, area: Rect, stat
         .constraints([Constraint::Length(1), Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
 
+    // Directional wording: each tag says where the item goes, not the raw API
+    // term — so [S] reads as "never here", not as a whitelist (issue #234).
     frame.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled("P", Style::default().fg(p.good)),
-            Span::raw(" priority  "),
+            Span::raw(" prefer here  "),
             Span::styled("E", Style::default().fg(p.warn)),
-            Span::raw(" exclude  "),
+            Span::raw(" avoid  "),
             Span::styled("S", Style::default().fg(p.crit)),
-            Span::raw(" strict  "),
-            Span::styled("·", Style::default().fg(p.dim)),
-            Span::raw(" none"),
+            Span::raw(" never here  "),
+            Span::styled("[ ]", Style::default().fg(p.dim)),
+            Span::raw(" any"),
         ])),
         rows[0],
     );
@@ -113,21 +115,24 @@ pub(crate) fn render_container_rules_overlay(frame: &mut Frame, area: Rect, stat
     let items: Vec<ListItem> = types
         .iter()
         .map(|ty| {
-            let (tag, color) = if priority.iter().any(|t| t == ty) {
-                ("[P]", p.good)
+            // Tag + a plain-language effect per type, so a pilot reads what the
+            // rule does without consulting the OpenAPI spec (issue #234).
+            let (tag, color, effect) = if priority.iter().any(|t| t == ty) {
+                ("[P]", p.good, "prefer here")
             } else if exclusion.iter().any(|t| t == ty) {
-                ("[E]", p.warn)
+                ("[E]", p.warn, "avoid if possible")
             } else if strict_exclusion.iter().any(|t| t == ty) {
-                ("[S]", p.crit)
+                ("[S]", p.crit, "never placed here")
             } else {
-                ("[ ]", p.dim)
+                ("[ ]", p.dim, "any container")
             };
             ListItem::new(Line::from(vec![
                 Span::styled(
                     format!("{tag} "),
                     Style::default().fg(color).add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(ty.clone(), Style::default().fg(p.text)),
+                Span::styled(format!("{ty:<20}"), Style::default().fg(p.text)),
+                Span::styled(effect, Style::default().fg(p.dim)),
             ]))
         })
         .collect();
@@ -155,6 +160,7 @@ pub(crate) fn render_container_rules_overlay(frame: &mut Frame, area: Rect, stat
             p,
             &[
                 FooterKey::nav("[Space]", "cycle"),
+                FooterKey::nav("[d]", "reserve"),
                 FooterKey::nav("[Del]", "clear"),
                 FooterKey::commit("[Enter]", "SAVE"),
                 FooterKey::nav("[Esc]", "cancel"),
