@@ -184,7 +184,7 @@ The four reused panels (Probe / Inventory / Scanner / Mannies) keep their intern
 | `/api/probe/mannies/{id}/install-bookmark` | POST | ✓ |
 | `/api/probe/mannies/{id}/inspect-sector-object` | POST | ✓ |
 | `/api/probe/mannies/{id}/recover-storage-container` | POST | ✓ |
-| `/api/probe/mannies/{id}/detach-storage-container` | POST | ✓ |
+| `/api/probe/mannies/{id}/detach-storage-container` | POST | ✓ (modes: drifting · hidden_on_asteroid · attach_to_probe (v91)) |
 | `/api/probe/mannies/{id}/drop-manny-cargo` | POST | ✓ |
 | `/api/probe/inventory/{id}/jettison` | POST | ✓ |
 | `/api/probe/atomic-printer/craft` | POST | ✓ |

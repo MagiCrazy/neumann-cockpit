@@ -672,5 +672,32 @@ pub(crate) fn render_detach_overlay(frame: &mut Frame, area: Rect, state: &AppSt
                 "HIDE HERE",
             );
         }
+
+        DetachInput::PickTargetProbe {
+            manny_name,
+            container_name,
+            probes,
+            selection,
+            error,
+            ..
+        } => {
+            let labels: Vec<String> = probes.iter().map(|(id, n)| format!("{n}  ·  #{id}")).collect();
+            let names: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
+            let height = (probes.len() as u16 + 8).min(18);
+            let prompt = format!("Attach to probe  (manny: {manny_name})");
+            render_pick_list(
+                frame,
+                area,
+                p,
+                &format!(" DETACH — {container_name} → probe "),
+                52,
+                height,
+                Some(&prompt),
+                &names,
+                *selection,
+                error.as_deref(),
+                "ATTACH",
+            );
+        }
     }
 }

@@ -434,9 +434,11 @@ impl AppState {
             ActiveWizard::Messages(MessagesInput::Compose { error, .. }) => Some(error),
             ActiveWizard::Deploy(DeployInput::EnterName { error, .. }) => Some(error),
             ActiveWizard::RenameManny(RenameMannyInput::Typing { error, .. }) => Some(error),
-            ActiveWizard::Detach(DetachInput::PickMode { error, .. } | DetachInput::PickAsteroid { error, .. }) => {
-                Some(error)
-            }
+            ActiveWizard::Detach(
+                DetachInput::PickMode { error, .. }
+                | DetachInput::PickAsteroid { error, .. }
+                | DetachInput::PickTargetProbe { error, .. },
+            ) => Some(error),
             ActiveWizard::RemoteMine(
                 RemoteMineInput::Configure { error, .. } | RemoteMineInput::PickContainer { error, .. },
             ) => Some(error),

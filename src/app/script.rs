@@ -427,7 +427,10 @@ impl AppState {
                 } else {
                     mode.join("")
                 };
-                if !DETACH_MODES.iter().any(|(m, _)| *m == mode) {
+                // Scripts support only the modes whose target resolves from the
+                // line; attach_to_probe (v91) needs a probe picker, so it stays
+                // interactive-only for now.
+                if mode != "drifting" && mode != "hidden_on_asteroid" {
                     return Err("detach: mode must be drifting or hidden_on_asteroid".into());
                 }
                 let object_id = if mode == "hidden_on_asteroid" {
