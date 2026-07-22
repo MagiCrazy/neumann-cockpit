@@ -21,8 +21,25 @@ pub struct ApiClient {
     active_probe_id: Option<u64>,
 }
 
+/// Connect timeout: bound establishing the TCP/TLS connection.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+/// Overall request timeout: bound the whole request/response.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
 impl ApiClient {
     pub fn new(base_url: String, api_key: String) -> Result<Self> {
+        Self::build(base_url, api_key, CONNECT_TIMEOUT, REQUEST_TIMEOUT)
+    }
+
+    /// Build a client with explicit timeouts. `new` uses the production values;
+    /// tests inject short ones to exercise the timeout path without a 30 s wait.
+    ///
+    /// reqwest has no default timeout: a half-open connection (suspend/resume,
+    /// wifi dropping mid-request) would otherwise hang a fetch task forever —
+    /// no ApiMessage ever arrives, `loading` stays true, and all three refresh
+    /// paths are gated on `!loading`. Bounding both the connect and the overall
+    /// request means a stuck fetch always fails and frees the refresh loop.
+    fn build(base_url: String, api_key: String, connect_timeout: Duration, timeout: Duration) -> Result<Self> {
         // Identify the client to the game server: app version + platform.
         // e.g. "neumann-cockpit/63.1.0 (linux; x86_64)".
         let user_agent = format!(
@@ -32,15 +49,10 @@ impl ApiClient {
             std::env::consts::ARCH,
         );
 
-        // reqwest has no default timeout: a half-open connection (suspend/resume,
-        // wifi dropping mid-request) would otherwise hang a fetch task forever —
-        // no ApiMessage ever arrives, `loading` stays true, and all three refresh
-        // paths are gated on `!loading`. Bound both the connect and the overall
-        // request so a stuck fetch always fails and frees the refresh loop.
         let client = Client::builder()
             .user_agent(user_agent)
-            .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(30))
+            .connect_timeout(connect_timeout)
+            .timeout(timeout)
             .build()
             .context("Failed to build HTTP client")?;
         let base_url = Url::parse(&base_url).context("Invalid base_url in config")?;
@@ -50,6 +62,13 @@ impl ApiClient {
             api_key,
             active_probe_id: None,
         })
+    }
+
+    /// Test-only constructor with a short overall timeout, for exercising the
+    /// timeout path against a deliberately slow mock server.
+    #[cfg(test)]
+    fn new_with_timeout(base_url: String, api_key: String, timeout: Duration) -> Result<Self> {
+        Self::build(base_url, api_key, timeout, timeout)
     }
 
     /// Return a clone of this client that targets `id` (or the default probe
@@ -912,5 +931,93 @@ mod tests {
         let c = client(None);
         assert_eq!(c.active_probe_id(), None);
         assert_eq!(c.with_active_probe(Some(7)).active_probe_id(), Some(7));
+    }
+
+    // ── HTTP-level error/timeout paths (issue #213) ─────────────────────────
+    // Exercised against a local wiremock server — offline, no network.
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    fn client_for(server: &MockServer) -> ApiClient {
+        ApiClient::new(server.uri(), "vng_test".into()).unwrap()
+    }
+
+    #[tokio::test]
+    async fn unauthorized_maps_to_api_key_hint() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/version"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+        let err = client_for(&server).get_api_version().await.unwrap_err();
+        assert!(
+            err.to_string().contains("api_key"),
+            "401 should hint at the api_key, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn get_error_includes_status_and_body() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/version"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("upstream boom"))
+            .mount(&server)
+            .await;
+        let err = client_for(&server).get_api_version().await.unwrap_err().to_string();
+        assert!(err.contains("500"), "GET error should carry the status: {err}");
+        assert!(err.contains("upstream boom"), "GET error should carry the body: {err}");
+    }
+
+    #[tokio::test]
+    async fn body_error_extracts_json_error_message() {
+        // send_with_body path (PATCH): a JSON `error.message` is surfaced verbatim.
+        let server = MockServer::start().await;
+        Mock::given(method("PATCH"))
+            .and(path("/api/probe/9"))
+            .respond_with(ResponseTemplate::new(422).set_body_json(serde_json::json!({
+                "error": { "message": "target must be in the same sector" }
+            })))
+            .mount(&server)
+            .await;
+        let err = client_for(&server)
+            .patch_probe(9, Some("Falling Outside"), None)
+            .await
+            .unwrap_err()
+            .to_string();
+        assert_eq!(err, "target must be in the same sector");
+    }
+
+    #[tokio::test]
+    async fn body_error_without_json_falls_back_to_raw_text() {
+        let server = MockServer::start().await;
+        Mock::given(method("PATCH"))
+            .and(path("/api/probe/9"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("plain failure"))
+            .mount(&server)
+            .await;
+        let err = client_for(&server)
+            .patch_probe(9, Some("x"), None)
+            .await
+            .unwrap_err()
+            .to_string();
+        assert_eq!(err, "plain failure");
+    }
+
+    #[tokio::test]
+    async fn slow_response_times_out_rather_than_hanging() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/version"))
+            .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(5)))
+            .mount(&server)
+            .await;
+        // A 200 ms overall timeout must fail fast, not wait for the 5 s response.
+        let c = ApiClient::new_with_timeout(server.uri(), "vng_test".into(), Duration::from_millis(200)).unwrap();
+        assert!(
+            c.get_api_version().await.is_err(),
+            "a slow response must time out to an error"
+        );
     }
 }

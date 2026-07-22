@@ -25,3 +25,5 @@ toml        = "1.0"
 
 [dev-dependencies]
 pretty_assertions = "1"
+# Local HTTP mock server for client.rs error/timeout tests (offline, no network).
+wiremock = "0.6"
