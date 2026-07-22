@@ -76,6 +76,7 @@ pub struct Ready {
     pub conn: Option<Connection>,
     pub scan_history: Vec<SectorObservation>,
     pub journal: Vec<LogEvent>,
+    pub telemetry: Vec<crate::app::TelemetrySample>,
     pub api_version: Option<u32>,
     pub link_ok: bool,
 }
@@ -133,12 +134,13 @@ pub async fn run(terminal: &mut Term, color: ColorMode) -> Result<Outcome> {
     // ── ARCHIVE (local SQLite store) ────────────────────────────────────
     log.begin("ARCHIVE");
     redraw(terminal, &log, None, None, color)?;
-    let (conn, scan_history, journal) = match store::open(&config::db_path()) {
+    let (conn, scan_history, journal, telemetry) = match store::open(&config::db_path()) {
         Ok(mut conn) => {
             let outcome = store::migrate_legacy_json(&mut conn, &config::history_path())
                 .unwrap_or(store::MigrationOutcome::NoLegacyFile);
             let history = store::load_observations(&conn);
             let journal = store::load_events(&conn);
+            let telemetry = store::load_telemetry(&conn);
             let msg = match outcome {
                 store::MigrationOutcome::Imported(n) => {
                     format!("{} sectors · migrated {n}", history.len())
@@ -146,11 +148,11 @@ pub async fn run(terminal: &mut Term, color: ColorMode) -> Result<Outcome> {
                 _ => format!("{} sectors · {} log", history.len(), journal.len()),
             };
             log.set(Status::Ok(msg));
-            (Some(conn), history, journal)
+            (Some(conn), history, journal, telemetry)
         }
         Err(e) => {
             log.set(Status::Warn(format!("disabled: {e}")));
-            (None, Vec::new(), Vec::new())
+            (None, Vec::new(), Vec::new(), Vec::new())
         }
     };
 
@@ -196,6 +198,7 @@ pub async fn run(terminal: &mut Term, color: ColorMode) -> Result<Outcome> {
         conn,
         scan_history,
         journal,
+        telemetry,
         api_version,
         link_ok,
     })))

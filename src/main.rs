@@ -95,6 +95,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
         conn,
         scan_history,
         journal,
+        telemetry,
         api_version,
         link_ok,
     } = ready;
@@ -108,6 +109,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
         booting: config.boot,
         scan_history,
         journal,
+        telemetry,
         api_version,
         ..Default::default()
     };
@@ -150,6 +152,17 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                 state.journal.insert(0, ev);
             }
             state.journal.truncate(store::JOURNAL_WINDOW);
+        }
+
+        // Persist telemetry samples staged by update_probe (already appended to
+        // the in-memory series; the DB keeps the full history for stats).
+        if !state.pending_telemetry.is_empty() {
+            let staged: Vec<_> = state.pending_telemetry.drain(..).collect();
+            if let Some(tx) = &persist_tx {
+                for s in staged {
+                    let _ = tx.send(store::PersistMsg::AppendTelemetry(s));
+                }
+            }
         }
 
         // Production queue: advance the executor, then spawn any craft it staged
