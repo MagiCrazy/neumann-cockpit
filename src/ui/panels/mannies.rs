@@ -39,7 +39,7 @@ pub(crate) fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppSta
     let items: Vec<ListItem> = mannies
         .iter()
         .enumerate()
-        .map(|(i, m)| manny_list_item(m, focused && i == sel, p))
+        .map(|(i, m)| manny_list_item(m, focused && i == sel, p, inner.width))
         .collect();
 
     let list = List::new(items)
@@ -171,8 +171,21 @@ pub(crate) fn manny_task_progress(m: &Manny) -> f64 {
     (1.0 - remaining_now / total).clamp(p0, 1.0)
 }
 
-pub(crate) fn manny_list_item(m: &Manny, selected: bool, p: Palette) -> ListItem<'_> {
-    // On the selected row everything is accent so the ETA/% stay legible;
+/// Truncate `s` to at most `max` display columns, appending an ellipsis when
+/// it does not fit. Returns an empty string if `max` is 0.
+fn truncate_ellipsis(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        return s.to_string();
+    }
+    match max {
+        0 => String::new(),
+        1 => "…".to_string(),
+        _ => format!("{}…", s.chars().take(max - 1).collect::<String>()),
+    }
+}
+
+pub(crate) fn manny_list_item(m: &Manny, selected: bool, p: Palette, width: u16) -> ListItem<'_> {
+    // On the selected row everything is accent so the ETA stays legible;
     // otherwise the palette's text for the name/task and dim for the rest.
     let primary = if selected {
         Style::default().fg(p.accent).add_modifier(Modifier::BOLD)
@@ -193,11 +206,8 @@ pub(crate) fn manny_list_item(m: &Manny, selected: bool, p: Palette) -> ListItem
     let task = m.current_task.as_ref();
     let task_style = if task.is_none() { secondary } else { primary };
 
-    let progress = if m.current_task.is_some() {
-        format!(" {:3.0}%", manny_task_progress(m) * 100.0)
-    } else {
-        String::new()
-    };
+    // Time remaining only — the raw % lives in the wider overview/detail views;
+    // the compact row keeps the ETA, which is what the pilot watches.
     let eta = manny_task_eta(m)
         .filter(|_| m.current_task.is_some())
         .map(|d| format!(" · {d}"))
@@ -209,16 +219,34 @@ pub(crate) fn manny_list_item(m: &Manny, selected: bool, p: Palette) -> ListItem
         ""
     };
 
-    // What it is crafting, when visible, so the generic "crafting" label
-    // names the recipe (mirrors the mining target shown in the wider views).
-    let recipe = manny_crafting_detail(m).map(|r| format!(" {r}")).unwrap_or_default();
+    // The flexible detail span, mirroring the wider views in brief: the recipe
+    // a Manny is crafting, or what/where it is mining (`{resources} → {dest}`).
+    // It truncates to the width left after the fixed columns and the ETA, so a
+    // long name never pushes the ETA off-row.
+    let label = manny_task_label(task);
+    let detail_text = manny_crafting_detail(m).or_else(|| {
+        manny_mining_detail(m).map(|d| {
+            let what = d.resources.unwrap_or(d.target);
+            format!("{what} → {}", d.destination)
+        })
+    });
+    let detail = detail_text
+        .map(|t| {
+            // Reserved: highlight symbol (2) · "{loc} " (2) · name (12) ·
+            // label · eta · scut · the detail's own leading space (1).
+            let fixed = 2 + 2 + 12 + label.chars().count() + eta.chars().count() + via_scut.chars().count() + 1;
+            let budget = (width as usize).saturating_sub(fixed);
+            truncate_ellipsis(&t, budget)
+        })
+        .filter(|t| !t.is_empty())
+        .map(|t| format!(" {t}"))
+        .unwrap_or_default();
 
     ListItem::new(Line::from(vec![
         Span::styled(format!("{loc} "), secondary),
         Span::styled(format!("{:<12}", m.name), primary),
-        Span::styled(manny_task_label(task), task_style),
-        Span::styled(recipe, secondary),
-        Span::styled(progress, secondary),
+        Span::styled(label, task_style),
+        Span::styled(detail, secondary),
         Span::styled(eta, secondary),
         Span::styled(via_scut, secondary),
     ]))
@@ -288,6 +316,16 @@ mod tests {
             r#"{"recipe":"micro_conductor","recipeName":"Micro-etched conductor"}"#,
         );
         assert_eq!(manny_crafting_detail(&m).as_deref(), Some("Micro-etched conductor"));
+    }
+
+    #[test]
+    fn truncate_ellipsis_fits_and_shrinks() {
+        use super::truncate_ellipsis;
+        assert_eq!(truncate_ellipsis("Battery pack", 20), "Battery pack");
+        assert_eq!(truncate_ellipsis("Battery pack", 12), "Battery pack");
+        assert_eq!(truncate_ellipsis("Battery pack", 5), "Batt…");
+        assert_eq!(truncate_ellipsis("Battery pack", 1), "…");
+        assert_eq!(truncate_ellipsis("Battery pack", 0), "");
     }
 
     #[test]
