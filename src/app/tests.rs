@@ -1250,6 +1250,45 @@ fn active_relay_offers_no_turn_on() {
 }
 
 #[test]
+fn active_relay_without_beacon_offers_install_transit_beacon() {
+    let mut state = AppState::default();
+    state.probe = Some(probe_at(0., 0., 0.));
+    state.scan_history = vec![relay_sector("on")]; // no isTransitBeacon → false
+    let entry = state
+        .scanner_objects()
+        .into_iter()
+        .find(|e| matches!(e.object_type, crate::api::types::SectorObjectType::ScutRelay))
+        .expect("relay entry present");
+    let actions = state.actions_for_object(&entry);
+    assert!(actions.contains(&ObjectAction::InstallTransitBeacon));
+}
+
+#[test]
+fn relay_with_beacon_offers_no_install() {
+    let sector = make_sector_with_objects(
+        0.,
+        0.,
+        0.,
+        r#"[{
+            "id": "42", "type": "scut_relay", "name": "Relais SCUT",
+            "estimated": false, "summary": "relay", "dangerLevel": "low",
+            "status": "on", "isTransitBeacon": true, "coverageRadiusSectors": 10,
+            "waypointBookmarks": [], "bookmarkTargets": []
+        }]"#,
+    );
+    let mut state = AppState::default();
+    state.probe = Some(probe_at(0., 0., 0.));
+    state.scan_history = vec![sector];
+    let entry = state
+        .scanner_objects()
+        .into_iter()
+        .find(|e| matches!(e.object_type, crate::api::types::SectorObjectType::ScutRelay))
+        .expect("relay entry present");
+    let actions = state.actions_for_object(&entry);
+    assert!(!actions.contains(&ObjectAction::InstallTransitBeacon));
+}
+
+#[test]
 fn deuterium_station_absent_in_current_sector() {
     let mut state = AppState::default();
     state.probe = Some(probe_at(0., 0., 0.));

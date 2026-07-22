@@ -68,6 +68,7 @@ pub enum ObjectAction {
     Recover,
     DeployWaypoint,
     TurnOnRelay,
+    InstallTransitBeacon,
 }
 
 impl ObjectAction {
@@ -79,6 +80,7 @@ impl ObjectAction {
             ObjectAction::Recover => "recover",
             ObjectAction::DeployWaypoint => "deploy waypoint",
             ObjectAction::TurnOnRelay => "turn on relay",
+            ObjectAction::InstallTransitBeacon => "install transit beacon",
         }
     }
 }
@@ -400,6 +402,12 @@ impl AppState {
                 actions.push(ObjectAction::TurnOnRelay);
                 actions.push(ObjectAction::Salvage);
             }
+            // An active relay without a transit beacon can be equipped (v96).
+            (ObjectProvenance::TopLevel, SectorObjectType::ScutRelay)
+                if !self.sector_object_is_transit_beacon(&entry.id) =>
+            {
+                actions.push(ObjectAction::InstallTransitBeacon);
+            }
             _ => {}
         }
         if entry.provenance == ObjectProvenance::TopLevel && self.inventory_waypoint_bookmark_id().is_some() {
@@ -413,6 +421,16 @@ impl AppState {
         self.probe_current_sector_scan()
             .map(|s| s.scut_networks.iter().map(|n| (n.id, n.name.clone())).collect())
             .unwrap_or_default()
+    }
+
+    /// Whether a SCUT relay object in the current sector already carries a
+    /// transit beacon (API v96), by object id.
+    pub fn sector_object_is_transit_beacon(&self, id: &str) -> bool {
+        self.probe_current_sector_scan()
+            .and_then(|s| s.objects.as_ref())
+            .and_then(|objects| objects.iter().find(|o| o.id.as_deref() == Some(id)))
+            .and_then(|o| o.is_transit_beacon)
+            .unwrap_or(false)
     }
 
     /// Status of a SCUT relay object in the probe's current sector, by object id.

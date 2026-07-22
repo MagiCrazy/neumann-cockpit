@@ -554,6 +554,15 @@ pub fn fetch_turn_on_relay(
     );
 }
 
+pub fn fetch_install_beacon(manny_id: String, relay_id: i64, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    spawn_action(
+        tx,
+        async move { client.install_scut_transit_beacon(&manny_id, relay_id).await },
+        |_| ApiMessage::TransitBeaconStarted,
+        ApiMessage::TransitBeaconError,
+    );
+}
+
 /// Promote a probe to the player's default (`PATCH /api/probe/{id}`). The
 /// server refuses an out-of-reach target with 422, surfaced as `ActionError`.
 pub fn fetch_set_default_probe(probe_id: u64, name: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
