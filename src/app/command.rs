@@ -474,11 +474,18 @@ impl AppState {
             match candidates.len() {
                 0 => return Err("no mineable objects in current sector — scan first".into()),
                 1 => candidates.into_iter().next().unwrap(),
-                _ => return Err("multiple asteroids — add at <asteroid>".into()),
+                _ => return Err("multiple asteroids — add at <asteroid name|id>".into()),
             }
         } else {
+            // Exact id first (the id shown in the zoomed Sector view, for
+            // targeting unnamed asteroids), then a case-insensitive name match.
             let q = at.join(" ").to_lowercase();
-            match candidates.iter().find(|(_, n)| n.to_lowercase().contains(&q)).cloned() {
+            let hit = candidates
+                .iter()
+                .find(|(id, _)| id.eq_ignore_ascii_case(&q))
+                .or_else(|| candidates.iter().find(|(_, n)| n.to_lowercase().contains(&q)))
+                .cloned();
+            match hit {
                 Some(o) => o,
                 None => return Err(format!("no asteroid matching \"{}\"", at.join(" "))),
             }

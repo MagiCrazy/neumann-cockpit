@@ -196,19 +196,23 @@ fn split_kw<'a>(args: &[&'a str]) -> (Vec<&'a str>, Vec<&'a str>, Vec<&'a str>, 
 }
 
 /// Pick a single target from a candidate list: the sole one when `query` is
-/// empty, else a case-insensitive substring match. `noun` shapes the error.
+/// empty, else an **exact id** match (case-insensitive) — for targeting unnamed
+/// objects by the id shown in the zoomed Sector view — falling back to a
+/// case-insensitive **name substring**. `noun` shapes the error.
 fn pick_one(cands: Vec<(String, String)>, query: &str, noun: &str) -> Result<(String, String), String> {
     if query.is_empty() {
         match cands.len() {
             0 => Err(format!("no {noun} in current sector")),
             1 => Ok(cands.into_iter().next().unwrap()),
-            _ => Err(format!("multiple {noun}s — name one")),
+            _ => Err(format!("multiple {noun}s — name one (or use its id)")),
         }
     } else {
         let q = query.to_lowercase();
         cands
-            .into_iter()
-            .find(|(_, n)| n.to_lowercase().contains(&q))
+            .iter()
+            .find(|(id, _)| id.eq_ignore_ascii_case(&q))
+            .or_else(|| cands.iter().find(|(_, n)| n.to_lowercase().contains(&q)))
+            .cloned()
             .ok_or_else(|| format!("no {noun} matching \"{query}\""))
     }
 }

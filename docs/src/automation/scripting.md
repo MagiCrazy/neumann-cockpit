@@ -27,7 +27,9 @@ Each line is one action. The MVP verbs:
 | `recover` | `[by <manny>] [at <container>]` |
 | `craft` | `<recipe> [by <manny>]` |
 
-Targets are matched by **case-insensitive substring** of a name (manny, asteroid, container), or an exact id. Where a target is unambiguous — the sole idle manny, the only asteroid in the sector — you can omit it.
+Targets are matched by **exact id** first, then a **case-insensitive substring** of a name (manny, asteroid, container). Where a target is unambiguous — the sole idle manny, the only asteroid in the sector — you can omit it.
+
+> Nested asteroids (bodies of a solar system) are often **unnamed**, so a name match can't single one out. Zoom the **Sector** pane (`z`): each body shows its `id`. Copy it into `at <id>` to target that exact rock — e.g. `mine metals 0.20 by all at c4d44bd03a7ccc94b37b`.
 
 ## Two ideas that make it work
 
