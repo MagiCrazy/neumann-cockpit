@@ -49,9 +49,19 @@ fn script_lines(text: &str) -> Vec<String> {
         .collect()
 }
 
+/// Flush stdout so a line reaches a redirected pipe/file immediately. Rust's
+/// stdout is line-buffered on a tty but block-buffered otherwise, so without
+/// this a long run's progress wouldn't appear until the buffer fills or the
+/// process exits — defeating the "streams as it progresses" contract.
+fn flush_stdout() {
+    use std::io::Write;
+    let _ = std::io::stdout().flush();
+}
+
 /// `HH:MM:SS  {msg}` on stdout — the ship's-log line format.
 fn log_line(msg: &str) {
     println!("{}  {msg}", Local::now().format("%H:%M:%S"));
+    flush_stdout();
 }
 
 /// A staged ship's-log entry, stamped with its own occurrence time.
@@ -61,6 +71,7 @@ fn print_event(ev: &LogEvent) {
         ev.occurred_at.with_timezone(&Local).format("%H:%M:%S"),
         ev.summary
     );
+    flush_stdout();
 }
 
 /// Run a script file headlessly. Returns the process exit code: 0 on
