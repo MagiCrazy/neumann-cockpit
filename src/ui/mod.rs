@@ -3,6 +3,8 @@ pub(crate) mod overlays;
 pub(crate) mod panels;
 pub(crate) mod preflight;
 pub(crate) mod sigil;
+#[cfg(test)]
+mod tests;
 pub(crate) mod theme;
 
 use crate::app::AppState;

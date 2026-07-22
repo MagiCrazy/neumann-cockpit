@@ -11,7 +11,7 @@ cargo build --release
 cargo run            # run the TUI (requires config, see below)
 cargo run -- --script run.ncs   # headless: play an action script, no TUI (see Headless)
 cargo clippy         # lints
-cargo test           # unit tests (app.rs, input.rs) + serde fixtures (tests/)
+cargo test           # unit tests (app, input, store, client) + TestBackend render tests (ui/tests.rs) + serde fixtures (tests/)
 ```
 
 ## Config
