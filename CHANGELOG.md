@@ -1,5 +1,13 @@
 # Changelog
 
+## [96.2.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v96.1.0...neumann-cockpit-v96.2.0) (2026-07-23)
+
+
+### Features
+
+* **diagnostics:** server latency & health diagnostic report (headless MVP) ([#268](https://github.com/MagiCrazy/neumann-cockpit/issues/268)) ([3a3aa85](https://github.com/MagiCrazy/neumann-cockpit/commit/3a3aa852ffd36b925ed8c79951f1893224e22cd7))
+* **tree:** visual tech tree browser (:tree) ([#266](https://github.com/MagiCrazy/neumann-cockpit/issues/266)) ([da2cecd](https://github.com/MagiCrazy/neumann-cockpit/commit/da2cecddc3f0192924dacfa2b79e1a76d0ffbe46))
+
 ## [96.1.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v96.0.0...neumann-cockpit-v96.1.0) (2026-07-22)
 
 
