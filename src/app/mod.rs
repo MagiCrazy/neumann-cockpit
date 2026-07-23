@@ -165,6 +165,8 @@ pub struct AppState {
     pub messages: Vec<ProbeMessage>,
     pub sent_messages: Vec<ProbeSentMessage>,
     pub map: MapView,
+    /// The full-screen tech-tree browser (`:tree`, #200).
+    pub tree: TreeView,
     /// The single modal wizard currently open (or `None`). Replaces the 31
     /// mutually-exclusive `*Input` fields — only one can be held at a time, so
     /// two wizards open at once is unrepresentable.

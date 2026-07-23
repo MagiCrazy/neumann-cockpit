@@ -2348,7 +2348,10 @@ fn completions_verb_prefix_and_ambiguity() {
     assert_eq!(cands, vec!["goto".to_string()]);
     // Ambiguous prefix returns every match, in table order.
     let (_, cands) = state.command_completions("t", 1).unwrap();
-    assert_eq!(cands, vec!["travel".to_string(), "theme".to_string()]);
+    assert_eq!(
+        cands,
+        vec!["travel".to_string(), "theme".to_string(), "tree".to_string()]
+    );
     // No match at all.
     assert!(state.command_completions("zzz", 3).is_none());
 }
