@@ -13,7 +13,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{AppState, Fabricator};
-use crate::api::types::CraftingRecipe;
+use crate::api::types::{CraftingRecipe, ProbeImprovement};
 
 /// The raw resources every recipe chain bottoms out in. Anything not craftable
 /// by a known recipe is a leaf; the four below are the ones the game mines.
@@ -126,6 +126,10 @@ pub struct TreeRow {
     pub is_header: bool,
     /// A base resource or an unmodelled leaf (no recipe).
     pub is_base: bool,
+    /// A probe-improvement node (built via the improve-probe task, not a recipe).
+    pub is_improvement: bool,
+    /// A locked improvement (blueprint not yet known): shown dim, non-buildable.
+    pub locked: bool,
     pub expandable: bool,
     pub expanded: bool,
 }
@@ -142,6 +146,8 @@ impl TreeRow {
             duration_seconds: 0,
             is_header: true,
             is_base: false,
+            is_improvement: false,
+            locked: false,
             expandable: false,
             expanded: false,
         }
@@ -194,7 +200,43 @@ impl AppState {
                 self.push_tree_node(&mut rows, &root_path, &recipe.id, qty, 0);
             }
         }
+        // Probe improvements (built via the improve-probe task, not a recipe).
+        if !self.tree_improvements.is_empty() {
+            rows.push(TreeRow::header("PROBE IMPROVEMENTS"));
+            for imp in &self.tree_improvements {
+                self.push_improvement_node(&mut rows, imp, qty);
+            }
+        }
         rows
+    }
+
+    /// Push a probe-improvement root and, when expanded, its ingredients (which
+    /// resolve against recipes / base resources like any other node).
+    fn push_improvement_node(&self, rows: &mut Vec<TreeRow>, imp: &ProbeImprovement, qty: f64) {
+        let path = format!("improve:{}", imp.id);
+        let expandable = !imp.ingredients.is_empty();
+        let expanded = expandable && self.tree.expanded.contains(&path);
+        rows.push(TreeRow {
+            path: path.clone(),
+            item: imp.id.clone(),
+            label: imp.name.clone(),
+            depth: 0,
+            qty_abs: qty,
+            fabricator: Some(Fabricator::Manny),
+            duration_seconds: imp.duration_seconds,
+            is_header: false,
+            is_base: false,
+            is_improvement: true,
+            locked: !imp.available,
+            expandable,
+            expanded,
+        });
+        if expanded {
+            for ing in &imp.ingredients {
+                let child_path = format!("{path}/{}", ing.ingredient_type);
+                self.push_tree_node(rows, &child_path, &ing.ingredient_type, qty * ing.quantity, 1);
+            }
+        }
     }
 
     /// Push `item` as a row and, when expanded, recurse into its ingredients.
@@ -213,6 +255,8 @@ impl AppState {
             duration_seconds: recipe.map(|r| r.duration_seconds).unwrap_or(0),
             is_header: false,
             is_base: recipe.is_none(),
+            is_improvement: false,
+            locked: false,
             expandable,
             expanded,
         });
@@ -285,5 +329,28 @@ impl AppState {
     pub fn tree_selected_item(&self) -> Option<String> {
         let rows = self.tree_rows();
         rows.get(self.tree.cursor).filter(|r| !r.is_header).map(|r| r.item.clone())
+    }
+
+    /// A tech-tree improvement by id (from the `includeAll` catalog).
+    pub fn tree_improvement(&self, id: &str) -> Option<&ProbeImprovement> {
+        self.tree_improvements.iter().find(|i| i.id == id)
+    }
+
+    /// Roll a probe improvement up to base resources: fold the recipe roll-up
+    /// over each of its ingredients (the improvement's own install is an
+    /// improve-probe task, not a craft, so it is not counted as a craft op).
+    pub fn improvement_rollup(&self, imp: &ProbeImprovement, qty: f64) -> Rollup {
+        let mut out = Rollup::default();
+        for ing in &imp.ingredients {
+            let sub = self.recipe_rollup(&ing.ingredient_type, ing.quantity * qty);
+            for (k, v) in sub.base {
+                *out.base.entry(k).or_insert(0.0) += v;
+            }
+            for (k, v) in sub.crafts {
+                *out.crafts.entry(k).or_insert(0.0) += v;
+            }
+            out.duration_seconds += sub.duration_seconds;
+        }
+        out
     }
 }

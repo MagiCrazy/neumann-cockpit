@@ -455,6 +455,9 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                     ApiMessage::ProbeImprovementsFetched(improvements) => {
                         state.probe_improvements = improvements;
                     }
+                    ApiMessage::TreeImprovementsFetched(improvements) => {
+                        state.tree_improvements = improvements;
+                    }
                     ApiMessage::ImproveProbeStarted => {
                         state.close_wizard();
                         state.finish_action("probe improvement started", Refetch::All);

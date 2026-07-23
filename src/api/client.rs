@@ -350,15 +350,19 @@ impl ApiClient {
         Ok(self.post::<Resp, _>(&path, &Body { recipe }).await?.manny)
     }
 
-    pub async fn get_probe_improvements(&self) -> Result<Vec<ProbeImprovement>> {
+    /// List probe improvements known by the player. `include_all` adds locked
+    /// catalog entries (as `available: false`) — used by the tech-tree browser
+    /// to show the full catalog; the Improve wizard passes `false`.
+    pub async fn get_probe_improvements(&self, include_all: bool) -> Result<Vec<ProbeImprovement>> {
         #[derive(Deserialize)]
         struct Resp {
             improvements: Vec<ProbeImprovement>,
         }
-        Ok(self
-            .get::<Resp>(&self.probe_path("/probe-improvements-available"))
-            .await?
-            .improvements)
+        let mut path = self.probe_path("/probe-improvements-available");
+        if include_all {
+            path.push_str("?includeAll=1");
+        }
+        Ok(self.get::<Resp>(&path).await?.improvements)
     }
 
     pub async fn improve_probe(&self, manny_id: &str, improvement: &str) -> Result<Manny> {

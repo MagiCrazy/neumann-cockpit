@@ -3032,6 +3032,51 @@ fn appstate_wrapper_uses_live_recipes() {
     assert!((r.base["metals"] - 0.66).abs() < 1e-9);
 }
 
+fn improvement_with(id: &str, available: bool, ings: &[(&str, f64, &str)]) -> crate::api::types::ProbeImprovement {
+    let ingredients: String = ings
+        .iter()
+        .map(|(t, q, u)| format!(r#"{{"type":"{t}","quantity":{q},"unit":"{u}","kind":"item"}}"#))
+        .collect::<Vec<_>>()
+        .join(",");
+    serde_json::from_str(&format!(
+        r#"{{"id":"{id}","name":"{id}","description":"d","available":{available},"done":false,
+        "durationSeconds":300,"ingredients":[{ingredients}],"effects":null}}"#
+    ))
+    .unwrap()
+}
+
+#[test]
+fn improvement_rollup_folds_over_ingredients() {
+    let mut s = AppState::default();
+    // steel → 0.02 metals; improvement needs 2 steel → 0.04 metals.
+    s.recipes = vec![recipe_with(
+        "steel",
+        5,
+        &[("metals", 0.02, "earth_container_equivalent")],
+    )];
+    let imp = improvement_with("reinforced", true, &[("steel", 2.0, "item")]);
+    let r = s.improvement_rollup(&imp, 1.0);
+    assert!((r.base["metals"] - 0.04).abs() < 1e-9, "metals = {}", r.base["metals"]);
+    assert_eq!(r.crafts["steel"], 2.0);
+}
+
+#[test]
+fn tree_rows_include_improvement_section() {
+    let mut s = AppState::default();
+    s.recipes = vec![recipe_with(
+        "steel",
+        5,
+        &[("metals", 0.02, "earth_container_equivalent")],
+    )];
+    s.tree_improvements = vec![improvement_with("reinforced", false, &[("steel", 2.0, "item")])];
+    s.open_tree();
+    let rows = s.tree_rows();
+    let imp_row = rows.iter().find(|r| r.item == "reinforced").expect("improvement row");
+    assert!(imp_row.is_improvement);
+    assert!(imp_row.locked, "unavailable improvement is locked");
+    assert!(imp_row.expandable, "has ingredients");
+}
+
 #[test]
 fn tokenize_groups_quoted_spans_and_keeps_quotes() {
     use crate::app::command::{dequote, tokenize};

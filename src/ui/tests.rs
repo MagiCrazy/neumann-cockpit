@@ -277,3 +277,26 @@ fn tree_overlay_expands_into_ingredients() {
         "steel_plate appears indented under linear_actuator"
     );
 }
+
+#[test]
+fn tree_overlay_shows_improvement_section() {
+    let mut state = AppState::default();
+    state.recipes = vec![recipe_json(
+        "steel_plate",
+        "Steel plate",
+        "manny",
+        r#"{"type":"metals","quantity":0.02,"unit":"earth_container_equivalent","kind":null}"#,
+        300,
+    )];
+    state.tree_improvements = vec![serde_json::from_str(
+        r#"{"id":"deuterium_compression","name":"Deuterium compression",
+        "description":"Bigger tank.","available":true,"done":false,"durationSeconds":300,
+        "ingredients":[{"type":"steel_plate","quantity":2,"unit":"item","kind":"item"}],"effects":null}"#,
+    )
+    .unwrap()];
+    state.open_tree();
+
+    let text = buffer_text(&render_cockpit(&state, 90, 24));
+    assert!(text.contains("PROBE IMPROVEMENTS"), "improvement section header");
+    assert!(text.contains("Deuterium compression"), "improvement listed");
+}

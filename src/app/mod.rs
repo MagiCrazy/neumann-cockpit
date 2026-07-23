@@ -174,6 +174,10 @@ pub struct AppState {
     pub api_version: Option<u32>,
     pub recipes: Vec<CraftingRecipe>,
     pub probe_improvements: Vec<ProbeImprovement>,
+    /// Full improvement catalog (locked entries included) for the `:tree`
+    /// browser (#200). Fetched with `includeAll=1`, kept separate from
+    /// `probe_improvements` so the Improve wizard's list is unaffected.
+    pub tree_improvements: Vec<ProbeImprovement>,
     // ── Multi-probe fleet (API v81) ─────────────────────────────────────
     /// The player's probes (`GET /api/probes`), refreshed every `fetch_all`.
     pub fleet: Vec<ProbeSummary>,

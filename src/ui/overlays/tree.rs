@@ -90,7 +90,7 @@ fn render_catalog(frame: &mut Frame, area: Rect, state: &AppState, p: crate::ui:
         let qty = fmt_qty(row.qty_abs);
         let name_style = if selected {
             Style::default().fg(p.text).add_modifier(Modifier::BOLD)
-        } else if row.is_base {
+        } else if row.is_base || row.locked {
             dim
         } else {
             text
@@ -124,18 +124,36 @@ fn render_detail(frame: &mut Frame, area: Rect, state: &AppState, p: crate::ui::
         return;
     };
     let qty = state.tree.qty.max(1);
+    let improvement = if row.is_improvement {
+        state.tree_improvement(&row.item)
+    } else {
+        None
+    };
 
     let mut lines: Vec<Line> = Vec::new();
     lines.push(Line::from(Span::styled(
         row.label.clone(),
         accent.add_modifier(Modifier::BOLD),
     )));
-    let builder = match row.fabricator {
-        Some(Fabricator::AtomicPrinter) => "atomic printer",
-        Some(Fabricator::Manny) => "Manny",
-        None => "raw resource",
-    };
-    let mut meta = vec![Span::styled(format!("built by: {builder}"), dim)];
+    // Meta line: for an improvement, its lock/duration status; else its builder.
+    let mut meta: Vec<Span> = Vec::new();
+    if let Some(imp) = improvement {
+        let status = if imp.done {
+            Span::styled("probe improvement · installed", Style::default().fg(p.good))
+        } else if imp.available {
+            Span::styled("probe improvement", dim)
+        } else {
+            Span::styled("probe improvement · locked", Style::default().fg(p.warn))
+        };
+        meta.push(status);
+    } else {
+        let builder = match row.fabricator {
+            Some(Fabricator::AtomicPrinter) => "atomic printer",
+            Some(Fabricator::Manny) => "Manny",
+            None => "raw resource",
+        };
+        meta.push(Span::styled(format!("built by: {builder}"), dim));
+    }
     if row.duration_seconds > 0 {
         meta.push(Span::styled(
             format!("  ·  {}", format_duration(row.duration_seconds)),
@@ -146,10 +164,19 @@ fn render_detail(frame: &mut Frame, area: Rect, state: &AppState, p: crate::ui::
     lines.push(Line::from(Span::styled(format!("quantity: ×{qty}"), dim)));
     lines.push(Line::default());
 
-    // Direct ingredients of the selected recipe (if any).
-    if let Some(recipe) = state.recipes.iter().find(|r| r.id == row.item || r.output.output_type == row.item) {
+    // Direct ingredients — of the improvement or of the recipe.
+    let direct = improvement
+        .map(|i| i.ingredients.as_slice())
+        .or_else(|| {
+            state
+                .recipes
+                .iter()
+                .find(|r| r.id == row.item || r.output.output_type == row.item)
+                .map(|r| r.ingredients.as_slice())
+        });
+    if let Some(ings) = direct {
         lines.push(Line::from(Span::styled("DIRECT INGREDIENTS", dim)));
-        for ing in &recipe.ingredients {
+        for ing in ings {
             let q = if ing.unit == "item" {
                 format!("{}", (ing.quantity * qty as f64) as i64)
             } else {
@@ -164,7 +191,10 @@ fn render_detail(frame: &mut Frame, area: Rect, state: &AppState, p: crate::ui::
     }
 
     // Roll-up to base resources.
-    let rollup = state.recipe_rollup(&row.item, qty as f64);
+    let rollup = match improvement {
+        Some(imp) => state.improvement_rollup(imp, qty as f64),
+        None => state.recipe_rollup(&row.item, qty as f64),
+    };
     lines.push(Line::from(Span::styled("── ROLLED UP TO BASE ──", dim)));
     for res in BASE_RESOURCES {
         let amount = rollup.base.get(res).copied().unwrap_or(0.0);
@@ -192,7 +222,39 @@ fn render_detail(frame: &mut Frame, area: Rect, state: &AppState, p: crate::ui::
         dim,
     )));
 
+    // Improvement flavour text.
+    if let Some(imp) = improvement {
+        lines.push(Line::default());
+        for line in wrap(&imp.description, inner.width as usize) {
+            lines.push(Line::from(Span::styled(line, dim)));
+        }
+    }
+
     frame.render_widget(Paragraph::new(lines), inner);
+}
+
+/// Greedy word-wrap to `width` columns (narrow detail panel).
+fn wrap(s: &str, width: usize) -> Vec<String> {
+    if width < 4 {
+        return vec![s.to_string()];
+    }
+    let mut lines = Vec::new();
+    let mut cur = String::new();
+    for word in s.split_whitespace() {
+        if cur.is_empty() {
+            cur = word.to_string();
+        } else if cur.chars().count() + 1 + word.chars().count() <= width {
+            cur.push(' ');
+            cur.push_str(word);
+        } else {
+            lines.push(std::mem::take(&mut cur));
+            cur = word.to_string();
+        }
+    }
+    if !cur.is_empty() {
+        lines.push(cur);
+    }
+    lines
 }
 
 /// Compact quantity for the catalog column: an integer for whole counts, else
