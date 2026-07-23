@@ -42,6 +42,12 @@ async fn main() -> Result<()> {
         let code = neumann_cockpit::headless::run(std::path::Path::new(&path)).await?;
         std::process::exit(code);
     }
+    // Headless API diagnostic: `--diagnostic[=N]` / `--status latency` fires a
+    // burst of read-only requests and prints a latency/health report (#247).
+    if let Some(rounds) = neumann_cockpit::headless::diagnostic_arg(&args) {
+        let code = neumann_cockpit::headless::run_diagnostic(rounds).await?;
+        std::process::exit(code);
+    }
 
     // Enter the alternate screen FIRST — before any fallible startup. A missing
     // or keyless config used to error out of `main` before the terminal was set
