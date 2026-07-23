@@ -18,6 +18,7 @@ mod telemetry;
 #[cfg(test)]
 mod tests;
 mod travel;
+mod tree;
 mod waypoints;
 
 pub use boot::{BOOT_CHARS_PER_FRAME, BOOT_LINE_STRIDE};
@@ -34,6 +35,7 @@ pub use queue::*;
 pub use scan::*;
 pub use script::*;
 pub use telemetry::*;
+pub use tree::*;
 pub use waypoints::*;
 
 use crate::api::types::{
