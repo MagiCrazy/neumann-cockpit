@@ -89,6 +89,7 @@ const RIGHT: &[Section] = &[
             (":craft", "[recipe] — production console / queue it"),
             (":queue", "open the production console"),
             (":script", "open the action-scripting console"),
+            (":tree", "open the tech-tree browser"),
             (":mine", "[res] [amt] [by/at/to …] — wizard or fire"),
             (":theme", "<mono-green|mono-amber|…>"),
             (":refresh", "reload all data"),
@@ -118,6 +119,16 @@ const RIGHT: &[Section] = &[
             ("p", "pause / resume"),
             ("verbs", "travel mine repair salvage detach recover"),
             ("mine by all", "fan-out: many Mannies, join before next"),
+        ],
+    ),
+    (
+        "Tech tree  ( :tree )",
+        &[
+            ("j k", "move the cursor"),
+            ("l h", "expand / collapse a node"),
+            ("Enter", "toggle expansion"),
+            ("+ -", "scale the roll-up quantity"),
+            ("detail", "direct ingredients + base-resource roll-up"),
         ],
     ),
 ];

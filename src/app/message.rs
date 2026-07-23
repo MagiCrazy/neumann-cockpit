@@ -42,6 +42,8 @@ pub enum ApiMessage {
     AtomicPrinterCraftError(String),
     RecipesFetched(Vec<CraftingRecipe>),
     ProbeImprovementsFetched(Vec<ProbeImprovement>),
+    /// The full improvement catalog (locked entries included) for `:tree`.
+    TreeImprovementsFetched(Vec<ProbeImprovement>),
     ImproveProbeStarted,
     ImproveProbeError(String),
     RenameMannyDone(Manny),

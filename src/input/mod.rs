@@ -24,6 +24,7 @@ mod scanner;
 mod script;
 mod storage_move;
 mod travel;
+mod tree;
 
 use alerts::handle_alerts_event;
 use assemble::handle_assemble_probe_event;
@@ -51,6 +52,7 @@ use scanner::{handle_object_action_event, handle_scut_network_event, handle_scut
 use script::handle_script_event;
 use storage_move::handle_storage_move_event;
 use travel::handle_travel_event;
+use tree::handle_tree_event;
 
 type WizardGuard = fn(&AppState) -> bool;
 type WizardHandler = fn(KeyCode, &mut AppState, &ApiClient, &mpsc::Sender<ApiMessage>);
@@ -71,6 +73,7 @@ const WIZARD_INPUTS: &[(WizardGuard, WizardHandler)] = &[
     (|s| s.help_open, |c, s, _, _| handle_help_event(c, s)),
     (|s| s.inventory_detail_open, |c, s, _, _| handle_inventory_detail_event(c, s)),
     (|s| s.map.open, |c, s, _, _| handle_map_event(c, s)),
+    (|s| s.tree.open, |c, s, _, _| handle_tree_event(c, s)),
     (|s| matches!(s.goto_visited, GotoVisitedInput::Picking { .. }), |c, s, _, _| handle_goto_visited_event(c, s)),
     (|s| matches!(s.probe_switch, ProbeSwitchInput::Picking { .. }), |c, s, _, _| handle_probe_switch_event(c, s)),
     (|s| matches!(s.active_wizard, ActiveWizard::AssembleProbe(_)), handle_assemble_probe_event),

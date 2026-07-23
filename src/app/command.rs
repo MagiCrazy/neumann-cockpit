@@ -2,9 +2,9 @@ use super::*;
 
 /// Command verbs recognised by `:` mode. Kept as a table so the input layer can
 /// offer Tab-completion and a `:help`-style listing.
-pub const COMMANDS: [&str; 14] = [
-    "focus", "travel", "goto", "filter", "refresh", "theme", "zoom", "craft", "mine", "queue", "script", "probe",
-    "help", "quit",
+pub const COMMANDS: [&str; 15] = [
+    "focus", "travel", "goto", "filter", "refresh", "theme", "zoom", "craft", "mine", "queue", "script", "tree",
+    "probe", "help", "quit",
 ];
 
 /// One-line argument usage for a verb, shown as inline ghost-text while typing
@@ -265,6 +265,14 @@ impl AppState {
             "queue" => self.active_wizard = ActiveWizard::Fabrication(FabricationInput::pick_recipe(None)),
             // `:script` opens the action-scripting console (#198).
             "script" => self.active_wizard = ActiveWizard::Script(ScriptInput::editing()),
+            // `:tree` opens the full-screen tech-tree browser (#200).
+            "tree" => {
+                if self.recipes.is_empty() {
+                    self.set_toast("recipes loading — F5 to refresh");
+                } else {
+                    self.open_tree();
+                }
+            }
             "help" => self.help_open = true,
             "q" | "quit" => self.set_quit(),
             other => self.set_toast(format!("unknown command: {other}")),

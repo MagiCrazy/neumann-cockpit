@@ -18,6 +18,7 @@ mod telemetry;
 #[cfg(test)]
 mod tests;
 mod travel;
+mod tree;
 mod waypoints;
 
 pub use boot::{BOOT_CHARS_PER_FRAME, BOOT_LINE_STRIDE};
@@ -34,6 +35,7 @@ pub use queue::*;
 pub use scan::*;
 pub use script::*;
 pub use telemetry::*;
+pub use tree::*;
 pub use waypoints::*;
 
 use crate::api::types::{
@@ -163,6 +165,8 @@ pub struct AppState {
     pub messages: Vec<ProbeMessage>,
     pub sent_messages: Vec<ProbeSentMessage>,
     pub map: MapView,
+    /// The full-screen tech-tree browser (`:tree`, #200).
+    pub tree: TreeView,
     /// The single modal wizard currently open (or `None`). Replaces the 31
     /// mutually-exclusive `*Input` fields — only one can be held at a time, so
     /// two wizards open at once is unrepresentable.
@@ -170,6 +174,10 @@ pub struct AppState {
     pub api_version: Option<u32>,
     pub recipes: Vec<CraftingRecipe>,
     pub probe_improvements: Vec<ProbeImprovement>,
+    /// Full improvement catalog (locked entries included) for the `:tree`
+    /// browser (#200). Fetched with `includeAll=1`, kept separate from
+    /// `probe_improvements` so the Improve wizard's list is unaffected.
+    pub tree_improvements: Vec<ProbeImprovement>,
     // ── Multi-probe fleet (API v81) ─────────────────────────────────────
     /// The player's probes (`GET /api/probes`), refreshed every `fetch_all`.
     pub fleet: Vec<ProbeSummary>,

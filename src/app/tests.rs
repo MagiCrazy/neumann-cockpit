@@ -2348,7 +2348,10 @@ fn completions_verb_prefix_and_ambiguity() {
     assert_eq!(cands, vec!["goto".to_string()]);
     // Ambiguous prefix returns every match, in table order.
     let (_, cands) = state.command_completions("t", 1).unwrap();
-    assert_eq!(cands, vec!["travel".to_string(), "theme".to_string()]);
+    assert_eq!(
+        cands,
+        vec!["travel".to_string(), "theme".to_string(), "tree".to_string()]
+    );
     // No match at all.
     assert!(state.command_completions("zzz", 3).is_none());
 }
@@ -2931,6 +2934,143 @@ fn script_craft_parse_and_resolve() {
         }
         other => panic!("expected Craft, got {other:?}"),
     }
+}
+
+// ── Tech-tree rollup (#200) ──────────────────────────────────────────────────
+
+/// Build a Manny recipe with explicit ingredients. `ings` are `(type, qty, unit)`.
+fn recipe_with(id: &str, duration: i64, ings: &[(&str, f64, &str)]) -> crate::api::types::CraftingRecipe {
+    let ingredients: String = ings
+        .iter()
+        .map(|(t, q, u)| format!(r#"{{"type":"{t}","quantity":{q},"unit":"{u}","kind":null}}"#))
+        .collect::<Vec<_>>()
+        .join(",");
+    serde_json::from_str(&format!(
+        r#"{{"id":"{id}","name":"{id}","craftableBy":["manny"],
+        "ingredients":[{ingredients}],"durationSeconds":{duration},
+        "output":{{"type":"{id}","name":"{id}","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}}}"#
+    ))
+    .unwrap()
+}
+
+/// A three-level synthetic tree whose totals are computed by hand:
+/// widget → 2 gadget + 0.5 metals; gadget → 3 steel + 0.02 metals; steel → 0.02 metals.
+fn synthetic_tree() -> Vec<crate::api::types::CraftingRecipe> {
+    vec![
+        recipe_with(
+            "widget",
+            100,
+            &[("gadget", 2.0, "item"), ("metals", 0.5, "earth_container_equivalent")],
+        ),
+        recipe_with(
+            "gadget",
+            10,
+            &[("steel", 3.0, "item"), ("metals", 0.02, "earth_container_equivalent")],
+        ),
+        recipe_with("steel", 5, &[("metals", 0.02, "earth_container_equivalent")]),
+    ]
+}
+
+#[test]
+fn rollup_walks_the_tree_to_base_resources() {
+    let recipes = synthetic_tree();
+    let r = crate::app::recipe_rollup(&recipes, "widget", 1.0);
+
+    // metals = 0.5 (widget) + 2*0.02 (gadget) + 6*0.02 (steel) = 0.66
+    assert!((r.base["metals"] - 0.66).abs() < 1e-9, "metals = {}", r.base["metals"]);
+    assert_eq!(r.base.len(), 1, "only metals should bottom out");
+
+    // crafts: widget×1, gadget×2, steel×6 = 9 ops
+    assert_eq!(r.crafts["widget"], 1.0);
+    assert_eq!(r.crafts["gadget"], 2.0);
+    assert_eq!(r.crafts["steel"], 6.0);
+    assert_eq!(r.craft_ops(), 9.0);
+
+    // duration: 100 + 2*10 + 6*5 = 150 (cumulative, not wall-clock)
+    assert!((r.duration_seconds - 150.0).abs() < 1e-9);
+}
+
+#[test]
+fn rollup_scales_linearly_with_quantity() {
+    let recipes = synthetic_tree();
+    let one = crate::app::recipe_rollup(&recipes, "widget", 1.0);
+    let three = crate::app::recipe_rollup(&recipes, "widget", 3.0);
+    assert!((three.base_total() - 3.0 * one.base_total()).abs() < 1e-9);
+    assert_eq!(three.craft_ops(), 3.0 * one.craft_ops());
+}
+
+#[test]
+fn rollup_unknown_item_is_a_single_leaf() {
+    let recipes = synthetic_tree();
+    let r = crate::app::recipe_rollup(&recipes, "mystery_ore", 2.0);
+    assert_eq!(r.base["mystery_ore"], 2.0);
+    assert!(r.crafts.is_empty());
+    assert_eq!(r.duration_seconds, 0.0);
+}
+
+#[test]
+fn rollup_cycle_is_bounded() {
+    // a → b → a. The depth guard must terminate rather than recurse forever.
+    let recipes = vec![
+        recipe_with("a", 1, &[("b", 1.0, "item")]),
+        recipe_with("b", 1, &[("a", 1.0, "item")]),
+    ];
+    let r = crate::app::recipe_rollup(&recipes, "a", 1.0);
+    // The exact leaf split doesn't matter; termination does.
+    assert!(r.craft_ops() > 0.0);
+}
+
+#[test]
+fn appstate_wrapper_uses_live_recipes() {
+    let mut s = AppState::default();
+    s.recipes = synthetic_tree();
+    let r = s.recipe_rollup("widget", 1.0);
+    assert!((r.base["metals"] - 0.66).abs() < 1e-9);
+}
+
+fn improvement_with(id: &str, available: bool, ings: &[(&str, f64, &str)]) -> crate::api::types::ProbeImprovement {
+    let ingredients: String = ings
+        .iter()
+        .map(|(t, q, u)| format!(r#"{{"type":"{t}","quantity":{q},"unit":"{u}","kind":"item"}}"#))
+        .collect::<Vec<_>>()
+        .join(",");
+    serde_json::from_str(&format!(
+        r#"{{"id":"{id}","name":"{id}","description":"d","available":{available},"done":false,
+        "durationSeconds":300,"ingredients":[{ingredients}],"effects":null}}"#
+    ))
+    .unwrap()
+}
+
+#[test]
+fn improvement_rollup_folds_over_ingredients() {
+    let mut s = AppState::default();
+    // steel → 0.02 metals; improvement needs 2 steel → 0.04 metals.
+    s.recipes = vec![recipe_with(
+        "steel",
+        5,
+        &[("metals", 0.02, "earth_container_equivalent")],
+    )];
+    let imp = improvement_with("reinforced", true, &[("steel", 2.0, "item")]);
+    let r = s.improvement_rollup(&imp, 1.0);
+    assert!((r.base["metals"] - 0.04).abs() < 1e-9, "metals = {}", r.base["metals"]);
+    assert_eq!(r.crafts["steel"], 2.0);
+}
+
+#[test]
+fn tree_rows_include_improvement_section() {
+    let mut s = AppState::default();
+    s.recipes = vec![recipe_with(
+        "steel",
+        5,
+        &[("metals", 0.02, "earth_container_equivalent")],
+    )];
+    s.tree_improvements = vec![improvement_with("reinforced", false, &[("steel", 2.0, "item")])];
+    s.open_tree();
+    let rows = s.tree_rows();
+    let imp_row = rows.iter().find(|r| r.item == "reinforced").expect("improvement row");
+    assert!(imp_row.is_improvement);
+    assert!(imp_row.locked, "unavailable improvement is locked");
+    assert!(imp_row.expandable, "has ingredients");
 }
 
 #[test]

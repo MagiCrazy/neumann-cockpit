@@ -206,3 +206,97 @@ fn detach_attach_to_probe_overlay_lists_target_probes() {
     assert!(text.contains("Attach to probe"), "prompt shown");
     assert!(text.contains("Falling Outside"), "target probe listed");
 }
+
+fn recipe_json(id: &str, name: &str, by: &str, ings: &str, dur: i64) -> crate::api::types::CraftingRecipe {
+    serde_json::from_str(&format!(
+        r#"{{"id":"{id}","name":"{name}","craftableBy":["{by}"],"ingredients":[{ings}],
+        "durationSeconds":{dur},
+        "output":{{"type":"{id}","name":"{name}","containerSpace":1.0,"containerSpaceUnit":"ECE","capacityBonus":null}}}}"#
+    ))
+    .unwrap()
+}
+
+#[test]
+fn tree_overlay_renders_catalog_and_rollup() {
+    let mut state = AppState::default();
+    state.recipes = vec![
+        recipe_json(
+            "steel_plate",
+            "Steel plate",
+            "manny",
+            r#"{"type":"metals","quantity":0.02,"unit":"earth_container_equivalent","kind":null}"#,
+            300,
+        ),
+        recipe_json(
+            "linear_actuator",
+            "Linear actuator",
+            "manny",
+            r#"{"type":"steel_plate","quantity":2,"unit":"item","kind":null}"#,
+            1200,
+        ),
+    ];
+    state.open_tree();
+
+    let text = buffer_text(&render_cockpit(&state, 90, 24));
+    assert!(text.contains("TECH TREE"), "overlay title");
+    assert!(text.contains("MANNY BAY"), "fabricator section header");
+    assert!(text.contains("Steel plate"), "recipe listed");
+    assert!(text.contains("ROLLED UP TO BASE"), "detail rollup panel");
+    assert!(text.contains("metals"), "base resource shown");
+}
+
+#[test]
+fn tree_overlay_expands_into_ingredients() {
+    let mut state = AppState::default();
+    state.recipes = vec![
+        recipe_json(
+            "steel_plate",
+            "Steel plate",
+            "manny",
+            r#"{"type":"metals","quantity":0.02,"unit":"earth_container_equivalent","kind":null}"#,
+            300,
+        ),
+        recipe_json(
+            "linear_actuator",
+            "Linear actuator",
+            "manny",
+            r#"{"type":"steel_plate","quantity":2,"unit":"item","kind":null}"#,
+            1200,
+        ),
+    ];
+    state.open_tree();
+    // Land on the linear_actuator root and expand it.
+    while state.tree_selected_item().as_deref() != Some("linear_actuator") {
+        state.tree_move(1);
+    }
+    state.tree_expand();
+
+    let rows = state.tree_rows();
+    assert!(
+        rows.iter().any(|r| r.item == "steel_plate" && r.depth == 1),
+        "steel_plate appears indented under linear_actuator"
+    );
+}
+
+#[test]
+fn tree_overlay_shows_improvement_section() {
+    let mut state = AppState::default();
+    state.recipes = vec![recipe_json(
+        "steel_plate",
+        "Steel plate",
+        "manny",
+        r#"{"type":"metals","quantity":0.02,"unit":"earth_container_equivalent","kind":null}"#,
+        300,
+    )];
+    state.tree_improvements = vec![serde_json::from_str(
+        r#"{"id":"deuterium_compression","name":"Deuterium compression",
+        "description":"Bigger tank.","available":true,"done":false,"durationSeconds":300,
+        "ingredients":[{"type":"steel_plate","quantity":2,"unit":"item","kind":"item"}],"effects":null}"#,
+    )
+    .unwrap()];
+    state.open_tree();
+
+    let text = buffer_text(&render_cockpit(&state, 90, 24));
+    assert!(text.contains("PROBE IMPROVEMENTS"), "improvement section header");
+    assert!(text.contains("Deuterium compression"), "improvement listed");
+}

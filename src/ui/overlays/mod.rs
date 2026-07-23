@@ -21,6 +21,7 @@ pub(crate) mod script;
 pub(crate) mod scut_network;
 pub(crate) mod storage_move;
 pub(crate) mod travel;
+pub(crate) mod tree;
 pub(crate) mod waypoints;
 
 pub(crate) use alerts::render_alerts_overlay;
@@ -53,6 +54,7 @@ pub(crate) use script::render_script_overlay;
 pub(crate) use scut_network::render_scut_network_overlay;
 pub(crate) use storage_move::render_storage_move_overlay;
 pub(crate) use travel::render_travel_overlay;
+pub(crate) use tree::render_tree_overlay;
 pub(crate) use waypoints::render_waypoints_overlay;
 
 use crate::api::types::DangerLevel;
@@ -124,6 +126,9 @@ pub(crate) fn render_active_overlays(frame: &mut Frame, area: Rect, state: &AppS
     // distinct enum) stay explicit. `help` is topmost, so it renders last.
     if state.map.open {
         render_map_overlay(frame, area, state);
+    }
+    if state.tree.open {
+        render_tree_overlay(frame, area, state);
     }
     if matches!(state.probe_switch, ProbeSwitchInput::Picking { .. }) {
         render_probe_switch_overlay(frame, area, state);

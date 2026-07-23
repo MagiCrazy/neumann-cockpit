@@ -100,14 +100,26 @@ pub fn fetch_all(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     fetch_alerts(client.clone(), tx.clone());
     fetch_missions(client.clone(), tx.clone());
     fetch_probe_improvements(client.clone(), tx.clone());
+    fetch_tree_improvements(client.clone(), tx.clone());
     fetch_damage_warnings(client, tx);
 }
 
 pub fn fetch_probe_improvements(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     spawn_fetch(
         tx,
-        async move { client.get_probe_improvements().await },
+        async move { client.get_probe_improvements(false).await },
         ApiMessage::ProbeImprovementsFetched,
+    );
+}
+
+/// The full improvement catalog (locked entries included) for the tech-tree
+/// browser (#200). Kept separate from `fetch_probe_improvements` so the Improve
+/// wizard's list stays limited to known blueprints.
+pub fn fetch_tree_improvements(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    spawn_fetch(
+        tx,
+        async move { client.get_probe_improvements(true).await },
+        ApiMessage::TreeImprovementsFetched,
     );
 }
 
