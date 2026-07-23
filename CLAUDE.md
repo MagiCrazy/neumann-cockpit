@@ -10,6 +10,7 @@ cargo build          # debug build
 cargo build --release
 cargo run            # run the TUI (requires config, see below)
 cargo run -- --script run.ncs   # headless: play an action script, no TUI (see Headless)
+cargo run -- --diagnostic       # headless: API latency/health report to stdout (see Diagnostics)
 cargo clippy         # lints
 cargo test           # unit tests (app, input, store, client) + TestBackend render tests (ui/tests.rs) + serde fixtures (tests/)
 ```
@@ -57,6 +58,12 @@ Once the link is up (or the pilot continues offline), it hands off to `run()`, w
 ### Headless script runner (`src/headless.rs`, #198 extension)
 
 `main()` checks `headless::script_arg(argv)` **before** touching the terminal: `--script <file>` / `-s <file>` / `--script=<file>` runs `headless::run()` and `process::exit`s with its code; a bare launch is the interactive cockpit, unchanged. The runner plays an action script from a file with **no TUI**: it loads the config non-interactively (no key onboarding — errors to stderr), opens the same SQLite DB, `fetch_all`s and waits until the probe + mannies rosters are primed, then parses the file (one command per line; blank lines and `#` comments skipped) via `parse_script_line` and runs it through the **same** `advance_script` executor (sequential, fork/join, late binding). It reuses the cockpit's `fetch_*` spawners and a minimal `ApiMessage` dispatch (refresh `probe`/`mannies`/`sector`; route the six MVP verb errors to `script_note_error`). Ship's-log entries are streamed to stdout (`HH:MM:SS » narrated summary`, plus `✓`/`✗` per step and a final status line) **and** persisted to the `events` table, so a headless run appears in the next TUI session's ship's log. Exit code: `0` on completion, `1` if the script halted on an error. This is the first non-TUI surface; #229 tracks a headless **status** mode sharing the same seams.
+
+### API diagnostics (`src/api/metrics.rs` + `headless::run_diagnostic`, #247)
+
+Every `ApiClient` send path (`get` / `send_with_body`) is instrumented: it times the `send()`, classifies the outcome (2xx / HTTP error / transport error / timeout via `reqwest::Error::is_timeout`), and records a `RequestSample { label, elapsed_ms, status, timed_out, ok }` into a bounded in-memory ring (`Metrics`, `RING_CAP` 1024) shared across every clone through `Arc<Mutex<_>>` (so `with_active_probe` clones and per-task clones all feed one ring — `ApiClient::metrics()` hands out the handle). `endpoint_label(method, path)` collapses numeric path segments to `:id` and drops the query string so requests aggregate per endpoint; `Metrics::aggregate()` yields per-label `{count, p50, p95, max, errors, timeouts}` (nearest-rank percentiles), sorted slowest-p95 first. Purely client-side — no server endpoint.
+
+The **MVP surface is headless** (the in-cockpit overlay is the deferred follow-up): `main()` checks `headless::diagnostic_arg(argv)` before the terminal — `--diagnostic` / `--diagnostic=N` / `--status latency` (the #229 alias), default `DEFAULT_DIAGNOSTIC_ROUNDS` (3) — and runs `headless::run_diagnostic(rounds)`. It fires N bursts of the **read-only** endpoints (`probe_endpoints`: version, probes, probe, mannies, sector, alerts, damage-warnings, missions, improvements, visited-sectors, crafting-recipes — no mutations, safe anytime), then prints the aggregate as a fixed-width table (copy-pasteable into a bug report) with a `⚠` on any p95 over `SLOW_THRESHOLD_MS` (1000 ms) and a session summary. Exit `0`, or `1` only when every request failed. Persistence to a SQLite `diagnostics` table (cross-session, mirroring the telemetry series #201) is deferred to the overlay follow-up.
 
 ### Event loop (`src/main.rs`)
 
