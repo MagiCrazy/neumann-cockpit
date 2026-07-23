@@ -1,3 +1,4 @@
+use super::metrics::{endpoint_label, Metrics, MetricsHandle, RequestSample};
 use super::types::{
     ContainerInventory, CraftingRecipe, DamageWarningRule, EndpointId, Manny, Mission, Pagination, Probe, ProbeAlert,
     ProbeImprovement, ProbeInventory, ProbeListResponse, ProbeMessage, ProbeMovement, ProbeSentMessage, ScutNetwork,
@@ -6,13 +7,16 @@ use super::types::{
 use anyhow::{Context, Result};
 use reqwest::{Client, StatusCode, Url};
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[derive(Clone)]
 pub struct ApiClient {
     client: Client,
     base_url: Url,
     api_key: String,
+    /// Shared request-instrumentation ring (#247). An `Arc`, so every clone —
+    /// including `with_active_probe` — records into the same ring.
+    metrics: MetricsHandle,
     /// The probe every per-probe endpoint targets. `None` means the player's
     /// default probe and reproduces the pre-v81 paths (`/api/probe/…`) exactly;
     /// `Some(id)` targets a specific probe via the `/api/probe/{id}/…` mirrors
@@ -61,7 +65,28 @@ impl ApiClient {
             base_url,
             api_key,
             active_probe_id: None,
+            metrics: Metrics::handle(),
         })
+    }
+
+    /// A handle onto the shared instrumentation ring, for the diagnostic report.
+    pub fn metrics(&self) -> MetricsHandle {
+        self.metrics.clone()
+    }
+
+    /// Record one request sample into the shared ring. Best-effort: a poisoned
+    /// lock is ignored rather than propagated (instrumentation must never break
+    /// a request path).
+    fn record(&self, label: String, elapsed: Duration, status: Option<u16>, timed_out: bool) {
+        if let Ok(mut m) = self.metrics.lock() {
+            m.record(RequestSample {
+                label,
+                elapsed_ms: elapsed.as_secs_f64() * 1000.0,
+                status,
+                timed_out,
+                ok: status.map(|s| (200..300).contains(&s)).unwrap_or(false),
+            });
+        }
     }
 
     /// Test-only constructor with a short overall timeout, for exercising the
@@ -108,14 +133,21 @@ impl ApiClient {
         path: &str,
         body: &B,
     ) -> Result<T> {
-        let resp = self
+        let label = endpoint_label(method.as_str(), path);
+        let start = Instant::now();
+        let sent = self
             .client
             .request(method.clone(), self.url(path))
             .bearer_auth(&self.api_key)
             .json(body)
             .send()
-            .await
-            .with_context(|| format!("{method} {path}"))?;
+            .await;
+        let (status_code, timed_out) = match &sent {
+            Ok(r) => (Some(r.status().as_u16()), false),
+            Err(e) => (None, e.is_timeout()),
+        };
+        self.record(label, start.elapsed(), status_code, timed_out);
+        let resp = sent.with_context(|| format!("{method} {path}"))?;
 
         let status = resp.status();
         if status == StatusCode::UNAUTHORIZED {
@@ -144,13 +176,15 @@ impl ApiClient {
     }
 
     async fn get<T: for<'de> Deserialize<'de>>(&self, path: &str) -> Result<T> {
-        let resp = self
-            .client
-            .get(self.url(path))
-            .bearer_auth(&self.api_key)
-            .send()
-            .await
-            .with_context(|| format!("GET {path}"))?;
+        let label = endpoint_label("GET", path);
+        let start = Instant::now();
+        let sent = self.client.get(self.url(path)).bearer_auth(&self.api_key).send().await;
+        let (status_code, timed_out) = match &sent {
+            Ok(r) => (Some(r.status().as_u16()), false),
+            Err(e) => (None, e.is_timeout()),
+        };
+        self.record(label, start.elapsed(), status_code, timed_out);
+        let resp = sent.with_context(|| format!("GET {path}"))?;
 
         let status = resp.status();
         if status == StatusCode::UNAUTHORIZED {
@@ -1059,5 +1093,60 @@ mod tests {
             c.get_api_version().await.is_err(),
             "a slow response must time out to an error"
         );
+    }
+
+    #[tokio::test]
+    async fn successful_request_records_a_sample() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/version"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"apiVersion": 96})))
+            .mount(&server)
+            .await;
+        let c = client_for(&server);
+        c.get_api_version().await.unwrap();
+
+        let m = c.metrics();
+        let m = m.lock().unwrap();
+        assert_eq!(m.len(), 1);
+        let agg = m.aggregate();
+        assert_eq!(agg[0].label, "GET /api/version");
+        assert_eq!(agg[0].errors, 0);
+        assert_eq!(agg[0].timeouts, 0);
+    }
+
+    #[tokio::test]
+    async fn timeout_is_recorded_as_a_timeout_sample() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/version"))
+            .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(5)))
+            .mount(&server)
+            .await;
+        let c = ApiClient::new_with_timeout(server.uri(), "vng_test".into(), Duration::from_millis(200)).unwrap();
+        let _ = c.get_api_version().await;
+
+        let m = c.metrics();
+        let m = m.lock().unwrap();
+        assert_eq!(m.total_timeouts(), 1);
+        assert_eq!(m.total_errors(), 1, "a timeout counts as an error (no 2xx)");
+        assert_eq!(m.aggregate()[0].timeouts, 1);
+    }
+
+    #[tokio::test]
+    async fn clones_share_the_metrics_ring() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/version"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"apiVersion": 96})))
+            .mount(&server)
+            .await;
+        let c = client_for(&server);
+        let clone = c.with_active_probe(Some(7));
+        c.get_api_version().await.unwrap();
+        clone.get_api_version().await.unwrap();
+
+        // Both requests land in the same shared ring.
+        assert_eq!(c.metrics().lock().unwrap().len(), 2);
     }
 }
