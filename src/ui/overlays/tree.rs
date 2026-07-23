@@ -165,15 +165,13 @@ fn render_detail(frame: &mut Frame, area: Rect, state: &AppState, p: crate::ui::
     lines.push(Line::default());
 
     // Direct ingredients — of the improvement or of the recipe.
-    let direct = improvement
-        .map(|i| i.ingredients.as_slice())
-        .or_else(|| {
-            state
-                .recipes
-                .iter()
-                .find(|r| r.id == row.item || r.output.output_type == row.item)
-                .map(|r| r.ingredients.as_slice())
-        });
+    let direct = improvement.map(|i| i.ingredients.as_slice()).or_else(|| {
+        state
+            .recipes
+            .iter()
+            .find(|r| r.id == row.item || r.output.output_type == row.item)
+            .map(|r| r.ingredients.as_slice())
+    });
     if let Some(ings) = direct {
         lines.push(Line::from(Span::styled("DIRECT INGREDIENTS", dim)));
         for ing in ings {
@@ -218,7 +216,10 @@ fn render_detail(frame: &mut Frame, area: Rect, state: &AppState, p: crate::ui::
     lines.push(Line::default());
     let ops = rollup.craft_ops() as i64;
     lines.push(Line::from(Span::styled(
-        format!("{ops} craft ops  ·  {} total", format_duration(rollup.duration_seconds as i64)),
+        format!(
+            "{ops} craft ops  ·  {} total",
+            format_duration(rollup.duration_seconds as i64)
+        ),
         dim,
     )));
 

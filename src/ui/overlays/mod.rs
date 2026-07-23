@@ -38,7 +38,6 @@ pub(crate) use improve::render_improve_overlay;
 pub(crate) use inventory_detail::render_inventory_detail_overlay;
 pub(crate) use jettison::render_jettison_overlay;
 pub(crate) use map::{render_goto_visited_overlay, render_map_overlay};
-pub(crate) use tree::render_tree_overlay;
 pub(crate) use messages::render_messages_overlay;
 pub(crate) use mine::render_mine_overlay;
 pub(crate) use missions::render_missions_overlay;
@@ -55,6 +54,7 @@ pub(crate) use script::render_script_overlay;
 pub(crate) use scut_network::render_scut_network_overlay;
 pub(crate) use storage_move::render_storage_move_overlay;
 pub(crate) use travel::render_travel_overlay;
+pub(crate) use tree::render_tree_overlay;
 pub(crate) use waypoints::render_waypoints_overlay;
 
 use crate::api::types::DangerLevel;

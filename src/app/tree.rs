@@ -241,7 +241,10 @@ impl AppState {
 
     /// Push `item` as a row and, when expanded, recurse into its ingredients.
     fn push_tree_node(&self, rows: &mut Vec<TreeRow>, path: &str, item: &str, qty_abs: f64, depth: usize) {
-        let recipe = self.recipes.iter().find(|r| r.id == item || r.output.output_type == item);
+        let recipe = self
+            .recipes
+            .iter()
+            .find(|r| r.id == item || r.output.output_type == item);
         let expandable = recipe.map(|r| !r.ingredients.is_empty()).unwrap_or(false);
         let expanded = expandable && self.tree.expanded.contains(path);
         let label = recipe.map(|r| r.name.clone()).unwrap_or_else(|| item.to_string());
@@ -263,7 +266,13 @@ impl AppState {
         if let (Some(recipe), true) = (recipe, expanded) {
             for ing in &recipe.ingredients {
                 let child_path = format!("{path}/{}", ing.ingredient_type);
-                self.push_tree_node(rows, &child_path, &ing.ingredient_type, qty_abs * ing.quantity, depth + 1);
+                self.push_tree_node(
+                    rows,
+                    &child_path,
+                    &ing.ingredient_type,
+                    qty_abs * ing.quantity,
+                    depth + 1,
+                );
             }
         }
     }
@@ -328,7 +337,9 @@ impl AppState {
     /// The item id currently selected, if any (for the detail roll-up).
     pub fn tree_selected_item(&self) -> Option<String> {
         let rows = self.tree_rows();
-        rows.get(self.tree.cursor).filter(|r| !r.is_header).map(|r| r.item.clone())
+        rows.get(self.tree.cursor)
+            .filter(|r| !r.is_header)
+            .map(|r| r.item.clone())
     }
 
     /// A tech-tree improvement by id (from the `includeAll` catalog).

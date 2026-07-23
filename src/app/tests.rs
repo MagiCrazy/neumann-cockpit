@@ -2939,11 +2939,7 @@ fn script_craft_parse_and_resolve() {
 // ── Tech-tree rollup (#200) ──────────────────────────────────────────────────
 
 /// Build a Manny recipe with explicit ingredients. `ings` are `(type, qty, unit)`.
-fn recipe_with(
-    id: &str,
-    duration: i64,
-    ings: &[(&str, f64, &str)],
-) -> crate::api::types::CraftingRecipe {
+fn recipe_with(id: &str, duration: i64, ings: &[(&str, f64, &str)]) -> crate::api::types::CraftingRecipe {
     let ingredients: String = ings
         .iter()
         .map(|(t, q, u)| format!(r#"{{"type":"{t}","quantity":{q},"unit":"{u}","kind":null}}"#))

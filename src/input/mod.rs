@@ -15,7 +15,6 @@ mod geometry;
 mod improve;
 mod jettison;
 mod map;
-mod tree;
 mod messages;
 mod mine;
 mod missions;
@@ -25,6 +24,7 @@ mod scanner;
 mod script;
 mod storage_move;
 mod travel;
+mod tree;
 
 use alerts::handle_alerts_event;
 use assemble::handle_assemble_probe_event;
