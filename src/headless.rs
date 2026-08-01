@@ -370,22 +370,23 @@ fn print_diagnostic_report(metrics: &crate::api::metrics::Metrics, base_url: &st
     println!("═══ API DIAGNOSTIC REPORT ═══");
     println!("base_url : {base_url}");
     println!(
-        "rounds   : {rounds}   requests: {}   errors: {}   timeouts: {}",
+        "rounds   : {rounds}   requests: {}   errors: {}   timeouts: {}   decode: {}",
         metrics.len(),
         metrics.total_errors(),
-        metrics.total_timeouts()
+        metrics.total_timeouts(),
+        metrics.total_decode_errors()
     );
     println!("slow flag: p95 > {} ms", SLOW_THRESHOLD_MS as i64);
     println!();
     println!(
-        "{:<46} {:>4} {:>7} {:>7} {:>7} {:>4} {:>4}",
-        "ENDPOINT", "n", "p50", "p95", "max", "err", "t/o"
+        "{:<46} {:>4} {:>7} {:>7} {:>7} {:>4} {:>4} {:>4}",
+        "ENDPOINT", "n", "p50", "p95", "max", "err", "t/o", "dec"
     );
-    println!("{}", "─".repeat(82));
+    println!("{}", "─".repeat(87));
     for s in &agg {
         let slow = if s.p95_ms > SLOW_THRESHOLD_MS { " ⚠" } else { "" };
         println!(
-            "{:<46} {:>4} {:>7.0} {:>7.0} {:>7.0} {:>4} {:>4}{slow}",
+            "{:<46} {:>4} {:>7.0} {:>7.0} {:>7.0} {:>4} {:>4} {:>4}{slow}",
             truncate(&s.label, 46),
             s.count,
             s.p50_ms,
@@ -393,6 +394,7 @@ fn print_diagnostic_report(metrics: &crate::api::metrics::Metrics, base_url: &st
             s.max_ms,
             s.errors,
             s.timeouts,
+            s.decode_errors,
         );
     }
     if let Some(slowest) = agg.first() {

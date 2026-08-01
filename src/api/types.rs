@@ -230,6 +230,10 @@ pub enum MannyTaskVisibility {
     Unknown,
 }
 
+/// One inventory entry. General probe and sector telemetry uses a *lightweight
+/// Manny projection* (API v104): `currentTask` and `taskProgressPercent` are
+/// omitted for `manny` entries, whose live task state now comes from the Manny
+/// endpoints only — hence both are optional here.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProbeInventoryItem {
@@ -239,7 +243,7 @@ pub struct ProbeInventoryItem {
     pub name: String,
     pub container_space: f64,
     pub current_task: Option<String>,
-    pub task_progress_percent: f64,
+    pub task_progress_percent: Option<f64>,
     pub location: Option<MannyLocation>,
     pub cargo: Option<MannyCargo>,
     pub container: Option<StorageContainerSummary>,
