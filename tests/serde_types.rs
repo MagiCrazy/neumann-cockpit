@@ -218,6 +218,66 @@ fn inventory_items_and_stocks() {
     assert_eq!(inv.resource_stocks[0].amount, 0.5);
 }
 
+/// Live API v104 shape: general probe/sector telemetry uses a *lightweight
+/// Manny projection* that omits `currentTask` and `taskProgressPercent` on
+/// `manny` entries (their live task state comes from the Manny endpoints only).
+/// Trimmed from a real `GET /api/probe` body — the missing
+/// `taskProgressPercent` used to fail the whole probe fetch, the only fatal
+/// one, so the cockpit could not boot at all (#274).
+const INVENTORY_V104_LIGHTWEIGHT_MANNY_JSON: &str = r#"{
+  "capacity": 6.0,
+  "usedCapacity": 3.5909,
+  "freeCapacity": 2.4091,
+  "capacityUnit": "earth_container_equivalent",
+  "items": [
+    {
+      "id": "mny_05089385c297b2cc9a6ed410",
+      "type": "manny",
+      "name": "manny-01",
+      "containerSpace": 0.05,
+      "location": { "type": "probe" },
+      "cargo": {
+        "capacity": 0.05,
+        "deuterium": 0,
+        "metals": 0,
+        "ice": 0,
+        "organicCompounds": 0,
+        "capacityUnit": "earth_container_equivalent"
+      },
+      "container": { "id": "probe-core", "kind": "probe", "label": "Cargo Probe", "sortOrder": 0 },
+      "metadata": { "movable": true }
+    },
+    {
+      "id": "itm_9f1c",
+      "type": "atomic_3d_printer",
+      "name": "Atomic printer",
+      "containerSpace": 0.3,
+      "currentTask": null,
+      "taskProgressPercent": 0,
+      "container": { "id": "probe-core", "kind": "probe", "label": "Cargo Probe", "sortOrder": 0 }
+    }
+  ],
+  "resourceStocks": [],
+  "externalTanks": [],
+  "containers": []
+}"#;
+
+#[test]
+fn inventory_manny_entry_without_task_projection() {
+    let inv: ProbeInventory = deser(INVENTORY_V104_LIGHTWEIGHT_MANNY_JSON);
+    assert_eq!(inv.items.len(), 2);
+
+    let manny = &inv.items[0];
+    assert_eq!(manny.item_type, "manny");
+    assert_eq!(manny.current_task, None);
+    assert_eq!(manny.task_progress_percent, None, "omitted by the v104 projection");
+
+    // Non-Manny entries still carry both fields.
+    let printer = &inv.items[1];
+    assert_eq!(printer.item_type, "atomic_3d_printer");
+    assert_eq!(printer.task_progress_percent, Some(0.0));
+}
+
 // ── CraftingRecipe ────────────────────────────────────────────────────────────
 
 const RECIPE_MANNY_JSON: &str = r#"{

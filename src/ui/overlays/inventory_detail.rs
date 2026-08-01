@@ -59,9 +59,11 @@ pub(crate) fn render_inventory_detail_overlay(frame: &mut Frame, area: Rect, sta
                 detail_kv(
                     p,
                     "Task",
-                    match item.current_task.as_deref() {
-                        None => "idle".into(),
-                        Some(t) => format!("{t}  {:.0}%", item.task_progress_percent),
+                    match (item.current_task.as_deref(), item.task_progress_percent) {
+                        (None, _) => "idle".into(),
+                        (Some(t), Some(pct)) => format!("{t}  {pct:.0}%"),
+                        // Lightweight Manny projection (API v104): no progress here.
+                        (Some(t), None) => t.to_string(),
                     },
                 ),
             ];

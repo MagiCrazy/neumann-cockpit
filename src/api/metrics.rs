@@ -27,8 +27,12 @@ pub struct RequestSample {
     /// `None` when no response arrived (timeout or transport error).
     pub status: Option<u16>,
     pub timed_out: bool,
-    /// A 2xx response.
+    /// A 2xx response whose body also deserialized into the endpoint's type.
+    /// A decode failure is an outage as far as the cockpit is concerned (the
+    /// fetch returns `Err`), so it must not read as a success in the report.
     pub ok: bool,
+    /// A 2xx response the client could not decode — a server contract change.
+    pub decode_failed: bool,
 }
 
 /// Aggregated stats for one endpoint label over the retained samples.
@@ -39,9 +43,12 @@ pub struct EndpointStats {
     pub p50_ms: f64,
     pub p95_ms: f64,
     pub max_ms: f64,
-    /// Requests that did not return a 2xx (HTTP errors + transport failures).
+    /// Requests that did not return usable data (HTTP errors + transport
+    /// failures + undecodable 2xx bodies).
     pub errors: usize,
     pub timeouts: usize,
+    /// Subset of `errors`: 2xx responses whose body failed to deserialize.
+    pub decode_errors: usize,
 }
 
 /// A bounded ring of request samples.
@@ -82,6 +89,11 @@ impl Metrics {
         self.ring.iter().filter(|s| s.timed_out).count()
     }
 
+    /// Total 2xx responses the client could not decode.
+    pub fn total_decode_errors(&self) -> usize {
+        self.ring.iter().filter(|s| s.decode_failed).count()
+    }
+
     /// Per-endpoint aggregate, one entry per label, sorted by descending p95
     /// (slowest first — what a bug report leads with).
     pub fn aggregate(&self) -> Vec<EndpointStats> {
@@ -102,6 +114,7 @@ impl Metrics {
                     max_ms: lat.last().copied().unwrap_or(0.0),
                     errors: samples.iter().filter(|s| !s.ok).count(),
                     timeouts: samples.iter().filter(|s| s.timed_out).count(),
+                    decode_errors: samples.iter().filter(|s| s.decode_failed).count(),
                 }
             })
             .collect();
@@ -171,7 +184,35 @@ mod tests {
             status,
             ok: status.map(|s| (200..300).contains(&s)).unwrap_or(false),
             timed_out,
+            decode_failed: false,
         }
+    }
+
+    /// A 2xx the client could not decode — a server contract change.
+    fn decode_failure(label: &str, ms: f64) -> RequestSample {
+        RequestSample {
+            label: label.to_string(),
+            elapsed_ms: ms,
+            status: Some(200),
+            ok: false,
+            timed_out: false,
+            decode_failed: true,
+        }
+    }
+
+    #[test]
+    fn undecodable_2xx_counts_as_an_error_not_a_success() {
+        let mut m = Metrics::default();
+        m.record(sample("GET /probe", 40.0, Some(200), false));
+        m.record(decode_failure("GET /probe", 42.0));
+
+        let agg = m.aggregate();
+        assert_eq!(agg[0].count, 2);
+        assert_eq!(agg[0].errors, 1, "the undecodable 200 is an error");
+        assert_eq!(agg[0].decode_errors, 1);
+        assert_eq!(agg[0].timeouts, 0);
+        assert_eq!(m.total_errors(), 1);
+        assert_eq!(m.total_decode_errors(), 1);
     }
 
     #[test]
@@ -189,6 +230,7 @@ mod tests {
         assert_eq!(agg[0].max_ms, 900.0);
         assert_eq!(agg[0].errors, 2, "one 500 + one timeout");
         assert_eq!(agg[0].timeouts, 1);
+        assert_eq!(agg[0].decode_errors, 0);
         assert_eq!(agg[1].label, "GET /b");
         assert_eq!(m.total_errors(), 2);
         assert_eq!(m.total_timeouts(), 1);

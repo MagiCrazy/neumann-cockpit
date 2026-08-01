@@ -77,14 +77,22 @@ impl ApiClient {
     /// Record one request sample into the shared ring. Best-effort: a poisoned
     /// lock is ignored rather than propagated (instrumentation must never break
     /// a request path).
-    fn record(&self, label: String, elapsed: Duration, status: Option<u16>, timed_out: bool) {
+    ///
+    /// `elapsed` times the `send()` only, so the latency columns stay
+    /// comparable across endpoints regardless of body size. `decode_failed`
+    /// marks a 2xx whose body did not deserialize — a server contract change
+    /// (this is exactly how the v104 lightweight Manny projection broke
+    /// `GET /api/probe`), which must count as an error and not as a success.
+    fn record(&self, label: String, elapsed: Duration, status: Option<u16>, timed_out: bool, decode_failed: bool) {
         if let Ok(mut m) = self.metrics.lock() {
+            let http_ok = status.map(|s| (200..300).contains(&s)).unwrap_or(false);
             m.record(RequestSample {
                 label,
                 elapsed_ms: elapsed.as_secs_f64() * 1000.0,
                 status,
                 timed_out,
-                ok: status.map(|s| (200..300).contains(&s)).unwrap_or(false),
+                ok: http_ok && !decode_failed,
+                decode_failed,
             });
         }
     }
@@ -142,18 +150,21 @@ impl ApiClient {
             .json(body)
             .send()
             .await;
-        let (status_code, timed_out) = match &sent {
-            Ok(r) => (Some(r.status().as_u16()), false),
-            Err(e) => (None, e.is_timeout()),
+        let elapsed = start.elapsed();
+        let resp = match sent {
+            Ok(r) => r,
+            Err(e) => {
+                self.record(label, elapsed, None, e.is_timeout(), false);
+                return Err(e).with_context(|| format!("{method} {path}"));
+            }
         };
-        self.record(label, start.elapsed(), status_code, timed_out);
-        let resp = sent.with_context(|| format!("{method} {path}"))?;
 
         let status = resp.status();
-        if status == StatusCode::UNAUTHORIZED {
-            anyhow::bail!("Unauthorized — check your api_key in config.toml");
-        }
         if !status.is_success() {
+            self.record(label, elapsed, Some(status.as_u16()), false, false);
+            if status == StatusCode::UNAUTHORIZED {
+                anyhow::bail!("Unauthorized — check your api_key in config.toml");
+            }
             let text = resp.text().await.unwrap_or_default();
             let msg = serde_json::from_str::<serde_json::Value>(&text)
                 .ok()
@@ -162,9 +173,9 @@ impl ApiClient {
             anyhow::bail!("{msg}");
         }
 
-        resp.json::<T>()
-            .await
-            .with_context(|| format!("Parsing {method} {path}"))
+        let decoded = resp.json::<T>().await;
+        self.record(label, elapsed, Some(status.as_u16()), false, decoded.is_err());
+        decoded.with_context(|| format!("Parsing {method} {path}"))
     }
 
     async fn post<T: for<'de> Deserialize<'de>, B: Serialize>(&self, path: &str, body: &B) -> Result<T> {
@@ -179,23 +190,28 @@ impl ApiClient {
         let label = endpoint_label("GET", path);
         let start = Instant::now();
         let sent = self.client.get(self.url(path)).bearer_auth(&self.api_key).send().await;
-        let (status_code, timed_out) = match &sent {
-            Ok(r) => (Some(r.status().as_u16()), false),
-            Err(e) => (None, e.is_timeout()),
+        let elapsed = start.elapsed();
+        let resp = match sent {
+            Ok(r) => r,
+            Err(e) => {
+                self.record(label, elapsed, None, e.is_timeout(), false);
+                return Err(e).with_context(|| format!("GET {path}"));
+            }
         };
-        self.record(label, start.elapsed(), status_code, timed_out);
-        let resp = sent.with_context(|| format!("GET {path}"))?;
 
         let status = resp.status();
-        if status == StatusCode::UNAUTHORIZED {
-            anyhow::bail!("Unauthorized — check your api_key in config.toml");
-        }
         if !status.is_success() {
+            self.record(label, elapsed, Some(status.as_u16()), false, false);
+            if status == StatusCode::UNAUTHORIZED {
+                anyhow::bail!("Unauthorized — check your api_key in config.toml");
+            }
             let body = resp.text().await.unwrap_or_default();
             anyhow::bail!("HTTP {status} on GET {path}: {body}");
         }
 
-        resp.json::<T>().await.with_context(|| format!("Parsing GET {path}"))
+        let decoded = resp.json::<T>().await;
+        self.record(label, elapsed, Some(status.as_u16()), false, decoded.is_err());
+        decoded.with_context(|| format!("Parsing GET {path}"))
     }
 
     pub async fn get_api_version(&self) -> Result<u32> {

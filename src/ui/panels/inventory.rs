@@ -115,7 +115,11 @@ pub(crate) fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppS
                 None => (Span::styled("idle", Style::default().fg(p.dim)), String::new()),
                 Some(t) => (
                     Span::styled(t.to_string(), Style::default().fg(p.warn)),
-                    format!(" {:3.0}%", item.task_progress_percent),
+                    // Omitted on Mannies since API v104 — the Mannies pane owns
+                    // their live progress.
+                    item.task_progress_percent
+                        .map(|pct| format!(" {pct:3.0}%"))
+                        .unwrap_or_default(),
                 ),
             };
             frame.render_widget(
