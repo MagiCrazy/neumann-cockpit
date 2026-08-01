@@ -1,5 +1,12 @@
 # Changelog
 
+## [96.2.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v96.2.0...neumann-cockpit-v96.2.1) (2026-08-01)
+
+
+### Bug Fixes
+
+* **api:** tolerate the v104 lightweight Manny inventory projection ([#276](https://github.com/MagiCrazy/neumann-cockpit/issues/276)) ([5b11103](https://github.com/MagiCrazy/neumann-cockpit/commit/5b11103ff60a45f118c5a350e77946c3799b712a)), closes [#274](https://github.com/MagiCrazy/neumann-cockpit/issues/274)
+
 ## [96.2.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v96.1.0...neumann-cockpit-v96.2.0) (2026-07-23)
 
 
