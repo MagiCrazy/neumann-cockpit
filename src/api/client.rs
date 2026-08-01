@@ -1,8 +1,8 @@
 use super::metrics::{endpoint_label, Metrics, MetricsHandle, RequestSample};
 use super::types::{
-    ContainerInventory, CraftingRecipe, DamageWarningRule, EndpointId, Manny, Mission, Pagination, Probe, ProbeAlert,
-    ProbeImprovement, ProbeInventory, ProbeListResponse, ProbeMessage, ProbeMovement, ProbeSentMessage, ScutNetwork,
-    SectorObservation, StorageContainer, VisitedSector,
+    ContainerInventory, CraftingRecipe, DamageWarningRule, EndpointId, Manny, MannyRoster, Mission, Pagination, Probe,
+    ProbeAlert, ProbeImprovement, ProbeInventory, ProbeListResponse, ProbeMessage, ProbeMovement, ProbeSentMessage,
+    ScutNetwork, SectorObservation, StorageContainer, VisitedSector,
 };
 use anyhow::{Context, Result};
 use reqwest::{Client, StatusCode, Url};
@@ -261,12 +261,12 @@ impl ApiClient {
             .await
     }
 
+    /// The Manny roster. The response also carries the v104
+    /// `nextUsefulRefreshDelayMs` polling hint, typed in [`MannyRoster`] but not
+    /// yet consumed — wiring it into the refresh deadline, the production queue
+    /// and the script sequencer is phase 3 of the v104 catch-up (#275).
     pub async fn get_mannies(&self) -> Result<Vec<Manny>> {
-        #[derive(Deserialize)]
-        struct Resp {
-            mannies: Vec<Manny>,
-        }
-        Ok(self.get::<Resp>(&self.probe_path("/mannies")).await?.mannies)
+        Ok(self.get::<MannyRoster>(&self.probe_path("/mannies")).await?.mannies)
     }
 
     pub async fn get_probe_sector(&self) -> Result<SectorObservation> {

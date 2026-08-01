@@ -905,3 +905,110 @@ fn artificial_object_detection_deserializes() {
     assert_eq!(d.object_id.as_deref(), Some("container-hidden-1"));
     assert_eq!(d.target_object_id.as_deref(), Some("ast-9"));
 }
+
+// ── API v104 additive fields (#275 phase 1) ────────────────────────────────────
+
+#[test]
+fn probe_model_deserializes_and_defaults_to_none() {
+    use neumann_cockpit::api::types::ProbeModel;
+
+    // Live v104 shape: `model` is required server-side.
+    let tanker: Probe = deser(&PROBE_JSON.replace(
+        r#""name": "Von Neumann #42","#,
+        r#""name": "Von Neumann #42", "model": "deuterium_tanker","#,
+    ));
+    assert_eq!(tanker.model, Some(ProbeModel::DeuteriumTanker));
+
+    // Pre-v104 payloads (and scan-history rows) carry no model.
+    let legacy: Probe = deser(PROBE_JSON);
+    assert_eq!(legacy.model, None);
+
+    // A model this build does not know about must not break the fetch.
+    let future: Probe = deser(&PROBE_JSON.replace(
+        r#""name": "Von Neumann #42","#,
+        r#""name": "Von Neumann #42", "model": "ramscoop","#,
+    ));
+    assert_eq!(future.model, Some(ProbeModel::Unknown));
+}
+
+#[test]
+fn probe_summary_model_deserializes() {
+    use neumann_cockpit::api::types::{ProbeListResponse, ProbeModel};
+    let fleet: ProbeListResponse = deser(
+        r#"{"defaultProbeId":5,"probes":[
+            {"id":5,"name":"Main probe","model":"generic","status":"idle",
+             "isDefault":true,"isReachable":true},
+            {"id":9,"name":"Tanker","model":"deuterium_tanker","status":"orbiting",
+             "isDefault":false,"isReachable":true}]}"#,
+    );
+    assert_eq!(fleet.probes[0].model, Some(ProbeModel::Generic));
+    assert_eq!(fleet.probes[1].model, Some(ProbeModel::DeuteriumTanker));
+}
+
+#[test]
+fn sector_scut_coverage_status_is_tri_state() {
+    use neumann_cockpit::api::types::ScutCoverageStatus;
+
+    let covered: SectorObservation = deser(&SECTOR_JSON.replace(
+        r#""confidence": 1.0,"#,
+        r#""confidence": 1.0, "scutCoverageStatus": "covered", "scutNetworks": [],"#,
+    ));
+    assert_eq!(covered.scut_coverage_status, Some(ScutCoverageStatus::Covered));
+
+    let uncovered: SectorObservation = deser(&SECTOR_JSON.replace(
+        r#""confidence": 1.0,"#,
+        r#""confidence": 1.0, "scutCoverageStatus": "uncovered", "scutNetworks": [],"#,
+    ));
+    assert_eq!(uncovered.scut_coverage_status, Some(ScutCoverageStatus::Uncovered));
+
+    // While coverage is unknown the server omits `scutNetworks` entirely, so an
+    // empty list must not be read as "uncovered".
+    let unknown: SectorObservation = deser(&SECTOR_JSON.replace(
+        r#""confidence": 1.0,"#,
+        r#""confidence": 1.0, "scutCoverageStatus": "unknown","#,
+    ));
+    assert_eq!(unknown.scut_coverage_status, Some(ScutCoverageStatus::Unknown));
+    assert!(unknown.scut_networks.is_empty());
+
+    // Pre-v104 payloads and scan-history rows have no status at all.
+    let legacy: SectorObservation = deser(SECTOR_JSON);
+    assert_eq!(legacy.scut_coverage_status, None);
+}
+
+#[test]
+fn sector_observation_round_trips_coverage_status() {
+    use neumann_cockpit::api::types::ScutCoverageStatus;
+    // Observations are persisted to the scan-history store, so the new field
+    // must survive a serialize/deserialize cycle.
+    let observed: SectorObservation = deser(&SECTOR_JSON.replace(
+        r#""confidence": 1.0,"#,
+        r#""confidence": 1.0, "scutCoverageStatus": "uncovered","#,
+    ));
+    let json = serde_json::to_string(&observed).expect("serialize");
+    let reloaded: SectorObservation = deser(&json);
+    assert_eq!(reloaded.scut_coverage_status, Some(ScutCoverageStatus::Uncovered));
+}
+
+#[test]
+fn manny_roster_carries_the_polling_hint() {
+    use neumann_cockpit::api::types::MannyRoster;
+    let roster: MannyRoster = deser(&format!(
+        r#"{{"mannies":[{MANNY_IDLE_JSON}],"nextUsefulRefreshDelayMs":30000}}"#
+    ));
+    assert_eq!(roster.mannies.len(), 1);
+    assert_eq!(roster.next_useful_refresh_delay_ms, Some(30000));
+
+    // Pre-v104 servers send the roster alone.
+    let legacy: MannyRoster = deser(&format!(r#"{{"mannies":[{MANNY_IDLE_JSON}]}}"#));
+    assert_eq!(legacy.next_useful_refresh_delay_ms, None);
+}
+
+#[test]
+fn generated_asteroid_carries_a_content_based_name() {
+    // v104 names generated asteroids instead of sending `name: null`.
+    let obj: SectorObject = deser(
+        r#"{"id":"mine-rock","type":"asteroid","name":"Ice Deut 15ce","estimated":false,
+            "summary":"Wandering asteroid body.","mass":0.000001,"massUnit":"earth_mass"}"#,
+    );
+    assert_eq!(obj.name.as_deref(), Some("Ice Deut 15ce"));
+}
