@@ -300,3 +300,20 @@ fn tree_overlay_shows_improvement_section() {
     assert!(text.contains("PROBE IMPROVEMENTS"), "improvement section header");
     assert!(text.contains("Deuterium compression"), "improvement listed");
 }
+
+#[test]
+fn rate_limit_chip_shows_the_remaining_backoff() {
+    let mut state = AppState::default();
+    assert!(
+        !buffer_text(&render_cockpit(&state, 120, 30)).contains("rate limit"),
+        "no chip while the quota is healthy"
+    );
+
+    // A 429 back-off is mirrored from the client each tick (API v104).
+    state.rate_limited_secs = Some(47);
+    let text = buffer_text(&render_cockpit(&state, 120, 30));
+    assert!(
+        text.contains("rate limit 47s"),
+        "the status bar should count the back-off down, got:\n{text}"
+    );
+}

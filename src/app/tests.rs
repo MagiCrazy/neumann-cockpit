@@ -2030,6 +2030,30 @@ fn periodic_refresh_not_due_when_recent_or_loading() {
 }
 
 #[test]
+fn rate_limit_holds_the_periodic_refresh_and_the_deadline() {
+    let mut state = AppState::default();
+    state.last_update = Some(chrono::Local::now() - chrono::Duration::seconds(90));
+    assert!(state.periodic_refresh_due(), "stale data, no throttle");
+
+    // A 429 back-off must hold the auto-refresh off entirely: retrying would
+    // only burn the per-token quota again (API v104).
+    state.rate_limited_secs = Some(12);
+    assert!(!state.periodic_refresh_due());
+
+    // …and push the timer deadline out, otherwise an already-elapsed arrival
+    // deadline the loop is not allowed to act on would spin it hot.
+    state.movement_arrival = Some(chrono::Utc::now() - chrono::Duration::seconds(5));
+    let wait = state.next_refresh_instant() - tokio::time::Instant::now();
+    assert!(
+        wait.as_secs() >= 10,
+        "deadline should sit at the end of the back-off, got {wait:?}"
+    );
+
+    state.rate_limited_secs = None;
+    assert!(state.periodic_refresh_due(), "the window reopened");
+}
+
+#[test]
 fn refresh_backoff_grows_then_caps_at_60() {
     let mut state = AppState::default();
     assert_eq!(state.refresh_backoff_secs(), 60, "healthy cadence is 60s");

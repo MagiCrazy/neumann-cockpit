@@ -144,6 +144,14 @@ pub async fn run(path: &Path) -> Result<i32> {
     // step resolves against it, so it must be primed before such a step fires.
     fetch_crafting_recipes(client.clone(), tx.clone());
     if !wait_until_primed(&mut state, &mut rx, Duration::from_secs(15)).await {
+        // A spent rate-limit window looks exactly like a dead link from here
+        // (fetch errors are dropped silently), so name it (API v104).
+        if client.saw_throttling() {
+            match client.throttled_for_secs() {
+                Some(secs) => bail!("rate limited by the server — retry in {secs}s"),
+                None => bail!("rate limited by the server during startup — retry now"),
+            }
+        }
         bail!("remote link failed — no probe data within 15s");
     }
 
@@ -331,14 +339,27 @@ pub async fn run_diagnostic(rounds: u32) -> Result<i32> {
 
     log_line(&format!("API diagnostic — {} · {rounds} round(s)", config.base_url));
 
+    // Stop as soon as the server throttles us (API v104): a burst of read-only
+    // calls is exactly what trips the per-token window, and hammering it would
+    // measure the rate limiter rather than the API.
+    let mut completed = 0;
     for round in 1..=rounds {
         probe_endpoints(&client).await;
+        completed = round;
+        if let Some(secs) = client.throttled_for_secs() {
+            log_line(&format!(
+                "rate limited after round {round}/{rounds} — stopping, retry in {secs}s"
+            ));
+            break;
+        }
         log_line(&format!("round {round}/{rounds} complete"));
     }
 
     let metrics = client.metrics();
     let metrics = metrics.lock().expect("metrics lock");
-    print_diagnostic_report(&metrics, &config.base_url, rounds);
+    let rate_limit = client.rate_limit();
+    let rate_limit = rate_limit.lock().ok().map(|s| s.clone());
+    print_diagnostic_report(&metrics, rate_limit.as_ref(), &config.base_url, completed);
 
     // Success unless nothing got through at all.
     let all_failed = !metrics.is_empty() && metrics.total_errors() == metrics.len();
@@ -364,7 +385,12 @@ async fn probe_endpoints(c: &ApiClient) {
 
 /// Print the aggregated per-endpoint report as a fixed-width table, copy-pasteable
 /// into a bug report. Slowest endpoint first; a `⚠` flags a slow p95.
-fn print_diagnostic_report(metrics: &crate::api::metrics::Metrics, base_url: &str, rounds: u32) {
+fn print_diagnostic_report(
+    metrics: &crate::api::metrics::Metrics,
+    rate_limit: Option<&crate::api::ratelimit::RateLimitState>,
+    base_url: &str,
+    rounds: u32,
+) {
     let agg = metrics.aggregate();
     println!();
     println!("═══ API DIAGNOSTIC REPORT ═══");
@@ -377,6 +403,16 @@ fn print_diagnostic_report(metrics: &crate::api::metrics::Metrics, base_url: &st
         metrics.total_decode_errors()
     );
     println!("slow flag: p95 > {} ms", SLOW_THRESHOLD_MS as i64);
+    if let Some(rl) = rate_limit {
+        if let Some(limit) = rl.limit {
+            let remaining = rl.remaining.map(|r| r.to_string()).unwrap_or_else(|| "?".into());
+            let throttled = match rl.retry_in_secs() {
+                Some(secs) => format!("   ⚠ throttled, retry in {secs}s"),
+                None => String::new(),
+            };
+            println!("quota    : {remaining}/{limit} left in the current window{throttled}");
+        }
+    }
     println!();
     println!(
         "{:<46} {:>4} {:>7} {:>7} {:>7} {:>4} {:>4} {:>4}",

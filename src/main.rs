@@ -155,6 +155,11 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
             state.persistence_degraded = degraded.load(std::sync::atomic::Ordering::Relaxed);
         }
 
+        // Mirror the shared rate-limit back-off (API v104). Read from the
+        // client rather than from an ApiMessage: a 429 can just as well hit a
+        // background fetch whose errors are dropped silently.
+        state.rate_limited_secs = client.throttled_for_secs();
+
         // Drain ship's-log entries staged by the previous tick's handlers:
         // persist each and prepend to the in-memory journal (newest first,
         // capped), mirroring how sector observations are persisted.
@@ -597,7 +602,9 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
             }
 
             _ = tokio::time::sleep_until(deadline) => {
-                if !state.loading {
+                // Same rate-limit hold as the periodic refresh: while throttled,
+                // the arrival/queue poll would only burn the quota again.
+                if !state.loading && state.rate_limited_secs.is_none() {
                     fetch_all(client.clone(), tx.clone());
                     state.loading = true;
                 }

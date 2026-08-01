@@ -352,6 +352,14 @@ fn render_status_line(frame: &mut Frame, area: Rect, state: &AppState, p: Palett
         };
         meta.push((label, style));
     }
+    // Rate limited by the server (API v104): the auto-refresh is held off until
+    // the per-token window reopens. Counts down on the 1 s tick.
+    if let Some(secs) = state.rate_limited_secs {
+        meta.push((
+            format!("⏳ rate limit {secs}s"),
+            Style::default().fg(p.warn).add_modifier(Modifier::BOLD),
+        ));
+    }
     // Persistence degraded: the SQLite writer hit a failing write, so history
     // is no longer being saved (issue #216). Warn, bold, so it stands out.
     if state.persistence_degraded {
