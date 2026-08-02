@@ -314,6 +314,22 @@ pub fn fetch_mannies(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     );
 }
 
+/// Fire an atomic Manny task batch (`POST …/mannies/tasks`, API v104): one
+/// request for a whole fan-out or lane round, applied wholesale or not at all.
+pub fn fetch_manny_tasks(
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+    probe_id: u64,
+    tasks: Vec<crate::api::types::MannyTaskRequest>,
+) {
+    spawn_action(
+        tx,
+        async move { client.assign_manny_tasks(probe_id, &tasks).await },
+        ApiMessage::MannyTasksStarted,
+        ApiMessage::MannyTasksError,
+    );
+}
+
 /// Refresh a single Manny (`GET /api/probe/{probeId}/mannies/{id}`, API v104) —
 /// one request instead of the roster when only one Manny is being waited on.
 pub fn fetch_manny(client: ApiClient, tx: mpsc::Sender<ApiMessage>, probe_id: u64, manny_id: String) {

@@ -1,9 +1,10 @@
 use super::metrics::{endpoint_label, Metrics, MetricsHandle, RequestSample};
 use super::ratelimit::{retry_after_from, RateLimitHandle, RateLimitState, RateLimited};
 use super::types::{
-    ContainerInventory, CraftingRecipe, DamageWarningRule, EndpointId, Manny, MannyDetail, MannyRoster, Mission,
-    Pagination, Probe, ProbeAlert, ProbeImprovement, ProbeInventory, ProbeListResponse, ProbeMessage, ProbeModel,
-    ProbeMovement, ProbeSentMessage, ScutNetwork, SectorObservation, StorageContainer, VisitedSector,
+    ContainerInventory, CraftingRecipe, DamageWarningRule, EndpointId, Manny, MannyDetail, MannyRoster,
+    MannyTaskRequest, Mission, Pagination, Probe, ProbeAlert, ProbeImprovement, ProbeInventory, ProbeListResponse,
+    ProbeMessage, ProbeModel, ProbeMovement, ProbeSentMessage, ScutNetwork, SectorObservation, StorageContainer,
+    VisitedSector,
 };
 use anyhow::{Context, Result};
 use reqwest::{Client, StatusCode, Url};
@@ -905,6 +906,36 @@ impl ApiClient {
         Ok(self.get::<Resp>("/api/visited-sectors").await?.visited_sectors)
     }
 
+    /// Assign several Manny tasks in one atomic request
+    /// (`POST /api/probe/{probeId}/mannies/tasks`, API v104): the whole batch
+    /// is applied in order, or none of it is. Returns the refreshed Mannies in
+    /// request order.
+    ///
+    /// Like the single-Manny GET, the server exposes this only on the
+    /// `{probeId}` mirror — the literal `/api/probe/mannies/tasks` answers 405
+    /// — so the piloted probe's id is passed explicitly.
+    ///
+    /// A rejection surfaces as the ordinary `error.message`. The spec also
+    /// mentions a zero-based `taskIndex`, but since nothing is applied on
+    /// failure the pilot's actionable information is the message itself.
+    pub async fn assign_manny_tasks(&self, probe_id: u64, tasks: &[MannyTaskRequest]) -> Result<Vec<Manny>> {
+        #[derive(Serialize)]
+        struct Body<'a> {
+            tasks: &'a [MannyTaskRequest],
+        }
+        #[derive(Deserialize)]
+        struct Entry {
+            manny: Manny,
+        }
+        #[derive(Deserialize)]
+        struct Resp {
+            results: Vec<Entry>,
+        }
+        let path = format!("/api/probe/{probe_id}/mannies/tasks");
+        let r = self.post::<Resp, _>(&path, &Body { tasks }).await?;
+        Ok(r.results.into_iter().map(|e| e.manny).collect())
+    }
+
     /// Exact number of unread received messages (API v104 `status=unread`).
     ///
     /// The inbox is paginated (50 by default), so counting unread entries in
@@ -1424,5 +1455,67 @@ mod tests {
             .mount(&server)
             .await;
         assert_eq!(client_for(&server).get_unread_message_count().await.unwrap(), 12);
+    }
+
+    #[tokio::test]
+    async fn manny_task_batch_posts_to_the_probe_id_mirror() {
+        use crate::api::types::MannyTaskRequest;
+
+        // Like the single-Manny GET, the batch lives only on the {probeId}
+        // mirror — the literal /api/probe/mannies/tasks answers 405.
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/probe/5/mannies/tasks"))
+            .respond_with(ResponseTemplate::new(202).set_body_json(serde_json::json!({
+                "results": [
+                    {"manny": {"id": "m1", "name": "a", "location": {"type": "sector"},
+                               "currentTask": "mining", "taskProgressPercent": 0.0,
+                               "cargo": {"capacity": 0.05, "deuterium": 0, "metals": 0, "ice": 0,
+                                         "organicCompounds": 0},
+                               "canReceiveOrders": false}},
+                    {"manny": {"id": "m2", "name": "b", "location": {"type": "sector"},
+                               "currentTask": "mining", "taskProgressPercent": 0.0,
+                               "cargo": {"capacity": 0.05, "deuterium": 0, "metals": 0, "ice": 0,
+                                         "organicCompounds": 0},
+                               "canReceiveOrders": false}}
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let tasks = vec![
+            MannyTaskRequest {
+                manny_id: "m1".into(),
+                task: "mine",
+                payload: serde_json::json!({"objectId": "ast-1", "resources": ["metals"], "targetAmount": 0.02}),
+            },
+            MannyTaskRequest {
+                manny_id: "m2".into(),
+                task: "mine",
+                payload: serde_json::json!({"objectId": "ast-1", "resources": ["metals"], "targetAmount": 0.02}),
+            },
+        ];
+        let mannies = client_for(&server).assign_manny_tasks(5, &tasks).await.unwrap();
+        assert_eq!(mannies.len(), 2, "results come back in request order");
+        assert_eq!(mannies[1].id, "m2");
+        assert!(!mannies[0].can_receive_orders, "the batch returns them already busy");
+    }
+
+    #[tokio::test]
+    async fn a_rejected_batch_surfaces_the_server_message() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/probe/5/mannies/tasks"))
+            .respond_with(ResponseTemplate::new(422).set_body_json(serde_json::json!({
+                "error": {"code": "invalid_mining_target", "message": "This object cannot be mined by a Manny."}
+            })))
+            .mount(&server)
+            .await;
+        let err = client_for(&server)
+            .assign_manny_tasks(5, &[])
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("cannot be mined"), "got: {err}");
     }
 }
