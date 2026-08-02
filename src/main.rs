@@ -13,7 +13,7 @@ use tokio::sync::mpsc;
 use neumann_cockpit::api::tasks::{
     fetch_all, fetch_api_version, fetch_atomic_printer_craft, fetch_craft, fetch_crafting_recipes, fetch_detach,
     fetch_mannies, fetch_manny, fetch_messages, fetch_mine, fetch_missions, fetch_move, fetch_recover, fetch_repair,
-    fetch_salvage, fetch_sent_messages,
+    fetch_salvage, fetch_sent_messages, fetch_unread_message_count,
 };
 use neumann_cockpit::app::{
     ActiveWizard, ApiMessage, AppState, ColorMode, Fabricator, MessagesInput, MissionsInput, Refetch, RefreshTarget,
@@ -436,7 +436,15 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                             state.scut_network_view = Some(network);
                         }
                     }
-                    ApiMessage::MessagesFetched(m) => state.messages = m,
+                    ApiMessage::MessagesFetched(m, pag) => {
+                        state.set_messages(m, pag.has_more);
+                        // Unread messages can sit outside the fetched page, so
+                        // the badge needs the server's own count (API v104).
+                        if state.needs_unread_message_count(pag.has_more) {
+                            fetch_unread_message_count(client.clone(), tx.clone());
+                        }
+                    }
+                    ApiMessage::UnreadMessagesFetched(n) => state.unread_messages_total = Some(n),
                     ApiMessage::SentMessagesFetched(m) => state.sent_messages = m,
                     ApiMessage::MessageSent(_) => {
                         state.active_wizard = ActiveWizard::Messages(MessagesInput::Browsing { sent_tab: false, selection: 0 });

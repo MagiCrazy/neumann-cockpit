@@ -3490,6 +3490,50 @@ fn script_note_error_halts_a_running_step() {
     }
 }
 
+// ── fleet-wide visited sectors & exact unread count (v104 phase 5) ─────────
+
+fn message_json(id: i64, status: &str) -> crate::api::types::ProbeMessage {
+    serde_json::from_str(&format!(
+        r#"{{
+            "id": {id},
+            "sender": {{ "type": "probe", "id": 2, "name": "nova" }},
+            "recipient": {{ "type": "probe", "id": 1, "name": "me" }},
+            "sector": {{ "relative": {{"x":0,"y":0,"z":0}} }},
+            "body": "hi", "status": "{status}", "readAt": null,
+            "createdAt": "2026-06-06T12:00:00+00:00", "updatedAt": "2026-06-06T12:00:00+00:00"
+        }}"#
+    ))
+    .expect("message fixture")
+}
+
+#[test]
+fn unread_badge_counts_the_page_when_it_is_the_whole_inbox() {
+    let mut state = AppState::default();
+    state.set_messages(vec![message_json(1, "unread"), message_json(2, "read")], false);
+    assert_eq!(state.unread_message_count(), 1);
+    assert!(
+        !state.needs_unread_message_count(false),
+        "no extra request when the page is the mailbox"
+    );
+}
+
+#[test]
+fn unread_badge_defers_to_the_server_when_the_inbox_spills_over() {
+    let mut state = AppState::default();
+    // A full page of read messages while unread ones sit beyond it: counting
+    // the page would report zero unread (API v104 fixes this with status=unread).
+    state.set_messages(vec![message_json(1, "read"), message_json(2, "read")], true);
+    assert!(state.needs_unread_message_count(true));
+    assert_eq!(state.unread_message_count(), 0, "before the count lands");
+
+    state.unread_messages_total = Some(7);
+    assert_eq!(state.unread_message_count(), 7, "the server knows better");
+
+    // A later page that *is* the whole mailbox drops back to local counting.
+    state.set_messages(vec![message_json(3, "unread")], false);
+    assert_eq!(state.unread_message_count(), 1);
+}
+
 // ── probe models (API v104, #275 phase 4) ──────────────────────────────────
 
 #[test]

@@ -141,9 +141,19 @@ pub fn fetch_missions(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
 }
 
 pub fn fetch_messages(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
-    spawn_fetch(tx, async move { client.get_messages().await }, |(messages, _pag)| {
-        ApiMessage::MessagesFetched(messages)
+    spawn_fetch(tx, async move { client.get_messages().await }, |(messages, pag)| {
+        ApiMessage::MessagesFetched(messages, pag)
     });
+}
+
+/// Ask the server how many received messages are unread (API v104). Only worth
+/// a request when the inbox spills past one page — see `get_unread_message_count`.
+pub fn fetch_unread_message_count(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    spawn_fetch(
+        tx,
+        async move { client.get_unread_message_count().await },
+        ApiMessage::UnreadMessagesFetched,
+    );
 }
 
 pub fn fetch_sent_messages(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
