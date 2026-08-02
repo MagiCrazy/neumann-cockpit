@@ -15,6 +15,8 @@ Startup runs a **preflight** inside the centre (Probe) pane before the live cock
    - `[K]` re-enter the API key (re-runs onboarding)
    - `[Enter]` continue **offline** (degraded mode — an error toast; `F5` retries later)
 
+   If the link fails because the server's [request quota](../cockpit/index.md#rate-limiting) is spent, the prompt says so and drops the "re-enter key" option — your key is fine, it just needs a moment. Retry after the delay it shows.
+
 Once the link is up, a short self-check animation assembles the cockpit centre-out. **Any key** drops you into the live cockpit.
 
 From here, head to **[The cockpit](../cockpit/index.md)**.

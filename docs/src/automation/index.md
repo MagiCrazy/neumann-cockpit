@@ -7,3 +7,5 @@ Three ways to let the cockpit work for you, from least to most hands-off:
 - **[Headless runner](headless.md)** — play a script from a file with no TUI, streaming the ship's-log to stdout, for cron jobs and unattended runs.
 
 All three share one sequencing engine, so they behave consistently: a step fires, completion is polled (a manny going idle again, a movement arriving), and progress shows in the status bar even with the console closed.
+
+Polling follows the **server's schedule** rather than a fixed tick: the API reports when the next visible change is due, so an hour-long craft is not re-checked every few seconds. Long unattended runs therefore stay well inside the server's [request quota](../cockpit/index.md#rate-limiting).
