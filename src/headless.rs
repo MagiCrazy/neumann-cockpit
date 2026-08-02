@@ -19,9 +19,9 @@ use tokio::time::{interval, MissedTickBehavior};
 use crate::api::client::ApiClient;
 use crate::api::tasks::{
     fetch_all, fetch_atomic_printer_craft, fetch_craft, fetch_crafting_recipes, fetch_detach, fetch_mannies,
-    fetch_manny, fetch_mine, fetch_move, fetch_recover, fetch_repair, fetch_salvage,
+    fetch_manny, fetch_manny_tasks, fetch_mine, fetch_move, fetch_recover, fetch_repair, fetch_salvage,
 };
-use crate::app::{ApiMessage, AppState, Fabricator, LogEvent, RefreshTarget, ScriptAction, StepState};
+use crate::app::{batch_tasks, ApiMessage, AppState, Fabricator, LogEvent, RefreshTarget, ScriptAction, StepState};
 use crate::config::{self, Config, ConfigStatus};
 use crate::store;
 
@@ -182,6 +182,15 @@ pub async fn run(path: &Path) -> Result<i32> {
 
     loop {
         state.advance_script();
+        // A fan-out step goes out as one atomic batch (API v104): the whole
+        // group is accepted or none of it is, in a single request.
+        let batched = state
+            .probe_id()
+            .zip(batch_tasks(&state.script_fire, ScriptAction::as_batch_task));
+        if let Some((probe_id, tasks)) = batched {
+            state.script_fire.clear();
+            fetch_manny_tasks(client.clone(), tx.clone(), probe_id, tasks);
+        }
         for action in state.script_fire.drain(..) {
             spawn(action, &client, &tx);
         }
@@ -325,6 +334,8 @@ fn dispatch(state: &mut AppState, msg: ApiMessage) {
         ApiMessage::ProbeUpdated(probe) => state.update_probe(probe),
         ApiMessage::ManniesUpdated(roster) => state.update_mannies_roster(roster),
         ApiMessage::MannyUpdated(detail) => state.update_manny(detail),
+        ApiMessage::MannyTasksStarted(mannies) => state.merge_mannies(mannies),
+        ApiMessage::MannyTasksError(e) => state.script_note_error(&e),
         ApiMessage::SectorUpdated(sector) => state.update_sector(sector),
         ApiMessage::RecipesFetched(recipes) => state.recipes = recipes,
         ApiMessage::MoveError(e)

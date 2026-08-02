@@ -473,6 +473,18 @@ pub struct MannyRoster {
     pub next_useful_refresh_delay_ms: Option<u64>,
 }
 
+/// One entry of an atomic Manny task batch (`POST …/mannies/tasks`, API v104).
+/// `task` is the verb the individual endpoint is named after and `payload` is
+/// that endpoint's request body verbatim, so the batch reuses exactly the same
+/// validation.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MannyTaskRequest {
+    pub manny_id: String,
+    pub task: &'static str,
+    pub payload: serde_json::Value,
+}
+
 /// Response of `GET /api/probe/{probeId}/mannies/{mannyId}` (API v104): one
 /// Manny, same visibility rules as the list, plus the polling hint. One request
 /// instead of the whole roster when only a single Manny is being watched.

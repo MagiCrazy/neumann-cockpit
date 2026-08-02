@@ -97,6 +97,11 @@ pub enum ApiMessage {
     /// The inbox page plus its pagination — the cockpit needs `has_more` to
     /// know whether the page holds every unread message (API v104).
     MessagesFetched(Vec<ProbeMessage>, Pagination),
+    /// An atomic Manny task batch was accepted (API v104); carries the
+    /// refreshed Mannies in request order.
+    MannyTasksStarted(Vec<Manny>),
+    /// The batch was rejected — nothing was applied.
+    MannyTasksError(String),
     /// Exact unread count from the server's `status=unread` filter.
     UnreadMessagesFetched(usize),
     SentMessagesFetched(Vec<ProbeSentMessage>),

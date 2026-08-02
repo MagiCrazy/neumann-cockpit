@@ -12,12 +12,12 @@ use tokio::sync::mpsc;
 
 use neumann_cockpit::api::tasks::{
     fetch_all, fetch_api_version, fetch_atomic_printer_craft, fetch_craft, fetch_crafting_recipes, fetch_detach,
-    fetch_mannies, fetch_manny, fetch_messages, fetch_mine, fetch_missions, fetch_move, fetch_recover, fetch_repair,
-    fetch_salvage, fetch_sent_messages, fetch_unread_message_count,
+    fetch_mannies, fetch_manny, fetch_manny_tasks, fetch_messages, fetch_mine, fetch_missions, fetch_move,
+    fetch_recover, fetch_repair, fetch_salvage, fetch_sent_messages, fetch_unread_message_count,
 };
 use neumann_cockpit::app::{
-    ActiveWizard, ApiMessage, AppState, ColorMode, Fabricator, MessagesInput, MissionsInput, Refetch, RefreshTarget,
-    RemoteMineInput, ScriptAction, ScutNetworkInput,
+    batch_tasks, ActiveWizard, ApiMessage, AppState, ColorMode, CraftFire, Fabricator, MessagesInput, MissionsInput,
+    Refetch, RefreshTarget, RemoteMineInput, ScriptAction, ScutNetworkInput,
 };
 use neumann_cockpit::input::handle_event;
 use neumann_cockpit::preflight;
@@ -201,6 +201,16 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
         // the next tick detect the craft going busy, then idle → complete.
         state.advance_queue();
         if !state.queue_fire.is_empty() {
+            // A lane round dispatches one craft per builder: send them as one
+            // atomic batch when they all qualify (API v104), so a rejection
+            // cannot leave half the lanes started.
+            let batched = state
+                .probe_id()
+                .zip(batch_tasks(&state.queue_fire, CraftFire::as_batch_task));
+            if let Some((probe_id, tasks)) = batched {
+                state.queue_fire.clear();
+                fetch_manny_tasks(client.clone(), tx.clone(), probe_id, tasks);
+            }
             for fire in state.queue_fire.drain(..) {
                 match fire.fabricator {
                     Fabricator::Manny => {
@@ -223,6 +233,16 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
         // refresh primes busy→idle completion detection.
         state.advance_script();
         if !state.script_fire.is_empty() {
+            // A fan-out step (`mine … by all`, a craft list) resolves to one
+            // action per builder; one atomic batch replaces N requests and
+            // cannot half-fire the group (API v104).
+            let batched = state
+                .probe_id()
+                .zip(batch_tasks(&state.script_fire, ScriptAction::as_batch_task));
+            if let Some((probe_id, tasks)) = batched {
+                state.script_fire.clear();
+                fetch_manny_tasks(client.clone(), tx.clone(), probe_id, tasks);
+            }
             for action in state.script_fire.drain(..) {
                 match action {
                     ScriptAction::Travel { x, y, z } => fetch_move(x, y, z, client.clone(), tx.clone()),
@@ -377,6 +397,18 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                     // start is quiet (the fire path already refreshed mannies)
                     // and an error halts the queue.
                     ApiMessage::CraftStarted => {}
+                    // An accepted batch already carries the refreshed Mannies:
+                    // merging them now makes the builders read busy a tick
+                    // earlier, which is what the sequencers' observed_busy
+                    // guard waits for.
+                    ApiMessage::MannyTasksStarted(mannies) => state.merge_mannies(mannies),
+                    // Nothing was applied — the batch is atomic. Route like a
+                    // craft error: whichever sequencer fired it reacts, the
+                    // other no-ops.
+                    ApiMessage::MannyTasksError(e) => {
+                        state.script_note_error(&e);
+                        state.fail_queue(e);
+                    }
                     // A craft error can belong to the queue or a scripted craft;
                     // route to both (each no-ops if it wasn't the one that fired).
                     ApiMessage::CraftError(e) => {

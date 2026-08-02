@@ -1,4 +1,5 @@
 mod assembly;
+mod batch;
 mod boot;
 mod color;
 mod command;
@@ -23,6 +24,7 @@ mod tree;
 mod waypoints;
 
 pub use assembly::*;
+pub use batch::*;
 pub use boot::{BOOT_CHARS_PER_FRAME, BOOT_LINE_STRIDE};
 pub use color::*;
 pub use command::{command_usage, CommandFire, COMMANDS};
@@ -392,6 +394,28 @@ impl AppState {
     pub fn update_mannies_roster(&mut self, roster: MannyRoster) {
         self.note_manny_poll_hint(roster.next_useful_refresh_delay_ms);
         self.update_mannies(roster.mannies);
+    }
+
+    /// The piloted probe's id, when a probe sync has landed. The v104
+    /// per-probe endpoints that exist only on the `{probeId}` mirror (the
+    /// single-Manny GET, the task batch) need it explicitly.
+    pub fn probe_id(&self) -> Option<u64> {
+        self.probe.as_ref().and_then(|p| u64::try_from(p.id).ok())
+    }
+
+    /// Patch several Mannies into the roster in place, leaving the rest alone —
+    /// the shape an accepted task batch comes back in (API v104).
+    pub fn merge_mannies(&mut self, updated: Vec<Manny>) {
+        let Some(mut mannies) = self.mannies.clone() else {
+            return;
+        };
+        for m in updated {
+            match mannies.iter().position(|x| x.id == m.id) {
+                Some(idx) => mannies[idx] = m,
+                None => mannies.push(m),
+            }
+        }
+        self.update_mannies(mannies);
     }
 
     /// Absorb a single-Manny fetch (`GET …/mannies/{id}`, API v104): replace

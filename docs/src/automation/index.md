@@ -8,4 +8,6 @@ Three ways to let the cockpit work for you, from least to most hands-off:
 
 All three share one sequencing engine, so they behave consistently: a step fires, completion is polled (a manny going idle again, a movement arriving), and progress shows in the status bar even with the console closed.
 
+When a step dispatches several mannies at once — a `by all` fan-out, or a round of queue lanes — the orders go out as **one atomic request**: either every manny takes its order or none does, so a rejection never leaves half a group working while the rest idles.
+
 Polling follows the **server's schedule** rather than a fixed tick: the API reports when the next visible change is due, so an hour-long craft is not re-checked every few seconds. Long unattended runs therefore stay well inside the server's [request quota](../cockpit/index.md#rate-limiting).
