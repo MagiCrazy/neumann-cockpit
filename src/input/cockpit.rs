@@ -516,13 +516,13 @@ fn fire_menu_action(action: MenuAction, state: &mut AppState, client: &ApiClient
             if containers.len() < 2 {
                 state.error = Some("need two empty additional containers".into());
             } else {
-                state.active_wizard = ActiveWizard::AssembleProbe(AssembleProbeInput::PickContainers {
+                // The hull model comes first (API v104): it sets the bill the
+                // container step shows.
+                state.active_wizard = ActiveWizard::AssembleProbe(AssembleProbeInput::PickModel {
                     manny_id: id,
                     manny_name: name,
                     containers,
-                    selected: Vec::new(),
                     cursor: 0,
-                    error: None,
                 });
             }
         }

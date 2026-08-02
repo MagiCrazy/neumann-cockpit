@@ -21,9 +21,12 @@ Press `:` for a vim-style command line. `Tab` completes and cycles the verb and 
 | `craft` | `[recipe]` | open the production console, or enqueue a recipe |
 | `queue` | | open the production console |
 | `script` | | open the [action-scripting](../automation/scripting.md) console |
+| `tree` | | open the tech-tree browser |
 | `mine` | `[res] [amt] [by/at/to …]` | open the mine wizard, or fire a mine directly |
 | `probe` | `<id\|name>` | pilot a fleet probe |
 | `theme` | `<mode>` | set the colour mode |
 | `refresh` · `zoom` · `help` · `q` | | refresh · toggle zoom · help · quit |
+
+`tree` opens a full-screen browser of the crafting dependency graph: a catalog of everything buildable — atomic printer, manny bay, probe improvements, and the two **probe hulls** (generic and deuterium tanker) — where each entry expands into its ingredients and the right panel prices it down to the four base resources. `+`/`-` scale the quantity, so you can ask "what does a tanker actually cost me in metals and ice?" before committing a three-hour build.
 
 `travel` accepts a leading `+` for relative moves (e.g. `travel +2 0 0`). `mine` is **hybrid**: bare `:mine` opens the wizard, a full line fires directly — resolving the builder manny and asteroid from context, overridable with `by`/`at`, destination defaulting to the probe (`to <container>` redirects).

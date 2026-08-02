@@ -12,8 +12,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::{AppState, Fabricator};
-use crate::api::types::{CraftingRecipe, ProbeImprovement};
+use super::{assembly_bill, model_label, model_wire, AppState, Fabricator, ASSEMBLABLE_MODELS, ASSEMBLY_SECONDS};
+use crate::api::types::{CraftingRecipe, ProbeImprovement, ProbeModel};
 
 /// The raw resources every recipe chain bottoms out in. Anything not craftable
 /// by a known recipe is a leaf; the four below are the ones the game mines.
@@ -128,6 +128,9 @@ pub struct TreeRow {
     pub is_base: bool,
     /// A probe-improvement node (built via the improve-probe task, not a recipe).
     pub is_improvement: bool,
+    /// A probe-assembly node (a hull model built by the assemble-probe task):
+    /// `item` is the model's wire value.
+    pub is_assembly: bool,
     /// A locked improvement (blueprint not yet known): shown dim, non-buildable.
     pub locked: bool,
     pub expandable: bool,
@@ -147,6 +150,7 @@ impl TreeRow {
             is_header: true,
             is_base: false,
             is_improvement: false,
+            is_assembly: false,
             locked: false,
             expandable: false,
             expanded: false,
@@ -200,6 +204,12 @@ impl AppState {
                 self.push_tree_node(&mut rows, &root_path, &recipe.id, qty, 0);
             }
         }
+        // Probe hulls (built via the assemble-probe task, not a recipe): what a
+        // drone actually costs, down to base resources (API v104 models).
+        rows.push(TreeRow::header("PROBE ASSEMBLY"));
+        for model in ASSEMBLABLE_MODELS {
+            self.push_assembly_node(&mut rows, model, qty);
+        }
         // Probe improvements (built via the improve-probe task, not a recipe).
         if !self.tree_improvements.is_empty() {
             rows.push(TreeRow::header("PROBE IMPROVEMENTS"));
@@ -208,6 +218,36 @@ impl AppState {
             }
         }
         rows
+    }
+
+    /// Push a probe-hull root and, when expanded, its component bill. The two
+    /// empty additional containers are part of the cost too, so they are listed
+    /// like any other component.
+    fn push_assembly_node(&self, rows: &mut Vec<TreeRow>, model: ProbeModel, qty: f64) {
+        let path = format!("assemble:{}", model_wire(model));
+        let expanded = self.tree.expanded.contains(&path);
+        rows.push(TreeRow {
+            path: path.clone(),
+            item: model_wire(model).to_string(),
+            label: format!("{} probe", model_label(model)),
+            depth: 0,
+            qty_abs: qty,
+            fabricator: Some(Fabricator::Manny),
+            duration_seconds: ASSEMBLY_SECONDS,
+            is_header: false,
+            is_base: false,
+            is_improvement: false,
+            is_assembly: true,
+            locked: false,
+            expandable: true,
+            expanded,
+        });
+        if expanded {
+            for (item, n) in assembly_bill(model) {
+                let child_path = format!("{path}/{item}");
+                self.push_tree_node(rows, &child_path, item, qty * n, 1);
+            }
+        }
     }
 
     /// Push a probe-improvement root and, when expanded, its ingredients (which
@@ -227,6 +267,7 @@ impl AppState {
             is_header: false,
             is_base: false,
             is_improvement: true,
+            is_assembly: false,
             locked: !imp.available,
             expandable,
             expanded,
@@ -259,6 +300,7 @@ impl AppState {
             is_header: false,
             is_base: recipe.is_none(),
             is_improvement: false,
+            is_assembly: false,
             locked: false,
             expandable,
             expanded,
@@ -345,6 +387,29 @@ impl AppState {
     /// A tech-tree improvement by id (from the `includeAll` catalog).
     pub fn tree_improvement(&self, id: &str) -> Option<&ProbeImprovement> {
         self.tree_improvements.iter().find(|i| i.id == id)
+    }
+
+    /// The hull model a tree row denotes, if it is an assembly root.
+    pub fn tree_assembly_model(&self, item: &str) -> Option<ProbeModel> {
+        ASSEMBLABLE_MODELS.into_iter().find(|m| model_wire(*m) == item)
+    }
+
+    /// Roll a probe hull up to base resources: fold the recipe roll-up over its
+    /// component bill. The assembly itself is an assemble-probe task, not a
+    /// craft, so — as for an improvement — it is not counted as a craft op.
+    pub fn assembly_rollup(&self, model: ProbeModel, qty: f64) -> Rollup {
+        let mut out = Rollup::default();
+        for (item, n) in assembly_bill(model) {
+            let sub = self.recipe_rollup(item, n * qty);
+            for (k, v) in sub.base {
+                *out.base.entry(k).or_insert(0.0) += v;
+            }
+            for (k, v) in sub.crafts {
+                *out.crafts.entry(k).or_insert(0.0) += v;
+            }
+            out.duration_seconds += sub.duration_seconds;
+        }
+        out
     }
 
     /// Roll a probe improvement up to base resources: fold the recipe roll-up

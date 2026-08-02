@@ -6,7 +6,8 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::{AppState, Fabricator, BASE_RESOURCES};
+use crate::api::types::ProbeModel;
+use crate::app::{assembly_bill, AppState, Fabricator, BASE_RESOURCES};
 use crate::ui::theme::{format_duration, palette};
 
 use super::{render_footer, FooterKey};
@@ -129,6 +130,7 @@ fn render_detail(frame: &mut Frame, area: Rect, state: &AppState, p: crate::ui::
     } else {
         None
     };
+    let assembly = row.is_assembly.then(|| state.tree_assembly_model(&row.item)).flatten();
 
     let mut lines: Vec<Line> = Vec::new();
     lines.push(Line::from(Span::styled(
@@ -137,7 +139,13 @@ fn render_detail(frame: &mut Frame, area: Rect, state: &AppState, p: crate::ui::
     )));
     // Meta line: for an improvement, its lock/duration status; else its builder.
     let mut meta: Vec<Span> = Vec::new();
-    if let Some(imp) = improvement {
+    if let Some(model) = assembly {
+        let tank = if model == ProbeModel::DeuteriumTanker { 400 } else { 100 };
+        meta.push(Span::styled(
+            format!("probe hull · assembled by a Manny · {tank}-point tank"),
+            dim,
+        ));
+    } else if let Some(imp) = improvement {
         let status = if imp.done {
             Span::styled("probe improvement · installed", Style::default().fg(p.good))
         } else if imp.available {
@@ -164,6 +172,22 @@ fn render_detail(frame: &mut Frame, area: Rect, state: &AppState, p: crate::ui::
     lines.push(Line::from(Span::styled(format!("quantity: ×{qty}"), dim)));
     lines.push(Line::default());
 
+    // A hull's bill is not a recipe ingredient list, so it renders on its own.
+    if let Some(model) = assembly {
+        lines.push(Line::from(Span::styled("COMPONENT BILL", dim)));
+        lines.push(Line::from(vec![
+            Span::styled(format!("  {:>7} ", 2 * qty), text),
+            Span::styled("empty additional container", text),
+        ]));
+        for (item, n) in assembly_bill(model) {
+            lines.push(Line::from(vec![
+                Span::styled(format!("  {:>7} ", (n * qty as f64) as i64), text),
+                Span::styled(item.to_string(), text),
+            ]));
+        }
+        lines.push(Line::default());
+    }
+
     // Direct ingredients — of the improvement or of the recipe.
     let direct = improvement.map(|i| i.ingredients.as_slice()).or_else(|| {
         state
@@ -189,9 +213,10 @@ fn render_detail(frame: &mut Frame, area: Rect, state: &AppState, p: crate::ui::
     }
 
     // Roll-up to base resources.
-    let rollup = match improvement {
-        Some(imp) => state.improvement_rollup(imp, qty as f64),
-        None => state.recipe_rollup(&row.item, qty as f64),
+    let rollup = match (assembly, improvement) {
+        (Some(model), _) => state.assembly_rollup(model, qty as f64),
+        (None, Some(imp)) => state.improvement_rollup(imp, qty as f64),
+        (None, None) => state.recipe_rollup(&row.item, qty as f64),
     };
     lines.push(Line::from(Span::styled("── ROLLED UP TO BASE ──", dim)));
     for res in BASE_RESOURCES {

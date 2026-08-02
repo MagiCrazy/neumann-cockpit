@@ -199,10 +199,10 @@ impl LogEvent {
         )
     }
 
-    pub fn assemble_probe(probe_id: Option<u64>) -> Self {
+    pub fn assemble_probe(probe_id: Option<u64>, model: crate::api::types::ProbeModel) -> Self {
         Self::action(
             kind::ASSEMBLE,
-            "Began assembling a new drone (~3h).".to_string(),
+            format!("Began assembling a new {} drone (~3h).", crate::app::model_label(model)),
             probe_id,
         )
     }

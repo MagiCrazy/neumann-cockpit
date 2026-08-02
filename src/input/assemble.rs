@@ -3,13 +3,15 @@ use tokio::sync::mpsc;
 
 use crate::api::client::ApiClient;
 use crate::api::tasks::fetch_assemble_probe;
-use crate::app::{ActiveWizard, ApiMessage, AppState, AssembleProbeInput, LogEvent};
+use crate::app::{ActiveWizard, ApiMessage, AppState, AssembleProbeInput, LogEvent, ASSEMBLABLE_MODELS};
 
 use super::geometry::list_nav;
 
-/// Assemble-probe wizard (API v81): pick exactly two empty additional
-/// containers, `Enter` fires the 3-hour build task, `Esc` cancels. `Space`
-/// toggles the container under the cursor (capped at two).
+/// Assemble-probe wizard (API v81, per-model since v104): pick the hull model,
+/// then exactly two empty additional containers. `Enter` advances then fires
+/// the ~3-hour build task, `Space` toggles the container under the cursor
+/// (capped at two), `Esc` backs out a step (and out of the wizard from the
+/// first one).
 pub(super) fn handle_assemble_probe_event(
     code: KeyCode,
     state: &mut AppState,
@@ -17,16 +19,37 @@ pub(super) fn handle_assemble_probe_event(
     tx: &mpsc::Sender<ApiMessage>,
 ) {
     match code {
-        KeyCode::Esc => state.close_wizard(),
-        KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
-            if let ActiveWizard::AssembleProbe(AssembleProbeInput::PickContainers { containers, cursor, .. }) =
-                &mut state.active_wizard
-            {
+        // Esc steps back to the model choice rather than throwing the whole
+        // wizard away — the container multi-select is the fiddly part.
+        KeyCode::Esc => match &state.active_wizard {
+            ActiveWizard::AssembleProbe(AssembleProbeInput::PickContainers {
+                manny_id,
+                manny_name,
+                containers,
+                ..
+            }) => {
+                state.active_wizard = ActiveWizard::AssembleProbe(AssembleProbeInput::PickModel {
+                    manny_id: manny_id.clone(),
+                    manny_name: manny_name.clone(),
+                    containers: containers.clone(),
+                    cursor: 0,
+                });
+            }
+            _ => state.close_wizard(),
+        },
+        KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => match &mut state.active_wizard {
+            ActiveWizard::AssembleProbe(AssembleProbeInput::PickModel { cursor, .. }) => {
+                if let Some(ns) = list_nav(code, *cursor, ASSEMBLABLE_MODELS.len()) {
+                    *cursor = ns;
+                }
+            }
+            ActiveWizard::AssembleProbe(AssembleProbeInput::PickContainers { containers, cursor, .. }) => {
                 if let Some(ns) = list_nav(code, *cursor, containers.len()) {
                     *cursor = ns;
                 }
             }
-        }
+            _ => {}
+        },
         KeyCode::Char(' ') => {
             if let ActiveWizard::AssembleProbe(AssembleProbeInput::PickContainers {
                 selected,
@@ -48,24 +71,45 @@ pub(super) fn handle_assemble_probe_event(
             }
         }
         KeyCode::Enter => {
+            // Model step: commit the choice and move on to the containers.
+            if let ActiveWizard::AssembleProbe(AssembleProbeInput::PickModel {
+                manny_id,
+                manny_name,
+                containers,
+                cursor,
+            }) = &state.active_wizard
+            {
+                let model = ASSEMBLABLE_MODELS[(*cursor).min(ASSEMBLABLE_MODELS.len() - 1)];
+                state.active_wizard = ActiveWizard::AssembleProbe(AssembleProbeInput::PickContainers {
+                    manny_id: manny_id.clone(),
+                    manny_name: manny_name.clone(),
+                    model,
+                    containers: containers.clone(),
+                    selected: Vec::new(),
+                    cursor: 0,
+                    error: None,
+                });
+                return;
+            }
             // Extract the order without holding a borrow across the fire.
             let order = match &state.active_wizard {
                 ActiveWizard::AssembleProbe(AssembleProbeInput::PickContainers {
                     manny_id,
+                    model,
                     containers,
                     selected,
                     ..
                 }) if selected.len() == 2 => {
                     let ids: Vec<String> = selected.iter().map(|&i| containers[i].0.clone()).collect();
-                    Some((manny_id.clone(), ids))
+                    Some((manny_id.clone(), *model, ids))
                 }
                 _ => None,
             };
             match order {
-                Some((manny, ids)) => {
+                Some((manny, model, ids)) => {
                     state.close_wizard();
-                    fetch_assemble_probe(manny, ids, client.clone(), tx.clone());
-                    state.log_event(LogEvent::assemble_probe(state.active_probe_id));
+                    fetch_assemble_probe(manny, model, ids, client.clone(), tx.clone());
+                    state.log_event(LogEvent::assemble_probe(state.active_probe_id, model));
                 }
                 None => {
                     if let ActiveWizard::AssembleProbe(AssembleProbeInput::PickContainers { error, .. }) =

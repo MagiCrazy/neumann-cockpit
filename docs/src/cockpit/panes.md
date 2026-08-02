@@ -15,7 +15,7 @@ A category root: **Messages**, **Alerts**, **Warnings**, each with an unread cou
 The objects in your current sector — asteroids (with reserves), detached containers, dormant constructs, planets (class + habitability). Drill into an object and `Enter` for its actions: **mine, inspect, salvage, recover, deploy waypoint**, or **turn on relay** for an inactive SCUT relay.
 
 ## Probe (`f`, centre)
-Status, fuel, hull integrity, movement ETA and speed gauges. Its top-right corner pins the active probe's **sigil** (a deterministic identicon) so drones are told apart at a glance. `Enter`: switch probe (multi-probe fleets), set default, rename, inspect the SCUT network, install **probe improvements**, and — if the probe is dead or trapped — reassign its mind snapshot. Zoom (`z`) unfolds the full fleet roster.
+Status, fuel, hull integrity, movement ETA and speed gauges. Its top-right corner pins the active probe's **sigil** (a deterministic identicon) so drones are told apart at a glance. `Enter`: switch probe (multi-probe fleets), set default, rename, inspect the SCUT network, install **probe improvements**, and — if the probe is dead or trapped — reassign its mind snapshot. Zoom (`z`) unfolds the full fleet roster, where a `⛽ tanker` marks your fuel-carrying drones; the piloted probe shows a `model` line when it is not a generic hull.
 
 ## Missions (`g`)
 Two categories: **Missions** (active directives with steps/status; `Enter` → abandon) and **Ship's log** (the captain's-log — newest-first narrated entries of your actions and server events).
@@ -27,4 +27,4 @@ Cargo stocks and onboard items. `Enter`: **Fabricate**, **Move stock**, **Jettis
 Storage containers with capacity bars. `Enter`: view contents, rename, and edit routing rules (none → priority → exclusion → strict).
 
 ## Mannies (`b`)
-The manny roster with live task progress. `Enter` opens the richest menu: fabricate, mine, repair, salvage, inspect, recover/detach a container, refuel, **transfer deuterium** to another probe, drop cargo, **assemble a probe**, recall/abandon, rename. A mining manny that turns up a hidden container flags it in its detail.
+The manny roster with live task progress. `Enter` opens the richest menu: fabricate, mine, repair, salvage, inspect, recover/detach a container, refuel, **transfer deuterium** to another probe, drop cargo, **assemble a probe**, recall/abandon, rename. Assembly asks for a **hull model** first — a *generic* probe or a *deuterium tanker*, which carries a 400-point fuel tank instead of 100 for a heavier component bill — then the two empty containers it consumes. A mining manny that turns up a hidden container flags it in its detail.

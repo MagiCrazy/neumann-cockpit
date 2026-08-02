@@ -65,14 +65,24 @@ pub enum RenameProbeInput {
     },
 }
 
-/// Assemble-a-drone wizard (API v81): a chosen Manny plus exactly two empty
-/// additional containers. Single step — the container multi-select and the
-/// (always-visible) ingredient bill live together; `Enter` with two selected
-/// fires the 3-hour task.
+/// Assemble-a-drone wizard (API v81, per-model since v104): pick the hull
+/// model, then a chosen Manny plus exactly two empty additional containers.
+/// The model step comes first because it decides the bill shown alongside the
+/// container multi-select; `Enter` with two selected fires the ~3-hour task.
 pub enum AssembleProbeInput {
+    /// Hull model picker. `generic` or `deuterium_tanker`, each with its bill.
+    PickModel {
+        manny_id: String,
+        manny_name: String,
+        /// Empty additional containers, `(id, label)`, carried to the next step.
+        containers: Vec<(String, String)>,
+        cursor: usize,
+    },
     PickContainers {
         manny_id: String,
         manny_name: String,
+        /// The hull model chosen in the previous step.
+        model: crate::api::types::ProbeModel,
         /// Empty additional containers, `(id, label)`.
         containers: Vec<(String, String)>,
         /// Indices into `containers` currently ticked (at most two).

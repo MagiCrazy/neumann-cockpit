@@ -317,3 +317,71 @@ fn rate_limit_chip_shows_the_remaining_backoff() {
         "the status bar should count the back-off down, got:\n{text}"
     );
 }
+
+#[test]
+fn assembly_wizard_shows_the_per_model_bill() {
+    use crate::api::types::ProbeModel;
+
+    let mut state = AppState::default();
+    state.active_wizard = ActiveWizard::AssembleProbe(crate::app::AssembleProbeInput::PickModel {
+        manny_id: "m1".into(),
+        manny_name: "Alpha".into(),
+        containers: vec![("c1".into(), "Box 1".into()), ("c2".into(), "Box 2".into())],
+        cursor: 0,
+    });
+    let generic = buffer_text(&render_cockpit(&state, 100, 30));
+    assert!(generic.contains("deuterium tanker"), "both models are offered");
+    assert!(generic.contains("solar panel"), "the generic bill is shown");
+    assert!(
+        !generic.contains("linear actuator"),
+        "the tanker extras are not part of the generic bill"
+    );
+
+    // Selecting the tanker swaps in its heavier bill.
+    state.active_wizard = ActiveWizard::AssembleProbe(crate::app::AssembleProbeInput::PickModel {
+        manny_id: "m1".into(),
+        manny_name: "Alpha".into(),
+        containers: vec![("c1".into(), "Box 1".into()), ("c2".into(), "Box 2".into())],
+        cursor: 1,
+    });
+    let tanker = buffer_text(&render_cockpit(&state, 100, 30));
+    assert!(tanker.contains("linear actuator"), "tanker extras listed");
+    assert!(tanker.contains("400-point"), "the bigger tank is the reason to pick it");
+
+    // The container step keeps the chosen model and its bill in view.
+    state.active_wizard = ActiveWizard::AssembleProbe(crate::app::AssembleProbeInput::PickContainers {
+        manny_id: "m1".into(),
+        manny_name: "Alpha".into(),
+        model: ProbeModel::DeuteriumTanker,
+        containers: vec![("c1".into(), "Box 1".into()), ("c2".into(), "Box 2".into())],
+        selected: vec![0],
+        cursor: 0,
+        error: None,
+    });
+    let step2 = buffer_text(&render_cockpit(&state, 100, 30));
+    assert!(step2.contains("deuterium tanker"), "model recalled in step two");
+    assert!(step2.contains("steel plate"), "tanker bill still in view");
+}
+
+#[test]
+fn fleet_roster_flags_a_tanker() {
+    let mut state = AppState::default();
+    state.probe = Some(probe(80.0));
+    state.zoomed = true;
+    state.active_pane = crate::app::Pane::Probe;
+    state.fleet = vec![
+        serde_json::from_str(
+            r#"{"id":5,"name":"Main","model":"generic","status":"idle",
+                "isDefault":true,"isReachable":true}"#,
+        )
+        .unwrap(),
+        serde_json::from_str(
+            r#"{"id":9,"name":"Bunker","model":"deuterium_tanker","status":"idle",
+                "isDefault":false,"isReachable":true}"#,
+        )
+        .unwrap(),
+    ];
+    let text = buffer_text(&render_cockpit(&state, 120, 40));
+    assert!(text.contains("Bunker"), "roster lists the drone");
+    assert!(text.contains("tanker"), "a tanker is flagged in the roster");
+}

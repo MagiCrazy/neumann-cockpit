@@ -494,13 +494,14 @@ pub fn fetch_drop_storage_container(
 
 pub fn fetch_assemble_probe(
     manny_id: String,
+    model: crate::api::types::ProbeModel,
     container_ids: Vec<String>,
     client: ApiClient,
     tx: mpsc::Sender<ApiMessage>,
 ) {
     spawn_action(
         tx,
-        async move { client.assemble_probe(&manny_id, &container_ids).await },
+        async move { client.assemble_probe(&manny_id, model, &container_ids).await },
         |(m, inv)| ApiMessage::AssembleProbeStarted(m, inv),
         ApiMessage::AssembleProbeError,
     );
