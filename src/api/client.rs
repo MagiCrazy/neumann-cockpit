@@ -1,9 +1,9 @@
 use super::metrics::{endpoint_label, Metrics, MetricsHandle, RequestSample};
 use super::ratelimit::{retry_after_from, RateLimitHandle, RateLimitState, RateLimited};
 use super::types::{
-    ContainerInventory, CraftingRecipe, DamageWarningRule, EndpointId, Manny, MannyRoster, Mission, Pagination, Probe,
-    ProbeAlert, ProbeImprovement, ProbeInventory, ProbeListResponse, ProbeMessage, ProbeMovement, ProbeSentMessage,
-    ScutNetwork, SectorObservation, StorageContainer, VisitedSector,
+    ContainerInventory, CraftingRecipe, DamageWarningRule, EndpointId, Manny, MannyDetail, MannyRoster, Mission,
+    Pagination, Probe, ProbeAlert, ProbeImprovement, ProbeInventory, ProbeListResponse, ProbeMessage, ProbeMovement,
+    ProbeSentMessage, ScutNetwork, SectorObservation, StorageContainer, VisitedSector,
 };
 use anyhow::{Context, Result};
 use reqwest::{Client, StatusCode, Url};
@@ -323,12 +323,24 @@ impl ApiClient {
             .await
     }
 
-    /// The Manny roster. The response also carries the v104
-    /// `nextUsefulRefreshDelayMs` polling hint, typed in [`MannyRoster`] but not
-    /// yet consumed — wiring it into the refresh deadline, the production queue
-    /// and the script sequencer is phase 3 of the v104 catch-up (#275).
-    pub async fn get_mannies(&self) -> Result<Vec<Manny>> {
-        Ok(self.get::<MannyRoster>(&self.probe_path("/mannies")).await?.mannies)
+    /// The Manny roster plus the v104 `nextUsefulRefreshDelayMs` polling hint:
+    /// how long the server thinks we should wait before asking again.
+    pub async fn get_mannies(&self) -> Result<MannyRoster> {
+        self.get::<MannyRoster>(&self.probe_path("/mannies")).await
+    }
+
+    /// One Manny (`GET /api/probe/{probeId}/mannies/{mannyId}`, API v104), with
+    /// its own polling hint. Same visibility and task-detail rules as the roster
+    /// endpoint — one request instead of the whole roster when a single Manny is
+    /// the only reason to poll.
+    ///
+    /// Unlike every other per-probe call this one does **not** go through
+    /// `probe_path`: the server exposes the GET only on the `{probeId}` mirror,
+    /// and the literal `/api/probe/mannies/{mannyId}` answers 405 (it only has
+    /// the rename PATCH). So the caller passes the piloted probe's id.
+    pub async fn get_manny(&self, probe_id: u64, manny_id: &str) -> Result<MannyDetail> {
+        self.get::<MannyDetail>(&format!("/api/probe/{probe_id}/mannies/{manny_id}"))
+            .await
     }
 
     pub async fn get_probe_sector(&self) -> Result<SectorObservation> {
@@ -1305,5 +1317,31 @@ mod tests {
         // The quota is per bearer token, so a 429 on one clone must hold them all.
         let _ = clone.get_api_version().await;
         assert_eq!(c.throttled_for_secs(), Some(7));
+    }
+
+    #[tokio::test]
+    async fn single_manny_get_uses_the_probe_id_mirror() {
+        // The server exposes this GET *only* on /api/probe/{probeId}/mannies/{id};
+        // the literal /api/probe/mannies/{id} answers 405 (rename PATCH only).
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/probe/5/mannies/mny_1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "manny": {
+                    "id": "mny_1", "name": "manny-01",
+                    "location": {"type": "probe"},
+                    "currentTask": "mining", "taskProgressPercent": 12.0,
+                    "cargo": {"capacity": 0.05, "deuterium": 0, "metals": 0, "ice": 0, "organicCompounds": 0},
+                    "canReceiveOrders": false
+                },
+                "nextUsefulRefreshDelayMs": 8000
+            })))
+            .mount(&server)
+            .await;
+
+        // Even piloting the default probe (no active id), the explicit mirror is used.
+        let detail = client_for(&server).get_manny(5, "mny_1").await.unwrap();
+        assert_eq!(detail.manny.id, "mny_1");
+        assert_eq!(detail.next_useful_refresh_delay_ms, Some(8000));
     }
 }

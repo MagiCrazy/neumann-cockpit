@@ -12,12 +12,12 @@ use tokio::sync::mpsc;
 
 use neumann_cockpit::api::tasks::{
     fetch_all, fetch_api_version, fetch_atomic_printer_craft, fetch_craft, fetch_crafting_recipes, fetch_detach,
-    fetch_mannies, fetch_messages, fetch_mine, fetch_missions, fetch_move, fetch_recover, fetch_repair, fetch_salvage,
-    fetch_sent_messages,
+    fetch_mannies, fetch_manny, fetch_messages, fetch_mine, fetch_missions, fetch_move, fetch_recover, fetch_repair,
+    fetch_salvage, fetch_sent_messages,
 };
 use neumann_cockpit::app::{
-    ActiveWizard, ApiMessage, AppState, ColorMode, Fabricator, MessagesInput, MissionsInput, Refetch, RemoteMineInput,
-    ScriptAction, ScutNetworkInput,
+    ActiveWizard, ApiMessage, AppState, ColorMode, Fabricator, MessagesInput, MissionsInput, Refetch, RefreshTarget,
+    RemoteMineInput, ScriptAction, ScutNetworkInput,
 };
 use neumann_cockpit::input::handle_event;
 use neumann_cockpit::preflight;
@@ -279,7 +279,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
 
         terminal.draw(|f| ui::render(f, &state))?;
 
-        let deadline = state.next_refresh_instant();
+        let (deadline, refresh_target) = state.next_refresh();
 
         tokio::select! {
             Some(event) = events.next() => {
@@ -316,7 +316,8 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         state.finish_action(format!("probe renamed to {name}"), Refetch::All);
                     }
                     ApiMessage::RenameProbeError(e) => state.set_wizard_error(e),
-                    ApiMessage::ManniesUpdated(mannies) => state.update_mannies(mannies),
+                    ApiMessage::ManniesUpdated(roster) => state.update_mannies_roster(roster),
+                    ApiMessage::MannyUpdated(detail) => state.update_manny(detail),
                     ApiMessage::SectorUpdated(sector) => {
                         let (sx, sy, sz) = (
                             sector.relative_coordinates.x as i32,
@@ -605,8 +606,25 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                 // Same rate-limit hold as the periodic refresh: while throttled,
                 // the arrival/queue poll would only burn the quota again.
                 if !state.loading && state.rate_limited_secs.is_none() {
-                    fetch_all(client.clone(), tx.clone());
-                    state.loading = true;
+                    match &refresh_target {
+                        // A travel arrival (or no hint yet): everything.
+                        RefreshTarget::All => {
+                            fetch_all(client.clone(), tx.clone());
+                            state.loading = true;
+                        }
+                        // Watching Manny work: poll only what moves, when the
+                        // server said it would move (API v104). `loading` stays
+                        // false — these are single cheap requests, and the
+                        // consumed hint is what keeps them from stacking.
+                        RefreshTarget::Mannies => {
+                            fetch_mannies(client.clone(), tx.clone());
+                            state.consume_manny_poll();
+                        }
+                        RefreshTarget::Manny { probe_id, manny_id } => {
+                            fetch_manny(client.clone(), tx.clone(), *probe_id, manny_id.clone());
+                            state.consume_manny_poll();
+                        }
+                    }
                 }
             }
         }

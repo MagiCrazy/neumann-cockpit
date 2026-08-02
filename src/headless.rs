@@ -18,10 +18,10 @@ use tokio::time::{interval, MissedTickBehavior};
 
 use crate::api::client::ApiClient;
 use crate::api::tasks::{
-    fetch_all, fetch_atomic_printer_craft, fetch_craft, fetch_crafting_recipes, fetch_detach, fetch_mine, fetch_move,
-    fetch_recover, fetch_repair, fetch_salvage,
+    fetch_all, fetch_atomic_printer_craft, fetch_craft, fetch_crafting_recipes, fetch_detach, fetch_mannies,
+    fetch_manny, fetch_mine, fetch_move, fetch_recover, fetch_repair, fetch_salvage,
 };
-use crate::app::{ApiMessage, AppState, Fabricator, LogEvent, ScriptAction, StepState};
+use crate::app::{ApiMessage, AppState, Fabricator, LogEvent, RefreshTarget, ScriptAction, StepState};
 use crate::config::{self, Config, ConfigStatus};
 use crate::store;
 
@@ -178,9 +178,6 @@ pub async fn run(path: &Path) -> Result<i32> {
 
     let mut ui_tick = interval(Duration::from_secs(1));
     ui_tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
-    // Poll cadence for completion + late binding, matching the TUI's brisk poll.
-    let mut poll = interval(Duration::from_secs(3));
-    poll.set_missed_tick_behavior(MissedTickBehavior::Skip);
     let mut reported = vec![false; total];
 
     loop {
@@ -201,9 +198,24 @@ pub async fn run(path: &Path) -> Result<i32> {
             break;
         }
 
+        // Completion + late binding polling, on the same server-driven cadence
+        // as the cockpit (API v104): only what moves, when the server says it
+        // moves. The old fixed 3 s `fetch_all` was seven requests every three
+        // seconds — 140 a minute, over the 120-per-window rate limit on its own.
+        let (deadline, target) = state.next_refresh();
         tokio::select! {
             _ = ui_tick.tick() => {}
-            _ = poll.tick() => fetch_all(client.clone(), tx.clone()),
+            _ = tokio::time::sleep_until(deadline) => match target {
+                RefreshTarget::All => fetch_all(client.clone(), tx.clone()),
+                RefreshTarget::Mannies => {
+                    fetch_mannies(client.clone(), tx.clone());
+                    state.consume_manny_poll();
+                }
+                RefreshTarget::Manny { probe_id, manny_id } => {
+                    fetch_manny(client.clone(), tx.clone(), probe_id, manny_id);
+                    state.consume_manny_poll();
+                }
+            },
             Some(msg) = rx.recv() => dispatch(&mut state, msg),
         }
     }
@@ -311,7 +323,8 @@ fn spawn(action: ScriptAction, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>
 fn dispatch(state: &mut AppState, msg: ApiMessage) {
     match msg {
         ApiMessage::ProbeUpdated(probe) => state.update_probe(probe),
-        ApiMessage::ManniesUpdated(mannies) => state.update_mannies(mannies),
+        ApiMessage::ManniesUpdated(roster) => state.update_mannies_roster(roster),
+        ApiMessage::MannyUpdated(detail) => state.update_manny(detail),
         ApiMessage::SectorUpdated(sector) => state.update_sector(sector),
         ApiMessage::RecipesFetched(recipes) => state.recipes = recipes,
         ApiMessage::MoveError(e)
