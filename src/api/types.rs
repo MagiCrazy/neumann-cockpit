@@ -458,11 +458,42 @@ pub struct ProbeSector {
     pub relative: Option<Vector>,
 }
 
+/// Response of `GET /api/probe/{probeId}/mannies`: the roster plus the v104
+/// polling hint.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MannyRoster {
+    pub mannies: Vec<Manny>,
+    /// Milliseconds the server recommends waiting before polling again: the
+    /// delay until the next observable scheduled Manny transition (including an
+    /// intermediate mining transition), 30000 when no task has one, or a short
+    /// settling delay when a transition is already due (so clients do not
+    /// busy-poll while the scheduler processes it). `None` on pre-v104 servers.
+    #[serde(default)]
+    pub next_useful_refresh_delay_ms: Option<u64>,
+}
+
+/// Probe hull model (API v104). A `deuterium_tanker` costs the generic
+/// assembly bill plus ten steel plates, two linear actuators and one integrated
+/// circuit, and carries a 400-point deuterium tank instead of 100 (still
+/// doubled by the deuterium-compression improvement).
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProbeModel {
+    Generic,
+    DeuteriumTanker,
+    #[serde(other)]
+    Unknown,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Probe {
     pub id: i64,
     pub name: String,
+    /// `None` on pre-v104 payloads; treat as `Generic`.
+    #[serde(default)]
+    pub model: Option<ProbeModel>,
     pub status: ProbeStatus,
     pub fuel: ProbeFuel,
     pub sensor_mode: SensorMode,
@@ -483,6 +514,9 @@ pub struct Probe {
 pub struct ProbeSummary {
     pub id: u64,
     pub name: String,
+    /// `None` on pre-v104 payloads; treat as `Generic`.
+    #[serde(default)]
+    pub model: Option<ProbeModel>,
     pub status: ProbeStatus,
     pub is_default: bool,
     /// True when the probe is the default, in the default's sector, or inside
@@ -983,6 +1017,19 @@ pub struct MinableTarget {
     pub resource_composition: Option<ResourceShares>,
 }
 
+/// Tri-state SCUT coverage of an observed sector (API v104). Distinguishes
+/// "known to be outside any network" from "we simply do not know yet", which a
+/// bare empty `scutNetworks` used to conflate. `unknown` maps to `Unknown`, as
+/// does any future value.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScutCoverageStatus {
+    Covered,
+    Uncovered,
+    #[serde(other)]
+    Unknown,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SectorObservation {
@@ -1007,8 +1054,18 @@ pub struct SectorObservation {
     pub message: Option<String>,
     pub sensor_mode: Option<SensorMode>,
     pub data_freshness: Option<DataFreshness>,
+    /// SCUT networks the player knows to cover this sector. The server omits
+    /// the list entirely while `scut_coverage_status` is `Unknown`, so an empty
+    /// vec alone does not mean "uncovered".
     #[serde(default)]
     pub scut_networks: Vec<ScutNetworkReference>,
+    /// Whether SCUT coverage is *known* for this sector (API v104). A
+    /// non-visited sector reports `Covered` only for networks with at least one
+    /// covered sector in the player's visited history, else `Unknown`; a
+    /// visited sector can report `Uncovered`. `None` on pre-v104 payloads and
+    /// on scan-history rows persisted before this field existed.
+    #[serde(default)]
+    pub scut_coverage_status: Option<ScutCoverageStatus>,
     pub scan: SectorScan,
     /// Local timestamp of when this observation was received (not an API
     /// field — stamped client-side and persisted in scan_history.json).

@@ -1833,6 +1833,7 @@ fn probe_summary(id: u64, name: &str, is_default: bool) -> crate::api::types::Pr
     crate::api::types::ProbeSummary {
         id,
         name: name.to_string(),
+        model: Some(crate::api::types::ProbeModel::Generic),
         status: crate::api::types::ProbeStatus::Idle,
         is_default,
         is_reachable: true,
