@@ -198,6 +198,10 @@ pub struct AppState {
     pub scut_network_view: Option<ScutNetwork>,
     pub missions: Vec<Mission>,
     pub messages: Vec<ProbeMessage>,
+    /// Exact unread-message count from the server (API v104 `status=unread`),
+    /// when the fetched inbox page is not the whole mailbox. `None` means the
+    /// page holds everything, so counting it is exact.
+    pub unread_messages_total: Option<usize>,
     pub sent_messages: Vec<ProbeSentMessage>,
     pub map: MapView,
     /// The full-screen tech-tree browser (`:tree`, #200).
@@ -461,6 +465,23 @@ impl AppState {
             self.mannies_selection = 0;
         }
         self.mannies = Some(mannies);
+    }
+
+    /// Absorb an inbox page. When it is the whole mailbox (`has_more` false)
+    /// the unread badge can be counted locally; otherwise the count must come
+    /// from the server's filter, so it is invalidated until that lands.
+    pub fn set_messages(&mut self, messages: Vec<ProbeMessage>, has_more: bool) {
+        self.messages = messages;
+        if !has_more {
+            self.unread_messages_total = None;
+        }
+    }
+
+    /// Whether the unread badge needs the server's `status=unread` count — the
+    /// inbox spilled past the fetched page, so unread messages may sit outside
+    /// it (API v104).
+    pub fn needs_unread_message_count(&self, has_more: bool) -> bool {
+        has_more
     }
 
     pub fn set_error(&mut self, msg: String) {

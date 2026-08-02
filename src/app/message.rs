@@ -1,7 +1,7 @@
 use crate::api::types::{
-    ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, MannyDetail, MannyRoster, Mission, Probe, ProbeAlert,
-    ProbeImprovement, ProbeInventory, ProbeListResponse, ProbeMessage, ProbeMovement, ProbeSentMessage, ScutNetwork,
-    SectorObservation, StorageContainer, VisitedSector,
+    ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, MannyDetail, MannyRoster, Mission, Pagination, Probe,
+    ProbeAlert, ProbeImprovement, ProbeInventory, ProbeListResponse, ProbeMessage, ProbeMovement, ProbeSentMessage,
+    ScutNetwork, SectorObservation, StorageContainer, VisitedSector,
 };
 
 pub enum ApiMessage {
@@ -94,7 +94,11 @@ pub enum ApiMessage {
     TransitBeaconError(String),
     ScutNetworkFetched(ScutNetwork),
     ScutNetworkError(String),
-    MessagesFetched(Vec<ProbeMessage>),
+    /// The inbox page plus its pagination — the cockpit needs `has_more` to
+    /// know whether the page holds every unread message (API v104).
+    MessagesFetched(Vec<ProbeMessage>, Pagination),
+    /// Exact unread count from the server's `status=unread` filter.
+    UnreadMessagesFetched(usize),
     SentMessagesFetched(Vec<ProbeSentMessage>),
     MessageSent(ProbeMessage),
     MessageSendError(String),

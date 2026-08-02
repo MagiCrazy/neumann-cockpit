@@ -888,16 +888,37 @@ impl ApiClient {
         Ok(self.post::<Resp, _>(&path, &Body { object_id }).await?.manny)
     }
 
+    /// Every sector the **player** has visited (`GET /api/visited-sectors`,
+    /// API v104): the union over the whole fleet, deduplicated, with cumulative
+    /// visit counts and dates spanning all probes.
+    ///
+    /// Player-level, so no `probe_path`. The per-probe
+    /// `/api/probe/{probeId}/visited-sectors` still exists but is explicitly
+    /// that probe's history only; the cockpit's jump picker and map are
+    /// fleet-wide, so they want the union.
     pub async fn get_visited_sectors(&self) -> Result<Vec<VisitedSector>> {
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase")]
         struct Resp {
             visited_sectors: Vec<VisitedSector>,
         }
-        Ok(self
-            .get::<Resp>(&self.probe_path("/visited-sectors"))
-            .await?
-            .visited_sectors)
+        Ok(self.get::<Resp>("/api/visited-sectors").await?.visited_sectors)
+    }
+
+    /// Exact number of unread received messages (API v104 `status=unread`).
+    ///
+    /// The inbox is paginated (50 by default), so counting unread entries in
+    /// the fetched page under-reports as soon as the mailbox is bigger than one
+    /// page. Asking for the filtered list with `limit=1` and reading
+    /// `pagination.total` gets the true count for one cheap request.
+    pub async fn get_unread_message_count(&self) -> Result<usize> {
+        #[derive(Deserialize)]
+        struct Resp {
+            pagination: Pagination,
+        }
+        let path = self.probe_path("/messages?status=unread&limit=1");
+        let r = self.get::<Resp>(&path).await?;
+        Ok(r.pagination.total.max(0) as usize)
     }
 
     pub async fn get_crafting_recipes(&self) -> Result<Vec<CraftingRecipe>> {
@@ -1360,5 +1381,48 @@ mod tests {
         let detail = client_for(&server).get_manny(5, "mny_1").await.unwrap();
         assert_eq!(detail.manny.id, "mny_1");
         assert_eq!(detail.next_useful_refresh_delay_ms, Some(8000));
+    }
+
+    #[tokio::test]
+    async fn visited_sectors_uses_the_player_wide_union_endpoint() {
+        // The fleet-wide picker and the map want every probe's history, not the
+        // piloted probe's (API v104). Player-level path: no {probeId}.
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/visited-sectors"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "visitedSectors": [{
+                    "relativeCoordinates": {"x": 3, "y": -5, "z": 4},
+                    "firstVisitedAt": "2026-06-04T02:45:02+00:00",
+                    "lastVisitedAt": "2026-07-06T23:11:51+00:00",
+                    "visitCount": 3
+                }]
+            })))
+            .mount(&server)
+            .await;
+
+        // Even while piloting a drone, the union endpoint is the one queried.
+        let sectors = client_for(&server)
+            .with_active_probe(Some(9))
+            .get_visited_sectors()
+            .await
+            .unwrap();
+        assert_eq!(sectors.len(), 1);
+        assert_eq!(sectors[0].visit_count, 3);
+    }
+
+    #[tokio::test]
+    async fn unread_message_count_reads_the_filtered_total() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/probe/messages"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "messages": [],
+                // The page is capped at 1, but `total` counts every unread one.
+                "pagination": {"limit": 1, "offset": 0, "count": 1, "total": 12, "hasMore": true}
+            })))
+            .mount(&server)
+            .await;
+        assert_eq!(client_for(&server).get_unread_message_count().await.unwrap(), 12);
     }
 }

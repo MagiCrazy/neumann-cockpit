@@ -81,7 +81,13 @@ impl AppState {
             .collect()
     }
 
+    /// Unread received messages. Prefers the server's exact count (API v104
+    /// `status=unread`) when the inbox spills past the fetched page; otherwise
+    /// the page *is* the mailbox and counting it locally is exact.
     pub fn unread_message_count(&self) -> usize {
+        if let Some(total) = self.unread_messages_total {
+            return total;
+        }
         self.messages
             .iter()
             .filter(|m| m.status == crate::api::types::MessageStatus::Unread)
