@@ -57,3 +57,40 @@ The same entries are **persisted** to the local ship's-log database, so a headle
 This makes it compose in shell scripts — chain runs with `&&`, or alert on a non-zero exit.
 
 > The runner loads your config non-interactively: there is no key onboarding here. If the config is missing or the API key is invalid, it errors to stderr and exits — launch the interactive cockpit once to set your key first.
+
+A run waits on the **server's own schedule** (the API reports when the next visible change is due) and asks about a single manny when only one is working, so an unattended run costs a request or two a minute. If the server's [request quota](../cockpit/index.md#rate-limiting) is spent when a run starts, the runner says so — `rate limited by the server — retry in 42s` — instead of reporting a dead link.
+
+## Server diagnostic
+
+A second headless mode reports API latency and health, with no TUI and **no mutating calls** — safe to run at any time:
+
+```bash
+neumann-cockpit --diagnostic        # 3 rounds (default)
+neumann-cockpit --diagnostic=10     # 10 rounds
+neumann-cockpit --status latency    # same thing, alias
+```
+
+It fires each read-only endpoint N times and prints a fixed-width table, ready to paste into a bug report:
+
+```text
+═══ API DIAGNOSTIC REPORT ═══
+base_url : https://neumann-probe.net
+rounds   : 2   requests: 22   errors: 0   timeouts: 0   decode: 0
+slow flag: p95 > 1000 ms
+quota    : 100/120 left in the current window
+
+ENDPOINT                                          n     p50     p95     max  err  t/o  dec
+──────────────────────────────────────────────────────────────────────────────────────────
+GET /api/probe/sector                             2      52      57      57    0    0    0
+GET /api/probe                                    2      40      41      41    0    0    0
+...
+```
+
+| Column | Meaning |
+|--------|---------|
+| `n` · `p50` · `p95` · `max` | request count and latency in ms, slowest `p95` first (`⚠` past 1000 ms) |
+| `err` | requests that returned no usable data |
+| `t/o` | timeouts |
+| `dec` | responses the server sent as OK but this build could not read — a version mismatch worth reporting |
+
+`quota` shows what is left of the server's per-key [request window](../cockpit/index.md#rate-limiting). A high round count stops early rather than hammering a spent quota. Exit code `0`, or `1` only when every request failed.

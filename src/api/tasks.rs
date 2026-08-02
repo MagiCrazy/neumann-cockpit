@@ -304,6 +304,16 @@ pub fn fetch_mannies(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     );
 }
 
+/// Refresh a single Manny (`GET /api/probe/{probeId}/mannies/{id}`, API v104) —
+/// one request instead of the roster when only one Manny is being waited on.
+pub fn fetch_manny(client: ApiClient, tx: mpsc::Sender<ApiMessage>, probe_id: u64, manny_id: String) {
+    spawn_fetch(
+        tx,
+        async move { client.get_manny(probe_id, &manny_id).await },
+        ApiMessage::MannyUpdated,
+    );
+}
+
 pub fn fetch_move(x: i32, y: i32, z: i32, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     spawn_action(
         tx,

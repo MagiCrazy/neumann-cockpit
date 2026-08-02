@@ -1,7 +1,7 @@
 use crate::api::types::{
-    ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, Mission, Probe, ProbeAlert, ProbeImprovement,
-    ProbeInventory, ProbeListResponse, ProbeMessage, ProbeMovement, ProbeSentMessage, ScutNetwork, SectorObservation,
-    StorageContainer, VisitedSector,
+    ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, MannyDetail, MannyRoster, Mission, Probe, ProbeAlert,
+    ProbeImprovement, ProbeInventory, ProbeListResponse, ProbeMessage, ProbeMovement, ProbeSentMessage, ScutNetwork,
+    SectorObservation, StorageContainer, VisitedSector,
 };
 
 pub enum ApiMessage {
@@ -17,7 +17,11 @@ pub enum ApiMessage {
     /// and the new name for the toast. Failure arrives as `RenameProbeError`.
     ProbeRenamed(ProbeListResponse, String),
     RenameProbeError(String),
-    ManniesUpdated(Vec<Manny>),
+    /// The Manny roster plus the v104 polling hint.
+    ManniesUpdated(MannyRoster),
+    /// A single Manny refreshed via `GET …/mannies/{id}` (API v104): the cheap
+    /// poll used while waiting on one busy Manny. Merged into the roster.
+    MannyUpdated(MannyDetail),
     SectorUpdated(SectorObservation),
     ScanError(String),
     MoveStarted(ProbeMovement),

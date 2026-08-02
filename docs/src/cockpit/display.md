@@ -21,6 +21,8 @@ A second status line lists the keys valid for the active pane. `F1` toggles it; 
 
 Time-derived values — progress bars, mining %, movement countdowns, the clock — tick **every second** without any input. Data is re-fetched when an action needs it, when a movement completes (the timer follows the probe's `arrival_at`), and otherwise at most once a minute. The bottom-right `⟳` shows how long since the last sync.
 
+While a manny is working, the cockpit polls on the **server's own schedule**: the API says when the next visible change is due, so a task that finishes in half an hour is not re-checked every few seconds, and when only one manny is busy it asks about that manny alone. Waiting costs a request or two a minute instead of a hundred, which is what keeps long runs clear of the [request quota](index.md#rate-limiting).
+
 ## Boot sequence
 
 On startup the probe core boots first (the centre-pane preflight), then the eight surrounding subsystems come online centre-out, each typing a themed self-check (SUDDAR array, SCUT link, autofactory, manny bay…). Any key skips straight into the live cockpit.

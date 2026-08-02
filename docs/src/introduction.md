@@ -20,7 +20,7 @@ It is a single **phosphor cockpit**: a 3×3 tiling dashboard of nine panes, keyb
 
 - **[Getting started](getting-started/index.md)** — install, configure, and the first-run onboarding.
 - **[The cockpit](cockpit/index.md)** — the grid, the nine panes, contextual actions, command mode, and display options.
-- **[Automation](automation/index.md)** — the production queue, vim-style action scripting, and the headless script runner.
+- **[Automation](automation/index.md)** — the production queue, vim-style action scripting, the headless script runner, and the server diagnostic.
 - **[Reference](reference/index.md)** — the keybinding cheat sheet and every config option.
 
 Developers: the codebase architecture lives in [`CLAUDE.md`](https://github.com/MagiCrazy/neumann-cockpit/blob/main/CLAUDE.md); see **[Architecture & contributing](project/architecture.md)**.

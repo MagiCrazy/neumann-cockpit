@@ -473,6 +473,17 @@ pub struct MannyRoster {
     pub next_useful_refresh_delay_ms: Option<u64>,
 }
 
+/// Response of `GET /api/probe/{probeId}/mannies/{mannyId}` (API v104): one
+/// Manny, same visibility rules as the list, plus the polling hint. One request
+/// instead of the whole roster when only a single Manny is being watched.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MannyDetail {
+    pub manny: Manny,
+    #[serde(default)]
+    pub next_useful_refresh_delay_ms: Option<u64>,
+}
+
 /// Probe hull model (API v104). A `deuterium_tanker` costs the generic
 /// assembly bill plus ten steel plates, two linear actuators and one integrated
 /// circuit, and carries a 400-point deuterium tank instead of 100 (still

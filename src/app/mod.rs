@@ -39,12 +39,34 @@ pub use tree::*;
 pub use waypoints::*;
 
 use crate::api::types::{
-    ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, Mission, Probe, ProbeAlert, ProbeImprovement,
-    ProbeInventory, ProbeMessage, ProbeSentMessage, ProbeSummary, ScutNetwork, SectorObservation, StorageContainer,
-    VisitedSector,
+    ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, MannyDetail, MannyRoster, Mission, Probe, ProbeAlert,
+    ProbeImprovement, ProbeInventory, ProbeMessage, ProbeSentMessage, ProbeSummary, ScutNetwork, SectorObservation,
+    StorageContainer, VisitedSector,
 };
 use chrono::{DateTime, Local, Utc};
 use tokio::time::Instant;
+
+/// Floor on the server's polling hint: it returns a short "settling delay" when
+/// a transition is already due, which must not turn into a hot loop.
+const MANNY_POLL_MIN_SECS: u64 = 1;
+/// Ceiling on the hint. The ordinary 60 s cadence refreshes everything anyway,
+/// so trusting a longer hint would buy nothing and risk sitting on a stale
+/// roster if the server's estimate slips.
+const MANNY_POLL_MAX_SECS: u64 = 30;
+
+/// What a fired refresh deadline should fetch. Watching Manny work no longer
+/// costs a full seven-endpoint refresh (API v104).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RefreshTarget {
+    /// Everything (`fetch_all`): the periodic sync and a travel arrival.
+    All,
+    /// The Manny roster alone — several Mannies are at work.
+    Mannies,
+    /// One Manny (`GET /api/probe/{probeId}/mannies/{id}`) — the only one being
+    /// waited on. Carries the piloted probe's id: the server exposes this GET
+    /// only on the `{probeId}` mirror.
+    Manny { probe_id: u64, manny_id: String },
+}
 
 /// A short label for a Manny task worth a desktop notification when it
 /// completes, or `None` for quick/uninteresting tasks (moving cargo, returning,
@@ -107,6 +129,12 @@ pub struct AppState {
     /// holds the auto-refresh off and shows a status-bar chip; `None` is the
     /// normal state.
     pub rate_limited_secs: Option<u64>,
+    /// When the server suggests polling the Mannies again (API v104
+    /// `nextUsefulRefreshDelayMs`, turned into a deadline on receipt). Drives
+    /// the refresh timer while a task is in flight, replacing the fixed
+    /// `QUEUE_POLL_SECS` guess; `None` means no hint (pre-v104 server, or a
+    /// poll already fired and awaiting its response).
+    pub manny_poll_at: Option<Instant>,
     pub loading: bool,
     pub quit: bool,
     pub mannies_selection: usize,
@@ -351,6 +379,51 @@ impl AppState {
         }
         self.active_probe_id = new;
         true
+    }
+
+    /// Absorb a roster fetch: the Mannies plus the server's polling hint
+    /// (API v104).
+    pub fn update_mannies_roster(&mut self, roster: MannyRoster) {
+        self.note_manny_poll_hint(roster.next_useful_refresh_delay_ms);
+        self.update_mannies(roster.mannies);
+    }
+
+    /// Absorb a single-Manny fetch (`GET …/mannies/{id}`, API v104): replace
+    /// that Manny in the roster in place, leaving the others untouched.
+    pub fn update_manny(&mut self, detail: MannyDetail) {
+        self.note_manny_poll_hint(detail.next_useful_refresh_delay_ms);
+        let Some(mut mannies) = self.mannies.clone() else {
+            // No roster yet: nothing to merge into, the next full fetch wins.
+            return;
+        };
+        match mannies.iter().position(|m| m.id == detail.manny.id) {
+            Some(idx) => mannies[idx] = detail.manny,
+            // Unknown id (a Manny transferred in since the last roster fetch):
+            // append rather than drop it.
+            None => mannies.push(detail.manny),
+        }
+        // Reuse the roster path so the busy→idle completion notice, the receipt
+        // stamp and the selection clamp all behave identically.
+        self.update_mannies(mannies);
+    }
+
+    /// Store the server's recommended delay before polling the Mannies again,
+    /// as an absolute deadline. Clamped: the floor keeps a "settling delay" from
+    /// spinning the loop, the ceiling keeps us from trusting a long hint further
+    /// than the ordinary 60 s cadence would anyway.
+    fn note_manny_poll_hint(&mut self, delay_ms: Option<u64>) {
+        self.manny_poll_at = delay_ms.map(|ms| {
+            let secs = (ms as f64 / 1000.0).ceil() as u64;
+            Instant::now() + std::time::Duration::from_secs(secs.clamp(MANNY_POLL_MIN_SECS, MANNY_POLL_MAX_SECS))
+        });
+    }
+
+    /// Consume the Manny poll deadline: called when the poll it scheduled has
+    /// been fired, so the loop waits for the response (which brings a fresh
+    /// hint) instead of re-firing every tick. A lost response is recovered by
+    /// the ordinary 60 s refresh.
+    pub fn consume_manny_poll(&mut self) {
+        self.manny_poll_at = None;
     }
 
     pub fn update_mannies(&mut self, mut mannies: Vec<Manny>) {
@@ -612,11 +685,25 @@ impl AppState {
     }
 
     pub fn next_refresh_instant(&self) -> Instant {
+        self.next_refresh().0
+    }
+
+    /// The next refresh deadline **and what to fetch when it fires**.
+    ///
+    /// Watching a task no longer means re-fetching everything every few
+    /// seconds: since API v104 the server says when the next observable Manny
+    /// transition is due (`nextUsefulRefreshDelayMs`), and exposes a
+    /// single-Manny endpoint. So a wait on one busy Manny costs one request at
+    /// the moment it matters, instead of seven every `QUEUE_POLL_SECS`.
+    pub fn next_refresh(&self) -> (Instant, RefreshTarget) {
         // A rate-limit back-off dominates every other cadence: without this the
         // loop would spin on an already-elapsed arrival deadline it is not
         // allowed to act on.
         if let Some(secs) = self.rate_limited_secs {
-            return Instant::now() + std::time::Duration::from_secs(secs);
+            return (
+                Instant::now() + std::time::Duration::from_secs(secs),
+                RefreshTarget::All,
+            );
         }
         let base = match self.movement_arrival {
             Some(arrival) => {
@@ -625,13 +712,59 @@ impl AppState {
             }
             None => Instant::now() + std::time::Duration::from_secs(86400),
         };
-        // While the production queue or the action script is working, poll
-        // briskly so a finished craft/step is detected within a few seconds (the
-        // server has no push).
-        if self.queue_active() || self.script_active() {
-            return base.min(Instant::now() + std::time::Duration::from_secs(QUEUE_POLL_SECS));
+
+        // Nothing to watch on the Manny side: the ordinary cadence applies. A
+        // travel arrival still needs the full fetch.
+        if !self.watching_mannies() {
+            return (base, RefreshTarget::All);
         }
-        base
+        // Server-driven, but only once a Manny is actually busy: a hint
+        // collected before our own order was accepted describes the *previous*
+        // schedule (typically the 30 s "nothing planned" value), and trusting it
+        // through the fire→busy lag would stall the queue. Otherwise — and on a
+        // pre-v104 server, which sends no hint at all — fall back to the fixed
+        // poll.
+        let fallback = Instant::now() + std::time::Duration::from_secs(QUEUE_POLL_SECS);
+        let manny_deadline = match self.manny_poll_at {
+            Some(at) if self.busy_manny_ids().next().is_some() => at,
+            _ => fallback,
+        };
+        if manny_deadline >= base {
+            return (base, RefreshTarget::All);
+        }
+        match (
+            self.sole_busy_manny(),
+            self.probe.as_ref().and_then(|p| u64::try_from(p.id).ok()),
+        ) {
+            (Some(manny_id), Some(probe_id)) => (manny_deadline, RefreshTarget::Manny { probe_id, manny_id }),
+            // Several Mannies at work — or no probe id yet, since the targeted
+            // GET needs one. A roster fetch covers them all, still far cheaper
+            // than the seven of a full refresh.
+            _ => (manny_deadline, RefreshTarget::Mannies),
+        }
+    }
+
+    /// Whether some Manny work is worth polling for: a running queue or script,
+    /// or any Manny busy on a pilot-issued task (whose completion drives the
+    /// long-task notification).
+    fn watching_mannies(&self) -> bool {
+        self.queue_active() || self.script_active() || self.busy_manny_ids().next().is_some()
+    }
+
+    fn busy_manny_ids(&self) -> impl Iterator<Item = &String> {
+        self.mannies
+            .iter()
+            .flatten()
+            .filter(|m| m.current_task.is_some() || !m.can_receive_orders)
+            .map(|m| &m.id)
+    }
+
+    /// The id of the only busy Manny, or `None` when zero or several are busy —
+    /// the case where the single-Manny endpoint pays off.
+    fn sole_busy_manny(&self) -> Option<String> {
+        let mut busy = self.busy_manny_ids();
+        let first = busy.next()?;
+        busy.next().is_none().then(|| first.clone())
     }
 
     pub fn seconds_until_refresh(&self) -> Option<i64> {

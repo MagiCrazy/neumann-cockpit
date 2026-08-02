@@ -1012,3 +1012,13 @@ fn generated_asteroid_carries_a_content_based_name() {
     );
     assert_eq!(obj.name.as_deref(), Some("Ice Deut 15ce"));
 }
+
+#[test]
+fn single_manny_detail_deserializes() {
+    use neumann_cockpit::api::types::MannyDetail;
+    let d: MannyDetail = deser(&format!(
+        r#"{{"manny":{MANNY_MINING_JSON},"nextUsefulRefreshDelayMs":8000}}"#
+    ));
+    assert_eq!(d.manny.current_task, Some(MannyTask::Mining));
+    assert_eq!(d.next_useful_refresh_delay_ms, Some(8000));
+}

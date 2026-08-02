@@ -2029,6 +2029,189 @@ fn periodic_refresh_not_due_when_recent_or_loading() {
     assert!(!state.periodic_refresh_due(), "a fetch already in flight");
 }
 
+// ── server-driven polling (API v104, #275 phase 3) ─────────────────────────
+
+/// A minimal probe, id 5 — the targeted Manny GET needs a probe id.
+fn probe_fixture() -> crate::api::types::Probe {
+    serde_json::from_str(
+        r#"{"id": 5, "name": "t", "model": "generic", "status": "idle",
+            "fuel": {"deuterium": 50.0}, "sensorMode": "normal",
+            "inventory": {"capacity": 1.0, "usedCapacity": 0.0, "freeCapacity": 1.0,
+                "items": [], "resourceStocks": [], "externalTanks": [], "containers": []}}"#,
+    )
+    .unwrap()
+}
+
+fn roster(mannies: Vec<Manny>, hint_ms: Option<u64>) -> crate::api::types::MannyRoster {
+    crate::api::types::MannyRoster {
+        mannies,
+        next_useful_refresh_delay_ms: hint_ms,
+    }
+}
+
+#[test]
+fn idle_cockpit_keeps_the_ordinary_cadence() {
+    let mut state = AppState::default();
+    state.update_mannies_roster(roster(vec![make_manny("m1", "probe", true, None)], Some(30_000)));
+
+    // Nothing is being waited on, so the hint must not pull the deadline in:
+    // that would poll every 30 s instead of the 60 s periodic refresh.
+    let (deadline, target) = state.next_refresh();
+    assert_eq!(target, RefreshTarget::All);
+    assert!(
+        (deadline - tokio::time::Instant::now()).as_secs() > 3600,
+        "an idle cockpit should stay on the long deadline"
+    );
+}
+
+#[test]
+fn one_busy_manny_is_polled_alone_on_the_server_hint() {
+    let mut state = AppState::default();
+    state.probe = Some(probe_fixture());
+    state.update_mannies_roster(roster(
+        vec![
+            make_manny("busy", "sector", false, Some("mining")),
+            make_manny("idle", "probe", true, None),
+        ],
+        Some(12_000),
+    ));
+
+    let (deadline, target) = state.next_refresh();
+    assert_eq!(
+        target,
+        RefreshTarget::Manny {
+            probe_id: 5,
+            manny_id: "busy".into()
+        },
+        "a single watched Manny costs one request, not the whole roster"
+    );
+    let wait = (deadline - tokio::time::Instant::now()).as_secs();
+    assert!((11..=12).contains(&wait), "should wait out the hint, got {wait}s");
+}
+
+#[test]
+fn several_busy_mannies_fall_back_to_the_roster() {
+    let mut state = AppState::default();
+    state.probe = Some(probe_fixture());
+    state.update_mannies_roster(roster(
+        vec![
+            make_manny("a", "sector", false, Some("mining")),
+            make_manny("b", "sector", false, Some("crafting")),
+        ],
+        Some(5_000),
+    ));
+    assert_eq!(state.next_refresh().1, RefreshTarget::Mannies);
+}
+
+#[test]
+fn without_a_probe_id_the_roster_is_polled_instead() {
+    let mut state = AppState::default();
+    // The targeted GET lives only on the {probeId} mirror, so before the first
+    // probe sync there is nothing to target with.
+    state.update_mannies_roster(roster(
+        vec![make_manny("busy", "sector", false, Some("mining"))],
+        Some(5_000),
+    ));
+    assert_eq!(state.next_refresh().1, RefreshTarget::Mannies);
+}
+
+#[test]
+fn the_hint_is_clamped_at_both_ends() {
+    let mut state = AppState::default();
+    let busy = || vec![make_manny("busy", "sector", false, Some("mining"))];
+
+    // The server's "settling delay" when a transition is already due must not
+    // become a hot loop.
+    state.update_mannies_roster(roster(busy(), Some(50)));
+    let wait = (state.next_refresh().0 - tokio::time::Instant::now()).as_millis();
+    assert!(wait > 500, "a sub-second hint should be floored, got {wait}ms");
+
+    // A very long hint is capped: the 60 s cadence would refresh anyway.
+    state.update_mannies_roster(roster(busy(), Some(600_000)));
+    let wait = (state.next_refresh().0 - tokio::time::Instant::now()).as_secs();
+    assert!(wait <= 30, "a long hint should be capped, got {wait}s");
+}
+
+#[test]
+fn a_hint_predating_our_order_does_not_stall_the_queue() {
+    let mut state = AppState::default();
+    // Roster fetched while everything was idle: the server reports its "nothing
+    // scheduled" 30 s. A craft has just been fired, so no Manny reads busy yet.
+    state.update_mannies_roster(roster(vec![make_manny("m1", "probe", true, None)], Some(30_000)));
+    let cmd = state.parse_script_line("mine metals").expect("valid line");
+    state.script.push(ScriptStep {
+        raw: "mine metals".into(),
+        cmd,
+        state: StepState::Running { observed_busy: false },
+        resolved: vec![],
+    });
+    state.script_running = true;
+
+    let wait = (state.next_refresh().0 - tokio::time::Instant::now()).as_secs();
+    assert!(
+        wait <= QUEUE_POLL_SECS,
+        "must fall back to the brisk poll through the fire→busy lag, got {wait}s"
+    );
+}
+
+#[test]
+fn travel_arrival_still_wins_over_a_manny_poll() {
+    let mut state = AppState::default();
+    state.update_mannies_roster(roster(
+        vec![make_manny("busy", "sector", false, Some("mining"))],
+        Some(30_000),
+    ));
+    state.movement_arrival = Some(chrono::Utc::now() + chrono::Duration::seconds(5));
+
+    let (deadline, target) = state.next_refresh();
+    assert_eq!(target, RefreshTarget::All, "an arrival needs the full refresh");
+    assert!((deadline - tokio::time::Instant::now()).as_secs() <= 5);
+}
+
+#[test]
+fn a_single_manny_fetch_merges_into_the_roster() {
+    let mut state = AppState::default();
+    state.update_mannies_roster(roster(
+        vec![
+            make_manny("a", "sector", false, Some("mining")),
+            make_manny("b", "probe", true, None),
+        ],
+        Some(5_000),
+    ));
+
+    // The watched Manny came back idle: only that entry changes.
+    state.update_manny(crate::api::types::MannyDetail {
+        manny: make_manny("a", "probe", true, None),
+        next_useful_refresh_delay_ms: Some(30_000),
+    });
+
+    let mannies = state.mannies.as_ref().unwrap();
+    assert_eq!(mannies.len(), 2, "the roster keeps its other entries");
+    assert!(mannies.iter().find(|m| m.id == "a").unwrap().can_receive_orders);
+    assert!(mannies.iter().any(|m| m.id == "b"));
+    // …and the busy→idle transition still raises the completion notice.
+    assert!(
+        state.pending_notifications.iter().any(|n| n.contains("mining")),
+        "a targeted poll must notify like a roster fetch"
+    );
+}
+
+#[test]
+fn firing_a_poll_consumes_the_hint() {
+    let mut state = AppState::default();
+    state.update_mannies_roster(roster(
+        vec![make_manny("busy", "sector", false, Some("mining"))],
+        Some(20_000),
+    ));
+    assert!(state.manny_poll_at.is_some());
+
+    // Once the poll it scheduled is in flight, the deadline must not re-fire
+    // every tick; the fallback carries us until the response lands.
+    state.consume_manny_poll();
+    let wait = (state.next_refresh().0 - tokio::time::Instant::now()).as_secs();
+    assert!(wait <= QUEUE_POLL_SECS, "got {wait}s");
+}
+
 #[test]
 fn rate_limit_holds_the_periodic_refresh_and_the_deadline() {
     let mut state = AppState::default();
