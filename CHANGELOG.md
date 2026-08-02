@@ -1,5 +1,20 @@
 # Changelog
 
+## [104.0.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v96.2.1...neumann-cockpit-v104.0.0) (2026-08-02)
+
+
+* release the cockpit as 104.0.0 ([#285](https://github.com/MagiCrazy/neumann-cockpit/issues/285)) ([ea55856](https://github.com/MagiCrazy/neumann-cockpit/commit/ea558560232f1e89ae8e54dcc0224a98eb0fb651))
+
+
+### Features
+
+* **api:** atomic Manny task batches (v104 phase 6) ([#284](https://github.com/MagiCrazy/neumann-cockpit/issues/284)) ([98e0b10](https://github.com/MagiCrazy/neumann-cockpit/commit/98e0b10aa0a42b528fea7c0e8f1f59f7d66a9527)), closes [#275](https://github.com/MagiCrazy/neumann-cockpit/issues/275)
+* **api:** fleet-wide visited sectors and an exact unread badge (v104 phase 5) ([#283](https://github.com/MagiCrazy/neumann-cockpit/issues/283)) ([ba7c33e](https://github.com/MagiCrazy/neumann-cockpit/commit/ba7c33eb9688dd7f40463056b05694fc7102167a)), closes [#275](https://github.com/MagiCrazy/neumann-cockpit/issues/275)
+* **api:** honour the v104 per-token rate limit ([#279](https://github.com/MagiCrazy/neumann-cockpit/issues/279)) ([5e93242](https://github.com/MagiCrazy/neumann-cockpit/commit/5e932421f40ed691af60f42021f32350df74d594)), closes [#275](https://github.com/MagiCrazy/neumann-cockpit/issues/275)
+* **api:** server-driven Manny polling (v104 phase 3) ([#281](https://github.com/MagiCrazy/neumann-cockpit/issues/281)) ([95b2138](https://github.com/MagiCrazy/neumann-cockpit/commit/95b21387e64a9dbb8d7ab566ae8a652403e65e91)), closes [#275](https://github.com/MagiCrazy/neumann-cockpit/issues/275)
+* **api:** track API v104 — phase 1 (additive fields + audits) ([#278](https://github.com/MagiCrazy/neumann-cockpit/issues/278)) ([dba8f6d](https://github.com/MagiCrazy/neumann-cockpit/commit/dba8f6dce0900cbbc5878568feaf55192797d8d7)), closes [#275](https://github.com/MagiCrazy/neumann-cockpit/issues/275)
+* **probe:** assemble a deuterium tanker (v104 phase 4) ([#282](https://github.com/MagiCrazy/neumann-cockpit/issues/282)) ([b6e0ea7](https://github.com/MagiCrazy/neumann-cockpit/commit/b6e0ea753ecb9b0e814cdcec5d581317bf053cc6)), closes [#275](https://github.com/MagiCrazy/neumann-cockpit/issues/275)
+
 ## [96.2.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v96.2.0...neumann-cockpit-v96.2.1) (2026-08-01)
 
 
