@@ -1,4 +1,5 @@
 use super::metrics::{endpoint_label, Metrics, MetricsHandle, RequestSample};
+use super::ratelimit::{retry_after_from, RateLimitHandle, RateLimitState, RateLimited};
 use super::types::{
     ContainerInventory, CraftingRecipe, DamageWarningRule, EndpointId, Manny, MannyRoster, Mission, Pagination, Probe,
     ProbeAlert, ProbeImprovement, ProbeInventory, ProbeListResponse, ProbeMessage, ProbeMovement, ProbeSentMessage,
@@ -17,6 +18,9 @@ pub struct ApiClient {
     /// Shared request-instrumentation ring (#247). An `Arc`, so every clone —
     /// including `with_active_probe` — records into the same ring.
     metrics: MetricsHandle,
+    /// Shared rate-limit state (API v104). Also an `Arc`: the quota is per
+    /// bearer token, so every clone must see the same window.
+    rate_limit: RateLimitHandle,
     /// The probe every per-probe endpoint targets. `None` means the player's
     /// default probe and reproduces the pre-v81 paths (`/api/probe/…`) exactly;
     /// `Some(id)` targets a specific probe via the `/api/probe/{id}/…` mirrors
@@ -66,12 +70,56 @@ impl ApiClient {
             api_key,
             active_probe_id: None,
             metrics: Metrics::handle(),
+            rate_limit: RateLimitState::handle(),
         })
     }
 
     /// A handle onto the shared instrumentation ring, for the diagnostic report.
     pub fn metrics(&self) -> MetricsHandle {
         self.metrics.clone()
+    }
+
+    /// A handle onto the shared rate-limit state (API v104). The event loop
+    /// reads it each tick to hold the auto-refresh off while throttled, and the
+    /// diagnostic report prints the remaining quota.
+    pub fn rate_limit(&self) -> RateLimitHandle {
+        self.rate_limit.clone()
+    }
+
+    /// Seconds to wait before the server will accept requests again, or `None`
+    /// when no 429 back-off is in force.
+    pub fn throttled_for_secs(&self) -> Option<u64> {
+        self.rate_limit.lock().ok()?.retry_in_secs()
+    }
+
+    /// Whether this session has taken a 429 at all. Sticky, unlike
+    /// [`Self::throttled_for_secs`]: a short back-off can expire before the
+    /// caller looks, and "we were throttled" is still the explanation it needs.
+    pub fn saw_throttling(&self) -> bool {
+        self.rate_limit.lock().map(|s| s.throttles > 0).unwrap_or(false)
+    }
+
+    /// Absorb a response's rate-limit headers, and on a 429 arm the back-off
+    /// and build the typed error. Returns the delay the server asked for.
+    fn note_rate_limit_headers(&self, headers: &reqwest::header::HeaderMap, throttled: bool) -> Option<u64> {
+        let num = |name: &str| -> Option<i64> { headers.get(name)?.to_str().ok()?.trim().parse().ok() };
+        let limit = num("x-ratelimit-limit").and_then(|v| u64::try_from(v).ok());
+        let remaining = num("x-ratelimit-remaining").and_then(|v| u64::try_from(v).ok());
+        let reset = num("x-ratelimit-reset");
+
+        let mut state = match self.rate_limit.lock() {
+            Ok(s) => s,
+            // Instrumentation must never break a request path.
+            Err(_) => return None,
+        };
+        state.note_quota(limit, remaining, reset);
+        if !throttled {
+            return None;
+        }
+        let retry_after = num("retry-after").and_then(|v| u64::try_from(v).ok());
+        let delay = retry_after_from(retry_after, reset, chrono::Utc::now().timestamp());
+        state.note_throttled(delay);
+        Some(delay.as_secs().max(1))
     }
 
     /// Record one request sample into the shared ring. Best-effort: a poisoned
@@ -160,8 +208,15 @@ impl ApiClient {
         };
 
         let status = resp.status();
+        // Absorb the v104 quota headers on every response; a 429 also arms the
+        // shared back-off so the cockpit stops sending until the window reopens.
+        let throttled = status == StatusCode::TOO_MANY_REQUESTS;
+        let retry_after_secs = self.note_rate_limit_headers(resp.headers(), throttled);
         if !status.is_success() {
             self.record(label, elapsed, Some(status.as_u16()), false, false);
+            if throttled {
+                return Err(anyhow::Error::new(RateLimited { retry_after_secs }));
+            }
             if status == StatusCode::UNAUTHORIZED {
                 anyhow::bail!("Unauthorized — check your api_key in config.toml");
             }
@@ -200,8 +255,15 @@ impl ApiClient {
         };
 
         let status = resp.status();
+        // Absorb the v104 quota headers on every response; a 429 also arms the
+        // shared back-off so the cockpit stops sending until the window reopens.
+        let throttled = status == StatusCode::TOO_MANY_REQUESTS;
+        let retry_after_secs = self.note_rate_limit_headers(resp.headers(), throttled);
         if !status.is_success() {
             self.record(label, elapsed, Some(status.as_u16()), false, false);
+            if throttled {
+                return Err(anyhow::Error::new(RateLimited { retry_after_secs }));
+            }
             if status == StatusCode::UNAUTHORIZED {
                 anyhow::bail!("Unauthorized — check your api_key in config.toml");
             }
@@ -1164,5 +1226,84 @@ mod tests {
 
         // Both requests land in the same shared ring.
         assert_eq!(c.metrics().lock().unwrap().len(), 2);
+    }
+
+    // ── Rate limiting (API v104) ────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn too_many_requests_yields_a_typed_error_with_the_retry_delay() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/version"))
+            .respond_with(
+                ResponseTemplate::new(429)
+                    .insert_header("retry-after", "12")
+                    .insert_header("x-ratelimit-limit", "120")
+                    .insert_header("x-ratelimit-remaining", "0"),
+            )
+            .mount(&server)
+            .await;
+        let c = client_for(&server);
+        let err = c.get_api_version().await.unwrap_err();
+
+        let limited = err
+            .downcast_ref::<RateLimited>()
+            .expect("a 429 must be a typed RateLimited, not a raw HTTP error");
+        assert_eq!(limited.retry_after_secs, Some(12));
+        assert!(
+            err.to_string().contains("12s"),
+            "the message must carry the delay: {err}"
+        );
+
+        // The back-off is armed on the shared state, so the cockpit can hold
+        // its auto-refresh even though this fetch's error was dropped.
+        assert_eq!(c.throttled_for_secs(), Some(12));
+        let state = c.rate_limit();
+        let state = state.lock().unwrap();
+        assert_eq!(state.limit, Some(120));
+        assert_eq!(state.remaining, Some(0));
+
+        // And it still counts as an error in the diagnostic report.
+        assert_eq!(c.metrics().lock().unwrap().total_errors(), 1);
+    }
+
+    #[tokio::test]
+    async fn quota_headers_are_absorbed_from_successful_responses() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/version"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("x-ratelimit-limit", "120")
+                    .insert_header("x-ratelimit-remaining", "119")
+                    .insert_header("x-ratelimit-reset", "1785611085")
+                    .set_body_json(serde_json::json!({"apiVersion": 104})),
+            )
+            .mount(&server)
+            .await;
+        let c = client_for(&server);
+        c.get_api_version().await.unwrap();
+
+        assert_eq!(c.throttled_for_secs(), None, "a 200 does not throttle");
+        let state = c.rate_limit();
+        let state = state.lock().unwrap();
+        assert_eq!(state.limit, Some(120));
+        assert_eq!(state.remaining, Some(119));
+        assert_eq!(state.reset_unix, Some(1785611085));
+    }
+
+    #[tokio::test]
+    async fn clones_share_the_rate_limit_window() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/version"))
+            .respond_with(ResponseTemplate::new(429).insert_header("retry-after", "7"))
+            .mount(&server)
+            .await;
+        let c = client_for(&server);
+        let clone = c.with_active_probe(Some(7));
+        // The quota is per bearer token, so a 429 on one clone must hold them all.
+        let _ = clone.get_api_version().await;
+        assert_eq!(c.throttled_for_secs(), Some(7));
     }
 }

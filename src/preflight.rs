@@ -22,6 +22,7 @@ use rusqlite::Connection;
 use tokio::time::timeout;
 
 use crate::api::client::ApiClient;
+use crate::api::ratelimit::RateLimited;
 use crate::api::types::SectorObservation;
 use crate::app::ColorMode;
 use crate::app::LogEvent;
@@ -161,6 +162,7 @@ pub async fn run(terminal: &mut Term, color: ColorMode) -> Result<Outcome> {
     // with actions (retry / re-enter key / continue offline).
     log.begin("REMOTE LINK");
     let mut client = ApiClient::new(config.base_url.clone(), config.api_key.clone())?;
+    let mut throttled = false;
     let (link_ok, api_version) = loop {
         log.set(Status::Pending);
         redraw(terminal, &log, None, None, color)?;
@@ -169,16 +171,21 @@ pub async fn run(terminal: &mut Term, color: ColorMode) -> Result<Outcome> {
                 log.set(Status::Ok(format!("online · v{v}")));
                 break (true, Some(v));
             }
-            Ok(Err(e)) => log.set(Status::Fail(short_err(&e))),
+            Ok(Err(e)) => {
+                // A 429 is a healthy link with a spent quota, not a bad key:
+                // offering "re-enter key" here would send the pilot down the
+                // wrong path (API v104).
+                throttled = e.downcast_ref::<RateLimited>().is_some();
+                log.set(Status::Fail(short_err(&e)));
+            }
             Err(_) => log.set(Status::Fail("timeout".into())),
         }
-        redraw(
-            terminal,
-            &log,
-            None,
-            Some("[R]etry   [K] re-enter key\n[Enter] continue offline"),
-            color,
-        )?;
+        let actions = if throttled {
+            "rate limited — the key is fine\n[R]etry after the delay   [Enter] continue offline"
+        } else {
+            "[R]etry   [K] re-enter key\n[Enter] continue offline"
+        };
+        redraw(terminal, &log, None, Some(actions), color)?;
         match wait_action(&mut events).await {
             LinkAction::Retry => continue,
             LinkAction::Continue => break (false, None),

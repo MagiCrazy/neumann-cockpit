@@ -102,6 +102,11 @@ pub struct AppState {
     /// history is no longer being saved. Read from the writer's shared flag each
     /// tick and surfaced as a status-bar warning (issue #216).
     pub persistence_degraded: bool,
+    /// Seconds until the server's per-token rate-limit window reopens (API
+    /// v104), mirrored from the `ApiClient`'s shared state each tick. `Some`
+    /// holds the auto-refresh off and shows a status-bar chip; `None` is the
+    /// normal state.
+    pub rate_limited_secs: Option<u64>,
     pub loading: bool,
     pub quit: bool,
     pub mannies_selection: usize,
@@ -592,6 +597,11 @@ impl AppState {
         if self.loading || self.last_update.is_none() {
             return false;
         }
+        // The server rate-limits per bearer token (API v104): while a 429
+        // back-off is in force, refreshing would only burn the quota again.
+        if self.rate_limited_secs.is_some() {
+            return false;
+        }
         if !matches!(self.seconds_since_sync(), Some(s) if s >= 60) {
             return false;
         }
@@ -602,6 +612,12 @@ impl AppState {
     }
 
     pub fn next_refresh_instant(&self) -> Instant {
+        // A rate-limit back-off dominates every other cadence: without this the
+        // loop would spin on an already-elapsed arrival deadline it is not
+        // allowed to act on.
+        if let Some(secs) = self.rate_limited_secs {
+            return Instant::now() + std::time::Duration::from_secs(secs);
+        }
         let base = match self.movement_arrival {
             Some(arrival) => {
                 let remaining = (arrival - Utc::now()).to_std().unwrap_or(std::time::Duration::ZERO);
