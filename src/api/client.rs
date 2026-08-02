@@ -2,8 +2,8 @@ use super::metrics::{endpoint_label, Metrics, MetricsHandle, RequestSample};
 use super::ratelimit::{retry_after_from, RateLimitHandle, RateLimitState, RateLimited};
 use super::types::{
     ContainerInventory, CraftingRecipe, DamageWarningRule, EndpointId, Manny, MannyDetail, MannyRoster, Mission,
-    Pagination, Probe, ProbeAlert, ProbeImprovement, ProbeInventory, ProbeListResponse, ProbeMessage, ProbeMovement,
-    ProbeSentMessage, ScutNetwork, SectorObservation, StorageContainer, VisitedSector,
+    Pagination, Probe, ProbeAlert, ProbeImprovement, ProbeInventory, ProbeListResponse, ProbeMessage, ProbeModel,
+    ProbeMovement, ProbeSentMessage, ScutNetwork, SectorObservation, StorageContainer, VisitedSector,
 };
 use anyhow::{Context, Result};
 use reqwest::{Client, StatusCode, Url};
@@ -431,10 +431,19 @@ impl ApiClient {
     /// additional containers plus fixed components (`POST
     /// /api/probe/mannies/{id}/assemble-probe`, API v81). Returns the updated
     /// Manny and probe inventory (the containers + components are consumed).
-    pub async fn assemble_probe(&self, manny_id: &str, container_ids: &[String]) -> Result<(Manny, ProbeInventory)> {
+    /// Start a drone assembly (API v81). `model` picks the hull (v104): the
+    /// server defaults to `generic` when the field is absent, but sending it
+    /// explicitly keeps the request honest about what the wizard showed.
+    pub async fn assemble_probe(
+        &self,
+        manny_id: &str,
+        model: ProbeModel,
+        container_ids: &[String],
+    ) -> Result<(Manny, ProbeInventory)> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
         struct Body<'a> {
+            model: &'a str,
             container_ids: &'a [String],
         }
         #[derive(Deserialize)]
@@ -443,7 +452,15 @@ impl ApiClient {
             inventory: ProbeInventory,
         }
         let path = self.probe_path(&format!("/mannies/{manny_id}/assemble-probe"));
-        let r = self.post::<Resp, _>(&path, &Body { container_ids }).await?;
+        let r = self
+            .post::<Resp, _>(
+                &path,
+                &Body {
+                    model: crate::app::model_wire(model),
+                    container_ids,
+                },
+            )
+            .await?;
         Ok((r.manny, r.inventory))
     }
 

@@ -1,3 +1,4 @@
+mod assembly;
 mod boot;
 mod color;
 mod command;
@@ -21,6 +22,7 @@ mod travel;
 mod tree;
 mod waypoints;
 
+pub use assembly::*;
 pub use boot::{BOOT_CHARS_PER_FRAME, BOOT_LINE_STRIDE};
 pub use color::*;
 pub use command::{command_usage, CommandFire, COMMANDS};

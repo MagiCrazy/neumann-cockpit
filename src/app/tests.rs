@@ -3489,3 +3489,102 @@ fn script_note_error_halts_a_running_step() {
         _ => panic!("expected the running step to fail"),
     }
 }
+
+// ── probe models (API v104, #275 phase 4) ──────────────────────────────────
+
+#[test]
+fn assembly_wizard_picks_a_model_before_containers() {
+    use crate::api::types::ProbeModel;
+
+    let mut state = AppState::default();
+    state.active_wizard = ActiveWizard::AssembleProbe(AssembleProbeInput::PickModel {
+        manny_id: "m1".into(),
+        manny_name: "Alpha".into(),
+        containers: vec![("c1".into(), "Box 1".into()), ("c2".into(), "Box 2".into())],
+        cursor: 1,
+    });
+
+    // Cursor 1 is the tanker; committing carries the model into step two along
+    // with the containers gathered up front.
+    let ActiveWizard::AssembleProbe(AssembleProbeInput::PickModel {
+        manny_id,
+        manny_name,
+        containers,
+        cursor,
+    }) = &state.active_wizard
+    else {
+        panic!("model step");
+    };
+    let model = ASSEMBLABLE_MODELS[*cursor];
+    assert_eq!(model, ProbeModel::DeuteriumTanker);
+    state.active_wizard = ActiveWizard::AssembleProbe(AssembleProbeInput::PickContainers {
+        manny_id: manny_id.clone(),
+        manny_name: manny_name.clone(),
+        model,
+        containers: containers.clone(),
+        selected: vec![],
+        cursor: 0,
+        error: None,
+    });
+    let ActiveWizard::AssembleProbe(AssembleProbeInput::PickContainers { model, containers, .. }) =
+        &state.active_wizard
+    else {
+        panic!("container step");
+    };
+    assert_eq!(*model, ProbeModel::DeuteriumTanker);
+    assert_eq!(containers.len(), 2, "the containers survive the step change");
+}
+
+/// A crafting recipe straight from JSON, as the API sends it.
+fn deser_recipe(json: &str) -> crate::api::types::CraftingRecipe {
+    serde_json::from_str(json).expect("recipe fixture")
+}
+
+#[test]
+fn tree_prices_both_hulls_down_to_base_resources() {
+    use crate::api::types::ProbeModel;
+
+    let mut state = AppState::default();
+    // Two of the eight bill components, enough to see the tanker cost more.
+    state.recipes = vec![
+        deser_recipe(
+            r#"{"id":"solar_panel","name":"Solar panel","craftableBy":["manny"],
+                "ingredients":[{"type":"metals","quantity":0.01,"unit":"ECE","kind":"metals"}],
+                "durationSeconds":300,
+                "output":{"type":"solar_panel","name":"Solar panel","containerSpace":0.01,
+                          "containerSpaceUnit":"ECE"}}"#,
+        ),
+        deser_recipe(
+            r#"{"id":"steel_plate","name":"Steel plate","craftableBy":["manny"],
+                "ingredients":[{"type":"metals","quantity":0.02,"unit":"ECE","kind":"metals"}],
+                "durationSeconds":300,
+                "output":{"type":"steel_plate","name":"Steel plate","containerSpace":0.01,
+                          "containerSpaceUnit":"ECE"}}"#,
+        ),
+    ];
+
+    let generic = state.assembly_rollup(ProbeModel::Generic, 1.0);
+    let tanker = state.assembly_rollup(ProbeModel::DeuteriumTanker, 1.0);
+
+    // 4 solar panels × 0.01 metals; the tanker adds 10 steel plates × 0.02.
+    assert!((generic.base.get("metals").copied().unwrap_or(0.0) - 0.04).abs() < 1e-9);
+    assert!((tanker.base.get("metals").copied().unwrap_or(0.0) - 0.24).abs() < 1e-9);
+    assert!(
+        tanker.base["metals"] > generic.base["metals"],
+        "the tanker bill is a superset"
+    );
+}
+
+#[test]
+fn tree_lists_a_row_per_hull_model() {
+    let mut state = AppState::default();
+    state.open_tree();
+    let rows = state.tree_rows();
+    assert!(
+        rows.iter().any(|r| r.is_header && r.label == "PROBE ASSEMBLY"),
+        "the assembly section is always offered, recipes or not"
+    );
+    let hulls: Vec<&str> = rows.iter().filter(|r| r.is_assembly).map(|r| r.item.as_str()).collect();
+    assert_eq!(hulls, vec!["generic", "deuterium_tanker"]);
+    assert!(rows.iter().filter(|r| r.is_assembly).all(|r| r.expandable));
+}

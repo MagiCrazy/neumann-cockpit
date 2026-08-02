@@ -1,5 +1,5 @@
-use crate::api::types::{MovementPhase, SensorMode};
-use crate::app::{AppState, TelemetrySample};
+use crate::api::types::{MovementPhase, ProbeModel, SensorMode};
+use crate::app::{model_label, AppState, TelemetrySample};
 use chrono::Utc;
 use ratatui::{
     layout::Rect,
@@ -70,6 +70,14 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
         label("status"),
         Span::styled(probe_status_label(&probe.status), probe_status_style(&probe.status)),
     ]));
+    // Hull model (API v104). Only worth a line when it is not the default one:
+    // a tanker's 400-point tank changes how the FUEL gauge should be read.
+    if let Some(model) = probe.model.filter(|m| *m != ProbeModel::Generic) {
+        lines.push(Line::from(vec![
+            label("model"),
+            Span::styled(model_label(model), Style::default().fg(p.accent)),
+        ]));
+    }
     let (sensor_txt, sensor_col) = match probe.sensor_mode {
         SensorMode::Normal => ("normal", p.good),
         SensorMode::Degraded => ("degraded", p.warn),
@@ -112,9 +120,15 @@ pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState
                     " "
                 };
                 let reach = if pr.is_reachable { "" } else { "  ⚠ far" };
+                // Tankers are worth spotting in the roster: they are the fleet's
+                // fuel depots (API v104).
+                let model = match pr.model {
+                    Some(ProbeModel::DeuteriumTanker) => "  ⛽ tanker",
+                    _ => "",
+                };
                 let st = if is_active { Style::default().fg(p.accent) } else { dim };
                 lines.push(Line::styled(
-                    format!("  {mark} {}  {}{reach}", pr.name, probe_status_label(&pr.status)),
+                    format!("  {mark} {}  {}{model}{reach}", pr.name, probe_status_label(&pr.status)),
                     st,
                 ));
             }
