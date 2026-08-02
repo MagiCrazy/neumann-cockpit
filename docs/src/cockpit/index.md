@@ -23,6 +23,7 @@ A few meta chips only appear when they have something to say:
 | `⛭ 3/8` | production queue progress, with the console closed |
 | `≡ 2/5` | action-script progress (`≡‖` when paused) |
 | `⚙ 4 idle` | idle mannies waiting for orders (`i` cycles to the next) |
+| `! 3` | unread alerts and messages, counted across your whole mailbox |
 | `⏳ rate limit 47s` | the server's request quota is spent — see below |
 | `⚠ save failing` | the local database is refusing writes, so history is no longer saved |
 

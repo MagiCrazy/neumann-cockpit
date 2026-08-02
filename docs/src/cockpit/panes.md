@@ -6,7 +6,7 @@ Each pane shows a slice of state and offers actions via `Enter`. Move the cursor
 Scan history: symbol, coordinates, and distance for every sector you've seen, filterable. `Enter` offers **Travel here** to the selected observation. Scan neighbours, a direction (distance 2), or arbitrary coordinates.
 
 ## Map (`r`)
-Compact sector summary. `z` opens the full **isometric map** (pan with `h j k l`, `g` travels to the centred sector, `c` re-centres on coordinates). `Enter` also offers **Travel to coordinates…**, **Jump to visited sector…**, and **Waypoints…** — each with a fuel/ETA preview.
+Compact sector summary. `z` opens the full **isometric map** (pan with `h j k l`, `g` travels to the centred sector, `c` re-centres on coordinates). `Enter` also offers **Travel to coordinates…**, **Jump to visited sector…**, and **Waypoints…** — each with a fuel/ETA preview. The visited-sector list is **fleet-wide**: anywhere any of your probes has been, not just the one you are piloting.
 
 ## Comms (`t`)
 A category root: **Messages**, **Alerts**, **Warnings**, each with an unread count and a preview. Drill in (`l`) to open the inbox/sent messaging overlay (read full-screen, `c` composes to a probe or planet), or an in-pane list where `Enter` acknowledges an alert/warning.
