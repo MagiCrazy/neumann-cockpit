@@ -676,6 +676,14 @@ impl AppState {
         if !self.script_running {
             return;
         }
+        // Same hazard as the production queue (#291): every completion check
+        // below reads the Manny roster, and a roster fetched for another probe
+        // reports this script's builders as absent, which is indistinguishable
+        // from idle. A script is bound to the probe it was composed on, so wait
+        // for a roster describing that probe rather than acting on a stranger's.
+        if !self.roster_matches_active() {
+            return;
+        }
 
         // A) A running step: poll its action group for the join (all done).
         if let Some(idx) = self.script.iter().position(ScriptStep::is_running) {

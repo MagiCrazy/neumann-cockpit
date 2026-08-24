@@ -3642,7 +3642,9 @@ fn script_mine_fans_out_and_joins_on_all_builders() {
 #[test]
 fn script_fails_when_a_target_cannot_be_resolved() {
     let mut s = AppState::default();
-    // No idle Manny → the repair step cannot resolve its builder.
+    // A roster for the piloted probe, holding no idle Manny → the repair step
+    // cannot resolve its builder.
+    set_roster(&mut s, vec![]);
     s.enqueue_script_line("repair 100 by ghost").unwrap();
     s.script_run();
     s.advance_script();
@@ -3656,6 +3658,8 @@ fn script_fails_when_a_target_cannot_be_resolved() {
 #[test]
 fn script_note_error_halts_a_running_step() {
     let mut s = AppState::default();
+    // The executor needs a roster it can attribute to the piloted probe (#291).
+    set_roster(&mut s, vec![]);
     s.enqueue_script_line("travel 2 0 0").unwrap();
     s.script_run();
     s.advance_script(); // fires travel → Running
