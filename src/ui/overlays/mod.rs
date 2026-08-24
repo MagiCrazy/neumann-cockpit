@@ -278,6 +278,11 @@ pub(crate) fn sector_object_label(
     object_pick_label(index, name, reserves, danger.as_ref())
 }
 
+/// Shared pick-list popup. The item list is **windowed** on the selection so
+/// the `▶` cursor is always drawn: the popup height each caller passes is a
+/// viewport, and a list longer than it scrolls instead of being silently cut
+/// off (issue #288). Overflow is advertised twice — an `n/N` counter in the
+/// title and an `▲/▼ n more` indicator row under the items.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn render_pick_list(
     frame: &mut Frame,
@@ -294,18 +299,44 @@ pub(crate) fn render_pick_list(
 ) {
     let popup = centered_rect(width, height, area);
     frame.render_widget(Clear, popup);
-    let block = Block::default()
-        .title(title.to_owned())
-        .title_alignment(Alignment::Center)
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(p.accent));
-    let inner = block.inner(popup);
-    frame.render_widget(block, popup);
-
+    let frame_block = |title: String| {
+        Block::default()
+            .title(title)
+            .title_alignment(Alignment::Center)
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(p.accent))
+    };
+    // The frame is drawn only once the title knows whether the list overflows,
+    // which needs the content area — hence the throwaway block for `inner`.
+    let inner = frame_block(String::new()).inner(popup);
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
+
+    // Rows left for the items once the prompt and the error block have taken
+    // their share of the content area.
+    let prompt_lines = if prompt.is_some() { 2 } else { 0 };
+    let error_lines = if error.is_some() { 2 } else { 0 };
+    let mut visible = (rows[0].height as usize)
+        .saturating_sub(prompt_lines + error_lines)
+        .max(1);
+    let overflow = items.len() > visible;
+    if overflow {
+        // One row goes to the ▲/▼ indicator.
+        visible = visible.saturating_sub(1).max(1);
+    }
+    // Stateless window: no scroll offset is kept between frames, so the cursor
+    // anchors to the bottom row while walking down and to the top going up.
+    let start = selection.saturating_sub(visible.saturating_sub(1));
+    let end = (start + visible).min(items.len());
+
+    let block = frame_block(if overflow {
+        format!("{title} {}/{}", (selection + 1).min(items.len()), items.len())
+    } else {
+        title.to_owned()
+    });
+    frame.render_widget(block, popup);
 
     let mut lines: Vec<Line> = Vec::new();
     if let Some(prompt) = prompt {
@@ -315,7 +346,7 @@ pub(crate) fn render_pick_list(
         )));
         lines.push(Line::default());
     }
-    for (i, name) in items.iter().enumerate() {
+    for (i, name) in items.iter().enumerate().take(end).skip(start) {
         if i == selection {
             lines.push(Line::from(vec![
                 Span::styled("▶ ", Style::default().fg(p.accent)),
@@ -330,6 +361,20 @@ pub(crate) fn render_pick_list(
                 Span::styled(name.to_string(), Style::default().fg(p.dim)),
             ]));
         }
+    }
+    if overflow {
+        let dim = Style::default().fg(p.dim);
+        let mut spans: Vec<Span> = Vec::new();
+        if start > 0 {
+            spans.push(Span::styled(format!("▲ {start} more"), dim));
+        }
+        if end < items.len() {
+            if !spans.is_empty() {
+                spans.push(Span::raw("  "));
+            }
+            spans.push(Span::styled(format!("▼ {} more", items.len() - end), dim));
+        }
+        lines.push(Line::from(spans));
     }
     if let Some(err) = error {
         lines.push(Line::default());
@@ -353,8 +398,9 @@ pub(crate) fn render_pick_list(
 
 #[cfg(test)]
 mod tests {
-    use super::{object_pick_label, render_active_overlays, DangerLevel};
-    use crate::app::{ActiveWizard, AppState, TravelInput};
+    use super::{object_pick_label, render_active_overlays, render_pick_list, DangerLevel};
+    use crate::app::{ActiveWizard, AppState, ColorMode, TravelInput};
+    use crate::ui::theme::palette;
     use ratatui::{backend::TestBackend, Terminal};
 
     #[test]
@@ -378,6 +424,56 @@ mod tests {
         );
         // Low/Unknown danger adds no glyph.
         assert_eq!(object_pick_label(0, "", None, Some(&DangerLevel::Low)), "#1");
+    }
+
+    /// Draw a pick list of `count` items with the cursor on `selection` inside a
+    /// popup too short to hold them all, and return the drawn cells.
+    fn rendered_pick_list(count: usize, selection: usize) -> String {
+        let labels: Vec<String> = (0..count).map(|i| format!("container-{i:02}")).collect();
+        let items: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
+        let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+        terminal
+            .draw(|f| {
+                render_pick_list(
+                    f,
+                    f.area(),
+                    palette(ColorMode::MonoGreen),
+                    " DETACH ",
+                    50,
+                    // The clamp every caller applies: a viewport far smaller
+                    // than the candidate list.
+                    12,
+                    Some("Pick a container"),
+                    &items,
+                    selection,
+                    None,
+                    "detach",
+                );
+            })
+            .unwrap();
+        terminal.backend().buffer().content.iter().map(|c| c.symbol()).collect()
+    }
+
+    #[test]
+    fn pick_list_windows_on_the_selection_when_it_overflows() {
+        // Issue #288: the list was rendered whole into a clamped popup, so a
+        // selection past the last visible row moved off-screen and `Enter`
+        // fired on an invisible target.
+        let text = rendered_pick_list(30, 27);
+        assert!(text.contains("▶ container-27"), "the cursor row is drawn: {text}");
+        assert!(text.contains("28/30"), "the title counts the overflowing list");
+        assert!(text.contains("▲ "), "an indicator says the list continues above");
+        // The window follows the cursor: early rows are scrolled out.
+        assert!(!text.contains("container-00"), "the top of the list is scrolled away");
+    }
+
+    #[test]
+    fn pick_list_keeps_every_row_when_it_fits() {
+        let text = rendered_pick_list(4, 3);
+        assert!(text.contains("▶ container-03"));
+        assert!(text.contains("container-00"), "no windowing on a list that fits");
+        assert!(!text.contains("/4"), "no counter without overflow");
+        assert!(!text.contains("more"), "no scroll indicator without overflow");
     }
 
     /// Render the overlays over a blank terminal and return all cell text.
