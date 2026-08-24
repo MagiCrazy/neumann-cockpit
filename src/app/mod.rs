@@ -114,6 +114,10 @@ pub enum Refetch {
 pub struct AppState {
     pub probe: Option<Probe>,
     pub mannies: Option<Vec<Manny>>,
+    /// Which probe the roster in `mannies` was fetched for: `None` = no roster
+    /// yet, `Some(None)` = the server default, `Some(Some(id))` = that drone.
+    /// Read through `roster_matches_active` (issue #291).
+    pub mannies_target: Option<Option<u64>>,
     pub last_update: Option<DateTime<Local>>,
     /// When the last automatic (periodic) refresh was *fired*, as opposed to
     /// `last_update` (last *successful* sync). Lets the periodic refresh throttle
@@ -390,10 +394,23 @@ impl AppState {
     }
 
     /// Absorb a roster fetch: the Mannies plus the server's polling hint
-    /// (API v104).
-    pub fn update_mannies_roster(&mut self, roster: MannyRoster) {
+    /// (API v104). `target` is the probe the fetch was aimed at, recorded so a
+    /// sequencer can tell whether the roster in hand describes the probe it is
+    /// working for (issue #291).
+    pub fn update_mannies_roster(&mut self, target: Option<u64>, roster: MannyRoster) {
         self.note_manny_poll_hint(roster.next_useful_refresh_delay_ms);
+        self.mannies_target = Some(target);
         self.update_mannies(roster.mannies);
+    }
+
+    /// Whether the Manny roster in hand was fetched for the probe currently
+    /// piloted. Every completion check reads `mannies`, and the roster is
+    /// replaced wholesale on a probe switch, so a sequencer that advances on a
+    /// roster belonging to another probe reads absent builders as idle — which
+    /// is what corrupted the production queue in #291. The outer `Option`
+    /// distinguishes "no roster yet" from "fetched for the default probe".
+    pub fn roster_matches_active(&self) -> bool {
+        self.mannies_target == Some(self.active_probe_id)
     }
 
     /// The piloted probe's id, when a probe sync has landed. The v104
@@ -420,8 +437,9 @@ impl AppState {
 
     /// Absorb a single-Manny fetch (`GET …/mannies/{id}`, API v104): replace
     /// that Manny in the roster in place, leaving the others untouched.
-    pub fn update_manny(&mut self, detail: MannyDetail) {
+    pub fn update_manny(&mut self, target: Option<u64>, detail: MannyDetail) {
         self.note_manny_poll_hint(detail.next_useful_refresh_delay_ms);
+        self.mannies_target = Some(target);
         let Some(mut mannies) = self.mannies.clone() else {
             // No roster yet: nothing to merge into, the next full fetch wins.
             return;
