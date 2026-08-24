@@ -336,8 +336,8 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         state.finish_action(format!("probe renamed to {name}"), Refetch::All);
                     }
                     ApiMessage::RenameProbeError(e) => state.set_wizard_error(e),
-                    ApiMessage::ManniesUpdated(roster) => state.update_mannies_roster(roster),
-                    ApiMessage::MannyUpdated(detail) => state.update_manny(detail),
+                    ApiMessage::ManniesUpdated(target, roster) => state.update_mannies_roster(target, roster),
+                    ApiMessage::MannyUpdated(target, detail) => state.update_manny(target, detail),
                     ApiMessage::SectorUpdated(sector) => {
                         let (sx, sy, sz) = (
                             sector.relative_coordinates.x as i32,

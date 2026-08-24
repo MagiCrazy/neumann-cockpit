@@ -8,11 +8,20 @@
 //! API call the pilot added, so it halts (pauses) on the first failure and is
 //! capped.
 //!
+//! **One queue per probe** (issue #291). The live `craft_queue` belongs to the
+//! piloted probe; switching probe parks it under its probe id and restores that
+//! probe's own queue. Only the piloted probe's queue runs: completion is read
+//! from `AppState::mannies`, which describes the piloted probe alone, so a queue
+//! whose builders are elsewhere has no signal to advance on. Production is local
+//! to a probe — probes drift far apart, and a shared queue across them would be
+//! meaningless.
+//!
 //! The `repeat`/executor shape is a primitive #198 (scripting) and #199 (rules)
 //! can reuse, but only the crafting surface is built here.
 
 use super::*;
 use crate::api::types::{MannyLocationType, MannyTask};
+use std::time::Instant;
 
 /// Cap on queue length; enqueuing past it is dropped with a toast so a runaway
 /// `[Q]` never silently balloons into hundreds of API calls.
@@ -52,6 +61,12 @@ pub struct QueuedCraft {
     pub repeat: u32,
     pub completed: u32,
     pub state: StepState,
+    /// The recipe's fabrication time, resolved at enqueue. Used as the fallback
+    /// completion signal when the builder's busy window was never observed.
+    pub duration_secs: u64,
+    /// When the current iteration's order was staged. With `duration_secs` it
+    /// bounds how long a `Running` step may wait for a busy it will never see.
+    pub fired_at: Option<Instant>,
 }
 
 impl QueuedCraft {
@@ -71,6 +86,8 @@ impl QueuedCraft {
             repeat: 1,
             completed: 0,
             state: StepState::Pending,
+            duration_secs: 0,
+            fired_at: None,
         }
     }
 
@@ -87,6 +104,28 @@ impl QueuedCraft {
     pub fn is_terminal(&self) -> bool {
         matches!(self.state, StepState::Done | StepState::Failed(_))
     }
+
+    /// Whether this iteration has been in flight for longer than the recipe
+    /// takes to build. The API exposes no per-Manny task history, so when the
+    /// builder's busy window was missed entirely — a short recipe between two
+    /// polls, or a craft that ran while its probe was not piloted — the recipe's
+    /// own duration is the only honest completion signal we have. Without it a
+    /// step that was never seen busy waits forever (issue #291).
+    fn ran_its_course(&self) -> bool {
+        match (self.duration_secs, self.fired_at) {
+            (0, _) | (_, None) => false,
+            (secs, Some(t)) => t.elapsed().as_secs() >= secs,
+        }
+    }
+}
+
+/// A queue set aside because its probe is not the one being piloted. Kept whole
+/// — steps, progress and pause state — so returning to that probe resumes
+/// exactly where the pilot left off.
+#[derive(Clone, Default)]
+pub struct ParkedQueue {
+    pub steps: Vec<QueuedCraft>,
+    pub paused: bool,
 }
 
 /// A craft the executor wants spawned, drained by the event loop (which owns the
@@ -117,7 +156,11 @@ fn log_of(step: &QueuedCraft) -> (String, bool) {
 impl AppState {
     /// Add a craft to the queue: coalesce with the last step if identical
     /// (bumping its `repeat`), else push — unless the cap is hit.
-    pub fn enqueue_craft(&mut self, craft: QueuedCraft) {
+    pub fn enqueue_craft(&mut self, mut craft: QueuedCraft) {
+        // Bind the live queue to the piloted probe before touching it, so a
+        // step is never appended to the queue of the probe we just left.
+        self.sync_queue_probe();
+        craft.duration_secs = self.recipe_duration_secs(&craft.recipe_id);
         if let Some(last) = self.craft_queue.last_mut() {
             if !last.is_terminal() && last.coalesces_with(&craft) {
                 last.repeat += craft.repeat;
@@ -164,6 +207,75 @@ impl AppState {
         }
     }
 
+    /// The recipe's fabrication time, resolved from the catalog at enqueue so
+    /// the executor keeps working off a self-contained step.
+    fn recipe_duration_secs(&self, recipe_id: &str) -> u64 {
+        self.fabrication_recipes()
+            .iter()
+            .find(|(_, r)| r.id == recipe_id)
+            .map(|(_, r)| r.duration_seconds.max(0) as u64)
+            .unwrap_or(0)
+    }
+
+    /// Bind the live queue to the piloted probe, parking the outgoing one and
+    /// restoring that probe's own (issue #291). Cheap and idempotent — a no-op
+    /// on every tick where the pilot has not switched probe.
+    pub fn sync_queue_probe(&mut self) {
+        let active = self.active_probe_id;
+        if self.queue_probe == Some(active) {
+            return;
+        }
+        if let Some(prev) = self.queue_probe {
+            let steps = std::mem::take(&mut self.craft_queue);
+            if steps.iter().any(|s| !s.is_terminal()) {
+                self.parked_queues.insert(
+                    prev,
+                    ParkedQueue {
+                        steps,
+                        paused: self.queue_paused,
+                    },
+                );
+            } else {
+                // Nothing left to run: drop it rather than hoard finished steps
+                // for a probe the pilot may never return to.
+                self.parked_queues.remove(&prev);
+            }
+        }
+        match self.parked_queues.remove(&active) {
+            Some(q) => {
+                self.craft_queue = q.steps;
+                self.queue_paused = q.paused;
+            }
+            None => {
+                self.craft_queue.clear();
+                self.queue_paused = false;
+            }
+        }
+        self.queue_probe = Some(active);
+    }
+
+    /// Forget the queue of a probe that no longer exists (destroyed or trapped,
+    /// v94) — live or parked. Its builders are gone with it.
+    pub fn forget_queue_for(&mut self, probe: Option<u64>) {
+        self.parked_queues.remove(&probe);
+        if self.queue_probe == Some(probe) {
+            self.craft_queue.clear();
+            self.queue_paused = false;
+            self.queue_probe = None;
+        }
+    }
+
+    /// Steps still to run in the queues of probes that are not being piloted —
+    /// the status-bar chip that keeps a parked queue from looking like a lost
+    /// one.
+    pub fn parked_pending(&self) -> usize {
+        self.parked_queues
+            .values()
+            .flat_map(|q| q.steps.iter())
+            .filter(|s| !s.is_terminal())
+            .count()
+    }
+
     /// Whether this craft's target is currently busy on the server — a Manny
     /// builder not accepting orders, or (atomic) any onboard Manny assisting the
     /// printer.
@@ -184,7 +296,16 @@ impl AppState {
     /// per-lane busy→idle transition; started crafts are staged in `queue_fire`.
     /// Cheap and idempotent — called every loop tick.
     pub fn advance_queue(&mut self) {
+        self.sync_queue_probe();
         if self.queue_paused {
+            return;
+        }
+        // Completion is read from the Manny roster, which describes the piloted
+        // probe alone. A roster fetched for another probe reports this queue's
+        // builders as absent, which `craft_target_busy` cannot distinguish from
+        // idle — advancing on it completes steps that never ran and fires orders
+        // at the wrong probe (issue #291). Wait for a roster we can trust.
+        if !self.roster_matches_active() {
             return;
         }
         let mut fires: Vec<(CraftFire, String, bool)> = Vec::new();
@@ -200,21 +321,29 @@ impl AppState {
         for idx in running {
             let busy = self.craft_target_busy(&self.craft_queue[idx]);
             let step = &mut self.craft_queue[idx];
-            if let StepState::Running { observed_busy } = &mut step.state {
-                if !*observed_busy {
-                    // Waiting for the target to pick up the order.
-                    if busy {
-                        *observed_busy = true;
-                    }
-                } else if !busy {
-                    // This iteration finished.
-                    step.completed += 1;
-                    if step.completed >= step.repeat {
-                        step.state = StepState::Done;
-                    } else {
-                        step.state = StepState::Running { observed_busy: false };
-                        fires.push((fire_of(step), step.recipe_name.clone(), log_of(step).1));
-                    }
+            let StepState::Running { observed_busy } = &mut step.state else {
+                continue;
+            };
+            let finished = if *observed_busy {
+                !busy
+            } else if busy {
+                // The target picked the order up.
+                *observed_busy = true;
+                false
+            } else {
+                // Never seen busy. Either the order is still being picked up, or
+                // the whole craft ran and finished unobserved — which is what a
+                // probe switch used to turn into a permanent stall.
+                step.ran_its_course()
+            };
+            if finished {
+                step.completed += 1;
+                if step.completed >= step.repeat {
+                    step.state = StepState::Done;
+                } else {
+                    step.state = StepState::Running { observed_busy: false };
+                    step.fired_at = Some(Instant::now());
+                    fires.push((fire_of(step), step.recipe_name.clone(), log_of(step).1));
                 }
             }
         }
@@ -234,6 +363,7 @@ impl AppState {
                 if !lane_running && builder_free {
                     let step = &mut self.craft_queue[i];
                     step.state = StepState::Running { observed_busy: false };
+                    step.fired_at = Some(Instant::now());
                     fires.push((fire_of(step), step.recipe_name.clone(), log_of(step).1));
                 }
             }

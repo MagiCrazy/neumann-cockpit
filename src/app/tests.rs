@@ -2050,9 +2050,36 @@ fn roster(mannies: Vec<Manny>, hint_ms: Option<u64>) -> crate::api::types::Manny
 }
 
 #[test]
+fn roster_provenance_tracks_the_probe_it_was_fetched_for() {
+    // Issue #291: the roster is replaced wholesale on a probe switch, and a
+    // fetch in flight when the pilot switches lands *after* it. Without the
+    // tag, that roster reads as if it described the newly piloted probe.
+    let mut state = AppState::default();
+    assert!(
+        !state.roster_matches_active(),
+        "no roster yet is not a match — nothing may advance on an empty roster"
+    );
+
+    let r = || roster(vec![make_manny("m1", "probe", true, None)], Some(30_000));
+    state.update_mannies_roster(None, r());
+    assert!(state.roster_matches_active(), "default probe, default-targeted roster");
+
+    // The pilot switches to drone 7; the roster in hand is still the default's.
+    state.active_probe_id = Some(7);
+    assert!(!state.roster_matches_active(), "stale roster after a switch");
+
+    // A late reply from the *previous* probe must not count either.
+    state.update_mannies_roster(None, r());
+    assert!(!state.roster_matches_active(), "in-flight reply from the old probe");
+
+    state.update_mannies_roster(Some(7), r());
+    assert!(state.roster_matches_active(), "the drone's own roster");
+}
+
+#[test]
 fn idle_cockpit_keeps_the_ordinary_cadence() {
     let mut state = AppState::default();
-    state.update_mannies_roster(roster(vec![make_manny("m1", "probe", true, None)], Some(30_000)));
+    state.update_mannies_roster(None, roster(vec![make_manny("m1", "probe", true, None)], Some(30_000)));
 
     // Nothing is being waited on, so the hint must not pull the deadline in:
     // that would poll every 30 s instead of the 60 s periodic refresh.
@@ -2068,13 +2095,16 @@ fn idle_cockpit_keeps_the_ordinary_cadence() {
 fn one_busy_manny_is_polled_alone_on_the_server_hint() {
     let mut state = AppState::default();
     state.probe = Some(probe_fixture());
-    state.update_mannies_roster(roster(
-        vec![
-            make_manny("busy", "sector", false, Some("mining")),
-            make_manny("idle", "probe", true, None),
-        ],
-        Some(12_000),
-    ));
+    state.update_mannies_roster(
+        None,
+        roster(
+            vec![
+                make_manny("busy", "sector", false, Some("mining")),
+                make_manny("idle", "probe", true, None),
+            ],
+            Some(12_000),
+        ),
+    );
 
     let (deadline, target) = state.next_refresh();
     assert_eq!(
@@ -2093,13 +2123,16 @@ fn one_busy_manny_is_polled_alone_on_the_server_hint() {
 fn several_busy_mannies_fall_back_to_the_roster() {
     let mut state = AppState::default();
     state.probe = Some(probe_fixture());
-    state.update_mannies_roster(roster(
-        vec![
-            make_manny("a", "sector", false, Some("mining")),
-            make_manny("b", "sector", false, Some("crafting")),
-        ],
-        Some(5_000),
-    ));
+    state.update_mannies_roster(
+        None,
+        roster(
+            vec![
+                make_manny("a", "sector", false, Some("mining")),
+                make_manny("b", "sector", false, Some("crafting")),
+            ],
+            Some(5_000),
+        ),
+    );
     assert_eq!(state.next_refresh().1, RefreshTarget::Mannies);
 }
 
@@ -2108,10 +2141,10 @@ fn without_a_probe_id_the_roster_is_polled_instead() {
     let mut state = AppState::default();
     // The targeted GET lives only on the {probeId} mirror, so before the first
     // probe sync there is nothing to target with.
-    state.update_mannies_roster(roster(
-        vec![make_manny("busy", "sector", false, Some("mining"))],
-        Some(5_000),
-    ));
+    state.update_mannies_roster(
+        None,
+        roster(vec![make_manny("busy", "sector", false, Some("mining"))], Some(5_000)),
+    );
     assert_eq!(state.next_refresh().1, RefreshTarget::Mannies);
 }
 
@@ -2122,12 +2155,12 @@ fn the_hint_is_clamped_at_both_ends() {
 
     // The server's "settling delay" when a transition is already due must not
     // become a hot loop.
-    state.update_mannies_roster(roster(busy(), Some(50)));
+    state.update_mannies_roster(None, roster(busy(), Some(50)));
     let wait = (state.next_refresh().0 - tokio::time::Instant::now()).as_millis();
     assert!(wait > 500, "a sub-second hint should be floored, got {wait}ms");
 
     // A very long hint is capped: the 60 s cadence would refresh anyway.
-    state.update_mannies_roster(roster(busy(), Some(600_000)));
+    state.update_mannies_roster(None, roster(busy(), Some(600_000)));
     let wait = (state.next_refresh().0 - tokio::time::Instant::now()).as_secs();
     assert!(wait <= 30, "a long hint should be capped, got {wait}s");
 }
@@ -2137,7 +2170,7 @@ fn a_hint_predating_our_order_does_not_stall_the_queue() {
     let mut state = AppState::default();
     // Roster fetched while everything was idle: the server reports its "nothing
     // scheduled" 30 s. A craft has just been fired, so no Manny reads busy yet.
-    state.update_mannies_roster(roster(vec![make_manny("m1", "probe", true, None)], Some(30_000)));
+    state.update_mannies_roster(None, roster(vec![make_manny("m1", "probe", true, None)], Some(30_000)));
     let cmd = state.parse_script_line("mine metals").expect("valid line");
     state.script.push(ScriptStep {
         raw: "mine metals".into(),
@@ -2157,10 +2190,10 @@ fn a_hint_predating_our_order_does_not_stall_the_queue() {
 #[test]
 fn travel_arrival_still_wins_over_a_manny_poll() {
     let mut state = AppState::default();
-    state.update_mannies_roster(roster(
-        vec![make_manny("busy", "sector", false, Some("mining"))],
-        Some(30_000),
-    ));
+    state.update_mannies_roster(
+        None,
+        roster(vec![make_manny("busy", "sector", false, Some("mining"))], Some(30_000)),
+    );
     state.movement_arrival = Some(chrono::Utc::now() + chrono::Duration::seconds(5));
 
     let (deadline, target) = state.next_refresh();
@@ -2171,19 +2204,25 @@ fn travel_arrival_still_wins_over_a_manny_poll() {
 #[test]
 fn a_single_manny_fetch_merges_into_the_roster() {
     let mut state = AppState::default();
-    state.update_mannies_roster(roster(
-        vec![
-            make_manny("a", "sector", false, Some("mining")),
-            make_manny("b", "probe", true, None),
-        ],
-        Some(5_000),
-    ));
+    state.update_mannies_roster(
+        None,
+        roster(
+            vec![
+                make_manny("a", "sector", false, Some("mining")),
+                make_manny("b", "probe", true, None),
+            ],
+            Some(5_000),
+        ),
+    );
 
     // The watched Manny came back idle: only that entry changes.
-    state.update_manny(crate::api::types::MannyDetail {
-        manny: make_manny("a", "probe", true, None),
-        next_useful_refresh_delay_ms: Some(30_000),
-    });
+    state.update_manny(
+        None,
+        crate::api::types::MannyDetail {
+            manny: make_manny("a", "probe", true, None),
+            next_useful_refresh_delay_ms: Some(30_000),
+        },
+    );
 
     let mannies = state.mannies.as_ref().unwrap();
     assert_eq!(mannies.len(), 2, "the roster keeps its other entries");
@@ -2199,10 +2238,10 @@ fn a_single_manny_fetch_merges_into_the_roster() {
 #[test]
 fn firing_a_poll_consumes_the_hint() {
     let mut state = AppState::default();
-    state.update_mannies_roster(roster(
-        vec![make_manny("busy", "sector", false, Some("mining"))],
-        Some(20_000),
-    ));
+    state.update_mannies_roster(
+        None,
+        roster(vec![make_manny("busy", "sector", false, Some("mining"))], Some(20_000)),
+    );
     assert!(state.manny_poll_at.is_some());
 
     // Once the poll it scheduled is in flight, the deadline must not re-fire
@@ -2888,6 +2927,14 @@ fn probe_menu_offers_switch_and_default_when_multi() {
 
 // ── Production queue (#197) ─────────────────────────────────────────────────
 
+/// Prime the roster the way a fetch does: the Mannies **plus** the provenance
+/// tag saying which probe they belong to. Assigning `mannies` alone leaves the
+/// executor unable to trust the roster, which is the whole point of #291.
+fn set_roster(s: &mut AppState, mannies: Vec<Manny>) {
+    s.mannies_target = Some(s.active_probe_id);
+    s.mannies = Some(mannies);
+}
+
 /// A Manny craft of `recipe` by builder `id`, for the queue tests.
 fn queued_manny_craft(recipe: &str, builder: &str) -> QueuedCraft {
     QueuedCraft::new(
@@ -2926,6 +2973,8 @@ fn queue_executor_completes_a_step_then_stops() {
     s.enqueue_craft(queued_manny_craft("steel_plate", "m1"));
     // The queue auto-runs (not paused); no explicit start needed.
     assert!(s.queue_active());
+    // …but only once a roster it can trust has landed (#291).
+    set_roster(&mut s, vec![make_manny("m1", "probe", true, None)]);
 
     // Start: the pending step fires.
     s.advance_queue();
@@ -2937,7 +2986,7 @@ fn queue_executor_completes_a_step_then_stops() {
     ));
 
     // Builder still idle (order not yet picked up) → not complete.
-    s.mannies = Some(vec![make_manny("m1", "probe", true, None)]);
+    set_roster(&mut s, vec![make_manny("m1", "probe", true, None)]);
     s.advance_queue();
     assert!(matches!(
         s.craft_queue[0].state,
@@ -2945,7 +2994,7 @@ fn queue_executor_completes_a_step_then_stops() {
     ));
 
     // Builder busy → observed.
-    s.mannies = Some(vec![make_manny("m1", "probe", false, Some("crafting"))]);
+    set_roster(&mut s, vec![make_manny("m1", "probe", false, Some("crafting"))]);
     s.advance_queue();
     assert!(matches!(
         s.craft_queue[0].state,
@@ -2953,7 +3002,7 @@ fn queue_executor_completes_a_step_then_stops() {
     ));
 
     // Builder idle again → the step is done.
-    s.mannies = Some(vec![make_manny("m1", "probe", true, None)]);
+    set_roster(&mut s, vec![make_manny("m1", "probe", true, None)]);
     s.advance_queue();
     assert!(matches!(s.craft_queue[0].state, StepState::Done));
     assert_eq!(s.craft_queue[0].completed, 1);
@@ -2978,9 +3027,9 @@ fn queue_executor_repeats_a_step_n_times() {
             fires += 1;
             s.queue_fire.clear();
         }
-        s.mannies = Some(vec![make_manny("m1", "probe", false, Some("crafting"))]);
+        set_roster(&mut s, vec![make_manny("m1", "probe", false, Some("crafting"))]);
         s.advance_queue(); // observe busy
-        s.mannies = Some(vec![make_manny("m1", "probe", true, None)]);
+        set_roster(&mut s, vec![make_manny("m1", "probe", true, None)]);
         s.advance_queue(); // idle → iteration complete
         if matches!(s.craft_queue[0].state, StepState::Done) {
             break;
@@ -2992,12 +3041,123 @@ fn queue_executor_repeats_a_step_n_times() {
 }
 
 #[test]
+fn queue_never_advances_on_another_probes_roster() {
+    // Issue #291, the corruption itself: the builders of the queue's probe are
+    // absent from another probe's roster, and `craft_target_busy` cannot tell
+    // "absent" from "idle". Advancing there completed steps that never ran and
+    // fired orders at the wrong probe.
+    let mut s = AppState::default();
+    s.enqueue_craft(queued_manny_craft("steel_plate", "m1"));
+    set_roster(&mut s, vec![make_manny("m1", "probe", true, None)]);
+    s.advance_queue();
+    s.queue_fire.clear();
+    // The builder picked the order up.
+    set_roster(&mut s, vec![make_manny("m1", "probe", false, Some("crafting"))]);
+    s.advance_queue();
+    assert!(matches!(
+        s.craft_queue[0].state,
+        StepState::Running { observed_busy: true }
+    ));
+
+    // The pilot switches to drone 7, whose roster knows nothing of m1.
+    s.set_active_probe(7);
+    s.update_mannies_roster(Some(7), roster(vec![make_manny("m9", "probe", true, None)], None));
+    s.advance_queue();
+    assert!(
+        s.queue_fire.is_empty(),
+        "no order may be fired at a probe the queue does not belong to"
+    );
+    let parked = s.parked_queues.get(&None).expect("the queue was parked, not run");
+    assert!(
+        matches!(parked.steps[0].state, StepState::Running { observed_busy: true }),
+        "the parked step keeps its progress instead of completing on an absent builder"
+    );
+    assert!(s.craft_queue.is_empty(), "drone 7 starts with its own empty queue");
+    assert_eq!(s.parked_pending(), 1, "the status bar can say the queue is parked");
+}
+
+#[test]
+fn returning_to_a_probe_restores_its_queue() {
+    let mut s = AppState::default();
+    // Piloting the default probe (active id stays `None` for it).
+    s.default_probe_id = Some(1);
+    s.enqueue_craft(queued_manny_craft("steel_plate", "m1"));
+    s.sync_queue_probe();
+    s.set_active_probe(7);
+    s.sync_queue_probe();
+    assert!(s.craft_queue.is_empty());
+
+    // Drone 7 gets a queue of its own; the two never mix.
+    s.enqueue_craft(queued_manny_craft("steel_bar", "m9"));
+    assert_eq!(s.craft_queue.len(), 1);
+    assert_eq!(s.craft_queue[0].recipe_id, "steel_bar");
+
+    s.set_active_probe(1);
+    s.sync_queue_probe();
+    assert_eq!(s.craft_queue.len(), 1);
+    assert_eq!(
+        s.craft_queue[0].recipe_id, "steel_plate",
+        "the default's queue came back"
+    );
+    assert_eq!(s.parked_pending(), 1, "drone 7's queue is the parked one now");
+}
+
+#[test]
+fn a_craft_that_finished_unobserved_completes_on_its_duration() {
+    // A step that was fired but never seen busy — a short recipe between two
+    // polls, or a craft that ran while its probe was not piloted — used to wait
+    // for a transition that had already happened, stalling the lane forever.
+    let mut s = AppState::default();
+    let mut c = queued_manny_craft("steel_plate", "m1");
+    c.repeat = 1;
+    s.enqueue_craft(c);
+    set_roster(&mut s, vec![make_manny("m1", "probe", true, None)]);
+    s.advance_queue();
+    s.queue_fire.clear();
+
+    // Still idle, and the recipe cannot possibly be done yet: keep waiting.
+    s.craft_queue[0].duration_secs = 3600;
+    s.advance_queue();
+    assert!(matches!(
+        s.craft_queue[0].state,
+        StepState::Running { observed_busy: false }
+    ));
+
+    // Long past the recipe's duration with the builder idle: it ran its course.
+    s.craft_queue[0].duration_secs = 1;
+    s.craft_queue[0].fired_at = Some(std::time::Instant::now() - std::time::Duration::from_secs(5));
+    s.advance_queue();
+    assert!(
+        matches!(s.craft_queue[0].state, StepState::Done),
+        "the lane is released"
+    );
+}
+
+#[test]
+fn a_lost_probe_takes_its_queue_with_it() {
+    let mut s = AppState::default();
+    s.set_active_probe(7);
+    s.enqueue_craft(queued_manny_craft("steel_plate", "m1"));
+    assert_eq!(s.craft_queue.len(), 1);
+
+    // v94: the piloted drone is destroyed and drops off the roster.
+    s.update_fleet(crate::api::types::ProbeListResponse {
+        probes: vec![],
+        default_probe_id: None,
+    });
+    assert_eq!(s.active_probe_id, None, "reverted to the default");
+    assert!(s.craft_queue.is_empty(), "its queue died with it");
+    assert_eq!(s.parked_pending(), 0, "and nothing was left parked");
+}
+
+#[test]
 fn queue_halts_on_failure_keeping_the_counter() {
     let mut s = AppState::default();
     let mut c = queued_manny_craft("steel_plate", "m1");
     c.repeat = 5;
     c.completed = 2;
     s.enqueue_craft(c);
+    set_roster(&mut s, vec![make_manny("m1", "probe", true, None)]);
     s.advance_queue();
     s.queue_fire.clear();
     s.fail_queue("insufficient metals".into());
@@ -3015,10 +3175,13 @@ fn queue_runs_lanes_in_parallel() {
     // Two crafts on two different idle builders.
     s.enqueue_craft(queued_manny_craft("steel_plate", "m2"));
     s.enqueue_craft(queued_manny_craft("integrated_circuit", "m3"));
-    s.mannies = Some(vec![
-        make_manny("m2", "probe", true, None),
-        make_manny("m3", "probe", true, None),
-    ]);
+    set_roster(
+        &mut s,
+        vec![
+            make_manny("m2", "probe", true, None),
+            make_manny("m3", "probe", true, None),
+        ],
+    );
     s.advance_queue();
     // Both lanes start the same tick → two crafts in flight at once.
     assert_eq!(s.queue_fire.len(), 2, "both idle builders start in parallel");
@@ -3030,7 +3193,7 @@ fn queue_same_builder_stays_sequential() {
     let mut s = AppState::default();
     s.enqueue_craft(queued_manny_craft("steel_plate", "m2"));
     s.enqueue_craft(queued_manny_craft("steel_bar", "m2")); // same lane, no coalesce
-    s.mannies = Some(vec![make_manny("m2", "probe", true, None)]);
+    set_roster(&mut s, vec![make_manny("m2", "probe", true, None)]);
     s.advance_queue();
     // One craft per builder at a time: only the first starts.
     assert_eq!(s.queue_fire.len(), 1, "a lane runs one craft at a time");
@@ -3117,7 +3280,7 @@ fn manny_recipe(id: &str, name: &str) -> crate::api::types::CraftingRecipe {
 fn script_craft_parse_and_resolve() {
     let mut s = AppState::default();
     s.recipes = vec![manny_recipe("steel_plate", "Steel plate")];
-    s.mannies = Some(vec![make_manny("m1", "probe", true, None)]);
+    set_roster(&mut s, vec![make_manny("m1", "probe", true, None)]);
 
     // Parse: a recipe token is required.
     assert!(s.parse_script_line("craft steel_plate").is_ok());
@@ -3313,11 +3476,14 @@ fn script_craft_fans_out_parts_across_builders() {
         manny_recipe("steel_plate", "Steel plate"),
         manny_recipe("steel_bar", "Steel bar"),
     ];
-    s.mannies = Some(vec![
-        make_manny("m1", "probe", true, None),
-        make_manny("m2", "probe", true, None),
-        make_manny("m3", "probe", true, None),
-    ]);
+    set_roster(
+        &mut s,
+        vec![
+            make_manny("m1", "probe", true, None),
+            make_manny("m2", "probe", true, None),
+            make_manny("m3", "probe", true, None),
+        ],
+    );
     // 3 parts (steel_plate + 2× steel_bar) fan out one-per-builder with `by all`.
     s.enqueue_script_line("craft steel_plate,steel_bar,steel_bar by all")
         .unwrap();
@@ -3345,7 +3511,7 @@ fn script_craft_fanout_needs_enough_builders() {
         manny_recipe("steel_plate", "Steel plate"),
         manny_recipe("steel_bar", "Steel bar"),
     ];
-    s.mannies = Some(vec![make_manny("m1", "probe", true, None)]); // only 1 idle
+    set_roster(&mut s, vec![make_manny("m1", "probe", true, None)]); // only 1 idle
     s.enqueue_script_line("craft steel_plate,steel_bar,steel_bar by all")
         .unwrap();
     s.script_run();
@@ -3358,7 +3524,7 @@ fn script_craft_fanout_needs_enough_builders() {
 fn script_craft_unknown_recipe_halts() {
     let mut s = AppState::default();
     s.recipes = vec![manny_recipe("steel_plate", "Steel plate")];
-    s.mannies = Some(vec![make_manny("m1", "probe", true, None)]);
+    set_roster(&mut s, vec![make_manny("m1", "probe", true, None)]);
     s.enqueue_script_line("craft nonexistent").unwrap(); // parses (syntactic)
     s.script_run();
     s.advance_script(); // resolve fails → step failed, script halts
@@ -3369,7 +3535,7 @@ fn script_craft_unknown_recipe_halts() {
 #[test]
 fn script_executor_runs_steps_in_order() {
     let mut s = AppState::default();
-    s.mannies = Some(vec![make_manny("m1", "probe", true, None)]);
+    set_roster(&mut s, vec![make_manny("m1", "probe", true, None)]);
     s.enqueue_script_line("travel 2 0 0").unwrap();
     s.enqueue_script_line("repair 100 by m1").unwrap();
     s.script_run();
@@ -3397,9 +3563,9 @@ fn script_executor_runs_steps_in_order() {
     s.script_fire.clear();
 
     // m1 busy → observed; idle → repair done → whole script finishes.
-    s.mannies = Some(vec![make_manny("m1", "probe", false, Some("repair"))]);
+    set_roster(&mut s, vec![make_manny("m1", "probe", false, Some("repair"))]);
     s.advance_script();
-    s.mannies = Some(vec![make_manny("m1", "probe", true, None)]);
+    set_roster(&mut s, vec![make_manny("m1", "probe", true, None)]);
     s.advance_script();
     assert!(matches!(s.script[1].state, StepState::Done));
     assert!(!s.script_active(), "script stops once all steps are done");
@@ -3408,10 +3574,13 @@ fn script_executor_runs_steps_in_order() {
 #[test]
 fn script_mine_fans_out_and_joins_on_all_builders() {
     let mut s = AppState::default();
-    s.mannies = Some(vec![
-        make_manny("m1", "probe", true, None),
-        make_manny("m2", "probe", true, None),
-    ]);
+    set_roster(
+        &mut s,
+        vec![
+            make_manny("m1", "probe", true, None),
+            make_manny("m2", "probe", true, None),
+        ],
+    );
     s.probe = Some(probe_at(0., 0., 0.));
     s.scan_history = vec![make_sector_with_objects(
         0.,
@@ -3434,18 +3603,24 @@ fn script_mine_fans_out_and_joins_on_all_builders() {
     s.script_fire.clear();
 
     // Both busy → observed.
-    s.mannies = Some(vec![
-        make_manny("m1", "probe", false, Some("mining")),
-        make_manny("m2", "probe", false, Some("mining")),
-    ]);
+    set_roster(
+        &mut s,
+        vec![
+            make_manny("m1", "probe", false, Some("mining")),
+            make_manny("m2", "probe", false, Some("mining")),
+        ],
+    );
     s.advance_script();
     assert!(matches!(s.script[0].state, StepState::Running { observed_busy: true }));
 
     // Barrier: one still mining → the step is NOT complete yet.
-    s.mannies = Some(vec![
-        make_manny("m1", "probe", true, None),
-        make_manny("m2", "probe", false, Some("mining")),
-    ]);
+    set_roster(
+        &mut s,
+        vec![
+            make_manny("m1", "probe", true, None),
+            make_manny("m2", "probe", false, Some("mining")),
+        ],
+    );
     s.advance_script();
     assert!(
         matches!(s.script[0].state, StepState::Running { .. }),
@@ -3453,10 +3628,13 @@ fn script_mine_fans_out_and_joins_on_all_builders() {
     );
 
     // All idle → join complete.
-    s.mannies = Some(vec![
-        make_manny("m1", "probe", true, None),
-        make_manny("m2", "probe", true, None),
-    ]);
+    set_roster(
+        &mut s,
+        vec![
+            make_manny("m1", "probe", true, None),
+            make_manny("m2", "probe", true, None),
+        ],
+    );
     s.advance_script();
     assert!(matches!(s.script[0].state, StepState::Done));
 }
@@ -3464,7 +3642,9 @@ fn script_mine_fans_out_and_joins_on_all_builders() {
 #[test]
 fn script_fails_when_a_target_cannot_be_resolved() {
     let mut s = AppState::default();
-    // No idle Manny → the repair step cannot resolve its builder.
+    // A roster for the piloted probe, holding no idle Manny → the repair step
+    // cannot resolve its builder.
+    set_roster(&mut s, vec![]);
     s.enqueue_script_line("repair 100 by ghost").unwrap();
     s.script_run();
     s.advance_script();
@@ -3478,6 +3658,8 @@ fn script_fails_when_a_target_cannot_be_resolved() {
 #[test]
 fn script_note_error_halts_a_running_step() {
     let mut s = AppState::default();
+    // The executor needs a roster it can attribute to the piloted probe (#291).
+    set_roster(&mut s, vec![]);
     s.enqueue_script_line("travel 2 0 0").unwrap();
     s.script_run();
     s.advance_script(); // fires travel → Running

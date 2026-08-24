@@ -48,6 +48,7 @@ use crate::api::types::{
     StorageContainer, VisitedSector,
 };
 use chrono::{DateTime, Local, Utc};
+use std::collections::BTreeMap;
 use tokio::time::Instant;
 
 /// Floor on the server's polling hint: it returns a short "settling delay" when
@@ -114,6 +115,10 @@ pub enum Refetch {
 pub struct AppState {
     pub probe: Option<Probe>,
     pub mannies: Option<Vec<Manny>>,
+    /// Which probe the roster in `mannies` was fetched for: `None` = no roster
+    /// yet, `Some(None)` = the server default, `Some(Some(id))` = that drone.
+    /// Read through `roster_matches_active` (issue #291).
+    pub mannies_target: Option<Option<u64>>,
     pub last_update: Option<DateTime<Local>>,
     /// When the last automatic (periodic) refresh was *fired*, as opposed to
     /// `last_update` (last *successful* sync). Lets the periodic refresh throttle
@@ -255,9 +260,16 @@ pub struct AppState {
     /// drained + dispatched by the event loop (which owns the client + sender).
     pub pending_refetch: Option<Refetch>,
     // ── Production queue (#197) ─────────────────────────────────────────
-    /// The crafting queue: sequential steps, one running at a time. Auto-runs
-    /// (drains as steps complete) unless paused.
+    /// The crafting queue of the **piloted** probe: lanes of steps that auto-run
+    /// (drain as steps complete) unless paused. One queue per probe (#291);
+    /// `sync_queue_probe` swaps this with `parked_queues` on a probe switch.
     pub craft_queue: Vec<QueuedCraft>,
+    /// Which probe `craft_queue` belongs to: `None` = not bound to any probe
+    /// yet, `Some(None)` = the default probe, `Some(Some(id))` = that drone.
+    pub queue_probe: Option<Option<u64>>,
+    /// The queues of every other probe, kept whole while their probe is not
+    /// piloted. Keyed like `queue_probe`'s inner value.
+    pub parked_queues: BTreeMap<Option<u64>, ParkedQueue>,
     /// Whether the executor is paused. Default `false` — the queue runs itself.
     pub queue_paused: bool,
     /// Crafts the executor wants spawned this tick (one per free lane); drained
@@ -356,9 +368,16 @@ impl AppState {
         if let Some(active) = self.active_probe_id {
             if !self.fleet.iter().any(|p| p.id == active) {
                 self.active_probe_id = None;
+                // Its Mannies went with it: the queue they were building for can
+                // never complete (#291).
+                self.forget_queue_for(Some(active));
                 self.set_toast("active probe lost — reverted to default");
             }
         }
+        // Same for the parked queues of probes that are no longer in the fleet.
+        let alive: Vec<u64> = self.fleet.iter().map(|p| p.id).collect();
+        self.parked_queues
+            .retain(|k, _| k.map(|id| alive.contains(&id)).unwrap_or(true));
     }
 
     /// The probe the cockpit is piloting, if it is present in the roster.
@@ -390,10 +409,23 @@ impl AppState {
     }
 
     /// Absorb a roster fetch: the Mannies plus the server's polling hint
-    /// (API v104).
-    pub fn update_mannies_roster(&mut self, roster: MannyRoster) {
+    /// (API v104). `target` is the probe the fetch was aimed at, recorded so a
+    /// sequencer can tell whether the roster in hand describes the probe it is
+    /// working for (issue #291).
+    pub fn update_mannies_roster(&mut self, target: Option<u64>, roster: MannyRoster) {
         self.note_manny_poll_hint(roster.next_useful_refresh_delay_ms);
+        self.mannies_target = Some(target);
         self.update_mannies(roster.mannies);
+    }
+
+    /// Whether the Manny roster in hand was fetched for the probe currently
+    /// piloted. Every completion check reads `mannies`, and the roster is
+    /// replaced wholesale on a probe switch, so a sequencer that advances on a
+    /// roster belonging to another probe reads absent builders as idle — which
+    /// is what corrupted the production queue in #291. The outer `Option`
+    /// distinguishes "no roster yet" from "fetched for the default probe".
+    pub fn roster_matches_active(&self) -> bool {
+        self.mannies_target == Some(self.active_probe_id)
     }
 
     /// The piloted probe's id, when a probe sync has landed. The v104
@@ -420,8 +452,9 @@ impl AppState {
 
     /// Absorb a single-Manny fetch (`GET …/mannies/{id}`, API v104): replace
     /// that Manny in the roster in place, leaving the others untouched.
-    pub fn update_manny(&mut self, detail: MannyDetail) {
+    pub fn update_manny(&mut self, target: Option<u64>, detail: MannyDetail) {
         self.note_manny_poll_hint(detail.next_useful_refresh_delay_ms);
+        self.mannies_target = Some(target);
         let Some(mut mannies) = self.mannies.clone() else {
             // No roster yet: nothing to merge into, the next full fetch wins.
             return;

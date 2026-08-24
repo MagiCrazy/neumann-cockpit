@@ -341,6 +341,13 @@ fn render_status_line(frame: &mut Frame, area: Rect, state: &AppState, p: Palett
         };
         meta.push((label, style));
     }
+    // Queues of probes that are not being piloted: they are frozen by design
+    // (#291), so say so rather than let the pilot read a parked queue as a lost
+    // one. Switching back to that probe resumes it.
+    let parked = state.parked_pending();
+    if parked > 0 {
+        meta.push((format!("⛭‖ {parked} parked"), dim));
+    }
     // Action script (#198): shown while it has steps, so progress is visible with
     // the console closed (`:script` opens it). `≡` marks the sequencer.
     let (s_done, s_total) = state.script_progress();

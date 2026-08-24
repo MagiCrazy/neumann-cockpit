@@ -332,8 +332,8 @@ fn spawn(action: ScriptAction, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>
 fn dispatch(state: &mut AppState, msg: ApiMessage) {
     match msg {
         ApiMessage::ProbeUpdated(probe) => state.update_probe(probe),
-        ApiMessage::ManniesUpdated(roster) => state.update_mannies_roster(roster),
-        ApiMessage::MannyUpdated(detail) => state.update_manny(detail),
+        ApiMessage::ManniesUpdated(target, roster) => state.update_mannies_roster(target, roster),
+        ApiMessage::MannyUpdated(target, detail) => state.update_manny(target, detail),
         ApiMessage::MannyTasksStarted(mannies) => state.merge_mannies(mannies),
         ApiMessage::MannyTasksError(e) => state.script_note_error(&e),
         ApiMessage::SectorUpdated(sector) => state.update_sector(sector),

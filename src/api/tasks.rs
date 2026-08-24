@@ -70,11 +70,10 @@ pub fn fetch_all(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
 
     // Mannies, sector, visited sectors and the fleet roster are all non-fatal.
     let c = client.clone();
-    spawn_fetch(
-        tx.clone(),
-        async move { c.get_mannies().await },
-        ApiMessage::ManniesUpdated,
-    );
+    let target = client.active_probe_id();
+    spawn_fetch(tx.clone(), async move { c.get_mannies().await }, move |roster| {
+        ApiMessage::ManniesUpdated(target, roster)
+    });
     let c = client.clone();
     spawn_fetch(
         tx.clone(),
@@ -307,11 +306,12 @@ pub fn fetch_update_container_rules(
 }
 
 pub fn fetch_mannies(client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
-    spawn_fetch(
-        tx,
-        async move { client.get_mannies().await },
-        ApiMessage::ManniesUpdated,
-    );
+    // Tag the response with the probe it was fetched for, read *before* the
+    // client is moved into the future: the reply may land after a probe switch.
+    let target = client.active_probe_id();
+    spawn_fetch(tx, async move { client.get_mannies().await }, move |roster| {
+        ApiMessage::ManniesUpdated(target, roster)
+    });
 }
 
 /// Fire an atomic Manny task batch (`POST …/mannies/tasks`, API v104): one
@@ -333,10 +333,11 @@ pub fn fetch_manny_tasks(
 /// Refresh a single Manny (`GET /api/probe/{probeId}/mannies/{id}`, API v104) —
 /// one request instead of the roster when only one Manny is being waited on.
 pub fn fetch_manny(client: ApiClient, tx: mpsc::Sender<ApiMessage>, probe_id: u64, manny_id: String) {
+    let target = client.active_probe_id();
     spawn_fetch(
         tx,
         async move { client.get_manny(probe_id, &manny_id).await },
-        ApiMessage::MannyUpdated,
+        move |detail| ApiMessage::MannyUpdated(target, detail),
     );
 }
 

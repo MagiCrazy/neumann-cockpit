@@ -17,11 +17,16 @@ pub enum ApiMessage {
     /// and the new name for the toast. Failure arrives as `RenameProbeError`.
     ProbeRenamed(ProbeListResponse, String),
     RenameProbeError(String),
-    /// The Manny roster plus the v104 polling hint.
-    ManniesUpdated(MannyRoster),
+    /// The Manny roster plus the v104 polling hint. The `Option<u64>` is the
+    /// probe the fetch targeted (`None` = the server default, i.e. the client's
+    /// own `active_probe_id`): a roster in flight when the pilot switches probe
+    /// lands *after* the switch, and a sequencer must never read it as if it
+    /// described the newly piloted probe (issue #291).
+    ManniesUpdated(Option<u64>, MannyRoster),
     /// A single Manny refreshed via `GET …/mannies/{id}` (API v104): the cheap
     /// poll used while waiting on one busy Manny. Merged into the roster.
-    MannyUpdated(MannyDetail),
+    /// Carries the same probe tag as `ManniesUpdated`.
+    MannyUpdated(Option<u64>, MannyDetail),
     SectorUpdated(SectorObservation),
     ScanError(String),
     MoveStarted(ProbeMovement),
