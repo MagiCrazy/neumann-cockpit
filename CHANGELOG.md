@@ -1,5 +1,12 @@
 # Changelog
 
+## [104.0.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.0.0...neumann-cockpit-v104.0.1) (2026-08-24)
+
+
+### Bug Fixes
+
+* **overlays:** window pick lists on the selection ([#288](https://github.com/MagiCrazy/neumann-cockpit/issues/288)) ([#289](https://github.com/MagiCrazy/neumann-cockpit/issues/289)) ([b18adf2](https://github.com/MagiCrazy/neumann-cockpit/commit/b18adf2d5fc032b2b455dad7456c1c3b6232620b))
+
 ## [104.0.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v96.2.1...neumann-cockpit-v104.0.0) (2026-08-02)
 
 
