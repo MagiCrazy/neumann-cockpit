@@ -48,6 +48,7 @@ use crate::api::types::{
     StorageContainer, VisitedSector,
 };
 use chrono::{DateTime, Local, Utc};
+use std::collections::BTreeMap;
 use tokio::time::Instant;
 
 /// Floor on the server's polling hint: it returns a short "settling delay" when
@@ -259,9 +260,16 @@ pub struct AppState {
     /// drained + dispatched by the event loop (which owns the client + sender).
     pub pending_refetch: Option<Refetch>,
     // ── Production queue (#197) ─────────────────────────────────────────
-    /// The crafting queue: sequential steps, one running at a time. Auto-runs
-    /// (drains as steps complete) unless paused.
+    /// The crafting queue of the **piloted** probe: lanes of steps that auto-run
+    /// (drain as steps complete) unless paused. One queue per probe (#291);
+    /// `sync_queue_probe` swaps this with `parked_queues` on a probe switch.
     pub craft_queue: Vec<QueuedCraft>,
+    /// Which probe `craft_queue` belongs to: `None` = not bound to any probe
+    /// yet, `Some(None)` = the default probe, `Some(Some(id))` = that drone.
+    pub queue_probe: Option<Option<u64>>,
+    /// The queues of every other probe, kept whole while their probe is not
+    /// piloted. Keyed like `queue_probe`'s inner value.
+    pub parked_queues: BTreeMap<Option<u64>, ParkedQueue>,
     /// Whether the executor is paused. Default `false` — the queue runs itself.
     pub queue_paused: bool,
     /// Crafts the executor wants spawned this tick (one per free lane); drained
@@ -360,9 +368,16 @@ impl AppState {
         if let Some(active) = self.active_probe_id {
             if !self.fleet.iter().any(|p| p.id == active) {
                 self.active_probe_id = None;
+                // Its Mannies went with it: the queue they were building for can
+                // never complete (#291).
+                self.forget_queue_for(Some(active));
                 self.set_toast("active probe lost — reverted to default");
             }
         }
+        // Same for the parked queues of probes that are no longer in the fleet.
+        let alive: Vec<u64> = self.fleet.iter().map(|p| p.id).collect();
+        self.parked_queues
+            .retain(|k, _| k.map(|id| alive.contains(&id)).unwrap_or(true));
     }
 
     /// The probe the cockpit is piloting, if it is present in the roster.
