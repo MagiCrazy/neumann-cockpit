@@ -164,7 +164,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
         // persist each and prepend to the in-memory journal (newest first,
         // capped), mirroring how sector observations are persisted.
         if !state.pending_journal.is_empty() {
-            let staged: Vec<_> = state.pending_journal.drain(..).collect();
+            let staged = std::mem::take(&mut state.pending_journal);
             for ev in staged {
                 if let Some(tx) = &persist_tx {
                     let _ = tx.send(store::PersistMsg::AppendEvent(ev.clone()));
@@ -177,7 +177,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
         // Persist telemetry samples staged by update_probe (already appended to
         // the in-memory series; the DB keeps the full history for stats).
         if !state.pending_telemetry.is_empty() {
-            let staged: Vec<_> = state.pending_telemetry.drain(..).collect();
+            let staged = std::mem::take(&mut state.pending_telemetry);
             if let Some(tx) = &persist_tx {
                 for s in staged {
                     let _ = tx.send(store::PersistMsg::AppendTelemetry(s));
@@ -188,7 +188,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
         // Desktop notifications staged when a long task completed. Always drain
         // (so they never accumulate); emit only when the pilot enabled them.
         if !state.pending_notifications.is_empty() {
-            let staged: Vec<_> = state.pending_notifications.drain(..).collect();
+            let staged = std::mem::take(&mut state.pending_notifications);
             if config.notifications {
                 for msg in staged {
                     neumann_cockpit::notify::desktop_notify(&msg);
