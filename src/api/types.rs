@@ -1139,6 +1139,37 @@ pub struct ScutNetworkProbe {
     pub sector: ProbeSector,
 }
 
+/// Outcome of sharing an improvement blueprint (API v116). `already_known` is
+/// not a failure: the endpoint is idempotent, answers 200 instead of 201, and
+/// deduplicates the recipient's alert — so a replay is harmless and must not be
+/// reported as one.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlueprintShareResult {
+    pub blueprint: NamedRef,
+    pub recipient_probe: NamedRef,
+    pub already_known: bool,
+    pub recipient_notified: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NamedRef {
+    #[serde(deserialize_with = "crate::api::types::string_or_number")]
+    pub id: String,
+    pub name: String,
+}
+
+/// The blueprint id is a string, the probe id a number; one shape reads both.
+fn string_or_number<'de, D>(d: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(match serde_json::Value::deserialize(d)? {
+        serde_json::Value::String(s) => s,
+        v => v.to_string(),
+    })
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScutNetwork {

@@ -285,6 +285,26 @@ pub fn fetch_rename_container(id: String, label: String, client: ApiClient, tx: 
     );
 }
 
+/// Share a known improvement blueprint with another player's probe (v116).
+pub fn fetch_share_blueprint(
+    probe_id: u64,
+    improvement_id: String,
+    recipient_probe_id: u64,
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+) {
+    spawn_action(
+        tx,
+        async move {
+            client
+                .share_blueprint(probe_id, &improvement_id, recipient_probe_id)
+                .await
+        },
+        ApiMessage::BlueprintShared,
+        ApiMessage::BlueprintShareError,
+    );
+}
+
 /// Move a container's crafting-output reservations elsewhere (API v116). Like
 /// the task batch, the endpoint exists only on the `{probeId}` mirror, so the
 /// piloted probe's id is passed explicitly.

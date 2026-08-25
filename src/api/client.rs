@@ -1,10 +1,10 @@
 use super::metrics::{endpoint_label, Metrics, MetricsHandle, RequestSample};
 use super::ratelimit::{retry_after_from, RateLimitHandle, RateLimitState, RateLimited};
 use super::types::{
-    ContainerInventory, CraftingRecipe, DamageWarningRule, EndpointId, Manny, MannyDetail, MannyRoster,
-    MannyTaskRequest, Mission, Pagination, Probe, ProbeAlert, ProbeImprovement, ProbeInventory, ProbeListResponse,
-    ProbeMessage, ProbeModel, ProbeMovement, ProbeSentMessage, ScutNetwork, SectorObservation, StorageContainer,
-    VisitedSector,
+    BlueprintShareResult, ContainerInventory, CraftingRecipe, DamageWarningRule, EndpointId, Manny, MannyDetail,
+    MannyRoster, MannyTaskRequest, Mission, Pagination, Probe, ProbeAlert, ProbeImprovement, ProbeInventory,
+    ProbeListResponse, ProbeMessage, ProbeModel, ProbeMovement, ProbeSentMessage, ScutNetwork, SectorObservation,
+    StorageContainer, VisitedSector,
 };
 use anyhow::{Context, Result};
 use reqwest::{Client, StatusCode, Url};
@@ -934,6 +934,30 @@ impl ApiClient {
         let path = format!("/api/probe/{probe_id}/mannies/tasks");
         let r = self.post::<Resp, _>(&path, &Body { tasks }).await?;
         Ok(r.results.into_iter().map(|e| e.manny).collect())
+    }
+
+    /// Share a known improvement blueprint with **another player's** probe
+    /// (API v116). The recipient is identified by one of their probes, whose
+    /// active SCUT coverage is what proves the player is reachable: sharing
+    /// with one's own probe is rejected (422), as is a probe with no common
+    /// active network — being in the same sector is not enough.
+    ///
+    /// Idempotent: replaying answers 200 with `alreadyKnown`, and the
+    /// recipient's alert is not duplicated. Mirror-only path.
+    pub async fn share_blueprint(
+        &self,
+        probe_id: u64,
+        improvement_id: &str,
+        recipient_probe_id: u64,
+    ) -> Result<BlueprintShareResult> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Body {
+            recipient_probe_id: u64,
+        }
+        let path = format!("/api/probe/{probe_id}/probe-improvement-blueprints/{improvement_id}/share");
+        self.post::<BlueprintShareResult, _>(&path, &Body { recipient_probe_id })
+            .await
     }
 
     /// Move every active crafting-output reservation aimed at a container to the
