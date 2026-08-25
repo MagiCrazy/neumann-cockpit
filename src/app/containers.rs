@@ -82,6 +82,39 @@ impl AppState {
         }
     }
 
+    /// How much of `resource` container `container_id` holds, in ECE — read from
+    /// the stock's per-container placement lines. Both sides of a resource move
+    /// are in ECE (`StorageMoveRequest.amount`, "in ECE"; `ProbeResourceStock`
+    /// counts "equivalent earth containers"), so this is directly comparable to
+    /// a destination's free capacity.
+    pub fn container_resource_amount(&self, container_id: &str, resource: &str) -> f64 {
+        self.probe
+            .as_ref()
+            .and_then(|p| p.inventory.resource_stocks.iter().find(|s| s.stock_type == resource))
+            .and_then(|s| s.containers.iter().find(|l| l.container.id == container_id))
+            .map(|l| l.amount)
+            .unwrap_or(0.0)
+    }
+
+    /// Free capacity of a container, in ECE.
+    pub fn container_free_capacity(&self, container_id: &str) -> f64 {
+        self.probe
+            .as_ref()
+            .and_then(|p| p.inventory.containers.iter().find(|c| c.id == container_id))
+            .map(|c| c.free_capacity)
+            .unwrap_or(0.0)
+    }
+
+    /// The largest resource move that can succeed: what the source holds, capped
+    /// by what fits at the destination. An upper bound only — the server also
+    /// subtracts capacity already reserved by other active moves toward the same
+    /// container — but it catches the obvious overflow without a 422 round-trip.
+    pub fn max_movable_resource(&self, from_id: &str, to_id: &str, resource: &str) -> f64 {
+        self.container_resource_amount(from_id, resource)
+            .min(self.container_free_capacity(to_id))
+            .max(0.0)
+    }
+
     /// Unit items movable between containers (excludes mannies, which use the
     /// dedicated `manny` move kind). Label shows the current container.
     pub fn collect_movable_items(&self) -> Vec<(String, String)> {

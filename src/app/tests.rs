@@ -324,6 +324,67 @@ fn mine_max_amount_clamps_to_zero() {
     assert_eq!(state.mine_max_amount(), 0.0);
 }
 
+// ── storage-move capacity figures (#236) ──────────────────────────────────
+
+/// A probe holding `metals` split across two containers, with known free space.
+fn probe_with_split_metals() -> Probe {
+    serde_json::from_str(
+        r#"{
+        "id": 1, "name": "test", "status": "idle",
+        "fuel": {"deuterium": 100.0}, "sensorMode": "normal",
+        "sector": null, "movement": null, "systems": null,
+        "inventory": {
+            "capacity": 10.0, "usedCapacity": 1.0, "freeCapacity": 9.0,
+            "items": [], "externalTanks": [],
+            "resourceStocks": [{
+                "id": "stock-metals", "type": "metals", "name": "Metals",
+                "amount": 0.9, "containerSpace": 0.9,
+                "containers": [
+                    {"container": {"id": "core", "kind": "probe", "label": "Sonde", "sortOrder": 0},
+                     "amount": 0.7, "containerSpace": 0.7},
+                    {"container": {"id": "box", "kind": "storage", "label": "Box", "sortOrder": 1},
+                     "amount": 0.2, "containerSpace": 0.2}
+                ]
+            }],
+            "containers": [
+                {"id": "core", "kind": "probe", "label": "Sonde", "sortOrder": 0,
+                 "capacity": 1.0, "usedCapacity": 0.7, "freeCapacity": 0.3, "capacityUnit": null,
+                 "rules": {}},
+                {"id": "box", "kind": "storage", "label": "Box", "sortOrder": 1,
+                 "capacity": 1.0, "usedCapacity": 0.2, "freeCapacity": 0.8, "capacityUnit": null,
+                 "rules": {}}
+            ]
+        }
+    }"#,
+    )
+    .unwrap()
+}
+
+#[test]
+fn container_figures_come_from_the_placement_lines() {
+    let mut s = AppState::default();
+    s.probe = Some(probe_with_split_metals());
+    assert_eq!(s.container_resource_amount("core", "metals"), 0.7);
+    assert_eq!(s.container_resource_amount("box", "metals"), 0.2);
+    // A resource the container does not hold, and an unknown container, read 0.
+    assert_eq!(s.container_resource_amount("core", "ice"), 0.0);
+    assert_eq!(s.container_resource_amount("ghost", "metals"), 0.0);
+    assert_eq!(s.container_free_capacity("core"), 0.3);
+    assert_eq!(s.container_free_capacity("box"), 0.8);
+}
+
+#[test]
+fn the_max_move_is_the_smaller_of_stock_and_free_space() {
+    let mut s = AppState::default();
+    s.probe = Some(probe_with_split_metals());
+    // core → box: the stock is the binding constraint (0.7 held, 0.8 free).
+    assert_eq!(s.max_movable_resource("core", "box", "metals"), 0.7);
+    // box → core: the destination is (0.2 held, 0.3 free).
+    assert_eq!(s.max_movable_resource("box", "core", "metals"), 0.2);
+    // Nothing of that resource anywhere → no move possible.
+    assert_eq!(s.max_movable_resource("core", "box", "ice"), 0.0);
+}
+
 // ── inventory_rows / jettison_for_selected ────────────────────────────────
 
 fn probe_with_inventory(items_json: &str, stocks_json: &str) -> Probe {
