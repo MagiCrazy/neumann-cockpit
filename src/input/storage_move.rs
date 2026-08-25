@@ -102,6 +102,12 @@ pub(super) fn handle_storage_move_event(
     }
 }
 
+/// Format an ECE figure for the amount buffer, rounding **down** so the value
+/// written back is never above the maximum it came from.
+fn format_ece(v: f64) -> String {
+    format!("{:.2}", (v * 100.0).floor() / 100.0)
+}
+
 fn enter_resource(state: &mut AppState, actor_manny_id: String, actor_manny_name: String) {
     let containers = state.collect_move_containers();
     if containers.len() < 2 {
@@ -166,6 +172,25 @@ fn handle_resource(code: KeyCode, state: &mut AppState, client: &ApiClient, tx: 
         return;
     };
     let clen = containers.len();
+    // [m] fills the amount with the largest move that can work. Resolved from
+    // the live probe, so it needs the ids out of the borrow first (#236).
+    if matches!(code, KeyCode::Char('m') | KeyCode::Char('M')) {
+        let (from_id, to_id) = (containers[*from_sel].0.clone(), containers[*to_sel].0.clone());
+        let resource = MOVE_RESOURCE_TYPES[*resource_idx].to_string();
+        let max = state.max_movable_resource(&from_id, &to_id, &resource);
+        if max <= 0.0 {
+            state.set_wizard_error("nothing to move: source empty or destination full".into());
+            return;
+        }
+        if let ActiveWizard::StorageMove(StorageMoveInput::ConfigureResource { amount_buf, field, .. }) =
+            &mut state.active_wizard
+        {
+            *amount_buf = format_ece(max);
+            // Land on the amount field so the pilot can trim it straight away.
+            *field = 3;
+        }
+        return;
+    }
     match code {
         KeyCode::Esc => state.close_wizard(),
         KeyCode::Up | KeyCode::BackTab => *field = wrap_prev(*field as usize, 4) as u8,
@@ -202,12 +227,32 @@ fn handle_resource(code: KeyCode, state: &mut AppState, client: &ApiClient, tx: 
                     return;
                 }
             };
+            // Take everything the request needs out of the wizard borrow, so the
+            // capacity lookups below can read the probe.
             let actor = actor_manny_id.clone();
             let resource = MOVE_RESOURCE_TYPES[*resource_idx].to_string();
-            let from_id = containers[*from_sel].0.clone();
-            let from_name = containers[*from_sel].1.clone();
-            let to_id = containers[*to_sel].0.clone();
-            let to_name = containers[*to_sel].1.clone();
+            let (from_id, from_name) = containers[*from_sel].clone();
+            let (to_id, to_name) = containers[*to_sel].clone();
+
+            // Clamp an obvious overflow here rather than spending a 422 on it:
+            // rewrite the buffer to the maximum and say so, leaving the pilot to
+            // confirm the corrected figure (#236).
+            let max = state.max_movable_resource(&from_id, &to_id, &resource);
+            if amount > max {
+                let capped = format_ece(max);
+                if let ActiveWizard::StorageMove(StorageMoveInput::ConfigureResource { amount_buf, .. }) =
+                    &mut state.active_wizard
+                {
+                    *amount_buf = capped.clone();
+                }
+                state.set_wizard_error(if max <= 0.0 {
+                    "nothing to move: source empty or destination full".into()
+                } else {
+                    format!("over the maximum — clamped to {capped} ECE")
+                });
+                return;
+            }
+
             fetch_storage_move(
                 StorageMoveArgs {
                     actor_manny_id: actor,

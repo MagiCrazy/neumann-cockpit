@@ -548,6 +548,128 @@ mod tests {
         assert_eq!(state.craft_queue.len(), 1, "queued, waiting for a free Manny");
     }
 
+    /// The resource step of the storage-move wizard, on a probe holding 0.7 ECE
+    /// of metals in `core` and 0.2 in `box` (0.3 / 0.8 ECE free respectively).
+    fn storage_move_state() -> AppState {
+        use crate::app::StorageMoveInput;
+        let mut state = AppState::default();
+        state.probe = Some(
+            serde_json::from_str(
+                r#"{
+            "id": 1, "name": "test", "status": "idle",
+            "fuel": {"deuterium": 100.0}, "sensorMode": "normal",
+            "sector": null, "movement": null, "systems": null,
+            "inventory": {
+                "capacity": 10.0, "usedCapacity": 1.0, "freeCapacity": 9.0,
+                "items": [], "externalTanks": [],
+                "resourceStocks": [{
+                    "id": "stock-metals", "type": "metals", "name": "Metals",
+                    "amount": 0.9, "containerSpace": 0.9,
+                    "containers": [
+                        {"container": {"id": "core", "kind": "probe", "label": "Sonde", "sortOrder": 0},
+                         "amount": 0.7, "containerSpace": 0.7},
+                        {"container": {"id": "box", "kind": "storage", "label": "Box", "sortOrder": 1},
+                         "amount": 0.2, "containerSpace": 0.2}
+                    ]
+                }],
+                "containers": [
+                    {"id": "core", "kind": "probe", "label": "Sonde", "sortOrder": 0,
+                     "capacity": 1.0, "usedCapacity": 0.7, "freeCapacity": 0.3, "capacityUnit": null,
+                     "rules": {}},
+                    {"id": "box", "kind": "storage", "label": "Box", "sortOrder": 1,
+                     "capacity": 1.0, "usedCapacity": 0.2, "freeCapacity": 0.8, "capacityUnit": null,
+                     "rules": {}}
+                ]
+            }
+        }"#,
+            )
+            .unwrap(),
+        );
+        state.active_wizard = ActiveWizard::StorageMove(StorageMoveInput::ConfigureResource {
+            actor_manny_id: "m1".into(),
+            actor_manny_name: "m1".into(),
+            containers: vec![("core".into(), "Sonde".into()), ("box".into(), "Box".into())],
+            resource_idx: 0,
+            from_sel: 0,
+            to_sel: 1,
+            amount_buf: "0.10".into(),
+            field: 3,
+            error: None,
+        });
+        state
+    }
+
+    fn move_amount(state: &AppState) -> String {
+        use crate::app::StorageMoveInput;
+        match &state.active_wizard {
+            ActiveWizard::StorageMove(StorageMoveInput::ConfigureResource { amount_buf, .. }) => amount_buf.clone(),
+            _ => panic!("expected the resource step"),
+        }
+    }
+
+    fn move_error(state: &AppState) -> String {
+        use crate::app::StorageMoveInput;
+        match &state.active_wizard {
+            ActiveWizard::StorageMove(StorageMoveInput::ConfigureResource { error, .. }) => {
+                error.clone().unwrap_or_default()
+            }
+            _ => panic!("expected the resource step"),
+        }
+    }
+
+    #[tokio::test]
+    async fn storage_move_m_fills_the_maximum() {
+        // core → box: 0.7 held, 0.8 free → the stock is the binding constraint.
+        let mut state = storage_move_state();
+        press(&mut state, KeyCode::Char('m'));
+        assert_eq!(move_amount(&state), "0.70");
+    }
+
+    #[tokio::test]
+    async fn storage_move_max_is_capped_by_the_destination() {
+        use crate::app::StorageMoveInput;
+        let mut state = storage_move_state();
+        // Reverse the move: box → core, where only 0.3 ECE fits.
+        if let ActiveWizard::StorageMove(StorageMoveInput::ConfigureResource { from_sel, to_sel, .. }) =
+            &mut state.active_wizard
+        {
+            (*from_sel, *to_sel) = (1, 0);
+        }
+        press(&mut state, KeyCode::Char('m'));
+        assert_eq!(move_amount(&state), "0.20", "0.2 held is smaller than 0.3 free");
+    }
+
+    #[tokio::test]
+    async fn storage_move_clamps_an_overflowing_amount_instead_of_sending_it() {
+        use crate::app::StorageMoveInput;
+        let mut state = storage_move_state();
+        if let ActiveWizard::StorageMove(StorageMoveInput::ConfigureResource { amount_buf, .. }) =
+            &mut state.active_wizard
+        {
+            *amount_buf = "5.00".into();
+        }
+        press(&mut state, KeyCode::Enter);
+        // The wizard stays open with the corrected figure for the pilot to
+        // confirm — no request left for the server to reject (#236).
+        assert_eq!(move_amount(&state), "0.70");
+        assert!(move_error(&state).contains("clamped"), "says what happened");
+    }
+
+    #[tokio::test]
+    async fn storage_move_refuses_when_there_is_nothing_to_move() {
+        use crate::app::StorageMoveInput;
+        let mut state = storage_move_state();
+        // Ice: held nowhere.
+        if let ActiveWizard::StorageMove(StorageMoveInput::ConfigureResource { resource_idx, .. }) =
+            &mut state.active_wizard
+        {
+            *resource_idx = 1;
+        }
+        press(&mut state, KeyCode::Char('m'));
+        assert!(move_error(&state).contains("nothing to move"));
+        assert_eq!(move_amount(&state), "0.10", "the buffer is left alone");
+    }
+
     #[tokio::test]
     async fn scut_inspect_from_probe_menu_opens_picker() {
         use crate::app::{Pane, ScutNetworkInput};
