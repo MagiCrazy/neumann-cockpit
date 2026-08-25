@@ -52,40 +52,37 @@ fn cursor(state: &AppState, pane: Pane) -> usize {
     state.pane_nav[pane.index()].cursor
 }
 
-/// Vertical scroll offset that keeps `cursor_line` on screen within `height`
-/// visible rows out of `total`. Scrolls only when the content overflows, keeps
-/// the cursor on the last visible row when scrolling down, and never scrolls
-/// past the end.
-fn scroll_offset(cursor_line: usize, total: usize, height: usize) -> u16 {
+/// The line span of the selected entry, `(first, last)` inclusive. Panes whose
+/// entries are one line pass the same index twice; a pane that renders an entry
+/// as a **block** — the zoomed Storage container with its rules and free
+/// capacity, a Manny with its task and location lines — passes the whole block
+/// so scrolling cannot cut its tail off (issue #293).
+type SelSpan = Option<(usize, usize)>;
+
+/// Vertical scroll offset that keeps the selected entry on screen within
+/// `height` visible rows out of `total`. Scrolls only when the content
+/// overflows, anchors the entry's **last** line to the bottom row when
+/// scrolling down, and never scrolls past the end.
+pub(crate) fn scroll_offset(sel: (usize, usize), total: usize, height: usize) -> u16 {
     if height == 0 || total <= height {
         return 0;
     }
-    let max_off = total - height;
-    let off = if cursor_line < height {
-        0
-    } else {
-        cursor_line + 1 - height
-    };
-    off.min(max_off) as u16
+    let (first, last) = sel;
+    let off = (last + 1).saturating_sub(height);
+    // Never push the entry's own head off the top: an entry taller than the
+    // window shows from its first line rather than its last.
+    off.min(first).min(total - height) as u16
 }
 
-/// Render a pane body. When `cursor_line` is `Some`, the content is scrolled so
-/// that absolute line index stays visible — the compact list panes render more
-/// rows than a 1/3 cell can show, so without this the cursor (and the row
-/// `Enter` acts on) can sit off-screen.
-fn render_body(
-    frame: &mut Frame,
-    area: Rect,
-    title: &str,
-    active: bool,
-    p: Palette,
-    lines: Vec<Line>,
-    cursor_line: Option<usize>,
-) {
+/// Render a pane body. When `sel` is `Some`, the content is scrolled so that
+/// whole entry stays visible — the compact list panes render more rows than a
+/// 1/3 cell can show, so without this the cursor (and the row `Enter` acts on)
+/// can sit off-screen.
+fn render_body(frame: &mut Frame, area: Rect, title: &str, active: bool, p: Palette, lines: Vec<Line>, sel: SelSpan) {
     let block = pane_block(title, active, p);
     let inner = block.inner(area);
     frame.render_widget(block, area);
-    let offset = cursor_line
+    let offset = sel
         .map(|c| scroll_offset(c, lines.len(), inner.height as usize))
         .unwrap_or(0);
     frame.render_widget(Paragraph::new(lines).scroll((offset, 0)), inner);
@@ -169,7 +166,7 @@ fn render_comms_root(frame: &mut Frame, area: Rect, state: &AppState, active: bo
     let mut sel_line = None;
     for (i, (label, total, unread, preview)) in rows.iter().enumerate() {
         if i == cur {
-            sel_line = Some(lines.len());
+            sel_line = Some((lines.len(), lines.len()));
         }
         let mut spans = vec![
             Span::styled(format!("{label:<9} "), row_style(active, i == cur).patch(text)),
@@ -220,7 +217,7 @@ fn render_comms_feed(
     }
     for (i, a) in entries.iter().enumerate() {
         if i == cur {
-            sel_line = Some(lines.len());
+            sel_line = Some((lines.len(), lines.len()));
         }
         let unread = a.is_unread();
         let (mark, mark_style) = if unread {
@@ -313,7 +310,7 @@ pub fn render_sector(frame: &mut Frame, area: Rect, state: &AppState, active: bo
         spans.push(Span::styled(name, row_style(active, i == cur).patch(text)));
         spans.extend(sector_entry_tags(state, &e.id, p));
         if i == cur {
-            sel_line = Some(lines.len());
+            sel_line = Some((lines.len(), lines.len()));
         }
         lines.push(Line::from(spans));
     }
@@ -545,7 +542,7 @@ pub fn render_missions(frame: &mut Frame, area: Rect, state: &AppState, active: 
                 .count();
             let title: String = m.title.chars().take(22).collect();
             if i == cur {
-                sel_line = Some(lines.len());
+                sel_line = Some((lines.len(), lines.len()));
             }
             lines.push(Line::from(vec![
                 Span::styled("▸ ", Style::default().fg(color)),
@@ -618,7 +615,7 @@ fn render_missions_root(frame: &mut Frame, area: Rect, state: &AppState, active:
     let mut sel_line = None;
     for (i, (label, total, active_count, preview)) in rows.iter().enumerate() {
         if i == cur {
-            sel_line = Some(lines.len());
+            sel_line = Some((lines.len(), lines.len()));
         }
         let mut spans = vec![
             Span::styled(format!("{label:<11} "), row_style(active, i == cur).patch(text)),
@@ -655,7 +652,7 @@ fn render_ship_log(frame: &mut Frame, area: Rect, state: &AppState, active: bool
         let width = area.width.saturating_sub(2) as usize;
         for (i, e) in entries.iter().enumerate() {
             if i == cur {
-                sel_line = Some(lines.len());
+                sel_line = Some((lines.len(), lines.len()));
             }
             let ts = e.occurred_at.with_timezone(&Local).format("%H:%M").to_string();
             let server = e.kind == crate::app::kind::ALERT;
@@ -775,7 +772,7 @@ pub fn render_storage(frame: &mut Frame, area: Rect, state: &AppState, active: b
                     spans.push(Span::styled(" ⚙", Style::default().fg(p.accent)));
                 }
                 if i == cur {
-                    sel_line = Some(lines.len());
+                    sel_line = Some((lines.len(), lines.len()));
                 }
                 lines.push(Line::from(spans));
 
@@ -803,6 +800,14 @@ pub fn render_storage(frame: &mut Frame, area: Rect, state: &AppState, active: b
                         format!("    free {:.2} of {:.2}", c.free_capacity, c.capacity),
                         dim,
                     ));
+                    // The entry is a block in zoom: hand the scroller its last
+                    // line too, or the free-capacity line of the last container
+                    // falls just past the bottom edge (issue #293).
+                    if i == cur {
+                        if let Some((first, _)) = sel_line {
+                            sel_line = Some((first, lines.len() - 1));
+                        }
+                    }
                 }
             }
         }
@@ -1010,7 +1015,7 @@ pub fn render_mannies_overview(frame: &mut Frame, area: Rect, state: &AppState, 
     for (i, m) in mannies.iter().enumerate() {
         let selected = i == sel;
         if selected {
-            sel_line = Some(lines.len());
+            sel_line = Some((lines.len(), lines.len()));
         }
         let name_style = if selected {
             Style::default().fg(p.accent).add_modifier(Modifier::BOLD)
@@ -1087,6 +1092,12 @@ pub fn render_mannies_overview(frame: &mut Frame, area: Rect, state: &AppState, 
         }
         lines.push(Line::styled(loc_line, dim));
         lines.push(Line::raw(""));
+        if selected {
+            if let Some((first, _)) = sel_line {
+                // Minus the trailing blank: it is a separator, not content.
+                sel_line = Some((first, lines.len().saturating_sub(2)));
+            }
+        }
     }
 
     let offset = sel_line
@@ -1210,32 +1221,43 @@ mod tests {
 
     #[test]
     fn no_scroll_when_content_fits() {
-        assert_eq!(scroll_offset(0, 3, 5), 0);
-        assert_eq!(scroll_offset(4, 5, 5), 0, "exactly fills → no scroll");
+        assert_eq!(scroll_offset((0, 0), 3, 5), 0);
+        assert_eq!(scroll_offset((4, 4), 5, 5), 0, "exactly fills → no scroll");
     }
 
     #[test]
     fn no_scroll_while_cursor_on_first_page() {
         // 10 rows, 4 visible: cursor within the first 4 stays put.
-        assert_eq!(scroll_offset(0, 10, 4), 0);
-        assert_eq!(scroll_offset(3, 10, 4), 0);
+        assert_eq!(scroll_offset((0, 0), 10, 4), 0);
+        assert_eq!(scroll_offset((3, 3), 10, 4), 0);
     }
 
     #[test]
     fn scrolls_to_keep_cursor_on_last_visible_row() {
         // 10 rows, 4 visible: cursor 4 → window shows rows 1..=4.
-        assert_eq!(scroll_offset(4, 10, 4), 1);
-        assert_eq!(scroll_offset(6, 10, 4), 3);
+        assert_eq!(scroll_offset((4, 4), 10, 4), 1);
+        assert_eq!(scroll_offset((6, 6), 10, 4), 3);
     }
 
     #[test]
     fn never_scrolls_past_the_end() {
         // 10 rows, 4 visible: last cursor pins to the final window (offset 6).
-        assert_eq!(scroll_offset(9, 10, 4), 6);
+        assert_eq!(scroll_offset((9, 9), 10, 4), 6);
     }
 
     #[test]
     fn zero_height_is_safe() {
-        assert_eq!(scroll_offset(5, 10, 0), 0);
+        assert_eq!(scroll_offset((5, 5), 10, 0), 0);
+    }
+
+    #[test]
+    fn a_multi_line_entry_is_shown_whole() {
+        // Issue #293: the last container of a zoomed Storage pane is a block —
+        // header plus its free-capacity line. Anchoring the header to the bottom
+        // row cut the tail off; the span anchors the block's *last* line.
+        assert_eq!(scroll_offset((8, 9), 10, 4), 6, "the whole block is in view");
+        // An entry taller than the window falls back to its head, so the row the
+        // pilot is acting on stays identifiable.
+        assert_eq!(scroll_offset((5, 9), 10, 4), 5);
     }
 }

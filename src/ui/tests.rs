@@ -385,3 +385,41 @@ fn fleet_roster_flags_a_tanker() {
     assert!(text.contains("Bunker"), "roster lists the drone");
     assert!(text.contains("tanker"), "a tanker is flagged in the roster");
 }
+
+#[test]
+fn zoomed_storage_shows_the_last_containers_free_line() {
+    // Issue #293: in zoom a container is a block (header + free capacity), but
+    // the scroller anchored the *header* to the bottom row, so the free line of
+    // the last container fell one row past the edge.
+    let mut state = AppState::default();
+    let containers: Vec<String> = (0..12)
+        .map(|i| {
+            format!(
+                r#"{{"id": "c{i:02}", "kind": "storage", "label": "Container {i:02}",
+                     "sortOrder": {i}, "capacity": 100.0, "usedCapacity": {i}.0,
+                     "freeCapacity": 9{i}.0, "rules": {{}}}}"#
+            )
+        })
+        .collect();
+    state.probe = Some(
+        serde_json::from_str(&format!(
+            r#"{{
+        "id": 1, "name": "t", "status": "idle",
+        "fuel": {{"deuterium": 50.0, "maxDeuterium": 100.0}}, "sensorMode": "normal",
+        "sector": null, "movement": null, "systems": {{"integrityPercent": 80.0}},
+        "inventory": {{"capacity": 10.0, "usedCapacity": 2.0, "freeCapacity": 8.0,
+            "items": [], "resourceStocks": [], "externalTanks": [], "containers": [{}]}}
+    }}"#,
+            containers.join(", ")
+        ))
+        .unwrap(),
+    );
+    state.active_pane = Pane::Storage;
+    state.zoomed = true;
+    // Cursor on the last container — the reported case.
+    state.pane_nav[Pane::Storage.index()].cursor = 11;
+
+    let text = buffer_text(&render_cockpit(&state, 80, 20));
+    assert!(text.contains("Container 11"), "the selected container is in view");
+    assert!(text.contains("free 911.00"), "and so is its free-capacity line: {text}");
+}
