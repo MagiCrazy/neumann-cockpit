@@ -22,7 +22,8 @@ use crate::app::{
     InspectInput, LogEvent, MenuAction, MessagesInput, MindSnapshotInput, MineInput, MissionsCategory, MissionsInput,
     ObjectActionInput, Pane, ProbeSwitchInput, RecallInput, RecoverInput, RefuelInput, RemoteMineInput,
     RenameContainerInput, RenameMannyInput, RenameProbeInput, RepairInput, SalvageInput, ScanMode, ScutCorridorInput,
-    ScutNetworkInput, StorageMoveInput, TransferDeuteriumInput, TransferProbeInput, TravelInput, WaypointsInput,
+    ScutNetworkInput, ShareBlueprintInput, StorageMoveInput, TransferDeuteriumInput, TransferProbeInput, TravelInput,
+    WaypointsInput,
 };
 
 pub fn handle_cockpit_event(code: KeyCode, state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
@@ -333,6 +334,26 @@ fn fire_menu_action(action: MenuAction, state: &mut AppState, client: &ApiClient
                 state.error = Some("no target object in current sector — scan first".into());
             } else {
                 state.active_wizard = ActiveWizard::Deploy(DeployInput::PickManny { mannies, selection: 0 });
+            }
+            return;
+        }
+        MenuAction::ShareBlueprint => {
+            let nets = state.scut_coverage();
+            match nets.len() {
+                0 => state.error = Some("no SCUT network covers this sector".into()),
+                1 => {
+                    state.scut_network_view = None;
+                    state.active_wizard = ActiveWizard::ShareBlueprint(ShareBlueprintInput::Loading {
+                        network_name: nets[0].1.clone(),
+                    });
+                    fetch_scut_network(nets[0].0, client.clone(), tx.clone());
+                }
+                _ => {
+                    state.active_wizard = ActiveWizard::ShareBlueprint(ShareBlueprintInput::PickNetwork {
+                        networks: nets,
+                        selection: 0,
+                    })
+                }
             }
             return;
         }

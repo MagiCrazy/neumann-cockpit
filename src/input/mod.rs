@@ -6,6 +6,7 @@ use crate::api::tasks::fetch_sector;
 use crate::app::{ActiveWizard, ApiMessage, AppState, GotoVisitedInput, InputMode, ProbeSwitchInput, ScanMode};
 mod alerts;
 mod assemble;
+mod blueprint;
 mod cockpit;
 mod command;
 mod containers;
@@ -93,6 +94,7 @@ const WIZARD_INPUTS: &[(WizardGuard, WizardHandler)] = &[
     (|s| matches!(s.active_wizard, ActiveWizard::ScutRelay(_)), handle_scut_relay_event),
     (|s| matches!(s.active_wizard, ActiveWizard::ScutNetwork(_)), handle_scut_network_event),
     (|s| matches!(s.active_wizard, ActiveWizard::ScutCorridor(_)), handle_scut_corridor_event),
+    (|s| matches!(s.active_wizard, ActiveWizard::ShareBlueprint(_)), blueprint::handle_share_blueprint_event),
     (|s| matches!(s.active_wizard, ActiveWizard::Missions(_)), handle_missions_event),
     (|s| matches!(s.active_wizard, ActiveWizard::Messages(_)), handle_messages_event),
     (|s| matches!(s.active_wizard, ActiveWizard::RenameManny(_)), handle_rename_manny_event),

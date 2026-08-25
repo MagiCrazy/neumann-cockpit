@@ -428,6 +428,35 @@ impl AppState {
         self.mannies_target == Some(self.active_probe_id)
     }
 
+    /// Blueprints this player knows and the server will let us share: unlocked
+    /// (or already installed) improvements whose id the share path accepts.
+    pub fn shareable_blueprints(&self) -> Vec<(String, String)> {
+        self.probe_improvements
+            .iter()
+            .filter(|i| (i.available || i.done) && SHAREABLE_BLUEPRINTS.contains(&i.id.as_str()))
+            .map(|i| (i.id.clone(), i.name.clone()))
+            .collect()
+    }
+
+    /// Probes on the fetched SCUT network that belong to **another player** —
+    /// the only valid share recipients. Our own probes are filtered out here
+    /// rather than left for the server's 422: offering them would invite an
+    /// error the cockpit already knows the answer to.
+    pub fn share_recipients(&self) -> Vec<(u64, String)> {
+        let Some(net) = &self.scut_network_view else {
+            return Vec::new();
+        };
+        let mine: Vec<u64> = self.fleet.iter().map(|p| p.id).collect();
+        net.probes
+            .iter()
+            .filter(|p| {
+                let id = u64::try_from(p.id).unwrap_or(0);
+                !mine.contains(&id) && Some(id) != self.probe_id()
+            })
+            .map(|p| (u64::try_from(p.id).unwrap_or(0), p.name.clone()))
+            .collect()
+    }
+
     /// The piloted probe's id, when a probe sync has landed. The v104
     /// per-probe endpoints that exist only on the `{probeId}` mirror (the
     /// single-Manny GET, the task batch) need it explicitly.

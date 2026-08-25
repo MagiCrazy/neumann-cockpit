@@ -525,6 +525,36 @@ pub enum ScutCorridorInput {
     Picking { selection: usize, error: Option<String> },
 }
 
+/// Sharing an improvement blueprint through SCUT (API v116).
+///
+/// The recipient is **another player's** probe: sharing with one's own is
+/// rejected, and the probes must share an *active* SCUT network — same sector
+/// without coverage does not count. Candidates therefore come from the
+/// network's own probe list, minus our fleet, rather than from the roster.
+pub enum ShareBlueprintInput {
+    /// Several networks cover the sector — pick which one to reach through.
+    PickNetwork {
+        networks: Vec<(i64, String)>,
+        selection: usize,
+    },
+    /// Waiting on `scut-network/{id}`, whose `probes` are the candidates.
+    Loading { network_name: String },
+    /// Pick the recipient probe: `(id, name)`.
+    PickRecipient {
+        recipients: Vec<(u64, String)>,
+        selection: usize,
+        error: Option<String>,
+    },
+    /// Pick which known blueprint to send: `(id, name)`.
+    PickBlueprint {
+        recipient_id: u64,
+        recipient_name: String,
+        blueprints: Vec<(String, String)>,
+        selection: usize,
+        error: Option<String>,
+    },
+}
+
 pub enum MissionsInput {
     /// Browsing the mission list; entries live in `AppState::missions`.
     Browsing { selection: usize },
@@ -690,6 +720,7 @@ pub enum ActiveWizard {
     ScutRelay(ScutRelayInput),
     ScutNetwork(ScutNetworkInput),
     ScutCorridor(ScutCorridorInput),
+    ShareBlueprint(ShareBlueprintInput),
     Missions(MissionsInput),
     Messages(MessagesInput),
     RenameManny(RenameMannyInput),

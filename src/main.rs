@@ -17,7 +17,7 @@ use neumann_cockpit::api::tasks::{
 };
 use neumann_cockpit::app::{
     batch_tasks, ActiveWizard, ApiMessage, AppState, ColorMode, CraftFire, Fabricator, MessagesInput, MissionsInput,
-    Refetch, RefreshTarget, RemoteMineInput, ScriptAction, ScutCorridorInput, ScutNetworkInput,
+    Refetch, RefreshTarget, RemoteMineInput, ScriptAction, ScutCorridorInput, ScutNetworkInput, ShareBlueprintInput,
 };
 use neumann_cockpit::input::handle_event;
 use neumann_cockpit::preflight;
@@ -472,6 +472,18 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                             ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { .. }) => {
                                 state.scut_network_view = Some(network);
                             }
+                            ActiveWizard::ShareBlueprint(ShareBlueprintInput::Loading { .. }) => {
+                                state.scut_network_view = Some(network);
+                                let recipients = state.share_recipients();
+                                let none = recipients.is_empty();
+                                state.active_wizard = ActiveWizard::ShareBlueprint(ShareBlueprintInput::PickRecipient {
+                                    recipients,
+                                    selection: 0,
+                                    error: none.then(|| {
+                                        "no other player's probe on this network — nobody to share with".to_string()
+                                    }),
+                                });
+                            }
                             ActiveWizard::ScutCorridor(ScutCorridorInput::Loading { .. }) => {
                                 state.scut_network_view = Some(network);
                                 let none = state.corridor_destinations().is_empty();
@@ -588,6 +600,19 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                     // 409 when a reservation has nowhere compatible to go; the
                     // server changed nothing, so this is informational.
                     ApiMessage::ReservationsReassignError(e) => state.set_error(e),
+                    ApiMessage::BlueprintShared(r) => {
+                        state.close_wizard();
+                        state.scut_network_view = None;
+                        // `alreadyKnown` is not a failure: the endpoint is
+                        // idempotent and the recipient's alert is deduplicated,
+                        // so say what happened rather than claim a delivery.
+                        state.set_toast(if r.already_known {
+                            format!("{} already knew {}", r.recipient_probe.name, r.blueprint.name)
+                        } else {
+                            format!("{} sent to {}", r.blueprint.name, r.recipient_probe.name)
+                        });
+                    }
+                    ApiMessage::BlueprintShareError(e) => state.set_wizard_error(e),
                     ApiMessage::UpdateContainerRulesDone(c, inv) => {
                         state.apply_container_update(c, inv);
                         state.close_wizard();
