@@ -1,9 +1,9 @@
 use neumann_cockpit::api::types::{
-    AlertPhase, AlertStatus, AlertType, ContainerInventory, CraftingRecipe, DamageWarningRule, DataFreshness,
-    EndpointId, KnowledgeLevel, Manny, MannyLocationType, MannyTask, MannyTaskVisibility, MessageStatus, Mission,
-    MissionStatus, MissionStepStatus, MovementPhase, Probe, ProbeAlert, ProbeImprovement, ProbeInventory, ProbeMessage,
-    ProbeMovement, ProbeStatus, ScutNetwork, ScutRelayStatus, SectorObject, SectorObjectType, SectorObservation,
-    SensorMode, StorageContainer,
+    AlertPhase, AlertStatus, AlertType, AsteroidTrajectoryMode, AsteroidTrajectoryStatus, ContainerInventory,
+    CraftingRecipe, DamageWarningRule, DataFreshness, EndpointId, KnowledgeLevel, Manny, MannyLocationType, MannyTask,
+    MannyTaskVisibility, MessageStatus, Mission, MissionStatus, MissionStepStatus, MotorFuelStatus, MovementPhase,
+    Probe, ProbeAlert, ProbeImprovement, ProbeInventory, ProbeMessage, ProbeMovement, ProbeStatus, ScutNetwork,
+    ScutRelayStatus, SectorObject, SectorObjectType, SectorObservation, SensorMode, StorageContainer,
 };
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -1021,4 +1021,101 @@ fn single_manny_detail_deserializes() {
     ));
     assert_eq!(d.manny.current_task, Some(MannyTask::Mining));
     assert_eq!(d.next_useful_refresh_delay_ms, Some(8000));
+}
+
+// ── motorized asteroids & trajectories (API v116) ─────────────────────────────
+
+#[test]
+fn motorized_asteroid_carries_its_trajectory() {
+    let o: SectorObject = deser(
+        r#"{"id":"ast-1","type":"asteroid","name":"Metal 8f1a","motorized":true,
+            "motorFuelStatus":"full","inTransit":true,
+            "trajectory":{"id":"atr_0123456789abcdef01234567","asteroidId":"ast-1",
+                "mode":"system_impact","status":"accelerating",
+                "startedAt":"2026-08-25T10:00:00Z","nextTransitionAt":"2026-08-25T12:00:00Z",
+                "targetObjectId":"planet-3","targetSpeedC":0.4,"currentSpeedC":0.12,
+                "plannedRevolutions":3,"completedRevolutions":1,
+                "direction":{"x":1,"y":0,"z":-1},"sectorsCrossed":0,"maximumSectorCrossings":4}}"#,
+    );
+    assert_eq!(o.motorized, Some(true));
+    assert_eq!(o.motor_fuel_status, Some(MotorFuelStatus::Full));
+    assert_eq!(o.in_transit, Some(true));
+    let t = o.trajectory.expect("trajectory embedded on the asteroid");
+    assert_eq!(t.mode, AsteroidTrajectoryMode::SystemImpact);
+    assert_eq!(t.status, AsteroidTrajectoryStatus::Accelerating);
+    assert_eq!(t.target_object_id.as_deref(), Some("planet-3"));
+    assert_eq!(t.current_speed_c, Some(0.12));
+    assert_eq!(t.completed_revolutions, Some(1));
+    assert_eq!(t.direction.expect("launch vector").z, -1);
+    assert!(t.next_transition_at.is_some(), "the countdown source parses as a date");
+}
+
+#[test]
+fn an_ordinary_asteroid_has_no_propulsion_fields() {
+    // Every v116 addition is optional: a pre-v116 payload, or an unmotorized
+    // rock, must still deserialize.
+    let o: SectorObject = deser(r#"{"id":"ast-2","type":"asteroid","name":"Rock"}"#);
+    assert_eq!(o.motorized, None);
+    assert_eq!(o.motor_fuel_status, None);
+    assert!(o.trajectory.is_none());
+    assert!(o.captured_by_object_id.is_none());
+    assert!(o.distinctive_feature.is_none());
+}
+
+#[test]
+fn trajectory_enums_fall_back_rather_than_failing() {
+    let o: SectorObject = deser(
+        r#"{"id":"ast-3","type":"asteroid","motorized":true,"motorFuelStatus":"leaking",
+            "trajectory":{"id":"atr_x","asteroidId":"ast-3","mode":"slingshot","status":"tumbling",
+                "startedAt":null,"nextTransitionAt":null}}"#,
+    );
+    assert_eq!(o.motor_fuel_status, Some(MotorFuelStatus::Unknown));
+    let t = o.trajectory.expect("trajectory");
+    assert_eq!(t.mode, AsteroidTrajectoryMode::Unknown);
+    assert_eq!(t.status, AsteroidTrajectoryStatus::Unknown);
+}
+
+#[test]
+fn duck_asteroid_keeps_its_distinctive_feature() {
+    let o: SectorObject = deser(
+        r#"{"id":"ast-4","type":"asteroid","distinctiveFeature":"Sculpted in the shape of a duck",
+            "capturedByObjectId":"planet-1"}"#,
+    );
+    assert_eq!(
+        o.distinctive_feature.as_deref(),
+        Some("Sculpted in the shape of a duck")
+    );
+    assert_eq!(o.captured_by_object_id.as_deref(), Some("planet-1"));
+}
+
+#[test]
+fn new_manny_tasks_and_alert_kinds_are_named() {
+    // Before v116 these fell into the `Unknown` fallback and read as "?" in the
+    // Mannies pane.
+    let m: Manny = deser(
+        r#"{"id":"m1","name":"M1","location":{"type":"probe","sector":null},
+            "currentTask":"motorizing_asteroid","taskProgressPercent":12.0,
+            "cargo":{"capacity":0.3,"deuterium":0.0,"metals":0.0,"ice":0.0,"organicCompounds":0.0},
+            "canReceiveOrders":false,"taskEstimatedEndTime":null,
+            "taskStartTime":"2026-08-25T10:00:00Z"}"#,
+    );
+    assert_eq!(m.current_task, Some(MannyTask::MotorizingAsteroid));
+    assert!(m.task_start_time.is_some(), "v116 exposes when the task started");
+
+    let a: ProbeAlert = deser(
+        r#"{"id":9,"type":"asteroid_trajectory","status":"unread","message":"Ignition.",
+            "phase":"ignition","scheduledAt":null}"#,
+    );
+    assert_eq!(a.alert_type, AlertType::AsteroidTrajectory);
+    assert_eq!(a.phase, AlertPhase::Ignition);
+}
+
+#[test]
+fn improvement_reports_whether_it_can_be_installed_here() {
+    let i: ProbeImprovement = deser(
+        r#"{"id":"distributed_thrust_anchoring","name":"Distributed Thrust Anchoring",
+            "description":"Anchor engines on an asteroid.","available":true,"done":false,
+            "installableOnProbe":false,"durationSeconds":300,"ingredients":[]}"#,
+    );
+    assert_eq!(i.installable_on_probe, Some(false));
 }
