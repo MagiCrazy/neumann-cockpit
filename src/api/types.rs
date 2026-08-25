@@ -60,6 +60,14 @@ pub enum MovementPhase {
 pub enum MannyTask {
     Repair,
     Mining,
+    /// Installing a deuterium engine on an asteroid (API v116). Needs the
+    /// Distributed Thrust Anchoring blueprint; the asteroid gets a **new id** on
+    /// completion, so anything holding the old one must re-resolve.
+    MotorizingAsteroid,
+    /// Topping up a motorized asteroid's engine (API v116).
+    RefuelingMotorizedAsteroid,
+    /// Shaping an asteroid into a duck (API v116).
+    SculptingDuckAsteroid,
     Crafting,
     AssistingAtomicPrinter,
     Salvage,
@@ -204,6 +212,11 @@ pub struct Manny {
     pub cargo: MannyCargo,
     pub can_receive_orders: bool,
     pub task_estimated_end_time: Option<DateTime<Utc>>,
+    /// When the current task started, server-side (API v116). Phase 1 types it;
+    /// the progress interpolation still runs off `observed_at`, and switching it
+    /// over to an exact `start → end` span is phase 2 of #301.
+    #[serde(default)]
+    pub task_start_time: Option<DateTime<Utc>>,
     /// Current-task payload. For a mining task it carries the target asteroid,
     /// resource types, and destination container (else the probe). Kept as a
     /// raw value: the API's `anyOf` may also be an empty object/array, and
@@ -301,6 +314,15 @@ pub enum AlertType {
     SectorObjectDetected,
     AnomalyDetected,
     MannyReport,
+    /// The mind snapshot was moved to a fresh probe.
+    MindSnapshotTransferred,
+    /// A probe was lost.
+    ProbeDestroyed,
+    /// A motorized asteroid changed phase along its trajectory (API v116) —
+    /// ignition, arrival, impact, capture…
+    AsteroidTrajectory,
+    /// Another probe shared an improvement blueprint (API v116).
+    BlueprintShared,
     #[serde(other)]
     Unknown,
 }
@@ -322,6 +344,12 @@ pub enum AlertPhase {
     Arrival,
     Detection,
     MannyReport,
+    InstanceSwitch,
+    ProbeLoss,
+    /// A motorized asteroid's engine fired (API v116).
+    Ignition,
+    /// A blueprint reached this probe (API v116).
+    BlueprintShare,
     #[serde(other)]
     Unknown,
 }
@@ -746,6 +774,9 @@ pub struct ProbeImprovement {
     pub description: String,
     pub available: bool,
     pub done: bool,
+    /// Whether this blueprint can be installed on the probe (API v116) —
+    /// separates "known" from "installable here". Absent on pre-v116 servers.
+    pub installable_on_probe: Option<bool>,
     pub duration_seconds: i64,
     pub ingredients: Vec<CraftingRecipeIngredient>,
     /// Free-form effect descriptors (e.g. `maxDeuteriumPercent`); the
@@ -847,6 +878,12 @@ pub struct WaypointBookmarkTarget {
     pub radius_unit: Option<String>,
     pub category: Option<String>,
     pub habitability_score: Option<f64>,
+    /// ── Motorized asteroids (API v116) ──
+    pub motorized: Option<bool>,
+    pub motor_fuel_status: Option<MotorFuelStatus>,
+    pub trajectory: Option<AsteroidTrajectory>,
+    pub captured_by_object_id: Option<String>,
+    pub distinctive_feature: Option<String>,
     #[serde(default)]
     pub waypoint_bookmarks: Vec<WaypointBookmarkHistory>,
 }
@@ -940,10 +977,98 @@ pub struct SectorObject {
     pub created_by_probe_name: Option<String>,
     pub activated_at: Option<String>,
     pub network: Option<ScutNetworkReference>,
+    /// ── Motorized asteroids (API v116) ──
+    /// True once Distributed Thrust Anchoring propulsion is installed.
+    pub motorized: Option<bool>,
+    pub motor_fuel_status: Option<MotorFuelStatus>,
+    /// Live trajectory, present while one is running.
+    pub trajectory: Option<AsteroidTrajectory>,
+    /// Set when the asteroid has been captured by another local body.
+    pub captured_by_object_id: Option<String>,
+    /// Cosmetic flag; the only value the server defines is a duck.
+    pub distinctive_feature: Option<String>,
+    /// True for a sector-transfer asteroid between two phase transitions.
+    pub in_transit: Option<bool>,
     #[serde(default)]
     pub waypoint_bookmarks: Vec<WaypointBookmarkHistory>,
     #[serde(default)]
     pub bookmark_targets: Vec<WaypointBookmarkTarget>,
+}
+
+/// Live trajectory of a motorized asteroid (API v116). Embedded on every
+/// detectable asteroid representation in a detailed sector scan, so a countdown
+/// can be drawn without a second request. Public telemetry deliberately omits
+/// the origin and current absolute sectors — `direction` is a launch vector,
+/// not a coordinate.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AsteroidTrajectory {
+    pub id: String,
+    pub asteroid_id: String,
+    pub mode: AsteroidTrajectoryMode,
+    pub status: AsteroidTrajectoryStatus,
+    pub started_at: Option<DateTime<Utc>>,
+    /// When the next phase change is due; `null` once nothing is scheduled.
+    pub next_transition_at: Option<DateTime<Utc>>,
+    pub target_object_id: Option<String>,
+    /// Fractions of light speed; the server caps both at 0.5.
+    pub target_speed_c: Option<f64>,
+    pub current_speed_c: Option<f64>,
+    pub planned_revolutions: Option<i64>,
+    pub completed_revolutions: Option<i64>,
+    pub estimated_completion_at: Option<DateTime<Utc>>,
+    pub direction: Option<TrajectoryDirection>,
+    pub sectors_crossed: Option<i64>,
+    pub maximum_sector_crossings: Option<i64>,
+    pub result: Option<String>,
+    pub failure_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AsteroidTrajectoryMode {
+    /// Aimed at an object in the local system.
+    SystemImpact,
+    /// Sent to a neighbouring sector.
+    SectorTransfer,
+    #[serde(other)]
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AsteroidTrajectoryStatus {
+    Accelerating,
+    Coasting,
+    CrossingSector,
+    OrbitingBlackHole,
+    Captured,
+    Completed,
+    Missed,
+    NoEffect,
+    Destroyed,
+    Lost,
+    Failed,
+    #[serde(other)]
+    Unknown,
+}
+
+/// Launch direction vector of a trajectory — a heading, not a position.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+pub struct TrajectoryDirection {
+    pub x: i64,
+    pub y: i64,
+    pub z: i64,
+}
+
+/// Fuel state of a motorized asteroid's engine (API v116).
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MotorFuelStatus {
+    Full,
+    Empty,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -1038,6 +1163,16 @@ pub struct MinableTarget {
     pub resource_types: Option<Vec<String>>,
     pub resource_amounts: Option<ResourceShares>,
     pub resource_composition: Option<ResourceShares>,
+    /// ── Motorized asteroids (API v116) ──
+    /// True once Distributed Thrust Anchoring propulsion is installed.
+    pub motorized: Option<bool>,
+    pub motor_fuel_status: Option<MotorFuelStatus>,
+    /// Live trajectory, present while one is running.
+    pub trajectory: Option<AsteroidTrajectory>,
+    /// Set when the asteroid has been captured by another local body.
+    pub captured_by_object_id: Option<String>,
+    /// Cosmetic flag; the only value the server defines is a duck.
+    pub distinctive_feature: Option<String>,
 }
 
 /// Tri-state SCUT coverage of an observed sector (API v104). Distinguishes
