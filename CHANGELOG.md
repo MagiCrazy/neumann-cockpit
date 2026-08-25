@@ -1,5 +1,12 @@
 # Changelog
 
+## [104.0.4](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.0.3...neumann-cockpit-v104.0.4) (2026-08-25)
+
+
+### Bug Fixes
+
+* **queue:** bind a Manny craft to its builder when it starts, not when it is queued ([#298](https://github.com/MagiCrazy/neumann-cockpit/issues/298)) ([b4f190d](https://github.com/MagiCrazy/neumann-cockpit/commit/b4f190d30df6d8fad8c43caa3cc6e254e1ccbb6a))
+
 ## [104.0.3](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.0.2...neumann-cockpit-v104.0.3) (2026-08-25)
 
 
