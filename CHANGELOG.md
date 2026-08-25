@@ -1,5 +1,12 @@
 # Changelog
 
+## [104.0.2](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.0.1...neumann-cockpit-v104.0.2) (2026-08-24)
+
+
+### Bug Fixes
+
+* **queue:** one production queue per probe ([#294](https://github.com/MagiCrazy/neumann-cockpit/issues/294)) ([bad86ba](https://github.com/MagiCrazy/neumann-cockpit/commit/bad86ba4a93a31636d04eaa2a3be51defe9908d5))
+
 ## [104.0.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.0.0...neumann-cockpit-v104.0.1) (2026-08-24)
 
 
