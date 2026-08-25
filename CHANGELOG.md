@@ -1,5 +1,12 @@
 # Changelog
 
+## [104.0.3](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.0.2...neumann-cockpit-v104.0.3) (2026-08-25)
+
+
+### Bug Fixes
+
+* **ui:** give the Inventory pane a viewport, and scroll zoomed blocks whole ([#296](https://github.com/MagiCrazy/neumann-cockpit/issues/296)) ([d14a911](https://github.com/MagiCrazy/neumann-cockpit/commit/d14a91183f9be642ea44466cc0010034fb28eb86))
+
 ## [104.0.2](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.0.1...neumann-cockpit-v104.0.2) (2026-08-24)
 
 
