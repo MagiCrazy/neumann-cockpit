@@ -423,6 +423,71 @@ impl AppState {
             .unwrap_or_default()
     }
 
+    /// SCUT networks whose relay **in the current sector** is active *and*
+    /// carries a transit beacon — the local half of a safe corridor.
+    ///
+    /// The rule (game changelog, API v96): a jump between two sectors that each
+    /// hold an active beacon-equipped relay **of the same network** waives the
+    /// probe-destruction risk. Container-detachment risk is unaffected.
+    pub fn local_beacon_networks(&self) -> Vec<(i64, String)> {
+        let Some(objects) = self.probe_current_sector_scan().and_then(|s| s.objects.as_ref()) else {
+            return Vec::new();
+        };
+        let mut out: Vec<(i64, String)> = Vec::new();
+        for o in objects {
+            if o.object_type != crate::api::types::SectorObjectType::ScutRelay
+                || o.status != Some(crate::api::types::ScutRelayStatus::On)
+                || o.is_transit_beacon != Some(true)
+            {
+                continue;
+            }
+            if let Some(net) = &o.network {
+                if !out.iter().any(|(id, _)| *id == net.id) {
+                    out.push((net.id, net.name.clone()));
+                }
+            }
+        }
+        out
+    }
+
+    /// Corridor destinations offered by the fetched network: its other active
+    /// beacon-equipped relays, i.e. every sector this one can be reached from
+    /// without destruction risk. The relay's own sector is excluded, and so is
+    /// any relay whose sector the server did not disclose.
+    pub fn corridor_destinations(&self) -> Vec<CorridorDestination> {
+        let Some(net) = &self.scut_network_view else {
+            return Vec::new();
+        };
+        let here = self.probe_sector_coords();
+        let mut out: Vec<CorridorDestination> = Vec::new();
+        for relay in &net.relays {
+            if relay.status != crate::api::types::ScutRelayStatus::On || !relay.is_transit_beacon {
+                continue;
+            }
+            let Some(v) = relay.sector.relative.as_ref() else {
+                continue;
+            };
+            let coords = (v.x.round() as i32, v.y.round() as i32, v.z.round() as i32);
+            if Some(coords) == here || out.iter().any(|d| d.coords == coords) {
+                continue;
+            }
+            out.push(CorridorDestination {
+                relay_name: relay.name.clone(),
+                network_name: net.name.clone(),
+                coords,
+            });
+        }
+        out
+    }
+
+    /// Whether travelling to these coordinates is a safe corridor, as far as the
+    /// cockpit currently knows. Deliberately one-sided: it says "yes" only on
+    /// evidence, and never claims a jump is unsafe — the network detail is
+    /// fetched lazily, so its absence means "unknown", not "risky".
+    pub fn is_safe_corridor(&self, x: i32, y: i32, z: i32) -> bool {
+        !self.local_beacon_networks().is_empty() && self.corridor_destinations().iter().any(|d| d.coords == (x, y, z))
+    }
+
     /// Whether a SCUT relay object in the current sector already carries a
     /// transit beacon (API v96), by object id.
     pub fn sector_object_is_transit_beacon(&self, id: &str) -> bool {
@@ -596,4 +661,13 @@ impl AppState {
         }
         None
     }
+}
+
+/// One end of a safe SCUT corridor: an active beacon-equipped relay in the same
+/// network as the one in the probe's own sector.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CorridorDestination {
+    pub relay_name: String,
+    pub network_name: String,
+    pub coords: (i32, i32, i32),
 }
