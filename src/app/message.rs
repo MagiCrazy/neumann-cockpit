@@ -1,7 +1,7 @@
 use crate::api::types::{
-    ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, MannyDetail, MannyRoster, Mission, Pagination, Probe,
-    ProbeAlert, ProbeImprovement, ProbeInventory, ProbeListResponse, ProbeMessage, ProbeMovement, ProbeSentMessage,
-    ScutNetwork, SectorObservation, StorageContainer, VisitedSector,
+    BlueprintShareResult, ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, MannyDetail, MannyRoster,
+    Mission, Pagination, Probe, ProbeAlert, ProbeImprovement, ProbeInventory, ProbeListResponse, ProbeMessage,
+    ProbeMovement, ProbeSentMessage, ScutNetwork, SectorObservation, StorageContainer, VisitedSector,
 };
 
 pub enum ApiMessage {
@@ -75,6 +75,9 @@ pub enum ApiMessage {
     /// Crafting reservations moved off a container (API v116): how many.
     ReservationsReassigned(u32),
     ReservationsReassignError(String),
+    /// An improvement blueprint reached another player (API v116).
+    BlueprintShared(BlueprintShareResult),
+    BlueprintShareError(String),
     UpdateContainerRulesDone(StorageContainer, ProbeInventory),
     UpdateContainerRulesError(String),
     StorageMoveDone(Manny, ProbeInventory),

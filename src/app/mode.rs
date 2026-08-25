@@ -10,6 +10,8 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuAction {
     Mine,
+    /// Share a known improvement blueprint through SCUT (API v116).
+    ShareBlueprint,
     /// Move a container's crafting-output reservations elsewhere (API v116).
     ReassignReservations,
     /// Safe SCUT corridors from this sector (API v96).
@@ -320,6 +322,28 @@ impl super::AppState {
             disabled_reason: (!can_rename).then(|| "no probe".to_string()),
         });
         let has_scut = !self.scut_coverage().is_empty();
+        {
+            // Needs SCUT coverage to reach another player, a blueprint worth
+            // sending, and the probe id the mirror-only path takes.
+            let covered = !self.scut_coverage().is_empty();
+            let has_bp = !self.shareable_blueprints().is_empty();
+            let known = self.probe_id().is_some();
+            let ok = covered && has_bp && known;
+            items.push(MenuItem {
+                action: MenuAction::ShareBlueprint,
+                label: "Share blueprint…".into(),
+                enabled: ok,
+                disabled_reason: (!ok).then(|| {
+                    if !covered {
+                        "no SCUT network covers this sector".to_string()
+                    } else if !has_bp {
+                        "no shareable blueprint known".to_string()
+                    } else {
+                        "waiting for a probe sync".to_string()
+                    }
+                }),
+            });
+        }
         items.push(MenuItem {
             action: MenuAction::ScutInspect,
             label: "Inspect SCUT network…".into(),

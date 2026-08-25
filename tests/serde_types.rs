@@ -1,9 +1,10 @@
 use neumann_cockpit::api::types::{
-    AlertPhase, AlertStatus, AlertType, AsteroidTrajectoryMode, AsteroidTrajectoryStatus, ContainerInventory,
-    CraftingRecipe, DamageWarningRule, DataFreshness, EndpointId, KnowledgeLevel, Manny, MannyLocationType, MannyTask,
-    MannyTaskVisibility, MessageStatus, Mission, MissionStatus, MissionStepStatus, MotorFuelStatus, MovementPhase,
-    Probe, ProbeAlert, ProbeImprovement, ProbeInventory, ProbeMessage, ProbeMovement, ProbeStatus, ScutNetwork,
-    ScutRelayStatus, SectorObject, SectorObjectType, SectorObservation, SensorMode, StorageContainer,
+    AlertPhase, AlertStatus, AlertType, AsteroidTrajectoryMode, AsteroidTrajectoryStatus, BlueprintShareResult,
+    ContainerInventory, CraftingRecipe, DamageWarningRule, DataFreshness, EndpointId, KnowledgeLevel, Manny,
+    MannyLocationType, MannyTask, MannyTaskVisibility, MessageStatus, Mission, MissionStatus, MissionStepStatus,
+    MotorFuelStatus, MovementPhase, Probe, ProbeAlert, ProbeImprovement, ProbeInventory, ProbeMessage, ProbeMovement,
+    ProbeStatus, ScutNetwork, ScutRelayStatus, SectorObject, SectorObjectType, SectorObservation, SensorMode,
+    StorageContainer,
 };
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -1118,4 +1119,23 @@ fn improvement_reports_whether_it_can_be_installed_here() {
             "installableOnProbe":false,"durationSeconds":300,"ingredients":[]}"#,
     );
     assert_eq!(i.installable_on_probe, Some(false));
+}
+
+#[test]
+fn a_blueprint_share_reports_whether_the_recipient_already_knew_it() {
+    // The endpoint is idempotent: a replay answers 200 with alreadyKnown rather
+    // than failing, and the recipient's alert is not duplicated. That is a
+    // result to report, not an error to raise.
+    let r: BlueprintShareResult = deser(
+        r#"{"blueprint":{"id":"deuterium_compression","name":"Deuterium compression"},
+            "recipientProbe":{"id":314,"name":"Someone else"},
+            "alreadyKnown":true,"recipientNotified":true}"#,
+    );
+    assert_eq!(r.blueprint.id, "deuterium_compression");
+    // The probe id arrives as a number where the blueprint id is a string; both
+    // land as strings so one shape reads the pair.
+    assert_eq!(r.recipient_probe.id, "314");
+    assert_eq!(r.recipient_probe.name, "Someone else");
+    assert!(r.already_known);
+    assert!(r.recipient_notified);
 }

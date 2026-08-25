@@ -671,3 +671,12 @@ pub struct CorridorDestination {
     pub network_name: String,
     pub coords: (i32, i32, i32),
 }
+
+/// Blueprints the server accepts for sharing (API v116 path enum). Anything
+/// else is a 404 on the path itself, so the catalog is filtered against it
+/// rather than offering an improvement the endpoint cannot take.
+pub const SHAREABLE_BLUEPRINTS: [&str; 3] = [
+    "deuterium_compression",
+    "reinforced_container_couplings",
+    "distributed_thrust_anchoring",
+];

@@ -72,6 +72,8 @@ const RIGHT: &[Section] = &[
             ("Missions", "browse steps, abandon"),
             ("Comms", "categories: messages, alerts, warnings"),
             ("Map", "travel, visited, waypoints, safe corridors"),
+            ("Probe", "switch, rename, improve, SCUT inspect,"),
+            ("", "share blueprint"),
             ("Storage", "rename, rules, recover, detach, move,"),
             ("", "move craft reservations out"),
             ("Sector", "object actions: mine, inspect,"),
