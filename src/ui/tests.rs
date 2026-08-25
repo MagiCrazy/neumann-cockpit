@@ -505,3 +505,59 @@ fn a_motorized_asteroid_reads_as_one() {
         "the feature is quoted verbatim"
     );
 }
+
+#[test]
+fn the_travel_confirm_marks_a_safe_corridor_without_overselling_it() {
+    // Issue #257: the marker must state what is waived (destruction) *and* what
+    // is not (container detachment). A pilot reading "safe" as "free" is exactly
+    // the failure this feature could cause.
+    use crate::app::TravelInput;
+    let mut state = AppState::default();
+    state.probe = Some(probe(50.0));
+    if let Some(pr) = state.probe.as_mut() {
+        pr.sector = serde_json::from_str(r#"{"relative":{"x":0,"y":0,"z":0}}"#).unwrap();
+    }
+    state.scan_history = vec![serde_json::from_str(
+        r#"{"relativeCoordinates":{"x":0,"y":0,"z":0},"distance":0,
+            "knowledgeLevel":"detailed","confidence":1.0,
+            "objects":[{"type":"scut_relay","id":"r1","name":"Alpha relay","status":"on",
+                        "isTransitBeacon":true,"network":{"id":7,"name":"Alpha"}}],
+            "scan":{"currentSectorResidenceSeconds":60,"requiredResidenceSeconds":60,"scanQuality":1.0}}"#,
+    )
+    .unwrap()];
+    state.scut_network_view = Some(
+        serde_json::from_str(
+            r#"{"id":7,"name":"Alpha","relayCount":2,"coveredSectorCount":4,
+            "relays":[{"id":2,"name":"Beta relay","status":"on","isTransitBeacon":true,
+                       "sector":{"relative":{"x":3,"y":0,"z":0}},"coverageRadiusSectors":2}],
+            "probes":[]}"#,
+        )
+        .unwrap(),
+    );
+    state.active_wizard = ActiveWizard::Travel(TravelInput::Confirming {
+        x: 3,
+        y: 0,
+        z: 0,
+        sector_distance: Some(3),
+        fuel_cost: Some(0.3),
+        eta_minutes: Some(12),
+        error: None,
+    });
+    let text = buffer_text(&render_cockpit(&state, 100, 30));
+    assert!(text.contains("safe corridor"), "the corridor is announced: {text}");
+    assert!(text.contains("no destruction risk"), "what it waives");
+    assert!(text.contains("containers can still detach"), "what it does not");
+
+    // A destination that is not a corridor says nothing at all.
+    state.active_wizard = ActiveWizard::Travel(TravelInput::Confirming {
+        x: 9,
+        y: 9,
+        z: 9,
+        sector_distance: Some(27),
+        fuel_cost: Some(2.7),
+        eta_minutes: Some(90),
+        error: None,
+    });
+    let text = buffer_text(&render_cockpit(&state, 100, 30));
+    assert!(!text.contains("safe corridor"), "no claim on an ordinary jump");
+}
