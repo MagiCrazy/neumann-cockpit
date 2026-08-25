@@ -2401,6 +2401,44 @@ fn manny_task_progress_complete_when_past_end() {
     assert_eq!(manny_task_progress(&m), 1.0);
 }
 
+#[test]
+fn manny_task_progress_uses_the_exact_span_when_the_server_gives_it() {
+    use crate::ui::panels::mannies::manny_task_progress;
+    let mut m = make_manny("m1", "sector", false, Some("mining"));
+    // API v116: started 3 minutes ago, ends in 1 → exactly 75 %, whatever the
+    // rounded snapshot claims. The pre-v116 inference had to trust that
+    // percentage; with a real start time it is no longer an input.
+    m.task_progress_percent = 10.0;
+    m.observed_at = Some(chrono::Utc::now() - chrono::Duration::seconds(180));
+    m.task_start_time = Some(chrono::Utc::now() - chrono::Duration::seconds(180));
+    m.task_estimated_end_time = Some(chrono::Utc::now() + chrono::Duration::seconds(60));
+    let prog = manny_task_progress(&m);
+    assert!((prog - 0.75).abs() < 0.01, "exact span → 75 %, got {prog}");
+}
+
+#[test]
+fn manny_task_progress_still_infers_on_a_pre_v116_server() {
+    use crate::ui::panels::mannies::manny_task_progress;
+    let mut m = make_manny("m1", "sector", false, Some("mining"));
+    // No start time: the old inference must still run rather than freezing on
+    // the snapshot.
+    m.task_start_time = None;
+    m.task_progress_percent = 20.0;
+    m.observed_at = Some(chrono::Utc::now() - chrono::Duration::seconds(30));
+    m.task_estimated_end_time = Some(chrono::Utc::now() + chrono::Duration::seconds(30));
+    assert!(manny_task_progress(&m) > 0.20);
+}
+
+#[test]
+fn manny_task_progress_is_complete_once_the_exact_span_has_elapsed() {
+    use crate::ui::panels::mannies::manny_task_progress;
+    let mut m = make_manny("m1", "sector", false, Some("mining"));
+    m.task_progress_percent = 40.0;
+    m.task_start_time = Some(chrono::Utc::now() - chrono::Duration::seconds(600));
+    m.task_estimated_end_time = Some(chrono::Utc::now() - chrono::Duration::seconds(30));
+    assert_eq!(manny_task_progress(&m), 1.0, "past the end is done, not 40 %");
+}
+
 // ── new v63 planet/asteroid fields ────────────────────────────────────────
 
 #[test]
@@ -2571,6 +2609,40 @@ fn map_menu_has_waypoints_disabled_when_empty() {
         .find(|i| i.action == MenuAction::ScutCorridors)
         .unwrap();
     assert!(!corridors.enabled, "no beacon relay here → disabled");
+}
+
+// ── crafting-reservation reassignment (#301 phase 2, API v116) ────────────
+
+#[test]
+fn the_storage_menu_offers_reassignment_once_the_probe_is_known() {
+    let mut state = AppState::default();
+    state.active_pane = Pane::Storage;
+    state.probe = Some(
+        serde_json::from_str(
+            r#"{"id": 4, "name": "t", "status": "idle",
+            "fuel": {"deuterium": 1.0}, "sensorMode": "normal",
+            "sector": null, "movement": null, "systems": null,
+            "inventory": {"capacity": 10.0, "usedCapacity": 1.0, "freeCapacity": 9.0,
+                "items": [], "resourceStocks": [], "externalTanks": [],
+                "containers": [{"id":"box","kind":"storage","label":"Box","sortOrder":0,
+                    "capacity":1.0,"usedCapacity":0.0,"freeCapacity":1.0,
+                    "capacityUnit":null,"rules":{}}]}}"#,
+        )
+        .unwrap(),
+    );
+    let menu = state.build_context_menu().expect("storage menu");
+    let item = menu
+        .items
+        .iter()
+        .find(|i| i.action == MenuAction::ReassignReservations)
+        .expect("reassignment offered");
+    assert!(item.enabled, "a synced probe gives the id the mirror path needs");
+
+    // The endpoint exists only on the {probeId} mirror, so without a probe sync
+    // there is no path to call — say so rather than fail at request time.
+    state.probe = None;
+    let menu = state.build_context_menu();
+    assert!(menu.is_none(), "no probe, no container list, no menu");
 }
 
 // ── safe SCUT corridors (#257, API v96) ───────────────────────────────────

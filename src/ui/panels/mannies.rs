@@ -159,12 +159,25 @@ pub(crate) fn manny_task_eta(m: &Manny) -> Option<String> {
 }
 
 /// Task progress in 0..=1, interpolated client-side so it ticks between
-/// fetches. The server sends a snapshot `task_progress_percent` at
-/// `observed_at` plus an estimated end time; assuming a linear task we rebuild
-/// the timeline and advance progress with the wall clock. Falls back to the
-/// raw snapshot when timestamps are missing, and never runs backward from it.
+/// fetches.
+///
+/// With `task_start_time` (API v116) the span is known exactly, so progress is
+/// simply where the wall clock sits between start and end. Before v116 the
+/// server gave only a snapshot `task_progress_percent` stamped at `observed_at`
+/// plus an estimated end, from which the total had to be *inferred* — that
+/// fallback is kept for older servers, and it is an approximation: it trusts a
+/// percentage the server rounded, and it drifts if the task is not linear.
 pub(crate) fn manny_task_progress(m: &Manny) -> f64 {
     let p0 = (m.task_progress_percent / 100.0).clamp(0.0, 1.0);
+    if let (Some(start), Some(end)) = (m.task_start_time, m.task_estimated_end_time) {
+        let total = (end - start).num_seconds() as f64;
+        if total > 0.0 {
+            let elapsed = (Utc::now() - start).num_seconds() as f64;
+            return (elapsed / total).clamp(0.0, 1.0);
+        }
+        // start == end (or worse): nothing to interpolate over.
+        return if end <= Utc::now() { 1.0 } else { p0 };
+    }
     let (Some(obs), Some(end)) = (m.observed_at, m.task_estimated_end_time) else {
         return p0;
     };
