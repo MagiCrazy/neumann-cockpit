@@ -936,6 +936,27 @@ impl ApiClient {
         Ok(r.results.into_iter().map(|e| e.manny).collect())
     }
 
+    /// Move every active crafting-output reservation aimed at a container to the
+    /// probe's other containers (API v116). Atomic: if one reservation has no
+    /// compatible destination the server changes nothing and answers 409, so a
+    /// partial reshuffle is impossible.
+    ///
+    /// Like the single-Manny GET and the task batch, this exists **only** on the
+    /// `{probeId}` mirror, hence the explicit probe id rather than `probe_path`.
+    /// Returns how many reservations moved (0 when none targeted the container).
+    pub async fn reassign_crafting_reservations(&self, probe_id: u64, container_id: &str) -> Result<u32> {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Resp {
+            reassigned_count: u32,
+        }
+        let path = format!("/api/probe/{probe_id}/storage-containers/{container_id}/crafting-reservations/reassign");
+        Ok(self
+            .post::<Resp, _>(&path, &serde_json::json!({}))
+            .await?
+            .reassigned_count)
+    }
+
     /// Exact number of unread received messages (API v104 `status=unread`).
     ///
     /// The inbox is paginated (50 by default), so counting unread entries in

@@ -575,6 +575,19 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         state.set_toast("container renamed");
                     }
                     ApiMessage::RenameContainerError(e) => state.set_wizard_error(e),
+                    ApiMessage::ReservationsReassigned(n) => {
+                        state.set_toast(match n {
+                            0 => "no crafting reservation targeted this container".to_string(),
+                            1 => "1 crafting reservation moved elsewhere".to_string(),
+                            n => format!("{n} crafting reservations moved elsewhere"),
+                        });
+                        // The destinations' free capacity changed.
+                        fetch_all(client.clone(), tx.clone());
+                        state.loading = true;
+                    }
+                    // 409 when a reservation has nowhere compatible to go; the
+                    // server changed nothing, so this is informational.
+                    ApiMessage::ReservationsReassignError(e) => state.set_error(e),
                     ApiMessage::UpdateContainerRulesDone(c, inv) => {
                         state.apply_container_update(c, inv);
                         state.close_wizard();

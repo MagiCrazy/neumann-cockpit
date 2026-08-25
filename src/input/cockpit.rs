@@ -12,8 +12,8 @@ use tokio::sync::mpsc;
 use crate::api::client::ApiClient;
 use crate::api::tasks::{
     fetch_ack_alert, fetch_ack_damage_warning, fetch_alerts, fetch_all, fetch_damage_warnings, fetch_inspect,
-    fetch_messages, fetch_recover, fetch_scut_network, fetch_sector, fetch_sent_messages, fetch_set_default_probe,
-    fetch_storage_container_detail,
+    fetch_messages, fetch_reassign_reservations, fetch_recover, fetch_scut_network, fetch_sector, fetch_sent_messages,
+    fetch_set_default_probe, fetch_storage_container_detail,
 };
 use crate::api::types::{MannyTask, MannyTaskVisibility};
 use crate::app::{
@@ -415,6 +415,15 @@ fn fire_menu_action(action: MenuAction, state: &mut AppState, client: &ApiClient
                 if let Some(editor) = state.rules_editor_for(&id) {
                     state.active_wizard = ActiveWizard::ContainerRules(editor);
                 }
+            }
+            return;
+        }
+        MenuAction::ReassignReservations => {
+            // Atomic server-side: every reservation moves, or none does and the
+            // container is left exactly as it was (API v116).
+            if let (Some(id), Some(probe_id)) = (state.storage_selected_container_id(), state.probe_id()) {
+                fetch_reassign_reservations(probe_id, id, client.clone(), tx.clone());
+                state.loading = true;
             }
             return;
         }

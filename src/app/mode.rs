@@ -10,6 +10,8 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuAction {
     Mine,
+    /// Move a container's crafting-output reservations elsewhere (API v116).
+    ReassignReservations,
     /// Safe SCUT corridors from this sector (API v96).
     ScutCorridors,
     /// Open the unified fabrication catalog (atomic printer + Manny craft).
@@ -270,6 +272,17 @@ impl super::AppState {
                     label: "Edit routing rules…".into(),
                     enabled: true,
                     disabled_reason: None,
+                },
+                {
+                    // Mirror-only endpoint: without a probe sync we have no
+                    // probe id to build the path with (API v116).
+                    let known = self.probe_id().is_some();
+                    MenuItem {
+                        action: MenuAction::ReassignReservations,
+                        label: "Move craft reservations out…".into(),
+                        enabled: known,
+                        disabled_reason: (!known).then(|| "waiting for a probe sync".to_string()),
+                    }
                 },
             ],
             cursor: 0,
