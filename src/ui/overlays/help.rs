@@ -102,7 +102,8 @@ const RIGHT: &[Section] = &[
         &[
             ("↑ ↓", "pick a recipe"),
             ("+ -  h l", "quantity to queue"),
-            ("Enter", "add recipe ×qty to the queue"),
+            ("Enter", "add recipe ×qty — any free Manny builds it"),
+            ("b", "pin a builder for this recipe instead"),
             ("Tab", "focus catalog ⇄ queue"),
             ("+ -", "(on queue) adjust a step's repeat"),
             ("x  c", "(on queue) remove step · clear"),

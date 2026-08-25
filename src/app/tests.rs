@@ -2763,10 +2763,12 @@ fn craft_one_shot_enqueues_on_the_sole_builder() {
     .unwrap()];
     state.mannies = Some(vec![make_manny("m1", "probe", true, None)]);
     state.run_command("craft widget"); // case-insensitive
-                                       // `:craft <recipe>` now enqueues on the sole idle builder (no direct fire).
+                                       // `:craft <recipe>` enqueues; the builder binds late, when the step starts
+                                       // (#235), so two `:craft` calls fill two lanes instead of one.
     assert_eq!(state.craft_queue.len(), 1);
     assert_eq!(state.craft_queue[0].recipe_id, "r1");
-    assert_eq!(state.craft_queue[0].builder_manny_id.as_deref(), Some("m1"));
+    assert!(state.craft_queue[0].is_auto());
+    assert!(state.craft_queue[0].builder_manny_id.is_none());
     assert!(state.pending_fire.is_none());
 }
 
@@ -3186,6 +3188,86 @@ fn queue_runs_lanes_in_parallel() {
     // Both lanes start the same tick → two crafts in flight at once.
     assert_eq!(s.queue_fire.len(), 2, "both idle builders start in parallel");
     assert!(s.craft_queue.iter().all(|st| st.is_running()));
+}
+
+#[test]
+fn late_bound_steps_spread_over_the_whole_crew() {
+    // Issue #235: three recipes queued from the catalog used to bind to the one
+    // Manny that happened to be idle when they were typed, then serialise on it
+    // while the rest of the crew sat idle.
+    let mut s = AppState::default();
+    for r in ["steel_plate", "steel_bar", "circuit"] {
+        s.enqueue_craft(QueuedCraft::new(Fabricator::Manny, r.into(), r.into(), None, None));
+    }
+    assert_eq!(s.craft_queue.len(), 3, "unpinned steps never coalesce");
+    set_roster(
+        &mut s,
+        vec![
+            make_manny("m1", "probe", true, None),
+            make_manny("m2", "probe", true, None),
+            make_manny("m3", "probe", true, None),
+        ],
+    );
+    s.advance_queue();
+
+    assert_eq!(s.queue_fire.len(), 3, "one craft per free Manny, all at once");
+    let mut builders: Vec<&str> = s
+        .craft_queue
+        .iter()
+        .filter_map(|st| st.builder_manny_id.as_deref())
+        .collect();
+    builders.sort_unstable();
+    assert_eq!(builders, ["m1", "m2", "m3"], "each step took a distinct builder");
+}
+
+#[test]
+fn late_binding_waits_rather_than_doubling_up_on_one_manny() {
+    let mut s = AppState::default();
+    for r in ["steel_plate", "steel_bar"] {
+        s.enqueue_craft(QueuedCraft::new(Fabricator::Manny, r.into(), r.into(), None, None));
+    }
+    // A single free Manny: one step starts, the other stays pending and unbound.
+    set_roster(&mut s, vec![make_manny("m1", "probe", true, None)]);
+    s.advance_queue();
+    assert_eq!(s.queue_fire.len(), 1, "only one lane exists");
+    assert!(s.craft_queue[0].is_running());
+    assert!(matches!(s.craft_queue[1].state, StepState::Pending));
+    assert!(
+        s.craft_queue[1].builder_manny_id.is_none(),
+        "the waiting step stays unbound, free to take whichever Manny frees up first"
+    );
+
+    // A second Manny comes back from a task: the waiting step takes it.
+    s.queue_fire.clear();
+    set_roster(
+        &mut s,
+        vec![
+            make_manny("m1", "probe", false, Some("crafting")),
+            make_manny("m2", "probe", true, None),
+        ],
+    );
+    s.advance_queue();
+    assert_eq!(s.queue_fire.len(), 1);
+    assert_eq!(s.craft_queue[1].builder_manny_id.as_deref(), Some("m2"));
+}
+
+#[test]
+fn a_pinned_step_keeps_its_builder() {
+    // Pinning is how the pilot says "this Manny and no other": it must not be
+    // re-bound, even when another Manny is free.
+    let mut s = AppState::default();
+    s.enqueue_craft(queued_manny_craft("steel_plate", "m1"));
+    set_roster(
+        &mut s,
+        vec![
+            make_manny("m1", "probe", false, Some("mining")),
+            make_manny("m2", "probe", true, None),
+        ],
+    );
+    s.advance_queue();
+    assert!(s.queue_fire.is_empty(), "it waits for its own builder");
+    assert_eq!(s.craft_queue[0].builder_manny_id.as_deref(), Some("m1"));
+    assert!(matches!(s.craft_queue[0].state, StepState::Pending));
 }
 
 #[test]

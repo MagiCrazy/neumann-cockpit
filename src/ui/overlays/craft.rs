@@ -134,6 +134,7 @@ fn render_console(
             FooterKey::nav("[↑↓]", "recipe"),
             FooterKey::nav("[+/-]", "qty"),
             add,
+            FooterKey::nav("[b]", "pin builder"),
             FooterKey::nav("[Tab]", "queue"),
             FooterKey::nav("[p]", if state.queue_paused { "resume" } else { "pause" }),
             FooterKey::nav("[Esc]", "close"),
@@ -329,8 +330,14 @@ fn render_queue_panel(frame: &mut Frame, area: Rect, state: &AppState, queue_sel
             spans.push(Span::styled(format!(" {}/{}", step.completed, step.repeat), dim));
         }
         // The lane (builder Manny, or printer) — this is what runs in parallel.
-        let lane = step.builder_manny_name.as_deref().unwrap_or("printer");
-        spans.push(Span::styled(format!(" ·{lane}"), dim));
+        // A late-bound step has no builder until it starts, and says so rather
+        // than borrowing the printer's label (#235).
+        let lane = match (step.builder_manny_name.as_deref(), step.is_auto()) {
+            (Some(name), _) => format!(" ·{name}"),
+            (None, true) => " ·⟳ auto".to_string(),
+            (None, false) => " ·printer".to_string(),
+        };
+        spans.push(Span::styled(lane, dim));
         lines.push(Line::from(spans));
     }
     frame.render_widget(Paragraph::new(lines), inner);

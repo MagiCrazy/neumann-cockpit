@@ -63,8 +63,34 @@ fn handle_catalog(code: KeyCode, state: &mut AppState) {
             mutate_recipe(state, |_, q| *q = q.saturating_sub(1).max(1));
         }
         KeyCode::Enter => enqueue_selected(state, selection, qty),
+        // Pin a builder deliberately: the catalog binds late by default, this is
+        // how the pilot says "this Manny and no other".
+        KeyCode::Char('b') => pin_builder(state, selection, qty),
         _ => {}
     }
+}
+
+/// Open the builder picker for the selected recipe, so the pilot can pin a
+/// Manny instead of letting the step bind late.
+fn pin_builder(state: &mut AppState, selection: usize, qty: u32) {
+    let Some((fab, recipe_id, recipe_name)) = state
+        .fabrication_recipes()
+        .get(selection)
+        .map(|(fab, r)| (*fab, r.id.clone(), r.name.clone()))
+    else {
+        return;
+    };
+    if !matches!(fab, Fabricator::Manny) {
+        state.set_wizard_error("the atomic printer picks its own assistant".into());
+        return;
+    }
+    let mannies = state.collect_idle_onboard_mannies();
+    if mannies.is_empty() {
+        state.set_wizard_error("no idle Manny to pin".into());
+        return;
+    }
+    state.active_wizard =
+        ActiveWizard::Fabrication(FabricationInput::pick_builder(recipe_id, recipe_name, qty, mannies));
 }
 
 fn handle_queue_panel(code: KeyCode, state: &mut AppState) {
@@ -170,6 +196,10 @@ fn enqueue_selected(state: &mut AppState, selection: usize, qty: u32) {
             }
         }
         Fabricator::Manny => {
+            if !state.has_onboard_manny() {
+                state.set_wizard_error("no Manny on board".into());
+                return;
+            }
             let prefilled = if let ActiveWizard::Fabrication(FabricationInput::PickRecipe { prefilled_manny, .. }) =
                 &state.active_wizard
             {
@@ -177,25 +207,24 @@ fn enqueue_selected(state: &mut AppState, selection: usize, qty: u32) {
             } else {
                 None
             };
-            let mannies = state.collect_idle_onboard_mannies();
-            let builder = prefilled.or_else(|| {
-                if mannies.len() == 1 {
-                    mannies.first().cloned()
-                } else {
-                    None
-                }
-            });
-            match builder {
+            match prefilled {
+                // Opened from the Mannies pane on a chosen Manny: honour it for
+                // this add, then fall back to auto so the rest of the queue can
+                // still spread over the crew (#235).
                 Some((id, name)) => {
                     enqueue(state, fab, recipe_id, recipe_name, Some(id), Some(name), qty);
-                    mutate_recipe(state, |_, q| *q = 1);
+                    clear_prefilled(state);
                 }
-                None if mannies.is_empty() => state.set_wizard_error("no idle Manny on board".into()),
+                // Late binding: `qty` separate steps, each taking whichever
+                // Manny is free when it starts. One step ×qty would mean "the
+                // same builder, qty times in a row" — the serialisation of #235.
                 None => {
-                    state.active_wizard =
-                        ActiveWizard::Fabrication(FabricationInput::pick_builder(recipe_id, recipe_name, qty, mannies));
+                    for _ in 0..qty {
+                        enqueue(state, fab, recipe_id.clone(), recipe_name.clone(), None, None, 1);
+                    }
                 }
             }
+            mutate_recipe(state, |_, q| *q = 1);
         }
     }
 }
@@ -212,6 +241,13 @@ fn enqueue(
     let mut craft = QueuedCraft::new(fabricator, recipe_id, recipe_name, builder_id, builder_name);
     craft.repeat = qty.max(1);
     state.enqueue_craft(craft);
+}
+
+/// Drop the pre-selected builder so the following adds bind late.
+fn clear_prefilled(state: &mut AppState) {
+    if let ActiveWizard::Fabrication(FabricationInput::PickRecipe { prefilled_manny, .. }) = &mut state.active_wizard {
+        *prefilled_manny = None;
+    }
 }
 
 /// Mutate the `(selection, qty)` of the catalog step in place.
