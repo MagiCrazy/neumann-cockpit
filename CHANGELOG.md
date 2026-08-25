@@ -1,5 +1,15 @@
 # Changelog
 
+## [104.2.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.1.0...neumann-cockpit-v104.2.0) (2026-08-25)
+
+
+### Features
+
+* **api:** v116 catch-up phase 1 — type the additive surface, show asteroids under thrust ([#303](https://github.com/MagiCrazy/neumann-cockpit/issues/303)) ([3441903](https://github.com/MagiCrazy/neumann-cockpit/commit/3441903a912ff5c80d68e0af89d0db2da759d03b))
+* **api:** v116 catch-up phase 2 — exact task progress, craft-reservation reassignment ([#306](https://github.com/MagiCrazy/neumann-cockpit/issues/306)) ([d76d4a2](https://github.com/MagiCrazy/neumann-cockpit/commit/d76d4a227b0702249114f70221079f110a189136))
+* **probe:** share improvement blueprints through SCUT (v116 phase 3) ([#307](https://github.com/MagiCrazy/neumann-cockpit/issues/307)) ([6e0e128](https://github.com/MagiCrazy/neumann-cockpit/commit/6e0e128b87c8f9bdddb55cc51fcbd177dd1636e3))
+* **travel:** surface safe SCUT corridors ([#305](https://github.com/MagiCrazy/neumann-cockpit/issues/305)) ([18f8cd9](https://github.com/MagiCrazy/neumann-cockpit/commit/18f8cd9855493dc4da89d98649779432c4591ee0))
+
 ## [104.1.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.0.4...neumann-cockpit-v104.1.0) (2026-08-25)
 
 
