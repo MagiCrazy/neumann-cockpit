@@ -1,5 +1,12 @@
 # Changelog
 
+## [104.1.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.0.4...neumann-cockpit-v104.1.0) (2026-08-25)
+
+
+### Features
+
+* **storage-move:** show source stock + destination free capacity, and a max selection ([#299](https://github.com/MagiCrazy/neumann-cockpit/issues/299)) ([d79cc02](https://github.com/MagiCrazy/neumann-cockpit/commit/d79cc02378d0e34d74755ecb2c3c1e8801d0a038))
+
 ## [104.0.4](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.0.3...neumann-cockpit-v104.0.4) (2026-08-25)
 
 
