@@ -468,24 +468,50 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fabricate_manny_recipe_advances_to_builder_pick_when_several_idle() {
+    async fn fabricate_manny_recipe_binds_late_instead_of_asking() {
         use crate::app::FabricationInput;
         let mut state = AppState::default();
         state.recipes = vec![manny_recipe("solar_panel")];
         state.mannies = Some(vec![idle_onboard_manny("m1"), idle_onboard_manny("m2")]);
         state.active_wizard = ActiveWizard::Fabrication(FabricationInput::pick_recipe(None));
         press(&mut state, KeyCode::Enter);
+        // Issue #235: the catalog no longer pins a builder at all — the step
+        // takes whichever Manny is free when it starts.
+        assert_eq!(state.craft_queue.len(), 1, "the recipe went straight to the queue");
+        assert!(state.craft_queue[0].is_auto(), "and it is late-bound");
+        assert!(state.craft_queue[0].builder_manny_id.is_none());
+        assert!(
+            matches!(
+                &state.active_wizard,
+                ActiveWizard::Fabrication(FabricationInput::PickRecipe { .. })
+            ),
+            "no builder prompt in the way"
+        );
+    }
+
+    #[tokio::test]
+    async fn fabricate_pins_a_builder_on_demand() {
+        use crate::app::FabricationInput;
+        let mut state = AppState::default();
+        state.recipes = vec![manny_recipe("solar_panel")];
+        state.mannies = Some(vec![idle_onboard_manny("m1"), idle_onboard_manny("m2")]);
+        state.active_wizard = ActiveWizard::Fabrication(FabricationInput::pick_recipe(None));
+        press(&mut state, KeyCode::Char('b'));
         match &state.active_wizard {
             ActiveWizard::Fabrication(FabricationInput::PickBuilder { recipe_id, mannies, .. }) => {
                 assert_eq!(recipe_id, "solar_panel");
                 assert_eq!(mannies.len(), 2, "both idle mannies offered as builders");
             }
-            _ => panic!("manny recipe with 2 idle mannies must open the builder picker"),
+            _ => panic!("[b] must open the builder picker"),
         }
+        press(&mut state, KeyCode::Enter);
+        assert_eq!(state.craft_queue.len(), 1);
+        assert!(!state.craft_queue[0].is_auto(), "an explicit pick stays pinned");
+        assert_eq!(state.craft_queue[0].builder_manny_id.as_deref(), Some("m1"));
     }
 
     #[tokio::test]
-    async fn fabricate_manny_recipe_errors_when_no_idle_manny() {
+    async fn fabricate_manny_recipe_errors_without_a_manny_aboard() {
         use crate::app::FabricationInput;
         let mut state = AppState::default();
         state.recipes = vec![manny_recipe("solar_panel")];
@@ -495,12 +521,31 @@ mod tests {
         match &state.active_wizard {
             ActiveWizard::Fabrication(FabricationInput::PickRecipe { error, .. }) => {
                 assert!(
-                    error.as_deref().unwrap_or("").contains("no idle Manny"),
+                    error.as_deref().unwrap_or("").contains("no Manny"),
                     "surfaces the no-manny error"
                 );
             }
             _ => panic!("stays on the recipe step with an error"),
         }
+        assert!(
+            state.craft_queue.is_empty(),
+            "nothing queued for a crew that cannot exist"
+        );
+    }
+
+    #[tokio::test]
+    async fn fabricate_queues_while_the_whole_crew_is_busy() {
+        use crate::app::FabricationInput;
+        let mut state = AppState::default();
+        state.recipes = vec![manny_recipe("solar_panel")];
+        // Aboard but working: with late binding this is a legitimate queue — the
+        // step waits for a Manny instead of being refused (#235).
+        let mut busy = idle_onboard_manny("m1");
+        busy.can_receive_orders = false;
+        state.mannies = Some(vec![busy]);
+        state.active_wizard = ActiveWizard::Fabrication(FabricationInput::pick_recipe(None));
+        press(&mut state, KeyCode::Enter);
+        assert_eq!(state.craft_queue.len(), 1, "queued, waiting for a free Manny");
     }
 
     #[tokio::test]

@@ -287,6 +287,16 @@ impl AppState {
             .unwrap_or_default()
     }
 
+    /// Whether any Manny is aboard at all, busy or not. A late-bound craft can
+    /// legitimately be queued while the whole crew works, but not on a probe
+    /// with no Manny to build it (#235).
+    pub fn has_onboard_manny(&self) -> bool {
+        self.mannies.as_ref().is_some_and(|ms| {
+            ms.iter()
+                .any(|m| m.location.location_type == crate::api::types::MannyLocationType::Probe)
+        })
+    }
+
     /// Indices (into `mannies`) of idle Mannies — onboard and free to take an
     /// order. Backs the status-bar "N idle" indicator and the idle-cycling key.
     fn idle_manny_indices(&self) -> Vec<usize> {

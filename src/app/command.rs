@@ -325,22 +325,14 @@ impl AppState {
                 }
             }
             Fabricator::Manny => {
-                let mannies = self.collect_idle_onboard_mannies();
-                match mannies.len() {
-                    0 => self.set_toast("no idle Manny on board"),
-                    1 => {
-                        let (id, name) = mannies.into_iter().next().unwrap();
-                        self.enqueue_craft(QueuedCraft::new(fab, recipe_id, recipe_name, Some(id), Some(name)));
-                    }
-                    // Ambiguous builder → let the pilot pick in the console.
-                    _ => {
-                        self.active_wizard = ActiveWizard::Fabrication(FabricationInput::pick_builder(
-                            recipe_id,
-                            recipe_name,
-                            1,
-                            mannies,
-                        ));
-                    }
+                // Late binding (#235): no builder is chosen here — the step takes
+                // whichever Manny is free when it starts, so `:craft` twice fills
+                // two lanes instead of queueing both on the same Manny. `[b]` in
+                // the console pins one deliberately.
+                if self.has_onboard_manny() {
+                    self.enqueue_craft(QueuedCraft::new(fab, recipe_id, recipe_name, None, None));
+                } else {
+                    self.set_toast("no Manny on board");
                 }
             }
         }
