@@ -100,19 +100,34 @@ pub(crate) fn render_storage_move_overlay(frame: &mut Frame, area: Rect, state: 
             error,
             ..
         } => {
-            let [body, footer] = framed(p, " STORAGE MOVE — RESOURCE ", area, 56, 9, frame);
+            let [body, footer] = framed(p, " STORAGE MOVE — RESOURCE ", area, 56, 11, frame);
             let cname = |i: usize| containers.get(i).map(|(_, l)| l.clone()).unwrap_or_default();
+            let cid = |i: usize| containers.get(i).map(|(id, _)| id.as_str()).unwrap_or("");
+            // Read the figures live from the probe rather than snapshotting them
+            // into the wizard: a refresh landing mid-wizard then updates them
+            // instead of showing what was true when the pilot opened it (#236).
+            let resource = MOVE_RESOURCE_TYPES[*resource_idx];
+            let held = state.container_resource_amount(cid(*from_sel), resource);
+            let free = state.container_free_capacity(cid(*to_sel));
+            let max = state.max_movable_resource(cid(*from_sel), cid(*to_sel), resource);
+            let dim = Style::default().fg(p.dim);
             let lines = vec![
-                field_row(
-                    p,
-                    "Resource:",
-                    MOVE_RESOURCE_TYPES[*resource_idx].to_string(),
-                    *field == 0,
-                    false,
-                ),
+                field_row(p, "Resource:", resource.to_string(), *field == 0, false),
                 field_row(p, "From:", cname(*from_sel), *field == 1, false),
                 field_row(p, "To:", cname(*to_sel), *field == 2, false),
                 field_row(p, "Amount:", format!("{amount_buf} ECE"), *field == 3, *field == 3),
+                Line::from(Span::styled(
+                    format!("           source holds {held:.2} · destination free {free:.2} ECE"),
+                    dim,
+                )),
+                Line::from(Span::styled(
+                    format!("           max {max:.2} ECE  ([m] fills it)"),
+                    if max > 0.0 {
+                        Style::default().fg(p.accent)
+                    } else {
+                        Style::default().fg(p.warn)
+                    },
+                )),
                 error_line(p, error),
             ];
             frame.render_widget(Paragraph::new(lines), body);
@@ -123,6 +138,7 @@ pub(crate) fn render_storage_move_overlay(frame: &mut Frame, area: Rect, state: 
                 &[
                     FooterKey::nav("[↑/↓]", "field"),
                     FooterKey::nav("[←/→]", "change"),
+                    FooterKey::nav("[m]", "max"),
                     FooterKey::commit("[Enter]", "MOVE"),
                     FooterKey::nav("[Esc]", "cancel"),
                 ],
