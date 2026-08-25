@@ -18,6 +18,7 @@ pub(crate) mod remote_mine;
 pub(crate) mod repair;
 pub(crate) mod scanner;
 pub(crate) mod script;
+pub(crate) mod scut_corridor;
 pub(crate) mod scut_network;
 pub(crate) mod storage_move;
 pub(crate) mod travel;
@@ -100,6 +101,7 @@ const WIZARD_OVERLAYS: &[(OverlayGuard, OverlayRender)] = &[
     (|s| matches!(s.active_wizard, ActiveWizard::Messages(_)), render_messages_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::ScutRelay(_)), render_scut_relay_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::ScutNetwork(_)), render_scut_network_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::ScutCorridor(_)), scut_corridor::render_scut_corridor_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::DropCargo(_)), render_drop_cargo_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::Deploy(_)), render_deploy_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::RenameManny(_)), render_rename_manny_overlay),

@@ -10,6 +10,8 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuAction {
     Mine,
+    /// Safe SCUT corridors from this sector (API v96).
+    ScutCorridors,
     /// Open the unified fabrication catalog (atomic printer + Manny craft).
     Fabricate,
     Repair,
@@ -175,6 +177,17 @@ impl super::AppState {
                     label: "Waypoints…".into(),
                     enabled: has_wp,
                     disabled_reason: (!has_wp).then(|| "no waypoints".to_string()),
+                }
+            },
+            {
+                // Needs a beacon-equipped active relay *here*: it is the local
+                // half of the corridor (API v96).
+                let beacons = !self.local_beacon_networks().is_empty();
+                MenuItem {
+                    action: MenuAction::ScutCorridors,
+                    label: "Safe corridors…".into(),
+                    enabled: beacons,
+                    disabled_reason: (!beacons).then(|| "no beacon relay in this sector".to_string()),
                 }
             },
         ];

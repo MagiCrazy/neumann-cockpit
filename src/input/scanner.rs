@@ -6,7 +6,7 @@ use crate::api::client::ApiClient;
 use crate::api::tasks::{fetch_inspect, fetch_install_beacon, fetch_recover, fetch_scut_network, fetch_turn_on_relay};
 use crate::app::{
     ActiveWizard, ApiMessage, AppState, DeployInput, LogEvent, MineInput, ObjectAction, ObjectActionInput,
-    SalvageInput, ScutNetworkInput, ScutRelayInput, WaypointsInput,
+    SalvageInput, ScutCorridorInput, ScutNetworkInput, ScutRelayInput, WaypointsInput,
 };
 /// Send the chosen object action, reusing the existing wizards/endpoints.
 pub(super) fn dispatch_object_action(
@@ -177,6 +177,82 @@ pub(super) fn handle_scut_network_event(
         ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { .. }) if code == KeyCode::Esc => {
             state.close_wizard();
             state.scut_network_view = None;
+        }
+        _ => {}
+    }
+}
+
+/// Safe SCUT corridors (API v96, issue #257). `Enter` on a destination hands
+/// over to the ordinary travel confirm rather than jumping outright: waiving the
+/// destruction risk does not waive the fuel bill, and the pilot still deserves
+/// the ETA before committing.
+pub(super) fn handle_scut_corridor_event(
+    code: KeyCode,
+    state: &mut AppState,
+    client: &ApiClient,
+    tx: &mpsc::Sender<ApiMessage>,
+) {
+    match &state.active_wizard {
+        ActiveWizard::ScutCorridor(ScutCorridorInput::PickNetwork { networks, selection }) => {
+            let (count, selection) = (networks.len(), *selection);
+            match code {
+                KeyCode::Esc => state.close_wizard(),
+                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                    if let Some(new_sel) = list_nav(code, selection, count) {
+                        if let ActiveWizard::ScutCorridor(ScutCorridorInput::PickNetwork { selection, .. }) =
+                            &mut state.active_wizard
+                        {
+                            *selection = new_sel;
+                        }
+                    }
+                }
+                KeyCode::Enter => {
+                    let ActiveWizard::ScutCorridor(ScutCorridorInput::PickNetwork { networks, .. }) =
+                        &state.active_wizard
+                    else {
+                        return;
+                    };
+                    let (id, name) = networks[selection].clone();
+                    state.scut_network_view = None;
+                    state.active_wizard = ActiveWizard::ScutCorridor(ScutCorridorInput::Loading { network_name: name });
+                    fetch_scut_network(id, client.clone(), tx.clone());
+                }
+                _ => {}
+            }
+        }
+        ActiveWizard::ScutCorridor(ScutCorridorInput::Loading { .. }) if code == KeyCode::Esc => {
+            state.close_wizard();
+            state.scut_network_view = None;
+        }
+        ActiveWizard::ScutCorridor(ScutCorridorInput::Picking { selection, .. }) => {
+            let destinations = state.corridor_destinations();
+            let (count, selection) = (destinations.len(), *selection);
+            match code {
+                KeyCode::Esc => {
+                    state.close_wizard();
+                    state.scut_network_view = None;
+                }
+                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                    if let Some(new_sel) = list_nav(code, selection, count) {
+                        if let ActiveWizard::ScutCorridor(ScutCorridorInput::Picking { selection, .. }) =
+                            &mut state.active_wizard
+                        {
+                            *selection = new_sel;
+                        }
+                    }
+                }
+                KeyCode::Enter => {
+                    let Some(d) = destinations.get(selection) else {
+                        return;
+                    };
+                    let (x, y, z) = d.coords;
+                    // Keep the network detail: the travel confirm reads it back
+                    // to mark the destination as a corridor.
+                    state.active_wizard = ActiveWizard::None;
+                    state.travel_go_sector(x, y, z);
+                }
+                _ => {}
+            }
         }
         _ => {}
     }

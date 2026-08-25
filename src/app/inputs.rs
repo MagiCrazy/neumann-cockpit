@@ -506,6 +506,25 @@ pub enum ScutNetworkInput {
     Viewing { error: Option<String> },
 }
 
+/// Safe SCUT corridors from the current sector (API v96). A jump between two
+/// sectors that each hold an active beacon-equipped relay of the **same**
+/// network waives the probe-destruction risk; container detachment still
+/// applies. The remote half of the topology needs `scut-network/{id}`, which is
+/// fetched when this wizard opens rather than kept warm — corridors change only
+/// when someone installs a beacon, and the quota is worth more elsewhere.
+pub enum ScutCorridorInput {
+    /// Several local relays belong to different networks — pick one.
+    PickNetwork {
+        networks: Vec<(i64, String)>,
+        selection: usize,
+    },
+    /// Waiting on `scut-network/{id}`; destinations live in
+    /// `AppState::scut_network_view` once it lands.
+    Loading { network_name: String },
+    /// Destinations from `AppState::corridor_destinations()`.
+    Picking { selection: usize, error: Option<String> },
+}
+
 pub enum MissionsInput {
     /// Browsing the mission list; entries live in `AppState::missions`.
     Browsing { selection: usize },
@@ -670,6 +689,7 @@ pub enum ActiveWizard {
     MindSnapshot(MindSnapshotInput),
     ScutRelay(ScutRelayInput),
     ScutNetwork(ScutNetworkInput),
+    ScutCorridor(ScutCorridorInput),
     Missions(MissionsInput),
     Messages(MessagesInput),
     RenameManny(RenameMannyInput),
