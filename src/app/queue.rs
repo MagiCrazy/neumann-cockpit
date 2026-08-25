@@ -54,10 +54,16 @@ pub struct QueuedCraft {
     pub fabricator: Fabricator,
     pub recipe_id: String,
     pub recipe_name: String,
-    /// Builder Manny for a Manny craft; `None` for an atomic-printer craft
-    /// (the printer auto-reserves a Manny).
+    /// Builder Manny. `None` on an atomic-printer craft (the printer reserves a
+    /// Manny itself); on a Manny craft it is the **current binding**, which is
+    /// `None` until the step is resolved unless the pilot pinned a builder.
     pub builder_manny_id: Option<String>,
     pub builder_manny_name: Option<String>,
+    /// Whether the pilot chose this builder deliberately. An unpinned Manny
+    /// craft binds **late** — it takes whichever Manny is free when it starts,
+    /// so a queue spreads over the whole crew instead of serialising on the one
+    /// Manny that happened to be idle when it was typed (issue #235).
+    pub pinned: bool,
     pub repeat: u32,
     pub completed: u32,
     pub state: StepState,
@@ -78,6 +84,7 @@ impl QueuedCraft {
         builder_manny_name: Option<String>,
     ) -> Self {
         Self {
+            pinned: matches!(fabricator, Fabricator::Manny) && builder_manny_id.is_some(),
             fabricator,
             recipe_id,
             recipe_name,
@@ -93,8 +100,19 @@ impl QueuedCraft {
 
     /// Two steps merge when they are the same recipe by the same target — so
     /// consecutive `[Q]` presses on a base element stack into one `×N` step.
+    /// An **unpinned** Manny craft never merges: `repeat` means "the same
+    /// builder, N times in a row", which is the opposite of what a late-bound
+    /// step is for — N separate steps spread over N free Mannies (#235).
     pub fn coalesces_with(&self, o: &QueuedCraft) -> bool {
+        if self.is_auto() || o.is_auto() {
+            return false;
+        }
         self.fabricator == o.fabricator && self.recipe_id == o.recipe_id && self.builder_manny_id == o.builder_manny_id
+    }
+
+    /// A Manny craft with no pinned builder: it resolves one when it starts.
+    pub fn is_auto(&self) -> bool {
+        matches!(self.fabricator, Fabricator::Manny) && !self.pinned
     }
 
     pub fn is_running(&self) -> bool {
@@ -281,13 +299,34 @@ impl AppState {
     /// printer.
     fn craft_target_busy(&self, craft: &QueuedCraft) -> bool {
         let Some(ms) = &self.mannies else { return false };
-        match &craft.builder_manny_id {
-            Some(id) => ms.iter().any(|m| &m.id == id && !m.can_receive_orders),
-            None => ms.iter().any(|m| {
+        // Branch on the fabricator, not on the presence of a builder: an
+        // unpinned Manny craft also has none, and it is not the printer.
+        match (craft.fabricator, &craft.builder_manny_id) {
+            (Fabricator::Manny, Some(id)) => ms.iter().any(|m| &m.id == id && !m.can_receive_orders),
+            // Unbound: it has no target to be busy on. Whether it can start is
+            // `resolve_auto_builder`'s business.
+            (Fabricator::Manny, None) => false,
+            (Fabricator::AtomicPrinter, _) => ms.iter().any(|m| {
                 m.location.location_type == MannyLocationType::Probe
                     && matches!(m.current_task, Some(MannyTask::AssistingAtomicPrinter))
             }),
         }
+    }
+
+    /// Pick a builder for a late-bound step: an idle onboard Manny that no other
+    /// step in this queue is already using, and that no step firing on this same
+    /// tick has just claimed. Returns `None` when the whole crew is busy — the
+    /// step simply waits for the next tick.
+    fn resolve_auto_builder(&self, claimed: &[String]) -> Option<(String, String)> {
+        let busy_here: Vec<&str> = self
+            .craft_queue
+            .iter()
+            .filter(|s| s.is_running())
+            .filter_map(|s| s.builder_manny_id.as_deref())
+            .collect();
+        self.collect_idle_onboard_mannies()
+            .into_iter()
+            .find(|(id, _)| !busy_here.contains(&id.as_str()) && !claimed.contains(id))
     }
 
     /// Advance the queue. Each **lane** (a builder Manny, or the atomic printer)
@@ -350,10 +389,29 @@ impl AppState {
 
         // B) Start the first pending step of every free lane: a lane is free
         // when it has no running step and its builder is idle (or the printer is
-        // free). Different builders fire together → parallel execution.
+        // free). Different builders fire together → parallel execution. A step
+        // with no pinned builder binds here, against the crew as it is *now*.
+        let mut claimed: Vec<String> = Vec::new();
         let mut i = 0;
         while i < self.craft_queue.len() {
             if matches!(self.craft_queue[i].state, StepState::Pending) {
+                if self.craft_queue[i].is_auto() {
+                    // Late binding (#235): take a Manny that is free right now
+                    // and that nothing else in the queue is using.
+                    match self.resolve_auto_builder(&claimed) {
+                        Some((id, name)) => {
+                            claimed.push(id.clone());
+                            let step = &mut self.craft_queue[i];
+                            step.builder_manny_id = Some(id);
+                            step.builder_manny_name = Some(name);
+                        }
+                        // Whole crew busy: wait for the next tick.
+                        None => {
+                            i += 1;
+                            continue;
+                        }
+                    }
+                }
                 let lane = self.craft_queue[i].builder_manny_id.clone();
                 let lane_running = self
                     .craft_queue
@@ -365,6 +423,13 @@ impl AppState {
                     step.state = StepState::Running { observed_busy: false };
                     step.fired_at = Some(Instant::now());
                     fires.push((fire_of(step), step.recipe_name.clone(), log_of(step).1));
+                } else if self.craft_queue[i].is_auto() {
+                    // The binding did not lead to a start (the lane it landed on
+                    // is taken): release it so the next tick re-resolves freely.
+                    claimed.retain(|c| Some(c.as_str()) != self.craft_queue[i].builder_manny_id.as_deref());
+                    let step = &mut self.craft_queue[i];
+                    step.builder_manny_id = None;
+                    step.builder_manny_name = None;
                 }
             }
             i += 1;
