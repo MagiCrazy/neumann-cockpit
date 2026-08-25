@@ -2611,6 +2611,88 @@ fn map_menu_has_waypoints_disabled_when_empty() {
     assert!(!corridors.enabled, "no beacon relay here → disabled");
 }
 
+// ── blueprint sharing (#301 phase 3, API v116) ────────────────────────────
+
+#[test]
+fn share_recipients_exclude_our_own_fleet() {
+    // The server answers 422 when the recipient belongs to the sender. The
+    // cockpit knows which probes are ours, so it must not offer them at all.
+    let mut s = AppState::default();
+    s.fleet = serde_json::from_str(
+        r#"[{"id":1,"name":"Mine","isDefault":true,"status":"idle","isReachable":true},
+            {"id":2,"name":"Also mine","isDefault":false,"status":"idle","isReachable":true}]"#,
+    )
+    .unwrap();
+    s.scut_network_view = Some(
+        serde_json::from_str(
+            r#"{"id":7,"name":"Alpha","relayCount":1,"coveredSectorCount":3,"relays":[],
+            "probes":[
+                {"id":1,"name":"Mine","sector":{"relative":{"x":0,"y":0,"z":0}}},
+                {"id":2,"name":"Also mine","sector":{"relative":{"x":1,"y":0,"z":0}}},
+                {"id":314,"name":"Someone else","sector":{"relative":{"x":2,"y":0,"z":0}}}]}"#,
+        )
+        .unwrap(),
+    );
+    assert_eq!(s.share_recipients(), vec![(314, "Someone else".to_string())]);
+}
+
+#[test]
+fn only_known_and_shareable_blueprints_are_offered() {
+    let mut s = AppState::default();
+    s.probe_improvements = serde_json::from_str(
+        r#"[{"id":"deuterium_compression","name":"Deuterium compression","description":"",
+             "available":true,"done":false,"durationSeconds":300,"ingredients":[]},
+            {"id":"distributed_thrust_anchoring","name":"Distributed Thrust Anchoring","description":"",
+             "available":false,"done":true,"durationSeconds":300,"ingredients":[]},
+            {"id":"reinforced_container_couplings","name":"Reinforced couplings","description":"",
+             "available":false,"done":false,"durationSeconds":300,"ingredients":[]},
+            {"id":"anatiform_asteroid_sculpting","name":"Duck sculpting","description":"",
+             "available":true,"done":false,"durationSeconds":300,"ingredients":[]}]"#,
+    )
+    .unwrap();
+    let ids: Vec<String> = s.shareable_blueprints().into_iter().map(|(id, _)| id).collect();
+    // Unlocked or already installed counts as known; a locked one does not, and
+    // duck sculpting is not in the endpoint's path enum however known it is.
+    assert_eq!(ids, vec!["deuterium_compression", "distributed_thrust_anchoring"]);
+}
+
+#[test]
+fn sharing_needs_coverage_a_blueprint_and_a_probe_id() {
+    let mut s = AppState::default();
+    s.active_pane = Pane::Probe;
+    let reason = |s: &AppState| {
+        s.build_context_menu()
+            .expect("probe menu")
+            .items
+            .iter()
+            .find(|i| i.action == MenuAction::ShareBlueprint)
+            .expect("share entry")
+            .disabled_reason
+            .clone()
+    };
+    assert_eq!(reason(&s).as_deref(), Some("no SCUT network covers this sector"));
+
+    s.scan_history = vec![serde_json::from_str(
+        r#"{"relativeCoordinates":{"x":0,"y":0,"z":0},"distance":0,
+            "knowledgeLevel":"detailed","confidence":1.0,
+            "scutNetworks":[{"id":7,"name":"Alpha"}],
+            "scan":{"currentSectorResidenceSeconds":60,"requiredResidenceSeconds":60,"scanQuality":1.0}}"#,
+    )
+    .unwrap()];
+    assert_eq!(reason(&s).as_deref(), Some("no shareable blueprint known"));
+
+    s.probe_improvements = serde_json::from_str(
+        r#"[{"id":"deuterium_compression","name":"Deuterium compression","description":"",
+             "available":true,"done":false,"durationSeconds":300,"ingredients":[]}]"#,
+    )
+    .unwrap();
+    // Mirror-only endpoint: no probe sync, no path to call.
+    assert_eq!(reason(&s).as_deref(), Some("waiting for a probe sync"));
+
+    s.probe = Some(probe_with_inventory("[]", "[]"));
+    assert_eq!(reason(&s), None, "coverage + blueprint + probe id → enabled");
+}
+
 // ── crafting-reservation reassignment (#301 phase 2, API v116) ────────────
 
 #[test]
