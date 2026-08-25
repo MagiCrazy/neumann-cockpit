@@ -385,3 +385,83 @@ fn fleet_roster_flags_a_tanker() {
     assert!(text.contains("Bunker"), "roster lists the drone");
     assert!(text.contains("tanker"), "a tanker is flagged in the roster");
 }
+
+#[test]
+fn inventory_pane_scrolls_to_the_selected_stock() {
+    // Issue #292: the pane laid its rows out as fixed 1-row rects, so anything
+    // past the pane height got a zero-height rect and vanished — the ▶ cursor
+    // included, which is exactly how a stock the pilot could see in the web UI
+    // was missing from the cockpit.
+    let mut state = AppState::default();
+    let stocks: Vec<String> = (0..24)
+        .map(|i| {
+            format!(
+                r#"{{"id": "s{i:02}", "type": "res{i:02}", "name": "res{i:02}",
+                     "amount": {i}.0, "containerSpace": 1.0}}"#
+            )
+        })
+        .collect();
+    state.probe = Some(
+        serde_json::from_str(&format!(
+            r#"{{
+        "id": 1, "name": "t", "status": "idle",
+        "fuel": {{"deuterium": 50.0, "maxDeuterium": 100.0}}, "sensorMode": "normal",
+        "sector": null, "movement": null, "systems": {{"integrityPercent": 80.0}},
+        "inventory": {{"capacity": 10.0, "usedCapacity": 2.0, "freeCapacity": 8.0,
+            "items": [], "resourceStocks": [{}], "externalTanks": [], "containers": []}}
+    }}"#,
+            stocks.join(", ")
+        ))
+        .unwrap(),
+    );
+    // Cursor on the last stock, in a pane far too short to hold 24 of them.
+    state.inventory_selection = 23;
+    let mut term = Terminal::new(TestBackend::new(48, 12)).unwrap();
+    term.draw(|f| {
+        let area = f.area();
+        crate::ui::panels::inventory::render_inventory_panel(f, area, &state, true);
+    })
+    .unwrap();
+    let text = buffer_text(term.backend().buffer());
+    assert!(text.contains("▶ "), "the cursor is drawn somewhere on screen");
+    assert!(text.contains("res23"), "the selected stock is in view");
+    assert!(!text.contains("res00"), "the top of the list scrolled away");
+}
+
+#[test]
+fn zoomed_storage_shows_the_last_containers_free_line() {
+    // Issue #293: in zoom a container is a block (header + free capacity), but
+    // the scroller anchored the *header* to the bottom row, so the free line of
+    // the last container fell one row past the edge.
+    let mut state = AppState::default();
+    let containers: Vec<String> = (0..12)
+        .map(|i| {
+            format!(
+                r#"{{"id": "c{i:02}", "kind": "storage", "label": "Container {i:02}",
+                     "sortOrder": {i}, "capacity": 100.0, "usedCapacity": {i}.0,
+                     "freeCapacity": 9{i}.0, "rules": {{}}}}"#
+            )
+        })
+        .collect();
+    state.probe = Some(
+        serde_json::from_str(&format!(
+            r#"{{
+        "id": 1, "name": "t", "status": "idle",
+        "fuel": {{"deuterium": 50.0, "maxDeuterium": 100.0}}, "sensorMode": "normal",
+        "sector": null, "movement": null, "systems": {{"integrityPercent": 80.0}},
+        "inventory": {{"capacity": 10.0, "usedCapacity": 2.0, "freeCapacity": 8.0,
+            "items": [], "resourceStocks": [], "externalTanks": [], "containers": [{}]}}
+    }}"#,
+            containers.join(", ")
+        ))
+        .unwrap(),
+    );
+    state.active_pane = Pane::Storage;
+    state.zoomed = true;
+    // Cursor on the last container — the reported case.
+    state.pane_nav[Pane::Storage.index()].cursor = 11;
+
+    let text = buffer_text(&render_cockpit(&state, 80, 20));
+    assert!(text.contains("Container 11"), "the selected container is in view");
+    assert!(text.contains("free 911.00"), "and so is its free-capacity line: {text}");
+}

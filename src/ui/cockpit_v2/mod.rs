@@ -10,6 +10,9 @@
 pub(crate) mod grid;
 mod menu;
 mod panes;
+/// Shared by the reused panels (`ui/panels/`), which scroll their line list
+/// the same way the grid panes do (issues #292, #293).
+pub(crate) use panes::scroll_offset;
 
 use crate::app::{AppState, DrillLevel, Pane};
 use crate::ui::panels::{render_inventory_panel, render_mannies_panel, render_probe_panel, render_scanner_panel};
