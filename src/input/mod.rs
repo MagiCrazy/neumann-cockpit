@@ -48,7 +48,10 @@ use pickers::{
     handle_rename_manny_event, handle_salvage_event,
 };
 use repair::handle_repair_event;
-use scanner::{handle_object_action_event, handle_scut_network_event, handle_scut_relay_event, handle_waypoints_event};
+use scanner::{
+    handle_object_action_event, handle_scut_corridor_event, handle_scut_network_event, handle_scut_relay_event,
+    handle_waypoints_event,
+};
 use script::handle_script_event;
 use storage_move::handle_storage_move_event;
 use travel::handle_travel_event;
@@ -89,6 +92,7 @@ const WIZARD_INPUTS: &[(WizardGuard, WizardHandler)] = &[
     (|s| matches!(s.active_wizard, ActiveWizard::MindSnapshot(_)), handle_mind_snapshot_event),
     (|s| matches!(s.active_wizard, ActiveWizard::ScutRelay(_)), handle_scut_relay_event),
     (|s| matches!(s.active_wizard, ActiveWizard::ScutNetwork(_)), handle_scut_network_event),
+    (|s| matches!(s.active_wizard, ActiveWizard::ScutCorridor(_)), handle_scut_corridor_event),
     (|s| matches!(s.active_wizard, ActiveWizard::Missions(_)), handle_missions_event),
     (|s| matches!(s.active_wizard, ActiveWizard::Messages(_)), handle_messages_event),
     (|s| matches!(s.active_wizard, ActiveWizard::RenameManny(_)), handle_rename_manny_event),

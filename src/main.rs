@@ -17,7 +17,7 @@ use neumann_cockpit::api::tasks::{
 };
 use neumann_cockpit::app::{
     batch_tasks, ActiveWizard, ApiMessage, AppState, ColorMode, CraftFire, Fabricator, MessagesInput, MissionsInput,
-    Refetch, RefreshTarget, RemoteMineInput, ScriptAction, ScutNetworkInput,
+    Refetch, RefreshTarget, RemoteMineInput, ScriptAction, ScutCorridorInput, ScutNetworkInput,
 };
 use neumann_cockpit::input::handle_event;
 use neumann_cockpit::preflight;
@@ -464,8 +464,25 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                     // so the failure surfaces as a status-bar error, not a wizard one.
                     ApiMessage::TransitBeaconError(e) => state.set_error(e),
                     ApiMessage::ScutNetworkFetched(network) => {
-                        if matches!(state.active_wizard, ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { .. })) {
-                            state.scut_network_view = Some(network);
+                        // Two wizards wait on this fetch: the inspector, and the
+                        // safe-corridor picker (#257), which needs the network's
+                        // other beacon relays to know where a risk-free jump
+                        // leads. Both read it back from `scut_network_view`.
+                        match state.active_wizard {
+                            ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { .. }) => {
+                                state.scut_network_view = Some(network);
+                            }
+                            ActiveWizard::ScutCorridor(ScutCorridorInput::Loading { .. }) => {
+                                state.scut_network_view = Some(network);
+                                let none = state.corridor_destinations().is_empty();
+                                state.active_wizard = ActiveWizard::ScutCorridor(ScutCorridorInput::Picking {
+                                    selection: 0,
+                                    error: none.then(|| {
+                                        "no other beacon relay in this network — nothing to jump to".to_string()
+                                    }),
+                                });
+                            }
+                            _ => {}
                         }
                     }
                     ApiMessage::MessagesFetched(m, pag) => {

@@ -2516,7 +2516,7 @@ fn map_context_menu_goto_disabled_without_visited() {
     let mut state = AppState::default();
     state.active_pane = Pane::Map;
     let menu = state.build_context_menu().expect("map menu");
-    assert_eq!(menu.items.len(), 4);
+    assert_eq!(menu.items.len(), 5);
     let goto = menu.items.iter().find(|i| i.action == MenuAction::GotoVisited).unwrap();
     assert!(!goto.enabled, "no visited sectors → jump disabled");
     // Open map / travel are always available.
@@ -2561,9 +2561,118 @@ fn map_menu_has_waypoints_disabled_when_empty() {
     let mut state = AppState::default();
     state.active_pane = Pane::Map;
     let menu = state.build_context_menu().expect("map menu");
-    assert_eq!(menu.items.len(), 4);
+    assert_eq!(menu.items.len(), 5);
     let wp = menu.items.iter().find(|i| i.action == MenuAction::Waypoints).unwrap();
     assert!(!wp.enabled, "no waypoints → disabled");
+    // Safe corridors need a beacon-equipped relay in this very sector (#257).
+    let corridors = menu
+        .items
+        .iter()
+        .find(|i| i.action == MenuAction::ScutCorridors)
+        .unwrap();
+    assert!(!corridors.enabled, "no beacon relay here → disabled");
+}
+
+// ── safe SCUT corridors (#257, API v96) ───────────────────────────────────
+
+/// A probe sitting at (0,0,0) with the given objects in its own sector.
+fn state_in_sector_with(objects_json: &str) -> AppState {
+    let mut s = AppState::default();
+    s.probe = Some(probe_with_inventory("[]", "[]"));
+    if let Some(pr) = s.probe.as_mut() {
+        pr.sector = serde_json::from_str(r#"{"relative":{"x":0,"y":0,"z":0}}"#).unwrap();
+    }
+    s.scan_history = vec![make_sector_with_objects(0.0, 0.0, 0.0, objects_json)];
+    s
+}
+
+const BEACON_RELAY: &str = r#"[{"type":"scut_relay","id":"r1","name":"Alpha relay","status":"on",
+    "isTransitBeacon":true,"network":{"id":7,"name":"Alpha"}}]"#;
+
+#[test]
+fn a_local_beacon_relay_opens_a_corridor_network() {
+    let s = state_in_sector_with(BEACON_RELAY);
+    assert_eq!(s.local_beacon_networks(), vec![(7, "Alpha".to_string())]);
+}
+
+#[test]
+fn a_relay_without_a_beacon_or_switched_off_opens_nothing() {
+    // Both halves of the rule matter: the relay must be active *and* equipped.
+    let no_beacon = state_in_sector_with(
+        r#"[{"type":"scut_relay","id":"r1","name":"A","status":"on",
+             "isTransitBeacon":false,"network":{"id":7,"name":"Alpha"}}]"#,
+    );
+    assert!(no_beacon.local_beacon_networks().is_empty(), "beacon required");
+    let switched_off = state_in_sector_with(
+        r#"[{"type":"scut_relay","id":"r1","name":"A","status":"off",
+             "isTransitBeacon":true,"network":{"id":7,"name":"Alpha"}}]"#,
+    );
+    assert!(switched_off.local_beacon_networks().is_empty(), "active relay required");
+}
+
+/// A fetched network holding the local relay plus two remote ones, only one of
+/// which is a valid corridor endpoint.
+fn with_network(s: &mut AppState) {
+    s.scut_network_view = Some(
+        serde_json::from_str(
+            r#"{"id":7,"name":"Alpha","relayCount":4,"coveredSectorCount":9,
+            "relays":[
+                {"id":1,"name":"Alpha relay","status":"on","isTransitBeacon":true,
+                 "sector":{"relative":{"x":0,"y":0,"z":0}},"coverageRadiusSectors":2},
+                {"id":2,"name":"Beta relay","status":"on","isTransitBeacon":true,
+                 "sector":{"relative":{"x":3,"y":-1,"z":2}},"coverageRadiusSectors":2},
+                {"id":3,"name":"Gamma relay","status":"on","isTransitBeacon":false,
+                 "sector":{"relative":{"x":5,"y":0,"z":0}},"coverageRadiusSectors":2},
+                {"id":4,"name":"Delta relay","status":"off","isTransitBeacon":true,
+                 "sector":{"relative":{"x":9,"y":9,"z":9}},"coverageRadiusSectors":2}],
+            "probes":[]}"#,
+        )
+        .unwrap(),
+    );
+}
+
+#[test]
+fn corridors_are_the_other_active_beacon_relays() {
+    let mut s = state_in_sector_with(BEACON_RELAY);
+    with_network(&mut s);
+    let dests = s.corridor_destinations();
+    assert_eq!(dests.len(), 1, "only the equipped, active, remote relay qualifies");
+    assert_eq!(dests[0].coords, (3, -1, 2));
+    assert_eq!(dests[0].relay_name, "Beta relay");
+    // The probe's own sector is not a destination, an unequipped relay is not a
+    // corridor, and a dark relay is not one either.
+    assert!(!dests.iter().any(|d| d.coords == (0, 0, 0)));
+    assert!(!dests.iter().any(|d| d.coords == (5, 0, 0)));
+    assert!(!dests.iter().any(|d| d.coords == (9, 9, 9)));
+}
+
+#[test]
+fn a_corridor_needs_both_ends() {
+    let mut s = state_in_sector_with(BEACON_RELAY);
+    with_network(&mut s);
+    assert!(s.is_safe_corridor(3, -1, 2), "both ends equipped and active");
+    assert!(!s.is_safe_corridor(5, 0, 0), "the far end has no beacon");
+
+    // Same network, but nothing equipped on this end: no corridor from here.
+    let mut no_local = state_in_sector_with(
+        r#"[{"type":"scut_relay","id":"r1","name":"A","status":"on",
+             "isTransitBeacon":false,"network":{"id":7,"name":"Alpha"}}]"#,
+    );
+    with_network(&mut no_local);
+    assert!(
+        !no_local.is_safe_corridor(3, -1, 2),
+        "the local half of the corridor is missing"
+    );
+}
+
+#[test]
+fn an_unknown_topology_never_claims_a_corridor() {
+    // The network detail is fetched lazily. Until it lands, the cockpit must
+    // stay silent rather than imply anything about the jump.
+    let s = state_in_sector_with(BEACON_RELAY);
+    assert!(s.scut_network_view.is_none());
+    assert!(!s.is_safe_corridor(3, -1, 2));
+    assert!(s.corridor_destinations().is_empty());
 }
 
 // ── recipe affordability ──────────────────────────────────────────────────

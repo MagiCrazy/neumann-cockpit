@@ -128,6 +128,25 @@ pub(crate) fn render_travel_overlay(frame: &mut Frame, area: Rect, state: &AppSt
                 ]));
             }
 
+            // Safe SCUT corridor (API v96, #257). Stated only on evidence — the
+            // network topology is fetched lazily, so silence means "unknown",
+            // never "unsafe". And it waives destruction, not detachment: say
+            // both, or the pilot reads it as a free jump.
+            if state.is_safe_corridor(*x, *y, *z) {
+                lines.push(Line::from(vec![
+                    Span::styled("   ≣✓ ", Style::default().fg(p.good)),
+                    Span::styled(
+                        "safe corridor",
+                        Style::default().fg(p.good).add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(" — no destruction risk", Style::default().fg(p.dim)),
+                ]));
+                lines.push(Line::from(Span::styled(
+                    "      containers can still detach",
+                    Style::default().fg(p.dim),
+                )));
+            }
+
             if let Some(err) = error {
                 lines.push(Line::from(""));
                 lines.push(Line::from(Span::styled(
