@@ -1,4 +1,7 @@
-use crate::api::types::{DangerLevel, ResourceShares, SectorObject, SectorObjectType, SensorMode};
+use crate::api::types::{
+    AsteroidTrajectory, AsteroidTrajectoryMode, AsteroidTrajectoryStatus, DangerLevel, MotorFuelStatus, ResourceShares,
+    SectorObject, SectorObjectType, SensorMode,
+};
 use crate::app::AppState;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -9,9 +12,10 @@ use ratatui::{
 };
 
 use crate::ui::theme::{
-    knowledge_color, knowledge_label, map_cell_style, object_color, object_icon, object_type_label, palette,
-    pane_block, ratio_color, Palette,
+    format_duration, knowledge_color, knowledge_label, map_cell_style, object_color, object_icon, object_type_label,
+    palette, pane_block, ratio_color, Palette,
 };
+use chrono::Utc;
 // ── Scanner panel ─────────────────────────────────────────────────────────────
 //
 // The SECTOR pane owns the current sector's full detail. The Scanner is the
@@ -346,6 +350,43 @@ pub(crate) fn resource_shares_line<'a>(
 
 /// Lines for one scanned object. `compact` drops the scientific detail
 /// (mass / radius / uid and nested-body dimensions) shown only in the zoom view.
+/// One-line description of a running asteroid trajectory: what it is doing, and
+/// when the next phase change is due. The status is what makes a rock under
+/// thrust legible — `accelerating` and `crossing_sector` mean very different
+/// things to whoever is standing in the target sector (API v116).
+pub(crate) fn trajectory_label(t: &AsteroidTrajectory) -> String {
+    let status = match t.status {
+        AsteroidTrajectoryStatus::Accelerating => "accelerating",
+        AsteroidTrajectoryStatus::Coasting => "coasting",
+        AsteroidTrajectoryStatus::CrossingSector => "crossing sector",
+        AsteroidTrajectoryStatus::OrbitingBlackHole => "orbiting black hole",
+        AsteroidTrajectoryStatus::Captured => "captured",
+        AsteroidTrajectoryStatus::Completed => "completed",
+        AsteroidTrajectoryStatus::Missed => "missed",
+        AsteroidTrajectoryStatus::NoEffect => "no effect",
+        AsteroidTrajectoryStatus::Destroyed => "destroyed",
+        AsteroidTrajectoryStatus::Lost => "lost",
+        AsteroidTrajectoryStatus::Failed => "failed",
+        AsteroidTrajectoryStatus::Unknown => "?",
+    };
+    let mode = match t.mode {
+        AsteroidTrajectoryMode::SystemImpact => "impact",
+        AsteroidTrajectoryMode::SectorTransfer => "transfer",
+        AsteroidTrajectoryMode::Unknown => "trajectory",
+    };
+    let mut out = format!("{mode}: {status}");
+    if let Some(v) = t.current_speed_c {
+        if v > 0.0 {
+            out.push_str(&format!(" {v:.2}c"));
+        }
+    }
+    if let Some(at) = t.next_transition_at {
+        let remaining = (at - Utc::now()).num_seconds().max(0);
+        out.push_str(&format!(" · next {}", format_duration(remaining)));
+    }
+    out
+}
+
 pub(crate) fn sector_object_lines<'a>(obj: &'a SectorObject, compact: bool, p: Palette) -> Vec<Line<'a>> {
     let dim = Style::default().fg(p.dim);
     let text = Style::default().fg(p.text);
@@ -383,6 +424,27 @@ pub(crate) fn sector_object_lines<'a>(obj: &'a SectorObject, compact: bool, p: P
     if obj.object_type == SectorObjectType::ScutRelay && obj.is_transit_beacon == Some(true) {
         main_spans.push(Span::styled("  ⚡ transit beacon", Style::default().fg(p.good)));
     }
+    // Motorized asteroid (API v116). A rock under thrust must not read as an
+    // ordinary one — least of all one aimed at the system you are sitting in.
+    if obj.motorized == Some(true) {
+        let fuel = match obj.motor_fuel_status {
+            Some(MotorFuelStatus::Empty) => " (dry)",
+            _ => "",
+        };
+        main_spans.push(Span::styled(
+            format!("  ⏵ motorized{fuel}"),
+            Style::default().fg(p.warn),
+        ));
+    }
+    if let Some(t) = &obj.trajectory {
+        main_spans.push(Span::styled(
+            format!("  ➤ {}", trajectory_label(t)),
+            Style::default().fg(p.crit),
+        ));
+    }
+    if obj.in_transit == Some(true) {
+        main_spans.push(Span::styled("  ⇢ in transit", Style::default().fg(p.warn)));
+    }
     if !manny_state.is_empty() {
         main_spans.push(Span::styled(format!("  [{manny_state}]"), dim));
     }
@@ -417,6 +479,32 @@ pub(crate) fn sector_object_lines<'a>(obj: &'a SectorObject, compact: bool, p: P
                     Span::styled(id.as_str(), dim),
                 ]));
             }
+        }
+        // Motorized-asteroid detail: what the engine is doing and where it is
+        // headed. Kept to zoom, where there is room to read it (API v116).
+        if let Some(t) = &obj.trajectory {
+            let mut spans = vec![
+                Span::styled("  trajectory ", dim),
+                Span::styled(trajectory_label(t), text),
+            ];
+            if let Some(target) = &t.target_object_id {
+                spans.push(Span::styled(format!("  → {target}"), dim));
+            }
+            if let (Some(done), Some(planned)) = (t.completed_revolutions, t.planned_revolutions) {
+                spans.push(Span::styled(format!("  rev {done}/{planned}"), dim));
+            }
+            lines.push(Line::from(spans));
+        }
+        if let Some(captured) = &obj.captured_by_object_id {
+            lines.push(Line::from(vec![
+                Span::styled("  captured by ", dim),
+                Span::styled(captured.as_str(), text),
+            ]));
+        }
+        // The one distinctive feature the server defines is a duck. Show it
+        // verbatim rather than paraphrasing the joke.
+        if let Some(feature) = &obj.distinctive_feature {
+            lines.push(Line::from(Span::styled(format!("  {feature}"), dim)));
         }
         let skip_dimensions = matches!(obj.object_type, SectorObjectType::SolarSystem);
         let has_mass = obj.mass.is_some() && !skip_dimensions;

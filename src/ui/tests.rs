@@ -465,3 +465,43 @@ fn zoomed_storage_shows_the_last_containers_free_line() {
     assert!(text.contains("Container 11"), "the selected container is in view");
     assert!(text.contains("free 911.00"), "and so is its free-capacity line: {text}");
 }
+
+#[test]
+fn a_motorized_asteroid_reads_as_one() {
+    // API v116: propulsion state and the live trajectory must be visible on the
+    // object line — a rock aimed at the system you are sitting in cannot look
+    // like an ordinary rock.
+    use crate::api::types::SectorObject;
+    let obj: SectorObject = serde_json::from_str(
+        r#"{"id":"ast-1","type":"asteroid","name":"Metal 8f1a","motorized":true,
+            "motorFuelStatus":"empty","distinctiveFeature":"Sculpted in the shape of a duck",
+            "trajectory":{"id":"atr_1","asteroidId":"ast-1","mode":"system_impact",
+                "status":"accelerating","startedAt":null,"nextTransitionAt":null,
+                "targetObjectId":"planet-3","currentSpeedC":0.25,
+                "plannedRevolutions":3,"completedRevolutions":1}}"#,
+    )
+    .unwrap();
+    let p = palette(ColorMode::MonoGreen);
+
+    let compact: String = crate::ui::panels::scanner::sector_object_lines(&obj, true, p)
+        .iter()
+        .flat_map(|l| l.spans.iter())
+        .map(|s| s.content.as_ref())
+        .collect();
+    assert!(compact.contains("motorized"), "propulsion marker: {compact}");
+    assert!(compact.contains("(dry)"), "an empty engine is worth knowing about");
+    assert!(compact.contains("impact: accelerating"), "mode and status: {compact}");
+    assert!(compact.contains("0.25c"), "current speed");
+
+    let zoomed: String = crate::ui::panels::scanner::sector_object_lines(&obj, false, p)
+        .iter()
+        .flat_map(|l| l.spans.iter())
+        .map(|s| s.content.as_ref())
+        .collect();
+    assert!(zoomed.contains("→ planet-3"), "the target, in zoom: {zoomed}");
+    assert!(zoomed.contains("rev 1/3"), "revolutions, in zoom");
+    assert!(
+        zoomed.contains("Sculpted in the shape of a duck"),
+        "the feature is quoted verbatim"
+    );
+}

@@ -18,6 +18,10 @@ fn alert_type_label(t: &AlertType) -> &'static str {
         AlertType::SectorObjectDetected => "object detected",
         AlertType::AnomalyDetected => "anomaly detected",
         AlertType::MannyReport => "manny report",
+        AlertType::MindSnapshotTransferred => "mind snapshot moved",
+        AlertType::ProbeDestroyed => "probe lost",
+        AlertType::AsteroidTrajectory => "asteroid trajectory",
+        AlertType::BlueprintShared => "blueprint shared",
         AlertType::Unknown => "alert",
     }
 }
@@ -30,6 +34,10 @@ fn type_color(t: &AlertType, p: Palette) -> Color {
         AlertType::SectorObjectDetected => p.warn,
         AlertType::AnomalyDetected => p.crit,
         AlertType::MannyReport => p.good,
+        AlertType::MindSnapshotTransferred => p.warn,
+        AlertType::ProbeDestroyed => p.crit,
+        AlertType::AsteroidTrajectory => p.warn,
+        AlertType::BlueprintShared => p.good,
         AlertType::Unknown => p.text,
     }
 }
