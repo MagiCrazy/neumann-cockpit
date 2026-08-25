@@ -285,6 +285,23 @@ pub fn fetch_rename_container(id: String, label: String, client: ApiClient, tx: 
     );
 }
 
+/// Move a container's crafting-output reservations elsewhere (API v116). Like
+/// the task batch, the endpoint exists only on the `{probeId}` mirror, so the
+/// piloted probe's id is passed explicitly.
+pub fn fetch_reassign_reservations(
+    probe_id: u64,
+    container_id: String,
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+) {
+    spawn_action(
+        tx,
+        async move { client.reassign_crafting_reservations(probe_id, &container_id).await },
+        ApiMessage::ReservationsReassigned,
+        ApiMessage::ReservationsReassignError,
+    );
+}
+
 pub fn fetch_update_container_rules(
     id: String,
     priority: Vec<String>,

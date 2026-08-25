@@ -72,6 +72,9 @@ pub enum ApiMessage {
     StorageContainerDetailError(String),
     RenameContainerDone(StorageContainer, ProbeInventory),
     RenameContainerError(String),
+    /// Crafting reservations moved off a container (API v116): how many.
+    ReservationsReassigned(u32),
+    ReservationsReassignError(String),
     UpdateContainerRulesDone(StorageContainer, ProbeInventory),
     UpdateContainerRulesError(String),
     StorageMoveDone(Manny, ProbeInventory),
