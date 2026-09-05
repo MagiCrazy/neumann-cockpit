@@ -1,5 +1,12 @@
 # Changelog
 
+## [104.3.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.2.2...neumann-cockpit-v104.3.0) (2026-09-05)
+
+
+### Features
+
+* **ui:** readable production console, container sorting, command prefixes ([#342](https://github.com/MagiCrazy/neumann-cockpit/issues/342)) ([1f0b073](https://github.com/MagiCrazy/neumann-cockpit/commit/1f0b0737323b62eb27d79c8ab7fc95159b75de61))
+
 ## [104.2.2](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.2.1...neumann-cockpit-v104.2.2) (2026-09-05)
 
 
