@@ -309,6 +309,58 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn menu_enter_on_a_disabled_item_explains_itself() {
+        // A disabled item carries the reason it cannot run; firing it used to
+        // be a dead keypress (issue #325).
+        use crate::app::{ContextMenu, InputMode, MenuAction, MenuItem};
+        let mut state = AppState::default();
+        state.mode = InputMode::Menu(ContextMenu {
+            title: "TEST".into(),
+            items: vec![MenuItem {
+                action: MenuAction::Travel,
+                label: "Travel…".into(),
+                enabled: false,
+                disabled_reason: Some("no fuel".into()),
+            }],
+            cursor: 0,
+        });
+        press(&mut state, KeyCode::Enter);
+        assert!(matches!(state.mode, InputMode::Menu(_)), "the menu stays open");
+        let toast = state.active_toast().expect("a disabled item says why");
+        assert!(toast.contains("no fuel"), "toast carries the reason: {toast}");
+        assert!(matches!(state.active_wizard, ActiveWizard::None), "and fires nothing");
+    }
+
+    #[tokio::test]
+    async fn menu_cursor_wraps_and_answers_the_shared_nav_keys() {
+        use crate::app::{ContextMenu, InputMode, MenuAction, MenuItem};
+        let item = |label: &str| MenuItem {
+            action: MenuAction::Travel,
+            label: label.into(),
+            enabled: true,
+            disabled_reason: None,
+        };
+        let mut state = AppState::default();
+        state.mode = InputMode::Menu(ContextMenu {
+            title: "TEST".into(),
+            items: vec![item("a"), item("b"), item("c")],
+            cursor: 0,
+        });
+        let cursor = |s: &AppState| match &s.mode {
+            InputMode::Menu(m) => m.cursor,
+            _ => panic!("menu closed"),
+        };
+        press(&mut state, KeyCode::Up);
+        assert_eq!(cursor(&state), 2, "up from the first item wraps");
+        press(&mut state, KeyCode::Down);
+        assert_eq!(cursor(&state), 0, "down from the last item wraps");
+        press(&mut state, KeyCode::End);
+        assert_eq!(cursor(&state), 2, "End jumps to the last item");
+        press(&mut state, KeyCode::Home);
+        assert_eq!(cursor(&state), 0);
+    }
+
+    #[tokio::test]
     async fn open_wizard_captures_keys_before_cockpit() {
         let mut state = AppState::default();
         state.active_wizard = ActiveWizard::Travel(TravelInput::Typing(String::new()));

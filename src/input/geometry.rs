@@ -1,5 +1,7 @@
 use crossterm::event::KeyCode;
 
+use crate::app::LIST_PAGE;
+
 // Retained for the Scanner pane's upcoming neighbour-scan action in the
 // cockpit interface (its classic single-key trigger was removed with U8).
 #[allow(dead_code)]
@@ -36,17 +38,46 @@ pub(super) fn face_d2(axis: u8) -> Vec<(i32, i32, i32)> {
     out
 }
 
+/// One navigation contract for every list in the cockpit (issue #325): the
+/// pop-up pick-lists handled here and the nine grid panes (`AppState`'s
+/// `pane_cursor_*`) answer to the same keys, with the same wrap.
+///
+/// `↑`/`k` and `↓`/`j` step and **wrap** at either end; `PgUp`/`PgDn` page by
+/// [`LIST_PAGE`] and `Home`/`End` jump to the ends — those four clamp, since a
+/// deliberate jump that wrapped around would be a surprise, not a shortcut.
 pub(super) fn list_nav(code: KeyCode, sel: usize, count: usize) -> Option<usize> {
+    let last = count.saturating_sub(1);
     match code {
-        KeyCode::Up | KeyCode::Char('k') => Some(sel.checked_sub(1).unwrap_or(count.saturating_sub(1))),
+        KeyCode::Up | KeyCode::Char('k') => Some(sel.checked_sub(1).unwrap_or(last)),
         KeyCode::Down | KeyCode::Char('j') => Some((sel + 1) % count.max(1)),
+        KeyCode::PageUp => Some(sel.saturating_sub(LIST_PAGE)),
+        KeyCode::PageDown => Some((sel + LIST_PAGE).min(last)),
+        KeyCode::Home => Some(0),
+        KeyCode::End => Some(last),
         _ => None,
     }
 }
 
+/// Whether `code` is one of the shared list-navigation keys. Handlers that
+/// match on explicit key arms use this as a guard so they route every one of
+/// them to [`list_nav`] rather than only the four step keys.
+pub(super) fn is_list_nav_key(code: KeyCode) -> bool {
+    matches!(
+        code,
+        KeyCode::Up
+            | KeyCode::Down
+            | KeyCode::Char('k')
+            | KeyCode::Char('j')
+            | KeyCode::PageUp
+            | KeyCode::PageDown
+            | KeyCode::Home
+            | KeyCode::End
+    )
+}
+
 /// Apply a pick-list nav key to `selection` in place. Returns `true` when the
-/// key was a navigation key (`j`/`k`/arrows) — so a handler can consume it and
-/// stop before its Esc/Enter arms, without re-matching the state to write back.
+/// key was a navigation key — so a handler can consume it and stop before its
+/// Esc/Enter arms, without re-matching the state to write back.
 pub(super) fn list_move(code: KeyCode, selection: &mut usize, count: usize) -> bool {
     match list_nav(code, *selection, count) {
         Some(n) => {
@@ -86,6 +117,41 @@ mod tests {
     fn list_nav_up_wraps_at_zero() {
         assert_eq!(list_nav(KeyCode::Up, 0, 3), Some(2));
         assert_eq!(list_nav(KeyCode::Char('k'), 0, 3), Some(2));
+    }
+
+    #[test]
+    fn list_nav_pages_and_clamps() {
+        // Paging and the end jumps clamp — only the step keys wrap (#325).
+        assert_eq!(list_nav(KeyCode::PageDown, 0, 30), Some(LIST_PAGE));
+        assert_eq!(list_nav(KeyCode::PageDown, 25, 30), Some(29), "clamped, not wrapped");
+        assert_eq!(list_nav(KeyCode::PageUp, 25, 30), Some(25 - LIST_PAGE));
+        assert_eq!(list_nav(KeyCode::PageUp, 3, 30), Some(0), "clamped, not wrapped");
+    }
+
+    #[test]
+    fn list_nav_home_and_end_jump_to_the_bounds() {
+        assert_eq!(list_nav(KeyCode::Home, 7, 30), Some(0));
+        assert_eq!(list_nav(KeyCode::End, 7, 30), Some(29));
+        assert_eq!(list_nav(KeyCode::End, 0, 0), Some(0), "empty list has no last row");
+    }
+
+    #[test]
+    fn is_list_nav_key_covers_the_whole_contract() {
+        for code in [
+            KeyCode::Up,
+            KeyCode::Down,
+            KeyCode::Char('j'),
+            KeyCode::Char('k'),
+            KeyCode::PageUp,
+            KeyCode::PageDown,
+            KeyCode::Home,
+            KeyCode::End,
+        ] {
+            assert!(is_list_nav_key(code), "{code:?} should navigate");
+            assert!(list_nav(code, 0, 3).is_some(), "{code:?} should resolve a position");
+        }
+        assert!(!is_list_nav_key(KeyCode::Enter));
+        assert!(!is_list_nav_key(KeyCode::Char('x')));
     }
 
     #[test]

@@ -8,7 +8,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::ui::theme::{format_duration, palette, pane_block, Palette};
+use crate::ui::theme::{format_duration, palette, pane_block, scroll_markers, Palette};
 use chrono::Utc;
 // ── Mannies panel ─────────────────────────────────────────────────────────────
 
@@ -49,7 +49,11 @@ pub(crate) fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppSta
     if focused {
         list_state.select(Some(sel));
     }
+    let total = mannies.len();
     frame.render_stateful_widget(list, inner, &mut list_state);
+    // The widget resolves its own scroll during the render, so its offset is
+    // only known afterwards — read it back for the overflow markers (#326).
+    scroll_markers(frame, area, list_state.offset() as u16, total, focused, p);
 }
 
 /// Short label for a Manny task (shared by the list and the detail view).

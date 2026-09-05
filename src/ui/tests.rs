@@ -561,3 +561,107 @@ fn the_travel_confirm_marks_a_safe_corridor_without_overselling_it() {
     let text = buffer_text(&render_cockpit(&state, 100, 30));
     assert!(!text.contains("safe corridor"), "no claim on an ordinary jump");
 }
+
+#[test]
+fn the_menu_cursor_is_visible_on_a_disabled_row() {
+    // Reverse video alone lost the cursor on a dimmed row, and a disabled row
+    // never got it at all (issue #325): column 1 now carries it explicitly.
+    use crate::app::{ContextMenu, InputMode, MenuAction, MenuItem};
+    let mut state = AppState::default();
+    state.mode = InputMode::Menu(ContextMenu {
+        title: "TEST".into(),
+        items: vec![
+            MenuItem {
+                action: MenuAction::Travel,
+                label: "Travel…".into(),
+                enabled: false,
+                disabled_reason: Some("no fuel".into()),
+            },
+            MenuItem {
+                action: MenuAction::Mine,
+                label: "Mine…".into(),
+                enabled: true,
+                disabled_reason: None,
+            },
+        ],
+        cursor: 0,
+    });
+
+    let text = buffer_text(&render_cockpit(&state, 80, 24));
+    let row = text
+        .lines()
+        .find(|l| l.contains("Travel…"))
+        .expect("the disabled item is rendered");
+    assert!(row.contains("▶"), "the cursor marks the disabled row it sits on: {row}");
+    assert!(row.contains("no fuel"), "and the row still states why: {row}");
+
+    let other = text
+        .lines()
+        .find(|l| l.contains("Mine…"))
+        .expect("the enabled item is rendered");
+    assert!(!other.contains("▶"), "only the cursor row is marked: {other}");
+}
+
+// ── overflow markers (issue #326) ─────────────────────────────────────────
+
+/// Render just the markers over a pane-sized rect and return the buffer.
+fn markers_buffer(offset: u16, total: usize, w: u16, h: u16) -> Buffer {
+    use crate::ui::theme::{pane_block, scroll_markers};
+    let p = palette(ColorMode::MonoGreen);
+    let mut term = Terminal::new(TestBackend::new(w, h)).unwrap();
+    term.draw(|f| {
+        let area = f.area();
+        f.render_widget(pane_block(" TEST ", true, p), area);
+        scroll_markers(f, area, offset, total, true, p);
+    })
+    .unwrap();
+    term.backend().buffer().clone()
+}
+
+#[test]
+fn overflow_markers_sit_on_the_border_and_only_when_needed() {
+    let (w, h) = (12u16, 6u16);
+    let at = |buf: &Buffer, y: u16| buf[(w - 1, y)].symbol().to_string();
+
+    // Viewport is 4 rows (h minus the two border rows) out of 20 lines.
+    let top = markers_buffer(0, 20, w, h);
+    assert_eq!(at(&top, h - 2), "▼", "more below → marker above the bottom corner");
+    assert_ne!(at(&top, 1), "▲", "nothing above yet");
+
+    let middle = markers_buffer(5, 20, w, h);
+    assert_eq!(at(&middle, 1), "▲", "scrolled → marker below the top corner");
+    assert_eq!(at(&middle, h - 2), "▼");
+
+    let bottom = markers_buffer(16, 20, w, h);
+    assert_eq!(at(&bottom, 1), "▲");
+    assert_ne!(at(&bottom, h - 2), "▼", "at the end, nothing more below");
+
+    let fits = markers_buffer(0, 3, w, h);
+    assert_ne!(at(&fits, 1), "▲", "a list that fits cries no wolf");
+    assert_ne!(at(&fits, h - 2), "▼");
+}
+
+#[test]
+fn a_pane_whose_list_overflows_says_so() {
+    // End to end: a roster taller than its pane marks its own frame.
+    let mut state = AppState::default();
+    state.active_pane = Pane::Mannies;
+    state.mannies = Some(
+        (0..40)
+            .map(|i| {
+                serde_json::from_str(&format!(
+                    r#"{{"id": "m{i}", "name": "m{i}",
+                        "location": {{"type": "probe", "sector": null}},
+                        "currentTask": null, "taskProgressPercent": 0.0,
+                        "cargo": {{"capacity": 0.3, "deuterium": 0.0, "metals": 0.0,
+                                   "ice": 0.0, "organicCompounds": 0.0}},
+                        "canReceiveOrders": true, "taskEstimatedEndTime": null}}"#
+                ))
+                .unwrap()
+            })
+            .collect(),
+    );
+
+    let text = buffer_text(&render_cockpit(&state, 80, 24));
+    assert!(text.contains("▼"), "the pane advertises that its list continues");
+}

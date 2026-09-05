@@ -5,7 +5,7 @@ use crate::api::client::ApiClient;
 use crate::api::tasks::fetch_assemble_probe;
 use crate::app::{ActiveWizard, ApiMessage, AppState, AssembleProbeInput, LogEvent, ASSEMBLABLE_MODELS};
 
-use super::geometry::list_nav;
+use super::geometry::{is_list_nav_key, list_nav};
 
 /// Assemble-probe wizard (API v81, per-model since v104): pick the hull model,
 /// then exactly two empty additional containers. `Enter` advances then fires
@@ -37,7 +37,7 @@ pub(super) fn handle_assemble_probe_event(
             }
             _ => state.close_wizard(),
         },
-        KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => match &mut state.active_wizard {
+        _ if is_list_nav_key(code) => match &mut state.active_wizard {
             ActiveWizard::AssembleProbe(AssembleProbeInput::PickModel { cursor, .. }) => {
                 if let Some(ns) = list_nav(code, *cursor, ASSEMBLABLE_MODELS.len()) {
                     *cursor = ns;

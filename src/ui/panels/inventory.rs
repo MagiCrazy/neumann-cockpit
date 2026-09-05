@@ -193,7 +193,9 @@ pub(crate) fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppS
     let offset = sel_line
         .map(|c| crate::ui::cockpit_v2::scroll_offset((c, c), lines.len(), inner.height as usize))
         .unwrap_or(0);
+    let total = lines.len();
     frame.render_widget(Paragraph::new(lines).scroll((offset, 0)), inner);
+    crate::ui::theme::scroll_markers(frame, area, offset, total, focused, p);
 }
 
 pub(crate) fn containers_row_count(inv: &crate::api::types::ProbeInventory, focused: bool) -> usize {

@@ -6,7 +6,7 @@ use crate::api::tasks::fetch_abandon_mission;
 use crate::api::types::MissionStatus;
 use crate::app::{ActiveWizard, ApiMessage, AppState, LogEvent, MissionsInput};
 
-use super::geometry::list_nav;
+use super::geometry::{is_list_nav_key, list_nav};
 
 pub(super) fn handle_missions_event(
     code: KeyCode,
@@ -21,7 +21,7 @@ pub(super) fn handle_missions_event(
                 KeyCode::Esc | KeyCode::Char('O') | KeyCode::Char('q') => {
                     state.close_wizard();
                 }
-                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                _ if is_list_nav_key(code) => {
                     if let Some(new_sel) = list_nav(code, selection, count) {
                         state.active_wizard = ActiveWizard::Missions(MissionsInput::Browsing { selection: new_sel });
                     }

@@ -1,7 +1,7 @@
 use crossterm::event::KeyCode;
 use tokio::sync::mpsc;
 
-use super::geometry::list_nav;
+use super::geometry::{is_list_nav_key, list_nav};
 use crate::api::client::ApiClient;
 use crate::api::tasks::fetch_improve_probe;
 use crate::app::{ActiveWizard, ApiMessage, AppState, ImproveInput, LogEvent};
@@ -19,7 +19,7 @@ pub(super) fn handle_improve_event(
             let count = state.probe_improvements.len();
             match code {
                 KeyCode::Esc => state.close_wizard(),
-                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                _ if is_list_nav_key(code) => {
                     if let Some(new_sel) = list_nav(code, selection, count) {
                         if let ActiveWizard::Improve(ImproveInput::PickImprovement { ref mut selection, .. }) =
                             state.active_wizard
@@ -38,7 +38,7 @@ pub(super) fn handle_improve_event(
             let count = mannies.len();
             match code {
                 KeyCode::Esc => state.close_wizard(),
-                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                _ if is_list_nav_key(code) => {
                     if let Some(new_sel) = list_nav(code, selection, count) {
                         if let ActiveWizard::Improve(ImproveInput::PickBuilder { ref mut selection, .. }) =
                             state.active_wizard

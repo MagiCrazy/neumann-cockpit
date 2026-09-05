@@ -4,11 +4,10 @@
 //! blocs (navigation, drill-in, rendering); U1 only establishes the state
 //! that `AppState` carries, so most of it is not read yet.
 
-/// Rows moved by one PageUp/PageDown in a pane list.
-const PANE_PAGE: usize = 10;
-/// Safety cap on the step-until-stable jump to top/bottom (guards against a
-/// hypothetical wrapping cursor looping forever).
-const PANE_JUMP_CAP: usize = 4096;
+/// Rows moved by one PageUp/PageDown in any cockpit list — the grid panes here
+/// and the pop-up pick-lists (`input::geometry::list_nav`), which share one
+/// navigation contract (issue #325).
+pub const LIST_PAGE: usize = 10;
 
 /// The nine panes of the Cockpit v2 grid, laid out to match the
 /// `e r t / d f g / c v b` navigation square (identical on AZERTY and
@@ -225,6 +224,7 @@ impl super::AppState {
 
     /// Move the cursor down within the active pane, routing to the pane's
     /// backing cursor (classic panels keep their existing selection state).
+    /// Wraps at the end, like every other list in the cockpit (issue #325).
     pub fn pane_cursor_down(&mut self) {
         match self.active_pane {
             Pane::Inventory => self.inventory_next(),
@@ -237,13 +237,13 @@ impl super::AppState {
                 let n = self.pane_item_count(pane);
                 if n > 0 {
                     let nav = &mut self.pane_nav[pane.index()];
-                    nav.cursor = (nav.cursor + 1).min(n - 1);
+                    nav.cursor = (nav.cursor + 1) % n;
                 }
             }
         }
     }
 
-    /// Move the cursor up within the active pane.
+    /// Move the cursor up within the active pane. Wraps at the top.
     pub fn pane_cursor_up(&mut self) {
         match self.active_pane {
             Pane::Inventory => self.inventory_prev(),
@@ -252,61 +252,84 @@ impl super::AppState {
             Pane::Mannies => {}
             Pane::Probe | Pane::Map => {}
             pane => {
-                let nav = &mut self.pane_nav[pane.index()];
-                nav.cursor = nav.cursor.saturating_sub(1);
+                let n = self.pane_item_count(pane);
+                if n > 0 {
+                    let nav = &mut self.pane_nav[pane.index()];
+                    nav.cursor = nav.cursor.checked_sub(1).unwrap_or(n - 1);
+                }
             }
         }
     }
 
-    /// The active pane's current cursor position, whichever backing field it
-    /// uses — so paging/jumping can detect when it has reached a bound.
+    /// How many rows the active pane's cursor can address, whichever backing
+    /// list it walks. `0` means the pane has no cursor (Probe, Map) or nothing
+    /// to point at — including a Mannies pane drilled into one Manny's detail,
+    /// where the cursor is deliberately frozen.
+    fn pane_cursor_len(&self) -> usize {
+        match self.active_pane {
+            Pane::Inventory => self.inventory_rows().len(),
+            Pane::Scanner => self.filtered_history_indices().len(),
+            Pane::Mannies if !self.pane_nav[Pane::Mannies.index()].drill.is_empty() => 0,
+            Pane::Mannies => self.mannies.as_ref().map_or(0, |m| m.len()),
+            Pane::Probe | Pane::Map => 0,
+            pane => self.pane_item_count(pane),
+        }
+    }
+
+    /// The active pane's cursor **position within its list** (not the backing
+    /// index: the Scanner walks the filtered history, so position and
+    /// `scan_history_idx` differ whenever a `ScanFilter` is active).
     fn pane_cursor_pos(&self) -> usize {
         match self.active_pane {
             Pane::Inventory => self.inventory_selection,
-            Pane::Scanner => self.scan_history_idx,
+            Pane::Scanner => self
+                .filtered_history_indices()
+                .iter()
+                .position(|&i| i == self.scan_history_idx)
+                .unwrap_or(0),
             Pane::Mannies => self.mannies_selection,
             pane => self.pane_nav[pane.index()].cursor,
         }
     }
 
-    /// Move the cursor a page (10 rows) down/up, reusing the per-pane routing.
-    /// Useful on lists that grow over a session (scan history, messages).
-    pub fn pane_cursor_page_down(&mut self) {
-        for _ in 0..PANE_PAGE {
-            self.pane_cursor_down();
+    /// Move the active pane's cursor to `pos` (a list position, clamped).
+    fn set_pane_cursor(&mut self, pos: usize) {
+        let len = self.pane_cursor_len();
+        if len == 0 {
+            return;
         }
+        let pos = pos.min(len - 1);
+        match self.active_pane {
+            Pane::Inventory => self.inventory_selection = pos,
+            Pane::Scanner => {
+                if let Some(&idx) = self.filtered_history_indices().get(pos) {
+                    self.scan_history_idx = idx;
+                    self.scan_detail_scroll = 0;
+                }
+            }
+            Pane::Mannies => self.mannies_selection = pos,
+            Pane::Probe | Pane::Map => {}
+            pane => self.pane_nav[pane.index()].cursor = pos,
+        }
+    }
+
+    /// Move the cursor a page ([`LIST_PAGE`] rows) down/up. Unlike `j`/`k`
+    /// these clamp: a deliberate jump that wrapped around would be a surprise.
+    pub fn pane_cursor_page_down(&mut self) {
+        self.set_pane_cursor(self.pane_cursor_pos() + LIST_PAGE);
     }
 
     pub fn pane_cursor_page_up(&mut self) {
-        for _ in 0..PANE_PAGE {
-            self.pane_cursor_up();
-        }
+        self.set_pane_cursor(self.pane_cursor_pos().saturating_sub(LIST_PAGE));
     }
 
-    /// Jump to the first/last row: step until the cursor stops moving (capped so
-    /// a wrapping cursor can never loop forever).
+    /// Jump to the first/last row.
     pub fn pane_cursor_top(&mut self) {
-        let mut last = self.pane_cursor_pos();
-        for _ in 0..PANE_JUMP_CAP {
-            self.pane_cursor_up();
-            let now = self.pane_cursor_pos();
-            if now == last {
-                break;
-            }
-            last = now;
-        }
+        self.set_pane_cursor(0);
     }
 
     pub fn pane_cursor_bottom(&mut self) {
-        let mut last = self.pane_cursor_pos();
-        for _ in 0..PANE_JUMP_CAP {
-            self.pane_cursor_down();
-            let now = self.pane_cursor_pos();
-            if now == last {
-                break;
-            }
-            last = now;
-        }
+        self.set_pane_cursor(self.pane_cursor_len().saturating_sub(1));
     }
 
     /// Toggle full-screen zoom of the active pane.
@@ -435,7 +458,7 @@ impl super::AppState {
         {
             parts.push("Enter act");
         }
-        parts.push("z zoom");
+        parts.push(if self.zoomed { "z/Esc unzoom" } else { "z zoom" });
         parts.push("ertdfgcvb pane");
         parts.push("F1 hints");
         parts.push("? help");

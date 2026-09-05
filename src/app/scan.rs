@@ -593,10 +593,9 @@ impl AppState {
             }
             return;
         };
-        if pos + 1 < idxs.len() {
-            self.scan_history_idx = idxs[pos + 1];
-            self.scan_detail_scroll = 0;
-        }
+        // Wraps at the end, like every other cockpit list (issue #325).
+        self.scan_history_idx = idxs[(pos + 1) % idxs.len()];
+        self.scan_detail_scroll = 0;
     }
 
     pub fn scan_hist_prev(&mut self) {
@@ -608,10 +607,8 @@ impl AppState {
             }
             return;
         };
-        if pos > 0 {
-            self.scan_history_idx = idxs[pos - 1];
-            self.scan_detail_scroll = 0;
-        }
+        self.scan_history_idx = idxs[pos.checked_sub(1).unwrap_or(idxs.len() - 1)];
+        self.scan_detail_scroll = 0;
     }
 
     pub fn set_scan_error(&mut self, msg: String) {

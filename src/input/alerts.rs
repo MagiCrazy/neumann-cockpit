@@ -5,7 +5,7 @@ use crate::api::client::ApiClient;
 use crate::api::tasks::{fetch_ack_alert, fetch_ack_damage_warning};
 use crate::app::{ActiveWizard, AlertsInput, ApiMessage, AppState};
 
-use super::geometry::list_nav;
+use super::geometry::{is_list_nav_key, list_nav};
 
 /// Number of entries shown under the currently selected tab.
 fn tab_len(state: &AppState, show_warnings: bool) -> usize {
@@ -43,7 +43,7 @@ pub(super) fn handle_alerts_event(
                 show_warnings: next,
             });
         }
-        KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+        _ if is_list_nav_key(code) => {
             if let Some(new_sel) = list_nav(code, selection, count) {
                 state.active_wizard = ActiveWizard::Alerts(AlertsInput::Browsing {
                     selection: new_sel,

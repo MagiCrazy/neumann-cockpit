@@ -277,12 +277,16 @@ fn scan_hist_next_advances_index() {
 }
 
 #[test]
-fn scan_hist_next_clamps_at_end() {
+fn scan_hist_next_wraps_at_end() {
+    // One navigation contract for every list: stepping past the end wraps,
+    // like the pick-lists and the Inventory/Mannies panes (issue #325).
     let mut state = AppState::default();
     state.scan_history = vec![make_sector(0., 0., 0.), make_sector(2., 0., 0.)];
     state.scan_history_idx = 1;
     state.scan_hist_next();
-    assert_eq!(state.scan_history_idx, 1);
+    assert_eq!(state.scan_history_idx, 0);
+    state.scan_hist_prev();
+    assert_eq!(state.scan_history_idx, 1, "and back the other way");
 }
 
 #[test]
@@ -295,7 +299,7 @@ fn scan_hist_prev_decrements_index() {
 }
 
 #[test]
-fn scan_hist_prev_clamps_at_zero() {
+fn scan_hist_prev_on_a_single_entry_stays_put() {
     let mut state = AppState::default();
     state.scan_history = vec![make_sector(0., 0., 0.)];
     state.scan_hist_prev();
@@ -661,6 +665,81 @@ fn manny_long_task_completion_notifies_but_short_and_lag_do_not() {
         state.pending_notifications.is_empty(),
         "starting a task is not a completion"
     );
+}
+
+// ── pane navigation contract (issue #325) ─────────────────────────────────
+
+#[test]
+fn pane_cursor_wraps_at_both_ends() {
+    let mut state = AppState::default();
+    state.active_pane = crate::app::Pane::Mannies;
+    state.mannies = Some(vec![
+        make_manny("a", "probe", true, None),
+        make_manny("b", "probe", true, None),
+        make_manny("c", "probe", true, None),
+    ]);
+
+    state.pane_cursor_up();
+    assert_eq!(state.mannies_selection, 2, "up from the first row wraps to the last");
+    state.pane_cursor_down();
+    assert_eq!(state.mannies_selection, 0, "down from the last row wraps to the first");
+}
+
+#[test]
+fn pane_cursor_pages_and_jumps_without_wrapping() {
+    let mut state = AppState::default();
+    state.active_pane = crate::app::Pane::Mannies;
+    state.mannies = Some(
+        (0..25)
+            .map(|i| make_manny(&format!("m{i}"), "probe", true, None))
+            .collect(),
+    );
+
+    state.pane_cursor_page_down();
+    assert_eq!(state.mannies_selection, crate::app::LIST_PAGE);
+    state.pane_cursor_page_up();
+    assert_eq!(state.mannies_selection, 0);
+    state.pane_cursor_page_up();
+    assert_eq!(
+        state.mannies_selection, 0,
+        "a page up at the top clamps, it does not wrap"
+    );
+
+    state.pane_cursor_bottom();
+    assert_eq!(state.mannies_selection, 24);
+    state.pane_cursor_page_down();
+    assert_eq!(state.mannies_selection, 24, "a page down at the end clamps too");
+    state.pane_cursor_top();
+    assert_eq!(state.mannies_selection, 0);
+}
+
+#[test]
+fn scanner_jumps_walk_the_filtered_history_not_the_raw_index() {
+    // The Scanner cursor addresses a *position* in the filtered list, so
+    // Home/End must land on filtered entries even when a filter hides some.
+    let mut state = AppState::default();
+    state.active_pane = crate::app::Pane::Scanner;
+    state.scan_history = vec![
+        make_sector(0., 0., 0.),
+        make_sector(2., 0., 0.),
+        make_sector(4., 0., 0.),
+    ];
+
+    state.pane_cursor_bottom();
+    let last = *state.filtered_history_indices().last().unwrap();
+    assert_eq!(state.scan_history_idx, last);
+    state.pane_cursor_top();
+    let first = state.filtered_history_indices()[0];
+    assert_eq!(state.scan_history_idx, first);
+}
+
+#[test]
+fn a_pane_without_a_cursor_ignores_the_jumps() {
+    let mut state = AppState::default();
+    state.active_pane = crate::app::Pane::Probe;
+    state.pane_cursor_bottom();
+    state.pane_cursor_page_down();
+    assert_eq!(state.pane_nav[crate::app::Pane::Probe.index()].cursor, 0);
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────

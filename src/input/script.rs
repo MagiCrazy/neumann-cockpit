@@ -1,5 +1,7 @@
 use crossterm::event::KeyCode;
 
+use super::geometry::{is_list_nav_key, list_nav};
+
 use crate::app::{ActiveWizard, AppState, ScriptInput};
 
 /// Vim-style modal editor for the action script (#198). `Insert` types a command
@@ -69,10 +71,11 @@ fn handle_normal(code: KeyCode, state: &mut AppState) {
         KeyCode::Char('i') | KeyCode::Char('a') | KeyCode::Char('o') => {
             state.active_wizard = ActiveWizard::Script(ScriptInput::editing());
         }
-        KeyCode::Down | KeyCode::Char('j') => {
-            set_selection(state, selection.saturating_add(1).min(len.saturating_sub(1)))
+        _ if is_list_nav_key(code) => {
+            if let Some(ns) = list_nav(code, selection, len) {
+                set_selection(state, ns);
+            }
         }
-        KeyCode::Up | KeyCode::Char('k') => set_selection(state, selection.saturating_sub(1)),
         KeyCode::Char('x') => {
             state.script_remove(selection);
             set_selection(state, selection.min(state.script.len().saturating_sub(1)));

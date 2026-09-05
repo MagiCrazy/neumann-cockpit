@@ -9,6 +9,7 @@
 use crossterm::event::KeyCode;
 use tokio::sync::mpsc;
 
+use super::geometry::{is_list_nav_key, list_move};
 use crate::api::client::ApiClient;
 use crate::api::tasks::{
     fetch_ack_alert, fetch_ack_damage_warning, fetch_alerts, fetch_all, fetch_damage_warnings, fetch_inspect,
@@ -242,45 +243,53 @@ fn open_sector_object_actions(state: &mut AppState) {
 fn handle_menu_key(code: KeyCode, state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
     match code {
         KeyCode::Esc => state.mode = InputMode::Normal,
-        KeyCode::Up | KeyCode::Char('k') => {
+        // The menu is a list like any other: same keys, same wrap (issue #325).
+        _ if is_list_nav_key(code) => {
             if let InputMode::Menu(m) = &mut state.mode {
-                m.cursor = m.cursor.saturating_sub(1);
-            }
-        }
-        KeyCode::Down | KeyCode::Char('j') => {
-            if let InputMode::Menu(m) = &mut state.mode {
-                if m.cursor + 1 < m.items.len() {
-                    m.cursor += 1;
-                }
+                let count = m.items.len();
+                list_move(code, &mut m.cursor, count);
             }
         }
         KeyCode::Enter => {
-            let action = if let InputMode::Menu(m) = &state.mode {
-                m.items.get(m.cursor).filter(|i| i.enabled).map(|i| i.action)
+            let idx = if let InputMode::Menu(m) = &state.mode {
+                m.cursor
             } else {
-                None
+                return;
             };
-            if let Some(action) = action {
-                state.mode = InputMode::Normal;
-                fire_menu_action(action, state, client, tx);
-            }
+            pick_menu_item(idx, state, client, tx);
         }
-        // 1-9 accelerators: fire the nth enabled item directly (one keystroke
-        // instead of walking there with j/k). Disabled/out-of-range digits noop.
+        // 1-9 accelerators: fire the nth item directly (one keystroke instead
+        // of walking there with j/k). Out-of-range digits noop; a disabled one
+        // explains itself, exactly as Enter on it does.
         KeyCode::Char(c @ '1'..='9') => {
-            let idx = c as usize - '1' as usize;
-            let action = if let InputMode::Menu(m) = &state.mode {
-                m.items.get(idx).filter(|i| i.enabled).map(|i| i.action)
-            } else {
-                None
-            };
-            if let Some(action) = action {
-                state.mode = InputMode::Normal;
-                fire_menu_action(action, state, client, tx);
-            }
+            pick_menu_item(c as usize - '1' as usize, state, client, tx);
         }
         _ => {}
     }
+}
+
+/// Fire the menu item at `idx`. A **disabled** item is not a dead keypress: it
+/// already carries the reason it cannot run, so surface that as a toast rather
+/// than silently dropping the action (issue #325).
+fn pick_menu_item(idx: usize, state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
+    let InputMode::Menu(m) = &state.mode else {
+        return;
+    };
+    let Some(item) = m.items.get(idx) else {
+        return;
+    };
+    if !item.enabled {
+        let label = item.label.clone();
+        let reason = item.disabled_reason.clone();
+        state.set_toast(match reason {
+            Some(reason) => format!("{label} — {reason}"),
+            None => format!("{label} — unavailable"),
+        });
+        return;
+    }
+    let action = item.action;
+    state.mode = InputMode::Normal;
+    fire_menu_action(action, state, client, tx);
 }
 
 /// Launch the wizard behind a menu action for the selected Manny. Mirrors the

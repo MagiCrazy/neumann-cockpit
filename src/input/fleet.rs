@@ -8,7 +8,7 @@ use crate::app::{
     TransferProbeInput,
 };
 
-use super::geometry::list_nav;
+use super::geometry::{is_list_nav_key, list_nav};
 
 /// Fleet picker (API v81 multi-probe): navigate the roster, `Enter` switches the
 /// piloted probe, `Esc` cancels. Switching is client-side only — the event loop
@@ -21,7 +21,7 @@ pub(super) fn handle_probe_switch_event(code: KeyCode, state: &mut AppState) {
     let count = state.fleet.len();
     match code {
         KeyCode::Esc => state.probe_switch = ProbeSwitchInput::Inactive,
-        KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+        _ if is_list_nav_key(code) => {
             if let Some(ns) = list_nav(code, selection, count) {
                 state.probe_switch = ProbeSwitchInput::Picking { selection: ns };
             }
@@ -60,7 +60,7 @@ pub(super) fn handle_transfer_deuterium_event(
         let (count, sel) = (targets.len(), *selection);
         match code {
             KeyCode::Esc => state.close_wizard(),
-            KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+            _ if is_list_nav_key(code) => {
                 if let (
                     Some(ns),
                     ActiveWizard::TransferDeuterium(TransferDeuteriumInput::PickTarget { selection, .. }),
@@ -164,7 +164,7 @@ pub(super) fn handle_transfer_probe_event(
     let (count, sel) = (targets.len(), *selection);
     match code {
         KeyCode::Esc => state.close_wizard(),
-        KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+        _ if is_list_nav_key(code) => {
             if let (Some(ns), ActiveWizard::TransferProbe(TransferProbeInput::PickTarget { selection, .. })) =
                 (list_nav(code, sel, count), &mut state.active_wizard)
             {

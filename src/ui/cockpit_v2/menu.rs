@@ -20,8 +20,9 @@ pub fn render(frame: &mut Frame, area: Rect, menu: &ContextMenu, p: Palette) {
         .items
         .iter()
         .map(|i| {
-            // 3 = the " N " accelerator gutter rendered before every label.
-            3 + i.label.chars().count() + i.disabled_reason.as_ref().map_or(0, |r| r.chars().count() + 3)
+            // 4 = the cursor column plus the " N " accelerator gutter, both
+            // rendered before every label.
+            4 + i.label.chars().count() + i.disabled_reason.as_ref().map_or(0, |r| r.chars().count() + 3)
         })
         .max()
         .unwrap_or(0)
@@ -57,19 +58,35 @@ pub fn render(frame: &mut Frame, area: Rect, menu: &ContextMenu, p: Palette) {
             } else {
                 "   ".to_string()
             };
+            // Column 1 marks the cursor explicitly. Reverse video alone used to
+            // carry it, which vanished on a dimmed disabled row — and disabled
+            // rows never got it at all (issue #325).
+            let selected = i == menu.cursor;
+            let mark = Span::styled(
+                if selected { "▶" } else { " " },
+                Style::default().fg(p.accent).add_modifier(Modifier::BOLD),
+            );
             if !item.enabled {
                 let reason = item.disabled_reason.as_deref().unwrap_or("unavailable");
+                // Bold, not reverse video: reversing a dim foreground is what
+                // made the cursor unreadable here in the first place.
+                let mut style = Style::default().fg(p.dim);
+                if selected {
+                    style = style.add_modifier(Modifier::BOLD);
+                }
                 return Line::from(vec![
-                    Span::styled(format!("{acc}{}", item.label), Style::default().fg(p.dim)),
+                    mark,
+                    Span::styled(format!("{acc}{}", item.label), style),
                     Span::styled(format!(" ({reason})"), Style::default().fg(p.dim)),
                 ]);
             }
-            let style = if i == menu.cursor {
+            let style = if selected {
                 Style::default().fg(p.accent).add_modifier(Modifier::REVERSED)
             } else {
                 Style::default().fg(p.text)
             };
             Line::from(vec![
+                mark,
                 Span::styled(acc, Style::default().fg(p.dim)),
                 Span::styled(item.label.clone(), style),
             ])

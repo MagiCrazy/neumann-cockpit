@@ -12,7 +12,7 @@ use crate::api::client::ApiClient;
 use crate::api::tasks::{fetch_scut_network, fetch_share_blueprint};
 use crate::app::{ActiveWizard, ApiMessage, AppState, ShareBlueprintInput};
 
-use super::geometry::list_nav;
+use super::geometry::{is_list_nav_key, list_nav};
 
 pub(super) fn handle_share_blueprint_event(
     code: KeyCode,
@@ -25,7 +25,7 @@ pub(super) fn handle_share_blueprint_event(
             let (count, selection) = (networks.len(), *selection);
             match code {
                 KeyCode::Esc => state.close_wizard(),
-                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                _ if is_list_nav_key(code) => {
                     if let Some(ns) = list_nav(code, selection, count) {
                         if let ActiveWizard::ShareBlueprint(ShareBlueprintInput::PickNetwork { selection, .. }) =
                             &mut state.active_wizard
@@ -62,7 +62,7 @@ pub(super) fn handle_share_blueprint_event(
                     state.close_wizard();
                     state.scut_network_view = None;
                 }
-                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                _ if is_list_nav_key(code) => {
                     if let Some(ns) = list_nav(code, selection, count) {
                         if let ActiveWizard::ShareBlueprint(ShareBlueprintInput::PickRecipient { selection, .. }) =
                             &mut state.active_wizard
@@ -105,7 +105,7 @@ pub(super) fn handle_share_blueprint_event(
                     state.close_wizard();
                     state.scut_network_view = None;
                 }
-                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                _ if is_list_nav_key(code) => {
                     if let Some(ns) = list_nav(code, selection, count) {
                         if let ActiveWizard::ShareBlueprint(ShareBlueprintInput::PickBlueprint { selection, .. }) =
                             &mut state.active_wizard
