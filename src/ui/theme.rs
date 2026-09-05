@@ -17,7 +17,11 @@ pub(crate) struct Palette {
     pub accent_dim: Color,
     /// Primary readable text.
     pub text: Color,
-    /// Secondary/muted text.
+    /// Secondary/muted text. It carries real information across the cockpit —
+    /// units, ETAs, routing rules, disabled reasons, ship's-log timestamps —
+    /// so it is toned for contrast, not just for being quiet: every mode keeps
+    /// it above the 4.5:1 WCAG AA text ratio on a dark ground while staying
+    /// clearly under `text` (issue #327).
     pub dim: Color,
     pub good: Color,
     pub warn: Color,
@@ -32,7 +36,7 @@ pub(crate) fn palette(mode: ColorMode) -> Palette {
                 accent,
                 accent_dim: Color::Rgb(0x2f, 0x7a, 0x52),
                 text: Color::Rgb(0xb6, 0xd4, 0xc2),
-                dim: Color::Rgb(0x3a, 0x5a, 0x48),
+                dim: Color::Rgb(0x6f, 0x9a, 0x82),
                 good: accent,
                 warn: Color::Rgb(0xc8, 0xff, 0xdd),
                 crit: accent,
@@ -44,7 +48,7 @@ pub(crate) fn palette(mode: ColorMode) -> Palette {
                 accent,
                 accent_dim: Color::Rgb(0x8a, 0x5e, 0x22),
                 text: Color::Rgb(0xf0, 0xd8, 0xb0),
-                dim: Color::Rgb(0x6e, 0x4a, 0x16),
+                dim: Color::Rgb(0xb0, 0x8d, 0x5a),
                 good: accent,
                 warn: Color::Rgb(0xff, 0xe1, 0xad),
                 crit: accent,
@@ -54,16 +58,20 @@ pub(crate) fn palette(mode: ColorMode) -> Palette {
             accent: Color::Rgb(0x5e, 0xf0, 0x8f),
             accent_dim: Color::Rgb(0x2f, 0x7a, 0x52),
             text: Color::Rgb(0xb6, 0xd4, 0xc2),
-            dim: Color::Rgb(0x3a, 0x5a, 0x48),
+            dim: Color::Rgb(0x6f, 0x9a, 0x82),
             good: Color::Rgb(0x5e, 0xf0, 0x8f),
             warn: Color::Rgb(0xff, 0xd2, 0x4a),
             crit: Color::Rgb(0xff, 0x5d, 0x6b),
         },
+        // Named ANSI only, so `dim` cannot be nudged a few percent: it takes
+        // the next real step up (Gray), and `text` moves to White to keep the
+        // two ranks apart. DarkGray stays for the inactive borders, which are
+        // decoration rather than text.
         ColorMode::Modern16 => Palette {
             accent: Color::Green,
             accent_dim: Color::DarkGray,
-            text: Color::Gray,
-            dim: Color::DarkGray,
+            text: Color::White,
+            dim: Color::Gray,
             good: Color::Green,
             warn: Color::Yellow,
             crit: Color::Red,
@@ -370,6 +378,81 @@ mod tests {
                 !palette(mode).crit_style().add_modifier.contains(Modifier::REVERSED),
                 "{mode:?} crit_style must not reverse"
             );
+        }
+    }
+
+    /// sRGB channels for a palette colour. Named ANSI colours are resolved to
+    /// the conventional xterm values — terminals vary, but the ranking they
+    /// encode (DarkGray < Gray < White) is what the test relies on.
+    fn channels(c: Color) -> (u8, u8, u8) {
+        match c {
+            Color::Rgb(r, g, b) => (r, g, b),
+            Color::White => (0xff, 0xff, 0xff),
+            Color::Gray => (0xaa, 0xaa, 0xaa),
+            Color::DarkGray => (0x55, 0x55, 0x55),
+            other => panic!("no sRGB value known for {other:?}"),
+        }
+    }
+
+    /// WCAG 2.x relative luminance.
+    fn luminance(c: Color) -> f64 {
+        let (r, g, b) = channels(c);
+        let lin = |v: u8| {
+            let v = v as f64 / 255.0;
+            if v <= 0.03928 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+    }
+
+    /// WCAG contrast ratio between two colours, 1.0..=21.0.
+    fn contrast(a: Color, b: Color) -> f64 {
+        let (hi, lo) = {
+            let (x, y) = (luminance(a), luminance(b));
+            if x > y {
+                (x, y)
+            } else {
+                (y, x)
+            }
+        };
+        (hi + 0.05) / (lo + 0.05)
+    }
+
+    #[test]
+    fn dim_text_is_readable_in_every_color_mode() {
+        // `dim` carries information, not decoration: it used to sit at 2.7:1
+        // on a black ground — under even the 3:1 asked of non-text elements
+        // (issue #327). Pin the AA text ratio so a future palette tweak cannot
+        // quietly make it unreadable again.
+        let black = Color::Rgb(0, 0, 0);
+        for mode in [
+            ColorMode::MonoGreen,
+            ColorMode::MonoAmber,
+            ColorMode::PhosphorSemantic,
+            ColorMode::Modern16,
+        ] {
+            let p = palette(mode);
+            let ratio = contrast(p.dim, black);
+            assert!(ratio >= 4.5, "{mode:?} dim is {ratio:.2}:1 on black, want >= 4.5");
+            assert!(
+                contrast(p.text, black) > ratio,
+                "{mode:?} text must stay brighter than dim"
+            );
+        }
+    }
+
+    #[test]
+    fn dim_text_survives_a_light_terminal_background() {
+        // A dim tuned for black can vanish on a white ground. These are
+        // mid-tones, so they hold the 3:1 large-text floor both ways —
+        // full light-polarity support is its own feature (issue #233).
+        let white = Color::Rgb(0xff, 0xff, 0xff);
+        for mode in [ColorMode::MonoGreen, ColorMode::MonoAmber, ColorMode::PhosphorSemantic] {
+            let ratio = contrast(palette(mode).dim, white);
+            assert!(ratio >= 3.0, "{mode:?} dim is {ratio:.2}:1 on white, want >= 3.0");
         }
     }
 }
