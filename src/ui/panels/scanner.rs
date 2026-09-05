@@ -13,7 +13,7 @@ use ratatui::{
 
 use crate::ui::theme::{
     format_duration, knowledge_color, knowledge_label, map_cell_style, object_color, object_icon, object_type_label,
-    palette, pane_block, ratio_color, Palette,
+    palette, pane_block, ratio_color, scroll_markers, Palette,
 };
 use chrono::Utc;
 // ── Scanner panel ─────────────────────────────────────────────────────────────
@@ -81,6 +81,10 @@ pub(crate) fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppSta
         let mut list_state = ListState::default();
         list_state.select(filtered.iter().position(|&i| i == state.scan_history_idx));
         frame.render_stateful_widget(list, hist_inner, &mut list_state);
+        // The history column runs along the pane's right border, so the
+        // overflow markers belong to it (#326). The widget resolves its scroll
+        // during the render, hence reading the offset back afterwards.
+        scroll_markers(frame, area, list_state.offset() as u16, history_len, focused, p);
     }
 
     // ── Detail area ──

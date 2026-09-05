@@ -1,9 +1,11 @@
 use crate::api::types::{DangerLevel, KnowledgeLevel, MovementPhase, ProbeStatus, SectorObjectType, SectorObservation};
 use crate::app::ColorMode;
 use ratatui::{
+    layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders},
+    Frame,
 };
 
 /// Resolved colour palette for the cockpit, one per [`ColorMode`]. Mono modes
@@ -104,6 +106,45 @@ pub(crate) fn pane_block(title: &str, active: bool, p: Palette) -> Block<'_> {
         .borders(Borders::ALL)
         .border_type(BorderType::Double)
         .border_style(Style::default().fg(color))
+}
+
+/// Overflow markers drawn **on** a pane's right border: `▲` just below the top
+/// corner when the list continues above the viewport, `▼` just above the
+/// bottom corner when it continues below (issue #326).
+///
+/// On the border rather than in the content, so a pane that is already short
+/// spends no content row saying it has more to show. `area` is the pane rect,
+/// borders included; `offset` is the first visible line and `total` the line
+/// count, exactly as handed to `Paragraph::scroll` — a `List` reports the same
+/// pair through its `ListState` offset. The marker takes the border's own
+/// colour, so it reads as part of the frame.
+pub(crate) fn scroll_markers(frame: &mut Frame, area: Rect, offset: u16, total: usize, active: bool, p: Palette) {
+    if area.width < 2 || area.height < 3 {
+        return;
+    }
+    let height = area.height.saturating_sub(2) as usize;
+    if height == 0 || total <= height {
+        return; // everything fits — no marker, or it would cry wolf
+    }
+    let above = offset > 0;
+    let below = offset as usize + height < total;
+    let x = area.right() - 1;
+    let (top, bottom) = (area.y + 1, area.bottom() - 2);
+    let color = if active { p.accent } else { p.accent_dim };
+    let style = Style::default().fg(color).add_modifier(Modifier::BOLD);
+    let mut mark = |y: u16, symbol: &str| {
+        if let Some(cell) = frame.buffer_mut().cell_mut((x, y)) {
+            cell.set_symbol(symbol).set_style(style);
+        }
+    };
+    // A one-row viewport has a single border row to write on: what lies below
+    // is the more useful half, since the pilot got here by scrolling down.
+    if below {
+        mark(bottom, "▼");
+    }
+    if above && (top != bottom || !below) {
+        mark(top, "▲");
+    }
 }
 
 pub(crate) fn map_cell_symbol(s: &SectorObservation) -> (&'static str, Style) {

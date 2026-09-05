@@ -16,7 +16,7 @@ use crate::ui::panels::mannies::{
 };
 use crate::ui::panels::scanner::{resource_shares_line, sector_object_lines};
 use crate::ui::theme::{
-    block_gauge_line, object_color, object_icon, object_type_label, pane_block, ratio_color, Palette,
+    block_gauge_line, object_color, object_icon, object_type_label, pane_block, ratio_color, scroll_markers, Palette,
 };
 use chrono::Local;
 use ratatui::{
@@ -85,7 +85,9 @@ fn render_body(frame: &mut Frame, area: Rect, title: &str, active: bool, p: Pale
     let offset = sel
         .map(|c| scroll_offset(c, lines.len(), inner.height as usize))
         .unwrap_or(0);
+    let total = lines.len();
     frame.render_widget(Paragraph::new(lines).scroll((offset, 0)), inner);
+    scroll_markers(frame, area, offset, total, active, p);
 }
 
 pub fn render_map(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {
@@ -1103,7 +1105,9 @@ pub fn render_mannies_overview(frame: &mut Frame, area: Rect, state: &AppState, 
     let offset = sel_line
         .map(|c| scroll_offset(c, lines.len(), inner.height as usize))
         .unwrap_or(0);
+    let total = lines.len();
     frame.render_widget(Paragraph::new(lines).scroll((offset, 0)), inner);
+    scroll_markers(frame, area, offset, total, true, p);
 }
 
 /// Zoom view for the Scanner pane: a spatial mini-map of the six sectors
