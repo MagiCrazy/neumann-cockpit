@@ -55,6 +55,14 @@ use tokio::time::Instant;
 /// a transition is already due, which must not turn into a hot loop.
 /// Share of the rate-limit window left below which the quota chip appears, and
 /// below which it turns urgent (issue #332).
+/// Production-console popup width, in columns: the design default, the bounds
+/// the pilot can resize within, and one `Shift`+`←`/`→` step (issue #328). The
+/// renderer clamps to the terminal on top of this.
+pub const FAB_CONSOLE_WIDTH: u16 = 96;
+pub const FAB_CONSOLE_MIN_WIDTH: u16 = 72;
+pub const FAB_CONSOLE_MAX_WIDTH: u16 = 200;
+pub const FAB_CONSOLE_STEP: i16 = 8;
+
 const QUOTA_CHIP_RATIO: f64 = 0.5;
 const QUOTA_URGENT_RATIO: f64 = 0.25;
 
@@ -146,6 +154,11 @@ pub struct AppState {
     /// Requests left over the window size (API v104 quota headers), mirrored
     /// from the shared `RateLimitState` each tick like `rate_limited_secs`.
     pub rate_limit_quota: Option<(u64, u64)>,
+    /// How many columns the pilot has grown (or shrunk) the production console
+    /// by, relative to [`FAB_CONSOLE_WIDTH`] (issue #328). Stored as an offset
+    /// so `Default` means "as designed"; session state rather than per-wizard,
+    /// so widening it once survives closing and reopening the console.
+    pub fab_console_extra: i16,
     /// When the server suggests polling the Mannies again (API v104
     /// `nextUsefulRefreshDelayMs`, turned into a deadline on receipt). Drives
     /// the refresh timer while a task is in flight, replacing the fixed
@@ -824,6 +837,28 @@ impl AppState {
             return None;
         }
         Some((format!("⏳ quota {remaining}/{limit}"), left <= QUOTA_URGENT_RATIO))
+    }
+
+    /// The production console's requested width, the pilot's resizing applied
+    /// and bounded (issue #328). The renderer clamps it to the terminal too.
+    pub fn fab_console_width(&self) -> u16 {
+        (FAB_CONSOLE_WIDTH as i32 + self.fab_console_extra as i32)
+            .clamp(FAB_CONSOLE_MIN_WIDTH as i32, FAB_CONSOLE_MAX_WIDTH as i32) as u16
+    }
+
+    /// Grow (`+1`) or shrink (`-1`) the production console by one step.
+    pub fn fab_console_resize(&mut self, direction: i16) {
+        let width = self.fab_console_width() as i16 + direction * FAB_CONSOLE_STEP;
+        let width = width.clamp(FAB_CONSOLE_MIN_WIDTH as i16, FAB_CONSOLE_MAX_WIDTH as i16);
+        self.fab_console_extra = width - FAB_CONSOLE_WIDTH as i16;
+    }
+
+    /// Whether the production console is the active wizard.
+    pub fn fabrication_console_open(&self) -> bool {
+        matches!(
+            self.active_wizard,
+            ActiveWizard::Fabrication(FabricationInput::PickRecipe { .. })
+        )
     }
 
     pub fn next_refresh_instant(&self) -> Instant {

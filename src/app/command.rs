@@ -261,8 +261,20 @@ impl AppState {
                     self.mine_command(&args);
                 }
             }
-            // `:queue` and `:craft` open the same production console.
-            "queue" => self.active_wizard = ActiveWizard::Fabrication(FabricationInput::pick_recipe(None)),
+            // `:queue` opens the same production console as `:craft`, but with
+            // focus already in the queue panel — the verb you type should match
+            // what you came to do (#328). An empty queue has nothing to manage,
+            // so it falls back to the catalog rather than parking the cursor in
+            // an empty panel.
+            "queue" => {
+                let mut console = FabricationInput::pick_recipe(None);
+                if !self.craft_queue.is_empty() {
+                    if let FabricationInput::PickRecipe { focus, .. } = &mut console {
+                        *focus = FabFocus::Queue;
+                    }
+                }
+                self.active_wizard = ActiveWizard::Fabrication(console);
+            }
             // `:script` opens the action-scripting console (#198).
             "script" => self.active_wizard = ActiveWizard::Script(ScriptInput::editing()),
             // `:tree` opens the full-screen tech-tree browser (#200).

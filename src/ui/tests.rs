@@ -797,3 +797,41 @@ fn the_quota_chip_yields_to_the_back_off_countdown() {
     assert!(text.contains("rate limit 4s"));
     assert!(!text.contains("quota"));
 }
+
+// -- production console (issue #328) --------------------------------------
+
+fn console_state() -> AppState {
+    let mut state = AppState::default();
+    state.active_wizard = ActiveWizard::Fabrication(crate::app::FabricationInput::pick_recipe(None));
+    state
+}
+
+#[test]
+fn the_console_names_the_probe_whose_production_it_is() {
+    // The queue belongs to the piloted probe and a switch parks it (#291), so
+    // a console that did not say whose it was made a parked queue look lost.
+    let mut state = console_state();
+    state.probe = Some(probe(50.0));
+    let text = buffer_text(&render_cockpit(&state, 110, 30));
+    assert!(text.contains("PRODUCTION"), "the console is up");
+    let title = text.lines().find(|l| l.contains("PRODUCTION")).unwrap();
+    assert!(title.contains('\u{2014}'), "the title names a probe: {title}");
+}
+
+#[test]
+fn the_console_resizes_and_stays_within_bounds() {
+    use crate::app::{FAB_CONSOLE_MAX_WIDTH, FAB_CONSOLE_MIN_WIDTH, FAB_CONSOLE_WIDTH};
+    let mut state = console_state();
+    assert_eq!(state.fab_console_width(), FAB_CONSOLE_WIDTH);
+
+    state.fab_console_resize(1);
+    assert!(state.fab_console_width() > FAB_CONSOLE_WIDTH, "Shift-right widens it");
+    for _ in 0..50 {
+        state.fab_console_resize(1);
+    }
+    assert_eq!(state.fab_console_width(), FAB_CONSOLE_MAX_WIDTH, "and stops");
+    for _ in 0..100 {
+        state.fab_console_resize(-1);
+    }
+    assert_eq!(state.fab_console_width(), FAB_CONSOLE_MIN_WIDTH, "both ways");
+}
