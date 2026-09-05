@@ -7,6 +7,35 @@ pub const COMMANDS: [&str; 15] = [
     "probe", "help", "quit",
 ];
 
+/// Verbs that answer to a shorter name of their own, resolved before any
+/// prefix matching (issue #329).
+const ALIASES: [(&str, &str); 1] = [("q", "quit")];
+
+/// Resolve a typed verb to a command (issue #329): an exact match first, then a
+/// **strictly unambiguous** prefix, so `:cr` runs `:craft` without a `Tab`.
+///
+/// `Err` carries the candidates when a prefix matches several. Guessing is not
+/// an option here — the verbs fire real actions that cost fuel and Manny time,
+/// so `:f` must say "focus or filter?" rather than pick the first alphabetically.
+/// An exact match always wins, even over a longer verb it prefixes.
+pub fn resolve_command_verb(verb: &str) -> Result<&'static str, Vec<&'static str>> {
+    let typed = verb.to_lowercase();
+    if let Some(exact) = COMMANDS.iter().find(|c| **c == typed) {
+        return Ok(exact);
+    }
+    // Aliases outrank prefixes: `:q` has always meant quit, and `queue` starts
+    // with the same letter — resolving it by prefix alone would make the one
+    // command a pilot types by reflex ambiguous.
+    if let Some((_, verb)) = ALIASES.iter().find(|(alias, _)| *alias == typed) {
+        return Ok(verb);
+    }
+    let matches: Vec<&'static str> = COMMANDS.iter().copied().filter(|c| c.starts_with(&typed)).collect();
+    match matches.len() {
+        1 => Ok(matches[0]),
+        _ => Err(matches),
+    }
+}
+
 /// One-line argument usage for a verb, shown as inline ghost-text while typing
 /// (`None` for verbs that take no argument).
 pub fn command_usage(verb: &str) -> Option<&'static str> {
@@ -187,8 +216,20 @@ impl AppState {
         // Quote-aware tokenization so a `:` command target may be quoted
         // (spaces or a keyword inside a name); args keep quotes, dequoted at use.
         let mut parts = tokenize(line).into_iter();
-        let Some(verb) = parts.next() else { return false };
+        let Some(typed) = parts.next() else { return false };
         let args: Vec<&str> = parts.collect();
+
+        // A prefix runs the command it unambiguously names (#329). An
+        // ambiguous one lists the candidates instead of guessing; an unknown
+        // one falls through to the `other` arm's message.
+        let verb = match resolve_command_verb(typed) {
+            Ok(verb) => verb,
+            Err(candidates) if candidates.is_empty() => typed,
+            Err(candidates) => {
+                self.set_toast(format!("ambiguous: {typed} → {}", candidates.join(", ")));
+                return false;
+            }
+        };
 
         match verb {
             "focus" => match args.first().and_then(|n| pane_from_name(n)) {
@@ -261,8 +302,20 @@ impl AppState {
                     self.mine_command(&args);
                 }
             }
-            // `:queue` and `:craft` open the same production console.
-            "queue" => self.active_wizard = ActiveWizard::Fabrication(FabricationInput::pick_recipe(None)),
+            // `:queue` opens the same production console as `:craft`, but with
+            // focus already in the queue panel — the verb you type should match
+            // what you came to do (#328). An empty queue has nothing to manage,
+            // so it falls back to the catalog rather than parking the cursor in
+            // an empty panel.
+            "queue" => {
+                let mut console = FabricationInput::pick_recipe(None);
+                if !self.craft_queue.is_empty() {
+                    if let FabricationInput::PickRecipe { focus, .. } = &mut console {
+                        *focus = FabFocus::Queue;
+                    }
+                }
+                self.active_wizard = ActiveWizard::Fabrication(console);
+            }
             // `:script` opens the action-scripting console (#198).
             "script" => self.active_wizard = ActiveWizard::Script(ScriptInput::editing()),
             // `:tree` opens the full-screen tech-tree browser (#200).

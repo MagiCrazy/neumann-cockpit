@@ -197,6 +197,23 @@ pub fn handle_event(event: Event, state: &mut AppState, client: &ApiClient, tx: 
         return;
     }
 
+    // Shift+←/→ resizes the production console (#328). It is resolved here,
+    // before the wizard registry, because the handlers take a bare `KeyCode`:
+    // this is the last place the modifier still exists.
+    if k.modifiers.contains(KeyModifiers::SHIFT) && state.fabrication_console_open() {
+        match k.code {
+            KeyCode::Right => {
+                state.fab_console_resize(1);
+                return;
+            }
+            KeyCode::Left => {
+                state.fab_console_resize(-1);
+                return;
+            }
+            _ => {}
+        }
+    }
+
     // A single wizard consumes the key if one is active (registry below).
     if dispatch_wizard_key(k.code, state, client, tx) {
         return;

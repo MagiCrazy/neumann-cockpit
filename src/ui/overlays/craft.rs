@@ -81,10 +81,15 @@ fn render_console(
     let rows = state.fabrication_recipes();
     let sel = rows.get(selection);
 
-    let popup = centered_rect(96, area.height.saturating_sub(4).clamp(12, 30), area);
+    // Width is the pilot's (Shift+←/→, #328), clamped to the terminal.
+    let width = state.fab_console_width().min(area.width);
+    let popup = centered_rect(width, area.height.saturating_sub(4).clamp(12, 30), area);
     frame.render_widget(Clear, popup);
 
-    // Title banner reflects the queue's run state.
+    // Title banner reflects the queue's run state — and names the probe whose
+    // production this is. Since #291 the queue belongs to the piloted probe and
+    // switching parks it, so a console that did not say whose it was made a
+    // parked queue look like a lost one (#328).
     let (done, total) = state.queue_progress();
     let banner = if total == 0 {
         String::new()
@@ -93,8 +98,12 @@ fn render_console(
     } else {
         format!(" · ▶ {done}/{total}")
     };
+    let whose = match state.active_probe_identity() {
+        Some((_, name)) => format!(" — {name}"),
+        None => String::new(),
+    };
     let block = Block::default()
-        .title(format!(" PRODUCTION{banner} "))
+        .title(format!(" PRODUCTION{whose}{banner} "))
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
         .border_style(Style::default().fg(p.accent));
@@ -115,7 +124,7 @@ fn render_console(
         .split(layout[0]);
 
     render_catalog_list(frame, panels[0], state, selection, qty, focus);
-    render_detail(frame, panels[1], state, sel, error, &p);
+    render_detail(frame, panels[1], state, sel, qty, error, &p);
     render_queue_panel(frame, panels[2], state, queue_sel, focus, &p);
 
     // Focus-dependent footer.
@@ -135,7 +144,8 @@ fn render_console(
             FooterKey::nav("[+/-]", "qty"),
             add,
             FooterKey::nav("[b]", "pin builder"),
-            FooterKey::nav("[Tab]", "queue"),
+            FooterKey::nav("[→]", "queue"),
+            FooterKey::nav("[⇧←→]", "resize"),
             FooterKey::nav("[p]", if state.queue_paused { "resume" } else { "pause" }),
             FooterKey::nav("[Esc]", "close"),
         ]
@@ -145,7 +155,8 @@ fn render_console(
             FooterKey::nav("[+/-]", "repeat"),
             FooterKey::danger("[x]", "remove"),
             FooterKey::danger("[c]", "clear"),
-            FooterKey::nav("[Tab]", "catalog"),
+            FooterKey::nav("[←]", "catalog"),
+            FooterKey::nav("[⇧←→]", "resize"),
             FooterKey::nav("[Esc]", "close"),
         ]
     };
@@ -220,11 +231,13 @@ fn render_catalog_list(frame: &mut Frame, area: Rect, state: &AppState, selectio
 }
 
 /// Middle panel: the selected recipe's detail (output, duration, ingredients).
+#[allow(clippy::too_many_arguments)]
 fn render_detail(
     frame: &mut Frame,
     area: Rect,
     state: &AppState,
     sel: Option<&(Fabricator, &crate::api::types::CraftingRecipe)>,
+    qty: u32,
     error: Option<&str>,
     p: &Palette,
 ) {
@@ -246,22 +259,35 @@ fn render_detail(
             Span::styled("→ ", dim),
             Span::styled(recipe.output.name.as_str(), text),
         ]));
+        // Per unit, not per batch: an unpinned Manny recipe queued ×N pushes N
+        // separate steps that spread across the crew and run in parallel
+        // (#235), so a multiplied total would be a lie.
+        let each = if qty > 1 { " each" } else { "" };
         detail.push(Line::from(Span::styled(
-            format!("⏲ {} min", recipe.duration_seconds / 60),
+            format!("⏲ {} min{each}", recipe.duration_seconds / 60),
             dim,
         )));
         detail.push(Line::default());
-        detail.push(Line::from(Span::styled("INGREDIENTS   have/need", dim)));
+        // The ingredient column prices the **whole** order, not one unit: with
+        // a quantity set, "can I afford this" is the question actually being
+        // asked (#328).
+        let header = if qty > 1 {
+            format!("INGREDIENTS  have/need ×{qty}")
+        } else {
+            "INGREDIENTS   have/need".to_string()
+        };
+        detail.push(Line::from(Span::styled(header, dim)));
         if recipe.ingredients.is_empty() {
             detail.push(Line::from(Span::styled("  (none)", dim)));
         }
         for ing in &recipe.ingredients {
             let have = state.recipe_ingredient_have(ing);
-            let ok = have >= ing.quantity;
+            let wanted = ing.quantity * qty as f64;
+            let ok = have >= wanted;
             let need = if ing.unit == "item" {
-                format!("{}", ing.quantity as u32)
+                format!("{}", wanted as u32)
             } else {
-                format!("{:.2}", ing.quantity)
+                format!("{wanted:.2}")
             };
             let have_str = if ing.unit == "item" {
                 format!("{}", have as u32)

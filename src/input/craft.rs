@@ -46,7 +46,10 @@ fn handle_catalog(code: KeyCode, state: &mut AppState) {
     match code {
         KeyCode::Esc => state.close_wizard(),
         KeyCode::Char('p') => state.queue_toggle_pause(),
-        KeyCode::Tab => {
+        // Freed from the quantity, `→`/`l` now mean what they read as: move
+        // right, into the queue panel — mirroring the `←`/`h` that already
+        // comes back from it (#328).
+        KeyCode::Tab | KeyCode::Right | KeyCode::Char('l') => {
             if !state.craft_queue.is_empty() {
                 set_focus(state, FabFocus::Queue);
             }
@@ -56,10 +59,14 @@ fn handle_catalog(code: KeyCode, state: &mut AppState) {
                 mutate_recipe(state, |sel, _| *sel = ns);
             }
         }
-        KeyCode::Char('+') | KeyCode::Char('=') | KeyCode::Right | KeyCode::Char('l') => {
+        // `+`/`-` only: `←`/`→` (and `h`/`l`) read as movement in a
+        // three-panel console, and stealing them for the quantity is exactly
+        // the confusion reported in #328. Shift+←/→ resizes the console
+        // instead, resolved in `input::handle_event` where the modifier lives.
+        KeyCode::Char('+') | KeyCode::Char('=') => {
             mutate_recipe(state, |_, q| *q = (*q + 1).min(QTY_MAX));
         }
-        KeyCode::Char('-') | KeyCode::Char('_') | KeyCode::Left | KeyCode::Char('h') => {
+        KeyCode::Char('-') | KeyCode::Char('_') => {
             mutate_recipe(state, |_, q| *q = q.saturating_sub(1).max(1));
         }
         KeyCode::Enter => enqueue_selected(state, selection, qty),
