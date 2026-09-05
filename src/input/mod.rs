@@ -361,6 +361,33 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn j_scrolls_a_drilled_in_manny_detail_instead_of_moving_a_cursor() {
+        // The pane cursor is frozen while drilled in, so `j` used to do
+        // nothing at all here (issue #337).
+        let mut state = AppState::default();
+        state.active_pane = Pane::Mannies;
+        state.mannies = Some(vec![serde_json::from_str(
+            r#"{"id": "m1", "name": "m1", "location": {"type": "probe", "sector": null},
+                "currentTask": "mining", "taskProgressPercent": 10.0,
+                "cargo": {"capacity": 0.3, "deuterium": 0.0, "metals": 0.0,
+                          "ice": 0.0, "organicCompounds": 0.0},
+                "canReceiveOrders": false, "taskEstimatedEndTime": null}"#,
+        )
+        .unwrap()]);
+        state.pane_drill_in();
+        assert!(state.detail_view_active());
+
+        press(&mut state, KeyCode::Char('j'));
+        assert_eq!(state.detail_scroll(), 1, "the viewport moved");
+        assert_eq!(state.mannies_selection, 0, "and the roster cursor did not");
+
+        press(&mut state, KeyCode::Char('k'));
+        assert_eq!(state.detail_scroll(), 0);
+        press(&mut state, KeyCode::Char('k'));
+        assert_eq!(state.detail_scroll(), 0, "a viewport does not wrap to the end");
+    }
+
+    #[tokio::test]
     async fn open_wizard_captures_keys_before_cockpit() {
         let mut state = AppState::default();
         state.active_wizard = ActiveWizard::Travel(TravelInput::Typing(String::new()));

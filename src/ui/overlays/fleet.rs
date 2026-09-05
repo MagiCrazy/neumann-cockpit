@@ -188,7 +188,7 @@ pub(crate) fn render_rename_probe_overlay(frame: &mut Frame, area: Rect, state: 
         return;
     };
     let p = palette(state.color_mode);
-    let popup = centered_rect(48, 7, area);
+    let popup = centered_rect(60, 7, area);
     frame.render_widget(Clear, popup);
     let block = Block::default()
         .title(format!(" RENAME PROBE — {current_name} "))
@@ -224,6 +224,7 @@ pub(crate) fn render_rename_probe_overlay(frame: &mut Frame, area: Rect, state: 
         &[
             FooterKey::commit("[Enter]", "RENAME"),
             FooterKey::nav("[Tab]", "suggest"),
+            FooterKey::nav("[Del]", "clear"),
             FooterKey::nav("[Esc]", "cancel"),
         ],
     );

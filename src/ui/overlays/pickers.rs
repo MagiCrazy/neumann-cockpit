@@ -382,7 +382,7 @@ pub(crate) fn render_rename_manny_overlay(frame: &mut Frame, area: Rect, state: 
         return;
     };
 
-    let popup = centered_rect(46, 7, area);
+    let popup = centered_rect(60, 7, area);
     frame.render_widget(Clear, popup);
 
     let title = format!(" RENAME — {manny_name} ");
@@ -421,6 +421,7 @@ pub(crate) fn render_rename_manny_overlay(frame: &mut Frame, area: Rect, state: 
         &[
             FooterKey::commit("[Enter]", "RENAME"),
             FooterKey::nav("[Tab]", "suggest"),
+            FooterKey::nav("[Del]", "clear"),
             FooterKey::nav("[Esc]", "cancel"),
         ],
     );

@@ -665,3 +665,135 @@ fn a_pane_whose_list_overflows_says_so() {
     let text = buffer_text(&render_cockpit(&state, 80, 24));
     assert!(text.contains("▼"), "the pane advertises that its list continues");
 }
+
+// ── drilled-in detail scrolling (issue #337) ──────────────────────────────
+
+/// A Manny mining a long-named asteroid into a long-named container: the
+/// detail block is taller than a 1/3 grid cell.
+fn busy_manny() -> crate::api::types::Manny {
+    serde_json::from_str(
+        r#"{"id": "m1", "name": "Falling Outside The Normal Moral Constraints",
+            "location": {"type": "sector", "sector": null},
+            "currentTask": "mining", "taskProgressPercent": 42.0,
+            "cargo": {"capacity": 0.3, "deuterium": 0.05, "metals": 0.12,
+                      "ice": 0.01, "organicCompounds": 0.0},
+            "canReceiveOrders": false, "taskEstimatedEndTime": null}"#,
+    )
+    .unwrap()
+}
+
+fn drilled_into_a_manny() -> AppState {
+    let mut state = AppState::default();
+    state.active_pane = Pane::Mannies;
+    state.mannies = Some(vec![busy_manny()]);
+    state.pane_drill_in();
+    state
+}
+
+#[test]
+fn the_manny_detail_scrolls_to_its_last_line() {
+    // Its tail — the cargo figures — used to be unreachable: the view had no
+    // viewport at all, and the pane cursor is frozen while drilled in (#337).
+    let mut state = drilled_into_a_manny();
+    assert!(state.detail_view_active(), "drilled into a Manny is a detail view");
+
+    // A pane too short for the block: the tail falls outside the frame.
+    let (w, h) = (40, 8);
+    let top = buffer_text(&render_cockpit(&state, w, h));
+    assert!(top.contains("mining"), "the head of the block is on screen");
+    assert!(!top.contains("deut"), "and its tail is not: {top}");
+    assert!(top.contains("▼"), "the pane says the block continues below: {top}");
+
+    state.set_detail_scroll(20); // past the end; the renderer clamps
+    let bottom = buffer_text(&render_cockpit(&state, w, h));
+    assert!(bottom.contains("deut"), "the cargo tail is now reachable: {bottom}");
+    assert!(bottom.contains("▲"), "and the pane says the block continues above");
+}
+
+#[test]
+fn leaving_the_detail_forgets_its_scroll() {
+    let mut state = drilled_into_a_manny();
+    state.set_detail_scroll(4);
+    state.pane_drill_out();
+    assert_eq!(
+        state.pane_nav[Pane::Mannies.index()].detail_scroll,
+        0,
+        "a fresh drill-in starts at the top"
+    );
+    assert!(!state.detail_view_active());
+}
+
+// ── rename prefill (issue #330) ───────────────────────────────────────────
+
+#[test]
+fn a_rename_opens_on_the_current_name_and_del_clears_it() {
+    use crate::app::{RenameMannyInput, RenameProbeInput};
+
+    // Manny: the wizard is prefilled, not seeded with a random suggestion.
+    let mut state = AppState::default();
+    state.active_wizard = ActiveWizard::RenameManny(RenameMannyInput::Typing {
+        manny_id: "m1".into(),
+        manny_name: "Grey Area".into(),
+        buf: "Grey Area".into(),
+        error: None,
+    });
+    let text = buffer_text(&render_cockpit(&state, 80, 24));
+    assert!(text.contains("Grey Area"), "the field carries the current name");
+    assert!(text.contains("[Del] clear"), "and says how to empty it: {text}");
+
+    state.rename_manny_clear();
+    let ActiveWizard::RenameManny(RenameMannyInput::Typing { buf, .. }) = &state.active_wizard else {
+        panic!("wizard closed");
+    };
+    assert!(buf.is_empty(), "Del empties the field outright");
+
+    // Probe: the suggestion stays one Tab away, so the ceremony is not lost.
+    let mut state = AppState::default();
+    state.active_wizard = ActiveWizard::RenameProbe(RenameProbeInput::Typing {
+        probe_id: 1,
+        current_name: "Sleeper Service".into(),
+        buf: "Sleeper Service".into(),
+        error: None,
+    });
+    let text = buffer_text(&render_cockpit(&state, 80, 24));
+    assert!(text.contains("Sleeper Service"));
+    assert!(text.contains("[Tab] suggest"));
+}
+
+// ── rate-limit quota chip (issue #332) ────────────────────────────────────
+
+#[test]
+fn the_quota_chip_stays_quiet_until_the_window_is_half_spent() {
+    let mut state = AppState::default();
+
+    state.rate_limit_quota = Some((119, 120));
+    assert!(
+        state.quota_chip().is_none(),
+        "a healthy window says nothing — a permanent chip is noise"
+    );
+    assert!(!buffer_text(&render_cockpit(&state, 100, 24)).contains("quota"));
+
+    state.rate_limit_quota = Some((50, 120));
+    let (label, urgent) = state.quota_chip().expect("half spent → visible");
+    assert_eq!(label, "⏳ quota 50/120");
+    assert!(!urgent, "half a window left is information, not an alarm");
+    assert!(buffer_text(&render_cockpit(&state, 100, 24)).contains("quota 50/120"));
+
+    state.rate_limit_quota = Some((12, 120));
+    let (_, urgent) = state.quota_chip().expect("nearly spent → visible");
+    assert!(urgent, "the last quarter is worth an alarm");
+}
+
+#[test]
+fn the_quota_chip_yields_to_the_back_off_countdown() {
+    // Both would say the same thing, and `remaining` is 0 by construction
+    // while a 429 back-off is in force.
+    let mut state = AppState::default();
+    state.rate_limit_quota = Some((0, 120));
+    state.rate_limited_secs = Some(4);
+    assert!(state.quota_chip().is_none());
+
+    let text = buffer_text(&render_cockpit(&state, 100, 24));
+    assert!(text.contains("rate limit 4s"));
+    assert!(!text.contains("quota"));
+}

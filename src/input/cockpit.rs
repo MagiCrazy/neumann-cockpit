@@ -24,8 +24,9 @@ use crate::app::{
     ObjectActionInput, Pane, ProbeSwitchInput, RecallInput, RecoverInput, RefuelInput, RemoteMineInput,
     RenameContainerInput, RenameMannyInput, RenameProbeInput, RepairInput, SalvageInput, ScanMode, ScutCorridorInput,
     ScutNetworkInput, ShareBlueprintInput, StorageMoveInput, TransferDeuteriumInput, TransferProbeInput, TravelInput,
-    WaypointsInput,
+    WaypointsInput, LIST_PAGE,
 };
+use crate::ui::theme::palette;
 
 pub fn handle_cockpit_event(code: KeyCode, state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
     // Cockpit keys (ertdfgcvb, jkhl, z, q, …) are all lowercase, but CapsLock —
@@ -49,6 +50,9 @@ pub fn handle_cockpit_event(code: KeyCode, state: &mut AppState, client: &ApiCli
         KeyCode::Char(c) if Pane::from_key(c).is_some() => {
             state.active_pane = Pane::from_key(c).unwrap();
         }
+        // A detail view has no cursor to move: the same keys scroll it
+        // (issue #337), so this must come before the list routing.
+        _ if state.detail_view_active() && scroll_detail(code, state) => {}
         KeyCode::Down | KeyCode::Char('j') => state.pane_cursor_down(),
         KeyCode::Up | KeyCode::Char('k') => state.pane_cursor_up(),
         // Paging + jump to ends, for lists that grow over a session (scan
@@ -88,6 +92,40 @@ pub fn handle_cockpit_event(code: KeyCode, state: &mut AppState, client: &ApiCli
         _ => {}
     }
 }
+
+/// Scroll the active pane's detail viewport (issue #337). Returns `true` when
+/// the key was consumed.
+///
+/// It answers the shared navigation keys (#325) but deliberately does **not**
+/// wrap: that contract is about a cursor walking a list, and a viewport that
+/// snapped back to the top on the keypress after the last line would read as a
+/// glitch rather than as a convenience.
+fn scroll_detail(code: KeyCode, state: &mut AppState) -> bool {
+    let Some(DrillLevel::Manny(id)) = state.pane_nav[state.active_pane.index()].drill.last().cloned() else {
+        return false;
+    };
+    let (width, height) = crate::ui::cockpit_v2::active_pane_inner_size(state);
+    let total = crate::ui::cockpit_v2::manny_detail_height(state, &id, width, palette(state.color_mode));
+    // The estimate is a floor (word wrapping can add a row), so allow a little
+    // slack — the renderer clamps the offset for real, which makes overscroll
+    // impossible and keeps the last row reachable when the estimate is short.
+    let max = total.saturating_sub(height as usize) + DETAIL_SCROLL_SLACK;
+    let cur = state.detail_scroll();
+    let next = match code {
+        KeyCode::Down | KeyCode::Char('j') => (cur + 1).min(max),
+        KeyCode::Up | KeyCode::Char('k') => cur.saturating_sub(1),
+        KeyCode::PageDown => (cur + LIST_PAGE).min(max),
+        KeyCode::PageUp => cur.saturating_sub(LIST_PAGE),
+        KeyCode::Home => 0,
+        KeyCode::End => max,
+        _ => return false,
+    };
+    state.set_detail_scroll(next);
+    true
+}
+
+/// Rows of slack allowed over the estimated detail height — see [`scroll_detail`].
+const DETAIL_SCROLL_SLACK: usize = 2;
 
 /// `Enter` action for the active pane: panes with a discrete action set open
 /// the contextual menu; panes backed by a rich wizard reuse its overlay.
@@ -429,7 +467,10 @@ fn fire_menu_action(action: MenuAction, state: &mut AppState, client: &ApiClient
                 if let Some((container_id, label)) =
                     state.storage_container(&id).map(|c| (c.id.clone(), c.label.clone()))
                 {
-                    let buf = state.next_name_suggestion();
+                    // Prefilled with the current name: renaming something
+                    // already named is the common case, and the ceremony is
+                    // better offered than imposed — `Tab` still suggests (#330).
+                    let buf = label.clone();
                     state.active_wizard = ActiveWizard::RenameContainer(RenameContainerInput::Typing {
                         container_id,
                         current_label: label,
@@ -532,7 +573,7 @@ fn fire_menu_action(action: MenuAction, state: &mut AppState, client: &ApiClient
         }
         MenuAction::RenameProbe => {
             if let Some((id, name)) = state.active_probe_identity() {
-                let buf = state.next_name_suggestion();
+                let buf = name.clone();
                 state.active_wizard = ActiveWizard::RenameProbe(RenameProbeInput::Typing {
                     probe_id: id,
                     current_name: name,
@@ -802,7 +843,7 @@ fn fire_menu_action(action: MenuAction, state: &mut AppState, client: &ApiClient
             });
         }
         MenuAction::Rename => {
-            let buf = state.next_name_suggestion();
+            let buf = name.clone();
             state.active_wizard = ActiveWizard::RenameManny(RenameMannyInput::Typing {
                 manny_id: id,
                 manny_name: name,

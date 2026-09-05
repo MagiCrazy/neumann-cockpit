@@ -175,6 +175,10 @@ impl MissionsCategory {
 pub struct PaneNav {
     pub cursor: usize,
     pub drill: Vec<DrillLevel>,
+    /// Viewport offset for a **detail** view — a drill level rendered as one
+    /// block rather than a list of selectable rows, so it scrolls instead of
+    /// moving a cursor (issue #337). Reset whenever the drill level changes.
+    pub detail_scroll: usize,
 }
 
 impl super::AppState {
@@ -332,6 +336,26 @@ impl super::AppState {
         self.set_pane_cursor(self.pane_cursor_len().saturating_sub(1));
     }
 
+    /// Whether the active pane is showing a **detail** view: one block of
+    /// content with no selectable rows, which scrolls as a viewport instead of
+    /// moving a cursor (issue #337). The Mannies pane drilled into one Manny is
+    /// the case today; the seam is here for the other detail levels.
+    pub fn detail_view_active(&self) -> bool {
+        matches!(
+            self.pane_nav[self.active_pane.index()].drill.last(),
+            Some(DrillLevel::Manny(_))
+        )
+    }
+
+    /// The active pane's detail viewport offset.
+    pub fn detail_scroll(&self) -> usize {
+        self.pane_nav[self.active_pane.index()].detail_scroll
+    }
+
+    pub fn set_detail_scroll(&mut self, offset: usize) {
+        self.pane_nav[self.active_pane.index()].detail_scroll = offset;
+    }
+
     /// Toggle full-screen zoom of the active pane.
     pub fn toggle_zoom(&mut self) {
         self.zoomed = !self.zoomed;
@@ -368,6 +392,7 @@ impl super::AppState {
             let nav = &mut self.pane_nav[idx];
             nav.drill.push(level);
             nav.cursor = 0;
+            nav.detail_scroll = 0;
         }
     }
 
@@ -421,6 +446,7 @@ impl super::AppState {
         let popped = self.pane_nav[idx].drill.pop().is_some();
         if popped {
             self.pane_nav[idx].cursor = 0;
+            self.pane_nav[idx].detail_scroll = 0;
         }
         popped
     }
@@ -434,7 +460,10 @@ impl super::AppState {
         if drilled {
             parts.push("h back");
         }
-        if !matches!(pane, Pane::Probe | Pane::Map) {
+        if self.detail_view_active() {
+            // No cursor here — the same keys move the viewport (issue #337).
+            parts.push("jk scroll");
+        } else if !matches!(pane, Pane::Probe | Pane::Map) {
             parts.push("jk move");
         }
         if !drilled && matches!(pane, Pane::Missions | Pane::Comms | Pane::Storage | Pane::Mannies) {

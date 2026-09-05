@@ -93,6 +93,18 @@ impl ApiClient {
         self.rate_limit.lock().ok()?.retry_in_secs()
     }
 
+    /// Requests left in the current window over the window's size, from the
+    /// last response that carried the quota headers. `None` until one has (or
+    /// on a pre-v104 server, which sends none).
+    ///
+    /// The window is metered per **bearer token**, not per client: two cockpits
+    /// on one key draw from the same budget, and each sees the other's
+    /// consumption reflected in its own responses.
+    pub fn quota(&self) -> Option<(u64, u64)> {
+        let state = self.rate_limit.lock().ok()?;
+        Some((state.remaining?, state.limit?))
+    }
+
     /// Whether this session has taken a 429 at all. Sticky, unlike
     /// [`Self::throttled_for_secs`]: a short back-off can expire before the
     /// caller looks, and "we were throttled" is still the explanation it needs.

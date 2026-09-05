@@ -253,6 +253,14 @@ impl AppState {
         }
     }
 
+    /// Empty the rename field outright (`Del`) — it opens prefilled with the
+    /// current name, so starting from scratch needs one keystroke (#330).
+    pub fn rename_manny_clear(&mut self) {
+        if let ActiveWizard::RenameManny(RenameMannyInput::Typing { buf, .. }) = &mut self.active_wizard {
+            buf.clear();
+        }
+    }
+
     pub fn rename_manny_backspace(&mut self) {
         if let ActiveWizard::RenameManny(RenameMannyInput::Typing { buf, .. }) = &mut self.active_wizard {
             buf.pop();

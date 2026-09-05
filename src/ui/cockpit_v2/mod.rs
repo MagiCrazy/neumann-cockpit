@@ -12,7 +12,7 @@ mod menu;
 mod panes;
 /// Shared by the reused panels (`ui/panels/`), which scroll their line list
 /// the same way the grid panes do (issues #292, #293).
-pub(crate) use panes::scroll_offset;
+pub(crate) use panes::{manny_detail_height, scroll_offset};
 
 use crate::app::{AppState, DrillLevel, Pane};
 use crate::ui::panels::{render_inventory_panel, render_mannies_panel, render_probe_panel, render_scanner_panel};
@@ -24,6 +24,33 @@ use ratatui::{
     widgets::Paragraph,
     Frame,
 };
+
+/// Inner size (content, borders excluded) of the active pane, derived the same
+/// way [`render`] lays the screen out. The input layer needs it to bound a
+/// detail viewport's scroll (issue #337) — the same shape as the help
+/// overlay's own scroll clamp, which reads the terminal size directly.
+///
+/// It mirrors the layout rather than observing it, so keep the two in step:
+/// status rows first, then the grid window (or the whole body when zoomed).
+pub(crate) fn active_pane_inner_size(state: &AppState) -> (u16, u16) {
+    let (w, h) = crossterm::terminal::size().unwrap_or((80, 24));
+    let status_h = if state.hints_visible || matches!(state.mode, crate::app::InputMode::Command(_)) {
+        2
+    } else {
+        1
+    };
+    let body = Rect::new(0, 0, w, h.saturating_sub(status_h));
+    let rect = if state.zoomed {
+        body
+    } else {
+        grid::visible_panes(body, state.active_pane)
+            .iter()
+            .find(|(pane, _)| *pane == state.active_pane)
+            .map(|(_, rect)| *rect)
+            .unwrap_or(body)
+    };
+    (rect.width.saturating_sub(2), rect.height.saturating_sub(2))
+}
 
 pub fn render(frame: &mut Frame, state: &AppState) {
     let area = frame.area();
@@ -369,6 +396,17 @@ fn render_status_line(frame: &mut Frame, area: Rect, state: &AppState, p: Palett
             format!("⏳ rate limit {secs}s"),
             Style::default().fg(p.warn).add_modifier(Modifier::BOLD),
         ));
+    }
+    // How much of the per-token window is left, once it is worth saying
+    // (issue #332). Quiet on a healthy link; `quota_chip` owns the thresholds
+    // and stays silent while the back-off chip above is showing.
+    if let Some((label, urgent)) = state.quota_chip() {
+        let style = if urgent {
+            Style::default().fg(p.warn).add_modifier(Modifier::BOLD)
+        } else {
+            dim
+        };
+        meta.push((label, style));
     }
     // Persistence degraded: the SQLite writer hit a failing write, so history
     // is no longer being saved (issue #216). Warn, bold, so it stands out.

@@ -216,6 +216,13 @@ pub(super) fn handle_rename_probe_event(
                 *buf = s;
             }
         }
+        // The field opens prefilled with the current name, so clearing it
+        // outright needs its own key (issue #330).
+        KeyCode::Delete => {
+            if let ActiveWizard::RenameProbe(RenameProbeInput::Typing { buf, .. }) = &mut state.active_wizard {
+                buf.clear();
+            }
+        }
         KeyCode::Backspace => {
             if let ActiveWizard::RenameProbe(RenameProbeInput::Typing { buf, .. }) = &mut state.active_wizard {
                 buf.pop();

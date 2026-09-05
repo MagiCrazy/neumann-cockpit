@@ -381,6 +381,8 @@ pub(super) fn handle_rename_manny_event(
                 *buf = s;
             }
         }
+        // The field opens prefilled with the current name (issue #330).
+        KeyCode::Delete => state.rename_manny_clear(),
         KeyCode::Backspace => state.rename_manny_backspace(),
         KeyCode::Char(c) => state.rename_manny_type_char(c),
         KeyCode::Enter => {
