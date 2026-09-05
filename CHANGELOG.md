@@ -1,5 +1,12 @@
 # Changelog
 
+## [104.2.2](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.2.1...neumann-cockpit-v104.2.2) (2026-09-05)
+
+
+### Bug Fixes
+
+* **mannies:** scrollable detail, rename prefill, and a visible rate-limit quota ([#340](https://github.com/MagiCrazy/neumann-cockpit/issues/340)) ([207fd9a](https://github.com/MagiCrazy/neumann-cockpit/commit/207fd9a01190c6ebef0695b3511e23042118ae14))
+
 ## [104.2.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.2.0...neumann-cockpit-v104.2.1) (2026-09-05)
 
 
