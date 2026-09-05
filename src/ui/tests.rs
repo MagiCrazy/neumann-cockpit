@@ -722,3 +722,40 @@ fn leaving_the_detail_forgets_its_scroll() {
     );
     assert!(!state.detail_view_active());
 }
+
+// ── rename prefill (issue #330) ───────────────────────────────────────────
+
+#[test]
+fn a_rename_opens_on_the_current_name_and_del_clears_it() {
+    use crate::app::{RenameMannyInput, RenameProbeInput};
+
+    // Manny: the wizard is prefilled, not seeded with a random suggestion.
+    let mut state = AppState::default();
+    state.active_wizard = ActiveWizard::RenameManny(RenameMannyInput::Typing {
+        manny_id: "m1".into(),
+        manny_name: "Grey Area".into(),
+        buf: "Grey Area".into(),
+        error: None,
+    });
+    let text = buffer_text(&render_cockpit(&state, 80, 24));
+    assert!(text.contains("Grey Area"), "the field carries the current name");
+    assert!(text.contains("[Del] clear"), "and says how to empty it: {text}");
+
+    state.rename_manny_clear();
+    let ActiveWizard::RenameManny(RenameMannyInput::Typing { buf, .. }) = &state.active_wizard else {
+        panic!("wizard closed");
+    };
+    assert!(buf.is_empty(), "Del empties the field outright");
+
+    // Probe: the suggestion stays one Tab away, so the ceremony is not lost.
+    let mut state = AppState::default();
+    state.active_wizard = ActiveWizard::RenameProbe(RenameProbeInput::Typing {
+        probe_id: 1,
+        current_name: "Sleeper Service".into(),
+        buf: "Sleeper Service".into(),
+        error: None,
+    });
+    let text = buffer_text(&render_cockpit(&state, 80, 24));
+    assert!(text.contains("Sleeper Service"));
+    assert!(text.contains("[Tab] suggest"));
+}

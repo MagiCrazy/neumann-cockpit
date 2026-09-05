@@ -467,7 +467,10 @@ fn fire_menu_action(action: MenuAction, state: &mut AppState, client: &ApiClient
                 if let Some((container_id, label)) =
                     state.storage_container(&id).map(|c| (c.id.clone(), c.label.clone()))
                 {
-                    let buf = state.next_name_suggestion();
+                    // Prefilled with the current name: renaming something
+                    // already named is the common case, and the ceremony is
+                    // better offered than imposed — `Tab` still suggests (#330).
+                    let buf = label.clone();
                     state.active_wizard = ActiveWizard::RenameContainer(RenameContainerInput::Typing {
                         container_id,
                         current_label: label,
@@ -570,7 +573,7 @@ fn fire_menu_action(action: MenuAction, state: &mut AppState, client: &ApiClient
         }
         MenuAction::RenameProbe => {
             if let Some((id, name)) = state.active_probe_identity() {
-                let buf = state.next_name_suggestion();
+                let buf = name.clone();
                 state.active_wizard = ActiveWizard::RenameProbe(RenameProbeInput::Typing {
                     probe_id: id,
                     current_name: name,
@@ -840,7 +843,7 @@ fn fire_menu_action(action: MenuAction, state: &mut AppState, client: &ApiClient
             });
         }
         MenuAction::Rename => {
-            let buf = state.next_name_suggestion();
+            let buf = name.clone();
             state.active_wizard = ActiveWizard::RenameManny(RenameMannyInput::Typing {
                 manny_id: id,
                 manny_name: name,

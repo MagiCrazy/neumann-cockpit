@@ -57,6 +57,12 @@ pub(super) fn handle_rename_container_event(
                 *buf = s;
             }
         }
+        // The field opens prefilled with the current name (issue #330).
+        KeyCode::Delete => {
+            if let ActiveWizard::RenameContainer(RenameContainerInput::Typing { buf, .. }) = &mut state.active_wizard {
+                buf.clear();
+            }
+        }
         KeyCode::Backspace => {
             if let ActiveWizard::RenameContainer(RenameContainerInput::Typing { buf, .. }) = &mut state.active_wizard {
                 buf.pop();
