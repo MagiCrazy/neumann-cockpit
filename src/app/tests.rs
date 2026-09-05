@@ -742,6 +742,62 @@ fn a_pane_without_a_cursor_ignores_the_jumps() {
     assert_eq!(state.pane_nav[crate::app::Pane::Probe.index()].cursor, 0);
 }
 
+// ── command prefixes (issue #329) ─────────────────────────────────────────
+
+#[test]
+fn an_unambiguous_command_prefix_resolves() {
+    use crate::app::resolve_command_verb;
+    assert_eq!(resolve_command_verb("cr"), Ok("craft"));
+    assert_eq!(
+        resolve_command_verb("c"),
+        Ok("craft"),
+        "one letter is enough when unique"
+    );
+    assert_eq!(
+        resolve_command_verb("q"),
+        Ok("quit"),
+        "the historical alias still works"
+    );
+    assert_eq!(resolve_command_verb("CRAFT"), Ok("craft"), "case-insensitive");
+    assert_eq!(resolve_command_verb("craft"), Ok("craft"));
+}
+
+#[test]
+fn an_ambiguous_prefix_refuses_rather_than_guessing() {
+    use crate::app::resolve_command_verb;
+    // Guessing here would fire a real action; `f` must ask which one.
+    let candidates = resolve_command_verb("f").unwrap_err();
+    assert!(candidates.contains(&"focus"), "{candidates:?}");
+    assert!(candidates.contains(&"filter"), "{candidates:?}");
+
+    let t = resolve_command_verb("t").unwrap_err();
+    assert!(t.len() > 1, "travel/theme/tree all start with t: {t:?}");
+
+    assert!(
+        resolve_command_verb("zzz").unwrap_err().is_empty(),
+        "no match at all is a different answer from too many"
+    );
+}
+
+#[test]
+fn an_ambiguous_command_lists_the_candidates() {
+    let mut state = AppState::default();
+    state.run_command("f");
+    let toast = state.active_toast().expect("it says something");
+    assert!(toast.contains("ambiguous"), "{toast}");
+    assert!(toast.contains("focus") && toast.contains("filter"), "{toast}");
+}
+
+#[test]
+fn a_prefix_runs_the_command_it_names() {
+    let mut state = AppState::default();
+    state.run_command("zo"); // → zoom
+    assert!(state.zoomed, "`:zo` toggled zoom");
+
+    state.run_command("he"); // → help
+    assert!(state.help_open, "`:he` opened the help");
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────
 
 fn make_manny(id: &str, location_type: &str, can_receive_orders: bool, task: Option<&str>) -> Manny {

@@ -27,7 +27,7 @@ pub use assembly::*;
 pub use batch::*;
 pub use boot::{BOOT_CHARS_PER_FRAME, BOOT_LINE_STRIDE};
 pub use color::*;
-pub use command::{command_usage, CommandFire, COMMANDS};
+pub use command::{command_usage, resolve_command_verb, CommandFire, COMMANDS};
 pub use grid::*;
 pub use inputs::*;
 pub use inventory::*;
