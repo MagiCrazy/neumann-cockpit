@@ -1,5 +1,12 @@
 # Changelog
 
+## [104.2.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.2.0...neumann-cockpit-v104.2.1) (2026-09-05)
+
+
+### Bug Fixes
+
+* **ui:** one list-navigation contract, readable dim text, overflow markers ([#336](https://github.com/MagiCrazy/neumann-cockpit/issues/336)) ([dde7bc6](https://github.com/MagiCrazy/neumann-cockpit/commit/dde7bc6f3ed6b59f48e694f49695a43072b11c12))
+
 ## [104.2.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.1.0...neumann-cockpit-v104.2.0) (2026-08-25)
 
 
