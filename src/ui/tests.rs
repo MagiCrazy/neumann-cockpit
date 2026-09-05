@@ -759,3 +759,41 @@ fn a_rename_opens_on_the_current_name_and_del_clears_it() {
     assert!(text.contains("Sleeper Service"));
     assert!(text.contains("[Tab] suggest"));
 }
+
+// ── rate-limit quota chip (issue #332) ────────────────────────────────────
+
+#[test]
+fn the_quota_chip_stays_quiet_until_the_window_is_half_spent() {
+    let mut state = AppState::default();
+
+    state.rate_limit_quota = Some((119, 120));
+    assert!(
+        state.quota_chip().is_none(),
+        "a healthy window says nothing — a permanent chip is noise"
+    );
+    assert!(!buffer_text(&render_cockpit(&state, 100, 24)).contains("quota"));
+
+    state.rate_limit_quota = Some((50, 120));
+    let (label, urgent) = state.quota_chip().expect("half spent → visible");
+    assert_eq!(label, "⏳ quota 50/120");
+    assert!(!urgent, "half a window left is information, not an alarm");
+    assert!(buffer_text(&render_cockpit(&state, 100, 24)).contains("quota 50/120"));
+
+    state.rate_limit_quota = Some((12, 120));
+    let (_, urgent) = state.quota_chip().expect("nearly spent → visible");
+    assert!(urgent, "the last quarter is worth an alarm");
+}
+
+#[test]
+fn the_quota_chip_yields_to_the_back_off_countdown() {
+    // Both would say the same thing, and `remaining` is 0 by construction
+    // while a 429 back-off is in force.
+    let mut state = AppState::default();
+    state.rate_limit_quota = Some((0, 120));
+    state.rate_limited_secs = Some(4);
+    assert!(state.quota_chip().is_none());
+
+    let text = buffer_text(&render_cockpit(&state, 100, 24));
+    assert!(text.contains("rate limit 4s"));
+    assert!(!text.contains("quota"));
+}

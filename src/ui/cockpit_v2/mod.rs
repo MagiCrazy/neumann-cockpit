@@ -397,6 +397,17 @@ fn render_status_line(frame: &mut Frame, area: Rect, state: &AppState, p: Palett
             Style::default().fg(p.warn).add_modifier(Modifier::BOLD),
         ));
     }
+    // How much of the per-token window is left, once it is worth saying
+    // (issue #332). Quiet on a healthy link; `quota_chip` owns the thresholds
+    // and stays silent while the back-off chip above is showing.
+    if let Some((label, urgent)) = state.quota_chip() {
+        let style = if urgent {
+            Style::default().fg(p.warn).add_modifier(Modifier::BOLD)
+        } else {
+            dim
+        };
+        meta.push((label, style));
+    }
     // Persistence degraded: the SQLite writer hit a failing write, so history
     // is no longer being saved (issue #216). Warn, bold, so it stands out.
     if state.persistence_degraded {

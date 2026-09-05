@@ -159,6 +159,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
         // client rather than from an ApiMessage: a 429 can just as well hit a
         // background fetch whose errors are dropped silently.
         state.rate_limited_secs = client.throttled_for_secs();
+        state.rate_limit_quota = client.quota();
 
         // Drain ship's-log entries staged by the previous tick's handlers:
         // persist each and prepend to the in-memory journal (newest first,

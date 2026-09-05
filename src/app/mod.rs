@@ -53,6 +53,11 @@ use tokio::time::Instant;
 
 /// Floor on the server's polling hint: it returns a short "settling delay" when
 /// a transition is already due, which must not turn into a hot loop.
+/// Share of the rate-limit window left below which the quota chip appears, and
+/// below which it turns urgent (issue #332).
+const QUOTA_CHIP_RATIO: f64 = 0.5;
+const QUOTA_URGENT_RATIO: f64 = 0.25;
+
 const MANNY_POLL_MIN_SECS: u64 = 1;
 /// Ceiling on the hint. The ordinary 60 s cadence refreshes everything anyway,
 /// so trusting a longer hint would buy nothing and risk sitting on a stale
@@ -138,6 +143,9 @@ pub struct AppState {
     /// holds the auto-refresh off and shows a status-bar chip; `None` is the
     /// normal state.
     pub rate_limited_secs: Option<u64>,
+    /// Requests left over the window size (API v104 quota headers), mirrored
+    /// from the shared `RateLimitState` each tick like `rate_limited_secs`.
+    pub rate_limit_quota: Option<(u64, u64)>,
     /// When the server suggests polling the Mannies again (API v104
     /// `nextUsefulRefreshDelayMs`, turned into a deadline on receipt). Drives
     /// the refresh timer while a task is in flight, replacing the fixed
@@ -791,6 +799,31 @@ impl AppState {
             None => true,
             Some(t) => (Local::now() - t).num_seconds().max(0) >= self.refresh_backoff_secs(),
         }
+    }
+
+    /// The status-bar quota chip: `(label, urgent)`, or `None` while the window
+    /// is comfortable (issue #332).
+    ///
+    /// Deliberately silent on a healthy link — a permanent `119/120` is noise,
+    /// and noise is what makes a status bar stop being read. It appears once
+    /// half the window is spent and turns urgent in the last quarter, which is
+    /// when the pilot can still act on it: slow down, or close the second
+    /// cockpit sharing the token.
+    pub fn quota_chip(&self) -> Option<(String, bool)> {
+        // While a 429 back-off is in force the countdown chip already says it,
+        // and `remaining` is 0 by construction — one chip, not two.
+        if self.rate_limited_secs.is_some() {
+            return None;
+        }
+        let (remaining, limit) = self.rate_limit_quota?;
+        if limit == 0 {
+            return None;
+        }
+        let left = remaining as f64 / limit as f64;
+        if left > QUOTA_CHIP_RATIO {
+            return None;
+        }
+        Some((format!("⏳ quota {remaining}/{limit}"), left <= QUOTA_URGENT_RATIO))
     }
 
     pub fn next_refresh_instant(&self) -> Instant {
