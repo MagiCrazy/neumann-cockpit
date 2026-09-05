@@ -17,8 +17,7 @@ use neumann_cockpit::api::tasks::{
 };
 use neumann_cockpit::app::{
     batch_tasks, ActiveWizard, ApiMessage, AppState, ColorMode, CraftFire, Fabricator, MessagesInput, MissionsInput,
-    Polarity, Refetch, RefreshTarget, RemoteMineInput, ScriptAction, ScutCorridorInput, ScutNetworkInput,
-    ShareBlueprintInput,
+    Refetch, RefreshTarget, RemoteMineInput, ScriptAction, ScutCorridorInput, ScutNetworkInput, ShareBlueprintInput,
 };
 use neumann_cockpit::input::handle_event;
 use neumann_cockpit::preflight;
@@ -74,9 +73,15 @@ async fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
+    // Ask the terminal whether its ground is dark or light **before** the
+    // preflight starts an `EventStream`: the OSC 11 reply would otherwise land
+    // in the middle of the key events (issue #233). Bounded and failure-proof —
+    // a terminal that does not answer costs 100 ms and yields `Dark`.
+    let polarity = neumann_cockpit::termbg::detect_polarity();
+
     // Preflight: config check + first-run onboarding, local archive migration,
     // and the remote link check — all drawn in-screen.
-    let ready = match preflight::run(&mut terminal, ColorMode::default(), Polarity::default()).await {
+    let ready = match preflight::run(&mut terminal, ColorMode::default(), polarity).await {
         Ok(preflight::Outcome::Ready(r)) => *r,
         Ok(preflight::Outcome::Quit) => {
             restore_terminal()?;
