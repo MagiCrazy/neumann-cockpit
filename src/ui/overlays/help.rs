@@ -43,6 +43,7 @@ const LEFT: &[Section] = &[
             ("Enter", "contextual action menu"),
             (":", "command line (see right)"),
             ("i", "jump to next idle Manny"),
+            ("s", "Storage: sort a-z / probe order"),
             ("F1", "toggle hints line"),
             ("F2", "cycle color mode"),
             ("F5", "refresh"),

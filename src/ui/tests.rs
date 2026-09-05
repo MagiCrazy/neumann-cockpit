@@ -835,3 +835,68 @@ fn the_console_resizes_and_stays_within_bounds() {
     }
     assert_eq!(state.fab_console_width(), FAB_CONSOLE_MIN_WIDTH, "both ways");
 }
+
+// -- storage sort (issue #333) ---------------------------------------------
+
+/// A probe holding three containers whose server order is not alphabetical.
+fn probe_with_unsorted_containers() -> AppState {
+    let mut state = AppState::default();
+    state.probe = Some(
+        serde_json::from_str(
+            r#"{
+        "id": 1, "name": "t", "status": "idle",
+        "fuel": {"deuterium": 50.0, "maxDeuterium": 100.0}, "sensorMode": "normal",
+        "sector": null, "movement": null, "systems": {"integrityPercent": 80.0},
+        "inventory": {"capacity": 10.0, "usedCapacity": 2.0, "freeCapacity": 8.0,
+            "items": [], "resourceStocks": [], "externalTanks": [], "containers": [
+              {"id": "c1", "kind": "storage", "label": "Zulu", "sortOrder": 0,
+               "capacity": 100.0, "usedCapacity": 1.0, "freeCapacity": 99.0, "rules": {}},
+              {"id": "c2", "kind": "storage", "label": "alpha", "sortOrder": 1,
+               "capacity": 100.0, "usedCapacity": 2.0, "freeCapacity": 98.0, "rules": {}},
+              {"id": "c3", "kind": "storage", "label": "Mike", "sortOrder": 2,
+               "capacity": 100.0, "usedCapacity": 3.0, "freeCapacity": 97.0, "rules": {}}]}
+    }"#,
+        )
+        .unwrap(),
+    );
+    state.active_pane = Pane::Storage;
+    state
+}
+
+#[test]
+fn sorting_containers_is_case_insensitive_and_defaults_to_the_server_order() {
+    let mut state = probe_with_unsorted_containers();
+    let labels = |s: &AppState| {
+        s.storage_containers_ordered()
+            .iter()
+            .map(|c| c.label.clone())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(labels(&state), ["Zulu", "alpha", "Mike"], "server order by default");
+
+    state.storage_toggle_sort();
+    assert_eq!(
+        labels(&state),
+        ["alpha", "Mike", "Zulu"],
+        "a-z ignores case, so a lowercase name does not sort last"
+    );
+    let title = buffer_text(&render_cockpit(&state, 80, 24));
+    assert!(title.contains("STORAGE · a-z"), "the pane says how it is sorted");
+}
+
+#[test]
+fn toggling_the_sort_keeps_the_cursor_on_the_same_container() {
+    // The cursor indexes into the ordering, so re-sorting under it would
+    // silently retarget every Storage action (issue #333).
+    let mut state = probe_with_unsorted_containers();
+    state.pane_nav[Pane::Storage.index()].cursor = 0; // "Zulu"
+    assert_eq!(state.storage_selected_container_id().as_deref(), Some("c1"));
+
+    state.storage_toggle_sort();
+    assert_eq!(
+        state.storage_selected_container_id().as_deref(),
+        Some("c1"),
+        "still on Zulu, now at the end of the list"
+    );
+    assert_eq!(state.pane_nav[Pane::Storage.index()].cursor, 2);
+}

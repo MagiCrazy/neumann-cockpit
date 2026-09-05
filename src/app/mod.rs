@@ -159,6 +159,9 @@ pub struct AppState {
     /// so `Default` means "as designed"; session state rather than per-wizard,
     /// so widening it once survives closing and reopening the console.
     pub fab_console_extra: i16,
+    /// Storage pane ordering: `false` (default) keeps the server's `sortOrder`,
+    /// `true` sorts by label (issue #333). Session state, like the color mode.
+    pub storage_sort_alpha: bool,
     /// When the server suggests polling the Mannies again (API v104
     /// `nextUsefulRefreshDelayMs`, turned into a deadline on receipt). Drives
     /// the refresh timer while a task is in flight, replacing the fixed

@@ -73,6 +73,12 @@ pub fn handle_cockpit_event(code: KeyCode, state: &mut AppState, client: &ApiCli
         KeyCode::Char('?') => state.help_open = true,
         // Jump to the next idle Manny (focuses the Mannies pane).
         KeyCode::Char('i') => state.cycle_to_next_idle_manny(),
+        // Storage: toggle server order ↔ alphabetical (issue #333).
+        KeyCode::Char('s') if state.active_pane == Pane::Storage => {
+            state.storage_toggle_sort();
+            let how = if state.storage_sort_alpha { "a-z" } else { "probe order" };
+            state.set_toast(format!("containers sorted: {how}"));
+        }
         KeyCode::F(1) => state.hints_visible = !state.hints_visible,
         // Esc backs out one step: leave zoom first, then drill up.
         KeyCode::Esc => {

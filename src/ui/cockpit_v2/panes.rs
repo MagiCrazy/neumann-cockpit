@@ -741,13 +741,16 @@ pub fn render_storage(frame: &mut Frame, area: Rect, state: &AppState, active: b
     }
 
     // Containers come with the probe (probe.inventory.containers), so the pane
-    // fills as soon as the probe loads — Enter opens the full browser.
-    match state.probe.as_ref().map(|pr| &pr.inventory.containers) {
-        None => lines.push(Line::styled("no data", dim)),
-        Some(cs) if cs.is_empty() => lines.push(Line::styled("no storage containers", dim)),
-        Some(cs) => {
+    // fills as soon as the probe loads — Enter opens the full browser. The
+    // order is `storage_containers_ordered`, which the cursor indexes into too
+    // (issue #333).
+    let ordered = state.storage_containers_ordered();
+    match (state.probe.as_ref(), ordered.is_empty()) {
+        (None, _) => lines.push(Line::styled("no data", dim)),
+        (Some(_), true) => lines.push(Line::styled("no storage containers", dim)),
+        (Some(_), false) => {
             const W: usize = 8;
-            for (i, c) in cs.iter().enumerate() {
+            for (i, c) in ordered.iter().enumerate() {
                 let selected = active && i == cur;
                 let ratio = if c.capacity > 0.0 {
                     (c.used_capacity / c.capacity).clamp(0.0, 1.0)
@@ -814,7 +817,14 @@ pub fn render_storage(frame: &mut Frame, area: Rect, state: &AppState, active: b
             }
         }
     }
-    render_body(frame, area, " STORAGE ", active, p, lines, sel_line);
+    // The title carries the ordering, so a pane sorted by name says so rather
+    // than looking like the server order shuffled (issue #333).
+    let title = if state.storage_sort_alpha {
+        " STORAGE · a-z "
+    } else {
+        " STORAGE "
+    };
+    render_body(frame, area, title, active, p, lines, sel_line);
 }
 
 /// Inline contents of a container (drill-in `l` on the Storage pane): capacity,

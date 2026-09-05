@@ -220,7 +220,7 @@ impl super::AppState {
             // rendered inline, read-only).
             Pane::Storage => match drill {
                 Some(DrillLevel::Container(_)) => 0,
-                _ => self.probe.as_ref().map_or(0, |p| p.inventory.containers.len()),
+                _ => self.storage_containers_ordered().len(),
             },
             _ => 0,
         }
@@ -376,9 +376,8 @@ impl super::AppState {
             // Missions and Comms drive their own drill (categories) via
             // `missions_activate` / `comms_activate`.
             Pane::Storage => self
-                .probe
-                .as_ref()
-                .and_then(|p| p.inventory.containers.get(cursor))
+                .storage_containers_ordered()
+                .get(cursor)
                 .map(|c| DrillLevel::Container(c.id.clone())),
             // Mannies uses its own selection cursor, not `pane_nav.cursor`.
             Pane::Mannies => self
@@ -486,6 +485,9 @@ impl super::AppState {
             )
         {
             parts.push("Enter act");
+        }
+        if pane == Pane::Storage && !drilled {
+            parts.push("s sort");
         }
         parts.push(if self.zoomed { "z/Esc unzoom" } else { "z zoom" });
         parts.push("ertdfgcvb pane");

@@ -259,7 +259,8 @@ impl super::AppState {
 
     fn storage_context_menu(&self) -> Option<ContextMenu> {
         let cur = self.pane_nav[super::Pane::Storage.index()].cursor;
-        let c = self.probe.as_ref()?.inventory.containers.get(cur)?;
+        let ordered = self.storage_containers_ordered();
+        let c = ordered.get(cur)?;
         Some(ContextMenu {
             title: c.label.clone(),
             items: vec![

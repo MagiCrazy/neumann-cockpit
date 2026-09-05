@@ -145,11 +145,41 @@ impl AppState {
             .find(|c| c.id == id)
     }
 
-    /// Id of the container the Storage pane cursor is on (from the probe's
-    /// inventory, which the pane renders).
+    /// The probe's storage containers in the order the Storage pane shows them
+    /// (issue #333). **The** ordering: the pane cursor indexes into this, so
+    /// every consumer — the renderer, the drill-in, the context menu — must
+    /// read the same slice or the cursor would point at another container.
+    ///
+    /// The server's `sortOrder` is the default and is meaningful (it is the
+    /// pilot's own arrangement); alphabetical is the alternative, for a fleet
+    /// with more containers than fit on one screen.
+    pub fn storage_containers_ordered(&self) -> Vec<&crate::api::types::StorageContainer> {
+        let Some(probe) = self.probe.as_ref() else {
+            return Vec::new();
+        };
+        let mut out: Vec<&crate::api::types::StorageContainer> = probe.inventory.containers.iter().collect();
+        if self.storage_sort_alpha {
+            out.sort_by_key(|c| c.label.to_lowercase());
+        }
+        out
+    }
+
+    /// Toggle the Storage pane between the server order and alphabetical,
+    /// keeping the cursor on the container it was on rather than on its index.
+    pub fn storage_toggle_sort(&mut self) {
+        let held = self.storage_selected_container_id();
+        self.storage_sort_alpha = !self.storage_sort_alpha;
+        if let Some(id) = held {
+            if let Some(pos) = self.storage_containers_ordered().iter().position(|c| c.id == id) {
+                self.pane_nav[crate::app::Pane::Storage.index()].cursor = pos;
+            }
+        }
+    }
+
+    /// Id of the container the Storage pane cursor is on.
     pub fn storage_selected_container_id(&self) -> Option<String> {
         let cur = self.pane_nav[crate::app::Pane::Storage.index()].cursor;
-        self.probe.as_ref()?.inventory.containers.get(cur).map(|c| c.id.clone())
+        self.storage_containers_ordered().get(cur).map(|c| c.id.clone())
     }
 
     pub fn rules_editor_for(&self, container_id: &str) -> Option<ContainerRulesInput> {
