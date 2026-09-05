@@ -1,4 +1,3 @@
-use crate::ui::theme::palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -21,7 +20,7 @@ fn preview(body: &str) -> String {
 }
 
 pub(crate) fn render_messages_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let ActiveWizard::Messages(messages_input) = &state.active_wizard else {
         return;
     };
@@ -183,7 +182,7 @@ pub(crate) fn render_messages_overlay(frame: &mut Frame, area: Rect, state: &App
             render_pick_list(
                 frame,
                 area,
-                palette(state.color_mode),
+                state.palette(),
                 " NEW MESSAGE — recipient ",
                 54,
                 height,

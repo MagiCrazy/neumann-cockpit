@@ -1158,7 +1158,7 @@ pub fn render_scanner_neighbors(frame: &mut Frame, area: Rect, state: &AppState,
     use crate::ui::panels::scanner::sector_interest_color;
     use crate::ui::theme::{knowledge_label, map_cell_style};
 
-    let p = crate::ui::theme::palette(state.color_mode);
+    let p = state.palette();
     let block = pane_block(" SCANNER · NEIGHBORS ", active, p);
     let inner = block.inner(area);
     frame.render_widget(block, area);

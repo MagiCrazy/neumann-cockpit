@@ -2,7 +2,6 @@ use crate::api::types::ProbeModel;
 use crate::app::{
     assembly_bill, model_blurb, model_label, ActiveWizard, AppState, AssembleProbeInput, ASSEMBLABLE_MODELS,
 };
-use crate::ui::theme::palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -29,7 +28,7 @@ fn render_model_step(frame: &mut Frame, area: Rect, state: &AppState) {
     else {
         return;
     };
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let selected_model = ASSEMBLABLE_MODELS[(*cursor).min(ASSEMBLABLE_MODELS.len() - 1)];
     let bill = assembly_bill(selected_model);
     let height = (bill.len() as u16 + ASSEMBLABLE_MODELS.len() as u16 * 2 + 8).clamp(14, 26);
@@ -109,7 +108,7 @@ fn render_container_step(frame: &mut Frame, area: Rect, state: &AppState) {
     else {
         return;
     };
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let bill = assembly_bill(*model);
     let height = (containers.len() as u16 + bill.len() as u16 + 10).clamp(14, 26);
     let popup = centered_rect(58, height, area);

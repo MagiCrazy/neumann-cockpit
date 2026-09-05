@@ -13,7 +13,7 @@ use ratatui::{
 
 use crate::ui::theme::{
     format_duration, knowledge_color, knowledge_label, map_cell_style, object_color, object_icon, object_type_label,
-    palette, pane_block, ratio_color, scroll_markers, Palette,
+    pane_block, ratio_color, scroll_markers, Palette,
 };
 use chrono::Utc;
 // ── Scanner panel ─────────────────────────────────────────────────────────────
@@ -27,7 +27,7 @@ use chrono::Utc;
 // [`Palette`] so the pane matches the rest of the phosphor cockpit.
 
 pub(crate) fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppState, focused: bool) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let dim = Style::default().fg(p.dim);
     let text = Style::default().fg(p.text);
 

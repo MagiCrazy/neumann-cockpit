@@ -1,4 +1,4 @@
-use crate::ui::theme::{palette, Palette};
+use crate::ui::theme::Palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -66,7 +66,7 @@ fn mission_lines(m: &Mission, selected: bool, p: Palette) -> Vec<Line<'static>> 
 }
 
 pub(crate) fn render_missions_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let selection = match &state.active_wizard {
         ActiveWizard::Missions(MissionsInput::Browsing { selection }) => *selection,
         ActiveWizard::Missions(MissionsInput::ConfirmAbandon { selection, .. }) => *selection,

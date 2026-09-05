@@ -1,5 +1,4 @@
 use crate::app::{ActiveWizard, AppState, ContainerRulesInput, RenameContainerInput};
-use crate::ui::theme::palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -11,7 +10,7 @@ use ratatui::{
 use super::{centered_rect, render_footer, FooterKey};
 
 pub(crate) fn render_rename_container_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let ActiveWizard::RenameContainer(RenameContainerInput::Typing {
         current_label,
         buf,
@@ -65,7 +64,7 @@ pub(crate) fn render_rename_container_overlay(frame: &mut Frame, area: Rect, sta
 }
 
 pub(crate) fn render_container_rules_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let ActiveWizard::ContainerRules(ContainerRulesInput::Editing {
         container_label,
         types,

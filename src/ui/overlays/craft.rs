@@ -1,5 +1,5 @@
 use crate::app::{ActiveWizard, AppState, FabFocus, FabricationInput, Fabricator, StepState};
-use crate::ui::theme::{palette, Palette};
+use crate::ui::theme::Palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -42,7 +42,7 @@ pub(crate) fn render_fabrication_overlay(frame: &mut Frame, area: Rect, state: &
             error,
             ..
         } => {
-            let p = palette(state.color_mode);
+            let p = state.palette();
             let names: Vec<&str> = mannies.iter().map(|(_, n)| n.as_str()).collect();
             let prompt = format!("Build {recipe_name} with:");
             let height = (names.len() as u16 + 6).clamp(8, 20);
@@ -77,7 +77,7 @@ fn render_console(
     queue_sel: usize,
     error: Option<&str>,
 ) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let rows = state.fabrication_recipes();
     let sel = rows.get(selection);
 
@@ -165,7 +165,7 @@ fn render_console(
 
 /// Left panel: the sectioned recipe list, scrolled to keep the cursor in view.
 fn render_catalog_list(frame: &mut Frame, area: Rect, state: &AppState, selection: usize, qty: u32, focus: FabFocus) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let rows = state.fabrication_recipes();
     let dim = Style::default().fg(p.dim);
     let text = Style::default().fg(p.text);

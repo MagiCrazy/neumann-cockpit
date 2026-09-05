@@ -1,6 +1,6 @@
 use crate::api::types::{AlertType, ProbeAlert};
 use crate::app::{ActiveWizard, AlertsInput, AppState};
-use crate::ui::theme::{palette, Palette};
+use crate::ui::theme::Palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -70,7 +70,7 @@ fn alert_row(alert: &ProbeAlert, p: Palette) -> ListItem<'static> {
 }
 
 pub(crate) fn render_alerts_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let ActiveWizard::Alerts(AlertsInput::Browsing {
         selection,
         show_warnings,

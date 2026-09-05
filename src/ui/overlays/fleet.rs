@@ -9,7 +9,7 @@ use ratatui::{
 use crate::app::{
     ActiveWizard, AppState, ProbeSwitchInput, RenameProbeInput, TransferDeuteriumInput, TransferProbeInput,
 };
-use crate::ui::theme::{palette, probe_status_label};
+use crate::ui::theme::probe_status_label;
 
 use super::{centered_rect, render_footer, render_pick_list, FooterKey};
 
@@ -20,7 +20,7 @@ pub(crate) fn render_probe_switch_overlay(frame: &mut Frame, area: Rect, state: 
     let ProbeSwitchInput::Picking { selection } = state.probe_switch else {
         return;
     };
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let active = state.active_probe_id.or(state.default_probe_id);
     let labels: Vec<String> = state
         .fleet
@@ -62,7 +62,7 @@ pub(crate) fn render_probe_switch_overlay(frame: &mut Frame, area: Rect, state: 
 /// the roster; step 2 collects the percentage to ferry. The same-sector rule is
 /// server-validated, so a mismatch surfaces as an error line in step 2.
 pub(crate) fn render_transfer_probe_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let ActiveWizard::TransferProbe(TransferProbeInput::PickTarget {
         manny_name,
         targets,
@@ -93,7 +93,7 @@ pub(crate) fn render_transfer_probe_overlay(frame: &mut Frame, area: Rect, state
 }
 
 pub(crate) fn render_transfer_deuterium_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let ActiveWizard::TransferDeuterium(transfer_deuterium) = &state.active_wizard else {
         return;
     };
@@ -187,7 +187,7 @@ pub(crate) fn render_rename_probe_overlay(frame: &mut Frame, area: Rect, state: 
     else {
         return;
     };
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let popup = centered_rect(60, 7, area);
     frame.render_widget(Clear, popup);
     let block = Block::default()

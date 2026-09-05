@@ -1,4 +1,3 @@
-use crate::ui::theme::palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::Style,
@@ -11,7 +10,7 @@ use super::{centered_rect, render_footer, render_pick_list, FooterKey};
 use crate::app::{ActiveWizard, AppState, RemoteMineInput, RESOURCE_LABELS};
 
 pub(crate) fn render_remote_mine_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let ActiveWizard::RemoteMine(remote_mine) = &state.active_wizard else {
         return;
     };
@@ -62,7 +61,7 @@ pub(crate) fn render_remote_mine_overlay(frame: &mut Frame, area: Rect, state: &
             render_pick_list(
                 frame,
                 area,
-                palette(state.color_mode),
+                state.palette(),
                 &format!(" REMOTE MINE — {manny_name} "),
                 52,
                 height,
@@ -156,7 +155,7 @@ pub(crate) fn render_remote_mine_overlay(frame: &mut Frame, area: Rect, state: &
             render_pick_list(
                 frame,
                 area,
-                palette(state.color_mode),
+                state.palette(),
                 " REMOTE MINE — store in ",
                 52,
                 height,

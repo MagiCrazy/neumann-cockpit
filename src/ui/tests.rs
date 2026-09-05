@@ -10,7 +10,9 @@ use ratatui::buffer::Buffer;
 use ratatui::Terminal;
 
 use crate::api::types::Probe;
-use crate::app::{ActiveWizard, AppState, ColorMode, ContainerRulesInput, DetachInput, Pane, TransferProbeInput};
+use crate::app::{
+    ActiveWizard, AppState, ColorMode, ContainerRulesInput, DetachInput, Pane, Polarity, TransferProbeInput,
+};
 use crate::ui::theme::{palette, ratio_color};
 
 /// Flatten a rendered buffer to text, one line per row, for `contains` checks.
@@ -68,7 +70,7 @@ fn grid_renders_at_three_sizes_without_panicking() {
 fn probe_gauge_color_tracks_the_fuel_ratio() {
     // Semantic palette so good (>50 %) and crit (<25 %) are distinct colours.
     let mode = ColorMode::PhosphorSemantic;
-    let p = palette(mode);
+    let p = palette(mode, Polarity::Dark);
 
     let fill_color = |deuterium: f64| -> ratatui::style::Color {
         let mut state = AppState::default();
@@ -169,7 +171,7 @@ fn sector_object_zoom_shows_asteroid_id() {
             "waypointBookmarks":[],"bookmarkTargets":[]}"#,
     )
     .unwrap();
-    let p = palette(ColorMode::MonoGreen);
+    let p = palette(ColorMode::MonoGreen, Polarity::Dark);
     let lines = crate::ui::panels::scanner::sector_object_lines(&obj, false, p);
     let text: String = lines
         .iter()
@@ -481,7 +483,7 @@ fn a_motorized_asteroid_reads_as_one() {
                 "plannedRevolutions":3,"completedRevolutions":1}}"#,
     )
     .unwrap();
-    let p = palette(ColorMode::MonoGreen);
+    let p = palette(ColorMode::MonoGreen, Polarity::Dark);
 
     let compact: String = crate::ui::panels::scanner::sector_object_lines(&obj, true, p)
         .iter()
@@ -607,7 +609,7 @@ fn the_menu_cursor_is_visible_on_a_disabled_row() {
 /// Render just the markers over a pane-sized rect and return the buffer.
 fn markers_buffer(offset: u16, total: usize, w: u16, h: u16) -> Buffer {
     use crate::ui::theme::{pane_block, scroll_markers};
-    let p = palette(ColorMode::MonoGreen);
+    let p = palette(ColorMode::MonoGreen, Polarity::Dark);
     let mut term = Terminal::new(TestBackend::new(w, h)).unwrap();
     term.draw(|f| {
         let area = f.area();
@@ -899,4 +901,49 @@ fn toggling_the_sort_keeps_the_cursor_on_the_same_container() {
         "still on Zulu, now at the end of the list"
     );
     assert_eq!(state.pane_nav[Pane::Storage.index()].cursor, 2);
+}
+
+// -- polarity (issue #233) -------------------------------------------------
+
+#[test]
+fn the_cockpit_renders_in_every_mode_and_polarity() {
+    // Fourteen palettes now reach the renderer; a mode wired into `ALL` but
+    // missing a `palette` arm, or a light variant that panics, shows up here.
+    for mode in ColorMode::ALL {
+        for polarity in [Polarity::Dark, Polarity::Light] {
+            let mut state = AppState::default();
+            state.color_mode = mode;
+            state.polarity = polarity;
+            state.probe = Some(probe(50.0));
+            let text = buffer_text(&render_cockpit(&state, 100, 30));
+            assert!(
+                text.contains("PROBE"),
+                "{} / {} rendered nothing",
+                mode.label(),
+                polarity.label()
+            );
+        }
+    }
+}
+
+#[test]
+fn polarity_actually_changes_what_is_painted() {
+    // The axis has to reach the buffer, not just the state: same mode, same
+    // frame, different ink.
+    let cell_colors = |polarity| {
+        let mut state = AppState::default();
+        state.polarity = polarity;
+        state.probe = Some(probe(50.0));
+        let buf = render_cockpit(&state, 100, 30);
+        let area = buf.area;
+        (0..area.height)
+            .flat_map(|y| (0..area.width).map(move |x| (x, y)))
+            .map(|(x, y)| buf[(x, y)].fg)
+            .collect::<Vec<_>>()
+    };
+    assert_ne!(
+        cell_colors(Polarity::Dark),
+        cell_colors(Polarity::Light),
+        "F3 must repaint the cockpit, not just flip a flag"
+    );
 }

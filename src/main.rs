@@ -17,7 +17,8 @@ use neumann_cockpit::api::tasks::{
 };
 use neumann_cockpit::app::{
     batch_tasks, ActiveWizard, ApiMessage, AppState, ColorMode, CraftFire, Fabricator, MessagesInput, MissionsInput,
-    Refetch, RefreshTarget, RemoteMineInput, ScriptAction, ScutCorridorInput, ScutNetworkInput, ShareBlueprintInput,
+    Polarity, Refetch, RefreshTarget, RemoteMineInput, ScriptAction, ScutCorridorInput, ScutNetworkInput,
+    ShareBlueprintInput,
 };
 use neumann_cockpit::input::handle_event;
 use neumann_cockpit::preflight;
@@ -75,7 +76,7 @@ async fn main() -> Result<()> {
 
     // Preflight: config check + first-run onboarding, local archive migration,
     // and the remote link check — all drawn in-screen.
-    let ready = match preflight::run(&mut terminal, ColorMode::default()).await {
+    let ready = match preflight::run(&mut terminal, ColorMode::default(), Polarity::default()).await {
         Ok(preflight::Outcome::Ready(r)) => *r,
         Ok(preflight::Outcome::Quit) => {
             restore_terminal()?;
@@ -104,6 +105,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
         telemetry,
         api_version,
         link_ok,
+        polarity,
     } = ready;
     // Mutable so a probe switch can retarget every subsequent call (auto-refresh
     // + actions) at the newly-active probe — see the reconcile after handle_event.
@@ -112,6 +114,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
     let mut state = AppState {
         hints_visible: config.hints,
         color_mode: config.color_mode(),
+        polarity,
         booting: config.boot,
         scan_history,
         journal,

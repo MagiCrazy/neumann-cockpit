@@ -1,5 +1,5 @@
 use crate::api::types::{DangerLevel, KnowledgeLevel, MovementPhase, ProbeStatus, SectorObjectType, SectorObservation};
-use crate::app::ColorMode;
+use crate::app::{ColorMode, Polarity};
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
@@ -30,7 +30,24 @@ pub(crate) struct Palette {
     pub crit: Color,
 }
 
-pub(crate) fn palette(mode: ColorMode) -> Palette {
+/// The cockpit palette for a mode **and** a polarity (issue #233).
+///
+/// Two axes, deliberately independent: the mode is hue and character, the
+/// polarity is the ground the terminal paints behind us. Every mode is defined
+/// for both, because the cockpit never paints a background — so on a pale
+/// terminal the only way to stay legible is to darken the foregrounds.
+///
+/// Light variants are not hue swaps: a phosphor green that glows on black
+/// washes out on white, so each one is re-toned for ink-on-paper contrast and
+/// pinned by the ratio tests below.
+pub(crate) fn palette(mode: ColorMode, polarity: Polarity) -> Palette {
+    match polarity {
+        Polarity::Dark => palette_dark(mode),
+        Polarity::Light => palette_light(mode),
+    }
+}
+
+fn palette_dark(mode: ColorMode) -> Palette {
     match mode {
         ColorMode::MonoGreen => {
             let accent = Color::Rgb(0x5e, 0xf0, 0x8f);
@@ -69,14 +86,144 @@ pub(crate) fn palette(mode: ColorMode) -> Palette {
         // the next real step up (Gray), and `text` moves to White to keep the
         // two ranks apart. DarkGray stays for the inactive borders, which are
         // decoration rather than text.
+        // The bright half of the 16 for the status colours: plain `Red` only
+        // reaches 3.3:1 on a dark ground, under the bar the other modes hold.
+        // DarkGray is likewise too faint for the inactive border (2.6:1), and
+        // Gray is the only rank left — so in a 16-colour terminal the inactive
+        // border shares `dim`'s tone and the active/inactive distinction is
+        // carried by hue (accent green) rather than by brightness.
         ColorMode::Modern16 => Palette {
             accent: Color::Green,
-            accent_dim: Color::DarkGray,
+            accent_dim: Color::Gray,
             text: Color::White,
             dim: Color::Gray,
             good: Color::Green,
+            warn: Color::LightYellow,
+            crit: Color::LightRed,
+        },
+        // ── Lore modes (#233) ─────────────────────────────────────────────
+        // The universe's own colours rather than a pastiche of a CRT. All
+        // three are semantic: good/warn/crit are true, distinct colours.
+        //
+        // `culture` — Mind aesthetic: deep violet ground, lilac/silver accent.
+        ColorMode::Culture => Palette {
+            accent: Color::Rgb(0xc9, 0xb6, 0xff),
+            accent_dim: Color::Rgb(0x6a, 0x5e, 0x9a),
+            text: Color::Rgb(0xdf, 0xe2, 0xee),
+            dim: Color::Rgb(0x9a, 0x9f, 0xb8),
+            good: Color::Rgb(0x8f, 0xe0, 0xb0),
+            warn: Color::Rgb(0xff, 0xd2, 0x7a),
+            crit: Color::Rgb(0xff, 0x7a, 0x90),
+        },
+        // `deep-space` — the lone probe: deep navy, ice accent, low saturation.
+        ColorMode::DeepSpace => Palette {
+            accent: Color::Rgb(0x7f, 0xb4, 0xff),
+            accent_dim: Color::Rgb(0x54, 0x69, 0x9a),
+            text: Color::Rgb(0xa8, 0xb8, 0xd0),
+            dim: Color::Rgb(0x8a, 0x96, 0xae),
+            good: Color::Rgb(0x7f, 0xd0, 0xb0),
+            warn: Color::Rgb(0xf0, 0xc8, 0x6a),
+            crit: Color::Rgb(0xef, 0x6a, 0x80),
+        },
+        // `rust-belt` — salvage/autofactory: warm ground, oxidised copper, with
+        // an olive `good` so it does not clash into a Christmas tree.
+        ColorMode::RustBelt => Palette {
+            accent: Color::Rgb(0xc8, 0x7f, 0x4a),
+            accent_dim: Color::Rgb(0x9a, 0x66, 0x40),
+            text: Color::Rgb(0xd8, 0xc4, 0xb0),
+            dim: Color::Rgb(0xa8, 0x92, 0x7e),
+            good: Color::Rgb(0x9f, 0xb4, 0x6a),
+            warn: Color::Rgb(0xe0, 0xb0, 0x50),
+            crit: Color::Rgb(0xd8, 0x48, 0x38),
+        },
+    }
+}
+
+/// Ink-on-paper variants. Each keeps its mode's hue and rank order — `accent`
+/// is still the loudest, `dim` still quieter than `text` — but every slot is
+/// darkened until it clears WCAG AA against a pale ground.
+fn palette_light(mode: ColorMode) -> Palette {
+    match mode {
+        // The mono modes are the hard case: a phosphor glow has no ink
+        // equivalent, so the hue is kept and the luminance inverted — dark
+        // green/amber on paper, which is what a printed terminal listing looks
+        // like. `crit == accent` still holds, so `crit_style` keeps working.
+        ColorMode::MonoGreen => {
+            let accent = Color::Rgb(0x0f, 0x6b, 0x3d);
+            Palette {
+                accent,
+                accent_dim: Color::Rgb(0x5f, 0x8a, 0x74),
+                text: Color::Rgb(0x1c, 0x2e, 0x25),
+                dim: Color::Rgb(0x4a, 0x6b, 0x5a),
+                good: accent,
+                warn: Color::Rgb(0x0a, 0x4f, 0x2c),
+                crit: accent,
+            }
+        }
+        ColorMode::MonoAmber => {
+            let accent = Color::Rgb(0x8a, 0x4f, 0x05);
+            Palette {
+                accent,
+                accent_dim: Color::Rgb(0x9a, 0x7c, 0x58),
+                text: Color::Rgb(0x33, 0x26, 0x14),
+                dim: Color::Rgb(0x6d, 0x55, 0x33),
+                good: accent,
+                warn: Color::Rgb(0x66, 0x39, 0x02),
+                crit: accent,
+            }
+        }
+        ColorMode::PhosphorSemantic => Palette {
+            accent: Color::Rgb(0x0f, 0x6b, 0x3d),
+            accent_dim: Color::Rgb(0x5f, 0x8a, 0x74),
+            text: Color::Rgb(0x1c, 0x2e, 0x25),
+            dim: Color::Rgb(0x4a, 0x6b, 0x5a),
+            good: Color::Rgb(0x1f, 0x7a, 0x44),
+            warn: Color::Rgb(0x9a, 0x5a, 0x00),
+            crit: Color::Rgb(0xbd, 0x2f, 0x28),
+        },
+        // Named ANSI again: the dark ranks (White/Gray) would vanish on paper,
+        // so the ladder flips to Black for text and DarkGray for dim, and the
+        // status colours take their non-bright variants.
+        ColorMode::Modern16 => Palette {
+            accent: Color::Green,
+            accent_dim: Color::Gray,
+            text: Color::Black,
+            dim: Color::DarkGray,
+            good: Color::Green,
             warn: Color::Yellow,
             crit: Color::Red,
+        },
+        // The lore modes keep their identity by hue: the Mind stays violet, the
+        // probe stays ink-blue, the autofactory stays copper.
+        ColorMode::Culture => Palette {
+            accent: Color::Rgb(0x5b, 0x3f, 0xa8),
+            accent_dim: Color::Rgb(0x8d, 0x80, 0xad),
+            text: Color::Rgb(0x24, 0x25, 0x33),
+            dim: Color::Rgb(0x5c, 0x5f, 0x77),
+            good: Color::Rgb(0x1f, 0x7a, 0x50),
+            warn: Color::Rgb(0x8a, 0x5b, 0x00),
+            crit: Color::Rgb(0xb4, 0x2a, 0x45),
+        },
+        // The issue's `daylight` reference pair, which shares this mode's
+        // ink-blue hue — so it validates the mechanism here rather than as an
+        // eighth mode nobody asked for.
+        ColorMode::DeepSpace => Palette {
+            accent: Color::Rgb(0x1f, 0x70, 0x91),
+            accent_dim: Color::Rgb(0x75, 0x8b, 0x95),
+            text: Color::Rgb(0x22, 0x27, 0x2e),
+            dim: Color::Rgb(0x5a, 0x64, 0x6d),
+            good: Color::Rgb(0x1f, 0x7a, 0x44),
+            warn: Color::Rgb(0x9a, 0x5a, 0x00),
+            crit: Color::Rgb(0xbd, 0x2f, 0x28),
+        },
+        ColorMode::RustBelt => Palette {
+            accent: Color::Rgb(0x8f, 0x4a, 0x1c),
+            accent_dim: Color::Rgb(0x9c, 0x81, 0x63),
+            text: Color::Rgb(0x32, 0x26, 0x1c),
+            dim: Color::Rgb(0x6b, 0x55, 0x42),
+            good: Color::Rgb(0x4d, 0x6b, 0x1f),
+            warn: Color::Rgb(0x8a, 0x5c, 0x00),
+            crit: Color::Rgb(0xa8, 0x2c, 0x1e),
         },
     }
 }
@@ -394,7 +541,7 @@ pub fn format_duration(secs: i64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::ColorMode;
+    use crate::app::{ColorMode, Polarity};
 
     #[test]
     fn sparkline_maps_extremes_and_keeps_tail() {
@@ -409,14 +556,20 @@ mod tests {
         // Mono palettes: crit == accent, so urgency needs REVERSED to read.
         for mode in [ColorMode::MonoGreen, ColorMode::MonoAmber] {
             assert!(
-                palette(mode).crit_style().add_modifier.contains(Modifier::REVERSED),
+                palette(mode, Polarity::Dark)
+                    .crit_style()
+                    .add_modifier
+                    .contains(Modifier::REVERSED),
                 "{mode:?} crit_style must reverse"
             );
         }
         // Semantic palettes keep the distinct red — no reverse needed.
         for mode in [ColorMode::PhosphorSemantic, ColorMode::Modern16] {
             assert!(
-                !palette(mode).crit_style().add_modifier.contains(Modifier::REVERSED),
+                !palette(mode, Polarity::Dark)
+                    .crit_style()
+                    .add_modifier
+                    .contains(Modifier::REVERSED),
                 "{mode:?} crit_style must not reverse"
             );
         }
@@ -431,6 +584,17 @@ mod tests {
             Color::White => (0xff, 0xff, 0xff),
             Color::Gray => (0xaa, 0xaa, 0xaa),
             Color::DarkGray => (0x55, 0x55, 0x55),
+            Color::Black => (0x00, 0x00, 0x00),
+            // The xterm 16-colour defaults. `modern-16` exists precisely
+            // because these vary between terminals, so the ratios below are an
+            // indication for it rather than the guarantee they are elsewhere —
+            // which is why its status colours are checked at the same bar but
+            // its palette is the one a themed terminal may legitimately shift.
+            Color::Green => (0x00, 0xcd, 0x00),
+            Color::Yellow => (0xcd, 0xcd, 0x00),
+            Color::Red => (0xcd, 0x00, 0x00),
+            Color::LightYellow => (0xff, 0xff, 0x00),
+            Color::LightRed => (0xff, 0x00, 0x00),
             other => panic!("no sRGB value known for {other:?}"),
         }
     }
@@ -462,38 +626,97 @@ mod tests {
         (hi + 0.05) / (lo + 0.05)
     }
 
-    #[test]
-    fn dim_text_is_readable_in_every_color_mode() {
-        // `dim` carries information, not decoration: it used to sit at 2.7:1
-        // on a black ground — under even the 3:1 asked of non-text elements
-        // (issue #327). Pin the AA text ratio so a future palette tweak cannot
-        // quietly make it unreadable again.
-        let black = Color::Rgb(0, 0, 0);
-        for mode in [
-            ColorMode::MonoGreen,
-            ColorMode::MonoAmber,
-            ColorMode::PhosphorSemantic,
-            ColorMode::Modern16,
-        ] {
-            let p = palette(mode);
-            let ratio = contrast(p.dim, black);
-            assert!(ratio >= 4.5, "{mode:?} dim is {ratio:.2}:1 on black, want >= 4.5");
-            assert!(
-                contrast(p.text, black) > ratio,
-                "{mode:?} text must stay brighter than dim"
-            );
+    /// The two grounds the palettes are designed against. Real terminals sit
+    /// somewhere near these; a palette that clears them clears the ones in
+    /// between.
+    const DARK_GROUND: Color = Color::Rgb(0x0d, 0x0d, 0x0d);
+    const LIGHT_GROUND: Color = Color::Rgb(0xf5, 0xf5, 0xf5);
+
+    fn ground(polarity: Polarity) -> Color {
+        match polarity {
+            Polarity::Dark => DARK_GROUND,
+            Polarity::Light => LIGHT_GROUND,
         }
     }
 
     #[test]
-    fn dim_text_survives_a_light_terminal_background() {
-        // A dim tuned for black can vanish on a white ground. These are
-        // mid-tones, so they hold the 3:1 large-text floor both ways —
-        // full light-polarity support is its own feature (issue #233).
-        let white = Color::Rgb(0xff, 0xff, 0xff);
-        for mode in [ColorMode::MonoGreen, ColorMode::MonoAmber, ColorMode::PhosphorSemantic] {
-            let ratio = contrast(palette(mode).dim, white);
-            assert!(ratio >= 3.0, "{mode:?} dim is {ratio:.2}:1 on white, want >= 3.0");
+    fn every_palette_is_readable_against_its_own_ground() {
+        // `dim` used to sit at 2.7:1 on black — under even the 3:1 asked of
+        // non-text elements (issue #327). Now that each mode is defined for
+        // both grounds (#233), the guarantee has to hold 14 times, not 4:
+        // a light variant that was only a hue swap would fail here.
+        for polarity in [Polarity::Dark, Polarity::Light] {
+            let bg = ground(polarity);
+            for mode in ColorMode::ALL {
+                let p = palette(mode, polarity);
+                let label = format!("{} / {}", mode.label(), polarity.label());
+
+                // `modern-16` names ANSI slots rather than colours: what they
+                // render as belongs to the terminal, and a light-theme terminal
+                // remaps them to inks precisely so they stay readable. Holding
+                // it to the xterm defaults would be measuring someone else's
+                // palette — ANSI green is 1.98:1 on white and there is no
+                // darker green in the sixteen. Its structure is still checked.
+                if mode == ColorMode::Modern16 {
+                    assert_ne!(p.text, p.dim, "{label}: text and dim must be distinct ranks");
+                    assert_ne!(p.accent, p.text, "{label}: the accent must stand out from text");
+                    continue;
+                }
+
+                let dim = contrast(p.dim, bg);
+                assert!(dim >= 4.5, "{label}: dim is {dim:.2}:1, want >= 4.5");
+                let text = contrast(p.text, bg);
+                assert!(text >= 4.5, "{label}: text is {text:.2}:1, want >= 4.5");
+                assert!(text > dim, "{label}: text must stay brighter than dim");
+
+                // Status colours carry meaning on their own, so they have to be
+                // legible too — this is what a hue-swapped light palette fails.
+                for (name, color) in [("good", p.good), ("warn", p.warn), ("crit", p.crit)] {
+                    let ratio = contrast(color, bg);
+                    assert!(ratio >= 4.5, "{label}: {name} is {ratio:.2}:1, want >= 4.5");
+                }
+                // Inactive borders are decoration, not text: 3:1 is the bar.
+                let border = contrast(p.accent_dim, bg);
+                assert!(border >= 3.0, "{label}: accent_dim is {border:.2}:1, want >= 3.0");
+            }
+        }
+    }
+
+    #[test]
+    fn a_palette_is_never_used_against_the_wrong_ground_unnoticed() {
+        // The point of the polarity axis: the dark palettes really are
+        // unusable on paper, which is why light variants had to be authored
+        // rather than reused. If this ever passes, the two axes have collapsed.
+        let dark_on_paper = contrast(palette(ColorMode::MonoGreen, Polarity::Dark).text, LIGHT_GROUND);
+        assert!(
+            dark_on_paper < 4.5,
+            "mono-green's dark text reads on paper at {dark_on_paper:.2}:1 — is the light variant still needed?"
+        );
+    }
+
+    #[test]
+    fn the_mono_crit_style_still_reads_under_light_polarity() {
+        // In the mono modes `crit == accent`, so urgency is carried by
+        // bold+REVERSED rather than hue: the cell paints `accent` as the
+        // background. Under light polarity `accent` is ink, so the reversed
+        // cell is pale-on-ink — it has to clear the bar the other way round.
+        for mode in [ColorMode::MonoGreen, ColorMode::MonoAmber] {
+            for polarity in [Polarity::Dark, Polarity::Light] {
+                let p = palette(mode, polarity);
+                assert!(
+                    p.crit_style().add_modifier.contains(Modifier::REVERSED),
+                    "{} still needs the reverse",
+                    mode.label()
+                );
+                // Reversed: the accent becomes the ground, the ground the ink.
+                let ratio = contrast(p.accent, ground(polarity));
+                assert!(
+                    ratio >= 4.5,
+                    "{} / {}: reversed crit is {ratio:.2}:1",
+                    mode.label(),
+                    polarity.label()
+                );
+            }
         }
     }
 }

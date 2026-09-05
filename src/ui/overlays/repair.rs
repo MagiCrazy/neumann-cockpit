@@ -8,9 +8,9 @@ use ratatui::{
 };
 
 use super::{centered_rect, render_footer, FooterKey, KeyTone};
-use crate::ui::theme::{format_duration, palette};
+use crate::ui::theme::format_duration;
 pub(crate) fn render_repair_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let ActiveWizard::Repair(RepairInput::Typing {
         manny_name, buf, error, ..
     }) = &state.active_wizard

@@ -162,6 +162,10 @@ pub struct AppState {
     /// Storage pane ordering: `false` (default) keeps the server's `sortOrder`,
     /// `true` sorts by label (issue #333). Session state, like the color mode.
     pub storage_sort_alpha: bool,
+    /// Dark or light terminal ground (issue #233). Detected at boot (OSC 11),
+    /// overridden by the `polarity` config key and by `F3`. Mirrors
+    /// `color_mode`: the two axes are independent and both live here.
+    pub polarity: Polarity,
     /// When the server suggests polling the Mannies again (API v104
     /// `nextUsefulRefreshDelayMs`, turned into a deadline on receipt). Drives
     /// the refresh timer while a task is in flight, replacing the fixed
@@ -862,6 +866,14 @@ impl AppState {
             self.active_wizard,
             ActiveWizard::Fabrication(FabricationInput::PickRecipe { .. })
         )
+    }
+
+    /// The cockpit palette for the pilot's current mode **and** polarity — the
+    /// single place the two axes are resolved together (issue #233). Renderers
+    /// call this rather than `theme::palette(mode, polarity)` so neither axis
+    /// can be forgotten at a call site.
+    pub(crate) fn palette(&self) -> crate::ui::theme::Palette {
+        crate::ui::theme::palette(self.color_mode, self.polarity)
     }
 
     pub fn next_refresh_instant(&self) -> Instant {

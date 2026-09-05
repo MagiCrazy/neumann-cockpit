@@ -2012,11 +2012,17 @@ fn scanner_obj_nav_wraps() {
 #[test]
 fn color_mode_cycles_and_defaults_green() {
     assert_eq!(ColorMode::default(), ColorMode::MonoGreen);
+    // The cycle walks `ColorMode::ALL`, so it stays exhaustive as modes are
+    // added — this asserts against the list rather than a hard-coded count.
     let mut m = ColorMode::default();
-    for _ in 0..4 {
+    let mut seen = vec![m];
+    for _ in 1..ColorMode::ALL.len() {
         m = m.cycle();
+        assert!(!seen.contains(&m), "{m:?} visited twice");
+        seen.push(m);
     }
-    assert_eq!(m, ColorMode::MonoGreen, "cycles back after four steps");
+    assert_eq!(seen.len(), ColorMode::ALL.len(), "every mode is reachable by F2");
+    assert_eq!(m.cycle(), ColorMode::MonoGreen, "and it comes back round");
 }
 
 // ── cockpit contextual menu ────────────────────────────────────────────────

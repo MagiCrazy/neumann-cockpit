@@ -8,12 +8,11 @@
 use ratatui::{layout::Rect, Frame};
 
 use crate::app::{ActiveWizard, AppState, ScutCorridorInput};
-use crate::ui::theme::palette;
 
 use super::render_pick_list;
 
 pub(crate) fn render_scut_corridor_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let ActiveWizard::ScutCorridor(corridor) = &state.active_wizard else {
         return;
     };

@@ -1,5 +1,4 @@
 use crate::app::{ActiveWizard, AppState, DropStorageContainerInput};
-use crate::ui::theme::palette;
 use ratatui::{layout::Rect, Frame};
 
 use super::render_pick_list;
@@ -17,7 +16,7 @@ pub(crate) fn render_drop_container_overlay(frame: &mut Frame, area: Rect, state
             render_pick_list(
                 frame,
                 area,
-                palette(state.color_mode),
+                state.palette(),
                 " DROP CONTAINER — SELECT CONTAINER ",
                 54,
                 height,
@@ -41,7 +40,7 @@ pub(crate) fn render_drop_container_overlay(frame: &mut Frame, area: Rect, state
             render_pick_list(
                 frame,
                 area,
-                palette(state.color_mode),
+                state.palette(),
                 " DROP CONTAINER — SELECT PLANET ",
                 54,
                 height,

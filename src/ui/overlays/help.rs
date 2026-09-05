@@ -45,7 +45,8 @@ const LEFT: &[Section] = &[
             ("i", "jump to next idle Manny"),
             ("s", "Storage: sort a-z / probe order"),
             ("F1", "toggle hints line"),
-            ("F2", "cycle color mode"),
+            ("F2", "cycle color mode (7, incl. lore)"),
+            ("F3", "dark / light terminal ground"),
             ("F5", "refresh"),
             ("?", "this help"),
             ("q", "quit"),
@@ -230,21 +231,21 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, p: Palette, scr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::ColorMode;
+    use crate::app::{ColorMode, Polarity};
     use crate::ui::theme::palette;
     use ratatui::{backend::TestBackend, Terminal};
 
     #[test]
     fn row_count_matches_rendered_columns() {
         // Keeps the scroll clamp honest: column_len must track column_lines.
-        let p = palette(ColorMode::MonoGreen);
+        let p = palette(ColorMode::MonoGreen, Polarity::Dark);
         let expected = column_lines(LEFT, p).len().max(column_lines(RIGHT, p).len());
         assert_eq!(help_row_count(), expected);
     }
 
     #[test]
     fn renders_all_sections_including_command_mode() {
-        let p = palette(ColorMode::MonoGreen);
+        let p = palette(ColorMode::MonoGreen, Polarity::Dark);
         let mut t = Terminal::new(TestBackend::new(100, 40)).unwrap();
         t.draw(|f| {
             let a = f.area();
