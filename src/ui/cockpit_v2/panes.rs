@@ -973,6 +973,23 @@ fn manny_detail_lines(state: &AppState, m: &Manny, p: Palette) -> Vec<Line<'stat
     lines
 }
 
+/// Rendered height of a Manny's detail block at `width`, in rows — what the
+/// `Wrap` renderer will produce, so the input layer can bound the scroll
+/// (issue #337). Word wrapping can push a line one row further than the plain
+/// division suggests, so treat this as a floor: the renderer clamps the offset
+/// for real, and the input layer allows a little slack over this figure so the
+/// last row stays reachable either way.
+pub(crate) fn manny_detail_height(state: &AppState, id: &str, width: u16, p: Palette) -> usize {
+    let Some(m) = state.mannies.as_ref().and_then(|v| v.iter().find(|m| m.id == id)) else {
+        return 1;
+    };
+    let width = width.max(1) as usize;
+    manny_detail_lines(state, m, p)
+        .iter()
+        .map(|l| l.width().max(1).div_ceil(width))
+        .sum()
+}
+
 pub fn render_manny_detail(frame: &mut Frame, area: Rect, state: &AppState, id: &str, active: bool, p: Palette) {
     let Some(m) = state.mannies.as_ref().and_then(|v| v.iter().find(|m| m.id == id)) else {
         let block = pane_block(" MANNY ", active, p);
@@ -988,10 +1005,24 @@ pub fn render_manny_detail(frame: &mut Frame, area: Rect, state: &AppState, id: 
     let block = pane_block(&title, active, p);
     let inner = block.inner(area);
     frame.render_widget(block, area);
+
+    // The detail is a block, not a list: it scrolls as a viewport (#337). The
+    // clamp lives here because only the renderer knows the wrapped height for
+    // certain — the input layer bounds the offset from an estimate.
+    let lines = manny_detail_lines(state, m, p);
+    let total: usize = lines
+        .iter()
+        .map(|l| l.width().max(1).div_ceil(inner.width.max(1) as usize))
+        .sum();
+    let max = total.saturating_sub(inner.height as usize);
+    let offset = state.pane_nav[Pane::Mannies.index()].detail_scroll.min(max);
     frame.render_widget(
-        Paragraph::new(manny_detail_lines(state, m, p)).wrap(Wrap { trim: false }),
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: false })
+            .scroll((offset as u16, 0)),
         inner,
     );
+    scroll_markers(frame, area, offset as u16, total, active, p);
 }
 
 /// Zoomed Mannies pane: a vertical list where each manny is a summary line

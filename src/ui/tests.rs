@@ -665,3 +665,60 @@ fn a_pane_whose_list_overflows_says_so() {
     let text = buffer_text(&render_cockpit(&state, 80, 24));
     assert!(text.contains("▼"), "the pane advertises that its list continues");
 }
+
+// ── drilled-in detail scrolling (issue #337) ──────────────────────────────
+
+/// A Manny mining a long-named asteroid into a long-named container: the
+/// detail block is taller than a 1/3 grid cell.
+fn busy_manny() -> crate::api::types::Manny {
+    serde_json::from_str(
+        r#"{"id": "m1", "name": "Falling Outside The Normal Moral Constraints",
+            "location": {"type": "sector", "sector": null},
+            "currentTask": "mining", "taskProgressPercent": 42.0,
+            "cargo": {"capacity": 0.3, "deuterium": 0.05, "metals": 0.12,
+                      "ice": 0.01, "organicCompounds": 0.0},
+            "canReceiveOrders": false, "taskEstimatedEndTime": null}"#,
+    )
+    .unwrap()
+}
+
+fn drilled_into_a_manny() -> AppState {
+    let mut state = AppState::default();
+    state.active_pane = Pane::Mannies;
+    state.mannies = Some(vec![busy_manny()]);
+    state.pane_drill_in();
+    state
+}
+
+#[test]
+fn the_manny_detail_scrolls_to_its_last_line() {
+    // Its tail — the cargo figures — used to be unreachable: the view had no
+    // viewport at all, and the pane cursor is frozen while drilled in (#337).
+    let mut state = drilled_into_a_manny();
+    assert!(state.detail_view_active(), "drilled into a Manny is a detail view");
+
+    // A pane too short for the block: the tail falls outside the frame.
+    let (w, h) = (40, 8);
+    let top = buffer_text(&render_cockpit(&state, w, h));
+    assert!(top.contains("mining"), "the head of the block is on screen");
+    assert!(!top.contains("deut"), "and its tail is not: {top}");
+    assert!(top.contains("▼"), "the pane says the block continues below: {top}");
+
+    state.set_detail_scroll(20); // past the end; the renderer clamps
+    let bottom = buffer_text(&render_cockpit(&state, w, h));
+    assert!(bottom.contains("deut"), "the cargo tail is now reachable: {bottom}");
+    assert!(bottom.contains("▲"), "and the pane says the block continues above");
+}
+
+#[test]
+fn leaving_the_detail_forgets_its_scroll() {
+    let mut state = drilled_into_a_manny();
+    state.set_detail_scroll(4);
+    state.pane_drill_out();
+    assert_eq!(
+        state.pane_nav[Pane::Mannies.index()].detail_scroll,
+        0,
+        "a fresh drill-in starts at the top"
+    );
+    assert!(!state.detail_view_active());
+}
