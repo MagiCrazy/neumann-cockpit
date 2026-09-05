@@ -28,7 +28,7 @@ const LEFT: &[Section] = &[
             ("e r t", "Scanner · Map · Comms"),
             ("d f g", "Sector · Probe · Missions"),
             ("c v b", "Inventory · Storage · Mannies"),
-            ("j k / ↑↓", "move cursor in pane"),
+            ("j k / ↑↓", "move cursor (wraps at both ends)"),
             ("PgUp PgDn", "page through long lists"),
             ("Home End", "jump to first / last"),
             ("l / h", "drill in / out (→ ←)"),

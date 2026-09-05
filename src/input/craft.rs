@@ -1,7 +1,7 @@
 use crossterm::event::KeyCode;
 use tokio::sync::mpsc;
 
-use super::geometry::list_nav;
+use super::geometry::{is_list_nav_key, list_nav};
 use crate::api::client::ApiClient;
 use crate::app::{ActiveWizard, ApiMessage, AppState, FabFocus, FabricationInput, Fabricator, QueuedCraft};
 
@@ -51,7 +51,7 @@ fn handle_catalog(code: KeyCode, state: &mut AppState) {
                 set_focus(state, FabFocus::Queue);
             }
         }
-        KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+        _ if is_list_nav_key(code) => {
             if let Some(ns) = list_nav(code, selection, count) {
                 mutate_recipe(state, |sel, _| *sel = ns);
             }
@@ -103,7 +103,7 @@ fn handle_queue_panel(code: KeyCode, state: &mut AppState) {
         KeyCode::Esc => state.close_wizard(),
         KeyCode::Tab | KeyCode::Left | KeyCode::Char('h') => set_focus(state, FabFocus::Catalog),
         KeyCode::Char('p') => state.queue_toggle_pause(),
-        KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+        _ if is_list_nav_key(code) => {
             if let Some(ns) = list_nav(code, sel, count) {
                 set_queue_sel(state, ns);
             }
@@ -133,7 +133,7 @@ fn handle_builder(code: KeyCode, state: &mut AppState) {
     };
     match code {
         KeyCode::Esc => state.close_wizard(),
-        KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+        _ if is_list_nav_key(code) => {
             if let ActiveWizard::Fabrication(FabricationInput::PickBuilder { selection, .. }) = &mut state.active_wizard
             {
                 if let Some(ns) = list_nav(code, *selection, count) {

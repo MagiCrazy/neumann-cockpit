@@ -1,7 +1,7 @@
 use crossterm::event::KeyCode;
 use tokio::sync::mpsc;
 
-use super::geometry::list_nav;
+use super::geometry::{is_list_nav_key, list_nav};
 use crate::api::client::ApiClient;
 use crate::api::tasks::{fetch_inspect, fetch_install_beacon, fetch_recover, fetch_scut_network, fetch_turn_on_relay};
 use crate::app::{
@@ -149,7 +149,7 @@ pub(super) fn handle_scut_network_event(
             let selection = *selection;
             match code {
                 KeyCode::Esc => state.close_wizard(),
-                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                _ if is_list_nav_key(code) => {
                     if let Some(new_sel) = list_nav(code, selection, count) {
                         if let ActiveWizard::ScutNetwork(ScutNetworkInput::Picking { selection, .. }) =
                             &mut state.active_wizard
@@ -197,7 +197,7 @@ pub(super) fn handle_scut_corridor_event(
             let (count, selection) = (networks.len(), *selection);
             match code {
                 KeyCode::Esc => state.close_wizard(),
-                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                _ if is_list_nav_key(code) => {
                     if let Some(new_sel) = list_nav(code, selection, count) {
                         if let ActiveWizard::ScutCorridor(ScutCorridorInput::PickNetwork { selection, .. }) =
                             &mut state.active_wizard
@@ -232,7 +232,7 @@ pub(super) fn handle_scut_corridor_event(
                     state.close_wizard();
                     state.scut_network_view = None;
                 }
-                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                _ if is_list_nav_key(code) => {
                     if let Some(new_sel) = list_nav(code, selection, count) {
                         if let ActiveWizard::ScutCorridor(ScutCorridorInput::Picking { selection, .. }) =
                             &mut state.active_wizard
@@ -266,7 +266,7 @@ pub(super) fn handle_waypoints_event(code: KeyCode, state: &mut AppState) {
     let selection = *selection;
     match code {
         KeyCode::Esc | KeyCode::Char('w') => state.close_wizard(),
-        KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+        _ if is_list_nav_key(code) => {
             if let Some(new_sel) = list_nav(code, selection, count) {
                 if let ActiveWizard::Waypoints(WaypointsInput::Browsing { selection, .. }) = &mut state.active_wizard {
                     *selection = new_sel;
@@ -300,7 +300,7 @@ pub(super) fn handle_object_action_event(
             let count = actions.len();
             match code {
                 KeyCode::Esc => state.close_wizard(),
-                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                _ if is_list_nav_key(code) => {
                     if let Some(new_sel) = list_nav(code, sel, count) {
                         if let ActiveWizard::ObjectAction(ObjectActionInput::PickAction { selection, .. }) =
                             &mut state.active_wizard
@@ -351,7 +351,7 @@ pub(super) fn handle_object_action_event(
             let count = mannies.len();
             match code {
                 KeyCode::Esc => state.close_wizard(),
-                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                _ if is_list_nav_key(code) => {
                     if let Some(new_sel) = list_nav(code, sel, count) {
                         if let ActiveWizard::ObjectAction(ObjectActionInput::PickManny { selection, .. }) =
                             &mut state.active_wizard

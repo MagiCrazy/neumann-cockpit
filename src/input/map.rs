@@ -2,7 +2,7 @@ use crossterm::event::KeyCode;
 
 use crate::app::{AppState, GotoVisitedInput};
 
-use super::geometry::list_nav;
+use super::geometry::{is_list_nav_key, list_nav};
 
 /// Picker over visited sectors: navigate the list, `Enter` launches the travel
 /// confirm for the chosen sector, `Esc` cancels.
@@ -13,7 +13,7 @@ pub(super) fn handle_goto_visited_event(code: KeyCode, state: &mut AppState) {
     let count = state.visited_sectors.len();
     match code {
         KeyCode::Esc => state.goto_visited = GotoVisitedInput::Inactive,
-        KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+        _ if is_list_nav_key(code) => {
             if let Some(ns) = list_nav(code, selection, count) {
                 state.goto_visited = GotoVisitedInput::Picking { selection: ns };
             }

@@ -1,7 +1,7 @@
 use crossterm::event::KeyCode;
 use tokio::sync::mpsc;
 
-use super::geometry::list_nav;
+use super::geometry::{is_list_nav_key, list_nav};
 use crate::api::client::ApiClient;
 use crate::api::tasks::fetch_mine;
 use crate::app::{ActiveWizard, ApiMessage, AppState, LogEvent, MineInput, RemoteMineInput, RESOURCE_TYPES};
@@ -71,7 +71,7 @@ pub(super) fn handle_mine_event(
             let count = candidates.len();
             match code {
                 KeyCode::Esc => state.close_wizard(),
-                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                _ if is_list_nav_key(code) => {
                     if let Some(new_sel) = list_nav(code, sel, count) {
                         if let ActiveWizard::Mine(MineInput::PickAsteroid { selection, .. }) = &mut state.active_wizard
                         {
@@ -266,7 +266,7 @@ pub(super) fn handle_remote_mine_event(
             let count = candidates.len();
             match code {
                 KeyCode::Esc => state.close_wizard(),
-                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                _ if is_list_nav_key(code) => {
                     if let Some(new_sel) = list_nav(code, sel, count) {
                         if let ActiveWizard::RemoteMine(RemoteMineInput::PickAsteroid { selection, .. }) =
                             &mut state.active_wizard
@@ -397,7 +397,7 @@ pub(super) fn handle_remote_mine_event(
             let count = containers.len();
             match code {
                 KeyCode::Esc => state.close_wizard(),
-                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                _ if is_list_nav_key(code) => {
                     if let Some(new_sel) = list_nav(code, sel, count) {
                         if let ActiveWizard::RemoteMine(RemoteMineInput::PickContainer { selection, .. }) =
                             &mut state.active_wizard

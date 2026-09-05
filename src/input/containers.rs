@@ -5,7 +5,7 @@ use crate::api::client::ApiClient;
 use crate::api::tasks::{fetch_rename_container, fetch_update_container_rules};
 use crate::app::{ActiveWizard, ApiMessage, AppState, ContainerRulesInput, LogEvent, RenameContainerInput};
 
-use super::geometry::list_nav;
+use super::geometry::{is_list_nav_key, list_nav};
 
 /// Move a type to the next/previous routing list:
 /// none → priority → exclusion → strict → none.
@@ -107,7 +107,7 @@ pub(super) fn handle_container_rules_event(
     let count = types.len();
     match code {
         KeyCode::Esc => state.close_wizard(),
-        KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+        _ if is_list_nav_key(code) => {
             if let Some(ns) = list_nav(code, sel, count) {
                 if let ActiveWizard::ContainerRules(ContainerRulesInput::Editing { selection, .. }) =
                     &mut state.active_wizard

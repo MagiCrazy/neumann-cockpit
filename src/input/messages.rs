@@ -5,7 +5,7 @@ use crate::api::client::ApiClient;
 use crate::api::tasks::{fetch_mark_message_read, fetch_send_message};
 use crate::app::{ActiveWizard, ApiMessage, AppState, LogEvent, MessagesInput};
 
-use super::geometry::list_nav;
+use super::geometry::{is_list_nav_key, list_nav};
 
 pub(super) fn handle_messages_event(
     code: KeyCode,
@@ -32,7 +32,7 @@ pub(super) fn handle_messages_event(
                         selection: 0,
                     });
                 }
-                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                _ if is_list_nav_key(code) => {
                     if let Some(new_sel) = list_nav(code, selection, count) {
                         state.active_wizard = ActiveWizard::Messages(MessagesInput::Browsing {
                             sent_tab,
@@ -88,7 +88,7 @@ pub(super) fn handle_messages_event(
                         selection: 0,
                     })
                 }
-                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                _ if is_list_nav_key(code) => {
                     if let Some(new_sel) = list_nav(code, sel, count) {
                         if let ActiveWizard::Messages(MessagesInput::PickRecipient { ref mut selection, .. }) =
                             state.active_wizard

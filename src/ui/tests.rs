@@ -561,3 +561,43 @@ fn the_travel_confirm_marks_a_safe_corridor_without_overselling_it() {
     let text = buffer_text(&render_cockpit(&state, 100, 30));
     assert!(!text.contains("safe corridor"), "no claim on an ordinary jump");
 }
+
+#[test]
+fn the_menu_cursor_is_visible_on_a_disabled_row() {
+    // Reverse video alone lost the cursor on a dimmed row, and a disabled row
+    // never got it at all (issue #325): column 1 now carries it explicitly.
+    use crate::app::{ContextMenu, InputMode, MenuAction, MenuItem};
+    let mut state = AppState::default();
+    state.mode = InputMode::Menu(ContextMenu {
+        title: "TEST".into(),
+        items: vec![
+            MenuItem {
+                action: MenuAction::Travel,
+                label: "Travel…".into(),
+                enabled: false,
+                disabled_reason: Some("no fuel".into()),
+            },
+            MenuItem {
+                action: MenuAction::Mine,
+                label: "Mine…".into(),
+                enabled: true,
+                disabled_reason: None,
+            },
+        ],
+        cursor: 0,
+    });
+
+    let text = buffer_text(&render_cockpit(&state, 80, 24));
+    let row = text
+        .lines()
+        .find(|l| l.contains("Travel…"))
+        .expect("the disabled item is rendered");
+    assert!(row.contains("▶"), "the cursor marks the disabled row it sits on: {row}");
+    assert!(row.contains("no fuel"), "and the row still states why: {row}");
+
+    let other = text
+        .lines()
+        .find(|l| l.contains("Mine…"))
+        .expect("the enabled item is rendered");
+    assert!(!other.contains("▶"), "only the cursor row is marked: {other}");
+}

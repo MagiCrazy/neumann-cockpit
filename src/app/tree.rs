@@ -319,24 +319,43 @@ impl AppState {
         }
     }
 
-    /// Move the tree cursor by `delta`, skipping non-selectable header rows.
+    /// Move the tree cursor by `delta` rows, skipping non-selectable header
+    /// rows. A single step wraps at either end and a multi-row page stops at
+    /// the edge, matching every other cockpit list (issue #325).
     pub fn tree_move(&mut self, delta: isize) {
         let rows = self.tree_rows();
-        if rows.is_empty() {
+        if rows.is_empty() || delta == 0 {
             return;
         }
-        let mut i = self.tree.cursor as isize;
         let step = delta.signum();
-        loop {
+        let wrap = delta.abs() == 1;
+        for _ in 0..delta.unsigned_abs() {
+            let Some(next) = self.tree_step(&rows, step, wrap) else {
+                return; // hit an edge — keep whatever progress was made
+            };
+            self.tree.cursor = next;
+        }
+    }
+
+    /// One selectable row away from the cursor in direction `step`, or `None`
+    /// at the edge when not wrapping. Bounded by the row count, so a tree made
+    /// only of headers terminates instead of spinning.
+    fn tree_step(&self, rows: &[TreeRow], step: isize, wrap: bool) -> Option<usize> {
+        let len = rows.len() as isize;
+        let mut i = self.tree.cursor as isize;
+        for _ in 0..rows.len() {
             i += step;
-            if i < 0 || i >= rows.len() as isize {
-                return; // hit an edge — leave the cursor where it was
+            if i < 0 || i >= len {
+                if !wrap {
+                    return None;
+                }
+                i = if i < 0 { len - 1 } else { 0 };
             }
             if !rows[i as usize].is_header {
-                self.tree.cursor = i as usize;
-                return;
+                return Some(i as usize);
             }
         }
+        None
     }
 
     /// Toggle expansion of the node under the cursor (`Enter`).

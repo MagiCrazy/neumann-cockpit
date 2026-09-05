@@ -5,7 +5,7 @@ use crate::api::client::ApiClient;
 use crate::api::tasks::{fetch_storage_move, StorageMoveArgs};
 use crate::app::{ActiveWizard, ApiMessage, AppState, LogEvent, StorageMoveInput, MOVE_RESOURCE_TYPES};
 
-use super::geometry::list_nav;
+use super::geometry::{is_list_nav_key, list_nav};
 
 fn wrap_prev(i: usize, len: usize) -> usize {
     if len == 0 {
@@ -33,7 +33,7 @@ pub(super) fn handle_storage_move_event(
             let (sel, count) = (*selection, mannies.len());
             match code {
                 KeyCode::Esc => state.close_wizard(),
-                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                _ if is_list_nav_key(code) => {
                     if let Some(ns) = list_nav(code, sel, count) {
                         if let ActiveWizard::StorageMove(StorageMoveInput::PickManny { selection, .. }) =
                             &mut state.active_wizard
@@ -64,7 +64,7 @@ pub(super) fn handle_storage_move_event(
             let sel = *selection;
             match code {
                 KeyCode::Esc => state.close_wizard(),
-                KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+                _ if is_list_nav_key(code) => {
                     if let Some(ns) = list_nav(code, sel, 2) {
                         if let ActiveWizard::StorageMove(StorageMoveInput::PickKind { selection, .. }) =
                             &mut state.active_wizard
