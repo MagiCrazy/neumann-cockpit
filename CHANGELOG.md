@@ -1,5 +1,12 @@
 # Changelog
 
+## [112.0.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v105.0.0...neumann-cockpit-v112.0.0) (2026-09-06)
+
+
+### Features
+
+* **comms:** discard alerts and damage warnings, not only acknowledge them ([#366](https://github.com/MagiCrazy/neumann-cockpit/issues/366)) ([#371](https://github.com/MagiCrazy/neumann-cockpit/issues/371)) ([bb4bc5c](https://github.com/MagiCrazy/neumann-cockpit/commit/bb4bc5c17ac5bdecc8319d964c8a38f5f16de107))
+
 ## [105.0.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.7.0...neumann-cockpit-v105.0.0) (2026-09-06)
 
 
