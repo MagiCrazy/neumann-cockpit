@@ -23,3 +23,10 @@ api_key  = "vng_your_api_key_here"
 # finishes — travel arrival or a Manny completing a long task. Set false
 # to stay silent.
 #notifications = true
+
+# Diagnostic log: "off", "error" (default), "info" or "debug". Failures the
+# cockpit can only show as a five-second toast are written to cockpit.log,
+# beside the database under the state directory, so a wedged session is still
+# explicable an hour later. The API key is never written to it.
+# NEUMANN_COCKPIT_LOG overrides this for a single run.
+#log = "error"

@@ -947,3 +947,55 @@ fn polarity_actually_changes_what_is_painted() {
         "F3 must repaint the cockpit, not just flip a flag"
     );
 }
+
+// -- scanner detail scrolling (issue #347) ---------------------------------
+
+/// A remote observation carrying enough objects that its detail overflows any
+/// pane: `scan_detail_scroll` used to be pinned at zero, so the tail could not
+/// be read at all.
+fn state_with_a_long_observation() -> AppState {
+    let objects: Vec<String> = (0..12)
+        .map(|i| {
+            format!(
+                r#"{{"id":"ast-{i}","type":"asteroid","name":"Rock {i:02}",
+                     "minableTargets":[{{"id":"mt-{i}","type":"asteroid",
+                                         "resourceTypes":["metals"]}}]}}"#
+            )
+        })
+        .collect();
+    let mut state = AppState::default();
+    state.active_pane = Pane::Scanner;
+    state.scan_history = vec![serde_json::from_str(&format!(
+        r#"{{"relativeCoordinates": {{"x": 8.0, "y": 0.0, "z": 0.0}}, "distance": 4,
+             "knowledgeLevel": "detailed", "confidence": 1.0, "objects": [{}],
+             "scan": {{"currentSectorResidenceSeconds": 60,
+                       "requiredResidenceSeconds": 60, "scanQuality": 1.0}}}}"#,
+        objects.join(", ")
+    ))
+    .unwrap()];
+    state.probe = Some(probe(50.0));
+    state
+}
+
+#[test]
+fn the_scanner_detail_can_be_read_to_its_end() {
+    use crate::app::ScannerFocus;
+    use crate::ui::panels::scanner::scanner_detail_lines;
+
+    let mut state = state_with_a_long_observation();
+    let p = state.palette();
+    let total = scanner_detail_lines(&state, p).len();
+    assert!(total > 10, "the fixture has to overflow to prove anything: {total}");
+
+    let (w, h) = (46, 14);
+    let top = buffer_text(&render_cockpit(&state, w, h));
+    assert!(top.contains("Rock 00"), "the head of the detail is on screen");
+    assert!(!top.contains("Rock 11"), "and its tail is not: {top}");
+
+    // Focus the detail column, then walk to the end.
+    state.scanner_focus = ScannerFocus::Detail;
+    state.scan_detail_scroll = total; // past the end; the renderer clamps
+    let bottom = buffer_text(&render_cockpit(&state, w, h));
+    assert!(bottom.contains("Rock 11"), "the tail is now reachable: {bottom}");
+    assert!(bottom.contains("\u{25b2}"), "and the pane says it continues above");
+}

@@ -36,6 +36,11 @@ pub struct Config {
     /// either way (issue #233).
     #[serde(default)]
     pub polarity: Option<String>,
+    /// Diagnostic log verbosity: `"off"`, `"error"` (default), `"info"` or
+    /// `"debug"` (issue #309). `NEUMANN_COCKPIT_LOG` overrides it for a
+    /// one-off debugging run.
+    #[serde(default)]
+    pub log: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -50,6 +55,19 @@ impl Config {
         self.theme
             .as_deref()
             .and_then(crate::app::ColorMode::from_label)
+            .unwrap_or_default()
+    }
+
+    /// Diagnostic log level: the `NEUMANN_COCKPIT_LOG` environment variable
+    /// first — so a pilot can raise it for one run without editing a file —
+    /// then the `log` key, then the default. An unrecognised value is ignored
+    /// rather than fatal, like every other key.
+    pub fn log_level(&self) -> crate::diaglog::Level {
+        std::env::var(crate::diaglog::LEVEL_ENV)
+            .ok()
+            .as_deref()
+            .and_then(crate::diaglog::Level::from_label)
+            .or_else(|| self.log.as_deref().and_then(crate::diaglog::Level::from_label))
             .unwrap_or_default()
     }
 
@@ -71,6 +89,7 @@ struct RawConfig {
     api_key: Option<String>,
     theme: Option<String>,
     polarity: Option<String>,
+    log: Option<String>,
     hints: Option<bool>,
     boot: Option<bool>,
     notifications: Option<bool>,
@@ -115,6 +134,7 @@ fn load_status_at(path: &std::path::Path) -> ConfigStatus {
         api_key: key,
         theme: raw.theme,
         polarity: raw.polarity,
+        log: raw.log,
         hints: raw.hints.unwrap_or(true),
         boot: raw.boot.unwrap_or(true),
         notifications: raw.notifications.unwrap_or(true),
@@ -172,6 +192,7 @@ mod tests {
     fn cfg(theme: Option<&str>) -> Config {
         Config {
             polarity: None,
+            log: None,
             base_url: "x".into(),
             api_key: "x".into(),
             theme: theme.map(String::from),

@@ -729,6 +729,14 @@ impl AppState {
     /// pause. Mirrors `fail_queue`. Called on a resolve failure or when an API
     /// error arrives while a step is in flight (`script_note_error`).
     pub fn fail_script(&mut self, msg: String) {
+        // Same reasoning as `fail_queue`: a halted script has to stay
+        // explicable after its toast expires (issue #309).
+        let step_no = self.script.iter().position(|s| !s.is_terminal()).map(|i| i + 1);
+        let detail = msg.clone();
+        self.log.error(move || match step_no {
+            Some(n) => format!("script halted at step {n} — {detail}"),
+            None => format!("script halted — {detail}"),
+        });
         if let Some(step) = self.script.iter_mut().find(|s| !s.is_terminal()) {
             step.state = StepState::Failed(msg);
         }

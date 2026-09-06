@@ -430,6 +430,45 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn the_scanner_columns_share_the_nav_keys_by_focus() {
+        // Two scrollable columns cannot both own j/k, so the focus decides
+        // which one they drive (issue #347).
+        use crate::app::ScannerFocus;
+        let mut state = AppState::default();
+        state.active_pane = Pane::Scanner;
+        let sector = |x: f64| {
+            serde_json::from_str(&format!(
+                r#"{{"relativeCoordinates": {{"x": {x}, "y": 0.0, "z": 0.0}}, "distance": 1,
+                     "knowledgeLevel": "detailed", "confidence": 1.0,
+                     "scan": {{"currentSectorResidenceSeconds": 60,
+                               "requiredResidenceSeconds": 60, "scanQuality": 1.0}}}}"#
+            ))
+            .unwrap()
+        };
+        state.scan_history = vec![sector(0.0), sector(2.0)];
+        assert_eq!(state.scanner_focus, ScannerFocus::History, "the historical default");
+
+        // History focused: the keys move the selection, not the detail.
+        press(&mut state, KeyCode::Char('j'));
+        assert_eq!(state.scan_history_idx, 1);
+        assert_eq!(state.scan_detail_scroll, 0);
+
+        // `h` reaches for the left column, `l` comes back — the keys point
+        // where the eye does.
+        press(&mut state, KeyCode::Char('h'));
+        assert_eq!(state.scanner_focus, ScannerFocus::Detail);
+        press(&mut state, KeyCode::Char('l'));
+        assert_eq!(state.scanner_focus, ScannerFocus::History);
+        press(&mut state, KeyCode::Tab);
+        assert_eq!(state.scanner_focus, ScannerFocus::Detail, "Tab toggles too");
+
+        // Detail focused: the selection freezes and the viewport moves.
+        let held = state.scan_history_idx;
+        press(&mut state, KeyCode::Char('j'));
+        assert_eq!(state.scan_history_idx, held, "the history cursor stays put");
+    }
+
+    #[tokio::test]
     async fn open_wizard_captures_keys_before_cockpit() {
         let mut state = AppState::default();
         state.active_wizard = ActiveWizard::Travel(TravelInput::Typing(String::new()));

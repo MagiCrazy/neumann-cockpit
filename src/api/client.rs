@@ -28,6 +28,9 @@ pub struct ApiClient {
     /// (API v81 multi-probe). Player-level endpoints (missions, mind-snapshot,
     /// sent messages, version, sector, recipes) never use this.
     active_probe_id: Option<u64>,
+    /// Diagnostic log (issue #309). Cloned like the ring above, and disabled by
+    /// default so a client built in a test writes nothing.
+    log: crate::diaglog::Logger,
 }
 
 /// Connect timeout: bound establishing the TCP/TLS connection.
@@ -72,6 +75,7 @@ impl ApiClient {
             active_probe_id: None,
             metrics: Metrics::handle(),
             rate_limit: RateLimitState::handle(),
+            log: crate::diaglog::Logger::disabled(),
         })
     }
 
@@ -145,14 +149,55 @@ impl ApiClient {
     /// (this is exactly how the v104 lightweight Manny projection broke
     /// `GET /api/probe`), which must count as an error and not as a success.
     fn record(&self, label: String, elapsed: Duration, status: Option<u16>, timed_out: bool, decode_failed: bool) {
+        self.record_with_detail(label, elapsed, status, timed_out, decode_failed, None)
+    }
+
+    /// Record a request outcome in the metrics ring **and** the diagnostic log
+    /// (issue #309). One choke point for both: every send path already comes
+    /// through here, so a failure cannot go unrecorded by forgetting a call.
+    ///
+    /// Failures are logged at `error`, successes at `debug` — the level a pilot
+    /// runs by default keeps the file quiet on a healthy session while still
+    /// answering "what did the server say?" an hour later.
+    fn record_with_detail(
+        &self,
+        label: String,
+        elapsed: Duration,
+        status: Option<u16>,
+        timed_out: bool,
+        decode_failed: bool,
+        detail: Option<&str>,
+    ) {
+        let http_ok = status.map(|s| (200..300).contains(&s)).unwrap_or(false);
+        let ok = http_ok && !decode_failed;
+        let ms = elapsed.as_secs_f64() * 1000.0;
+        if ok {
+            let label = label.clone();
+            self.log
+                .debug(move || format!("{label} {} {ms:.0}ms", status.unwrap_or(0)));
+        } else {
+            let (label, detail) = (label.clone(), detail.unwrap_or_default().to_string());
+            self.log.error(move || {
+                let what = match (status, timed_out, decode_failed) {
+                    (_, true, _) => "timeout".to_string(),
+                    (None, _, _) => "transport error".to_string(),
+                    (Some(code), _, true) => format!("{code} but undecodable body"),
+                    (Some(code), _, false) => code.to_string(),
+                };
+                if detail.is_empty() {
+                    format!("{label} {what} {ms:.0}ms")
+                } else {
+                    format!("{label} {what} {ms:.0}ms — {detail}")
+                }
+            });
+        }
         if let Ok(mut m) = self.metrics.lock() {
-            let http_ok = status.map(|s| (200..300).contains(&s)).unwrap_or(false);
             m.record(RequestSample {
                 label,
-                elapsed_ms: elapsed.as_secs_f64() * 1000.0,
+                elapsed_ms: ms,
                 status,
                 timed_out,
-                ok: http_ok && !decode_failed,
+                ok,
                 decode_failed,
             });
         }
@@ -163,6 +208,14 @@ impl ApiClient {
     #[cfg(test)]
     fn new_with_timeout(base_url: String, api_key: String, timeout: Duration) -> Result<Self> {
         Self::build(base_url, api_key, timeout, timeout)
+    }
+
+    /// Attach the diagnostic log (issue #309). Called once at boot; every
+    /// clone made afterwards — `with_active_probe` and the per-task clones —
+    /// carries the same handle, so one file receives the whole session.
+    pub fn with_log(mut self, log: crate::diaglog::Logger) -> Self {
+        self.log = log;
+        self
     }
 
     /// Return a clone of this client that targets `id` (or the default probe
@@ -226,18 +279,26 @@ impl ApiClient {
         let throttled = status == StatusCode::TOO_MANY_REQUESTS;
         let retry_after_secs = self.note_rate_limit_headers(resp.headers(), throttled);
         if !status.is_success() {
-            self.record(label, elapsed, Some(status.as_u16()), false, false);
+            // Resolve what the server actually said *before* recording, so the
+            // log line carries it (issue #309) rather than a bare status code.
+            let msg = if throttled {
+                match retry_after_secs {
+                    Some(secs) => format!("rate limited, retry in {secs}s"),
+                    None => "rate limited, no Retry-After given".to_string(),
+                }
+            } else if status == StatusCode::UNAUTHORIZED {
+                "Unauthorized — check your api_key in config.toml".to_string()
+            } else {
+                let text = resp.text().await.unwrap_or_default();
+                serde_json::from_str::<serde_json::Value>(&text)
+                    .ok()
+                    .and_then(|v| v["error"]["message"].as_str().map(String::from))
+                    .unwrap_or(text)
+            };
+            self.record_with_detail(label, elapsed, Some(status.as_u16()), false, false, Some(&msg));
             if throttled {
                 return Err(anyhow::Error::new(RateLimited { retry_after_secs }));
             }
-            if status == StatusCode::UNAUTHORIZED {
-                anyhow::bail!("Unauthorized — check your api_key in config.toml");
-            }
-            let text = resp.text().await.unwrap_or_default();
-            let msg = serde_json::from_str::<serde_json::Value>(&text)
-                .ok()
-                .and_then(|v| v["error"]["message"].as_str().map(String::from))
-                .unwrap_or(text);
             anyhow::bail!("{msg}");
         }
 
@@ -273,15 +334,22 @@ impl ApiClient {
         let throttled = status == StatusCode::TOO_MANY_REQUESTS;
         let retry_after_secs = self.note_rate_limit_headers(resp.headers(), throttled);
         if !status.is_success() {
-            self.record(label, elapsed, Some(status.as_u16()), false, false);
+            let msg = if throttled {
+                match retry_after_secs {
+                    Some(secs) => format!("rate limited, retry in {secs}s"),
+                    None => "rate limited, no Retry-After given".to_string(),
+                }
+            } else if status == StatusCode::UNAUTHORIZED {
+                "Unauthorized — check your api_key in config.toml".to_string()
+            } else {
+                let body = resp.text().await.unwrap_or_default();
+                format!("HTTP {status} on GET {path}: {body}")
+            };
+            self.record_with_detail(label, elapsed, Some(status.as_u16()), false, false, Some(&msg));
             if throttled {
                 return Err(anyhow::Error::new(RateLimited { retry_after_secs }));
             }
-            if status == StatusCode::UNAUTHORIZED {
-                anyhow::bail!("Unauthorized — check your api_key in config.toml");
-            }
-            let body = resp.text().await.unwrap_or_default();
-            anyhow::bail!("HTTP {status} on GET {path}: {body}");
+            anyhow::bail!("{msg}");
         }
 
         let decoded = resp.json::<T>().await;
@@ -1225,18 +1293,95 @@ mod tests {
 
     // ── HTTP-level error/timeout paths (issue #213) ─────────────────────────
     // Exercised against a local wiremock server — offline, no network.
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{method, path as path_matcher};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn client_for(server: &MockServer) -> ApiClient {
         ApiClient::new(server.uri(), "vng_test".into()).unwrap()
     }
 
+    /// Drain a logger's file, giving the writer thread a bounded moment.
+    fn read_log(path: &std::path::Path) -> String {
+        for _ in 0..200 {
+            let body = std::fs::read_to_string(path).unwrap_or_default();
+            if !body.is_empty() {
+                return body;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        String::new()
+    }
+
+    #[tokio::test]
+    async fn a_rejected_call_is_still_explicable_from_the_log_alone() {
+        // The acceptance criterion of #309: the toast expires, the file does
+        // not. And the key must not be in it — a log is what a pilot pastes
+        // into a bug report.
+        let dir = std::env::temp_dir().join("nc_client_log_test");
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("cockpit.log");
+
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path_matcher("/api/probe"))
+            .respond_with(
+                ResponseTemplate::new(422).set_body_json(serde_json::json!({"error": {"message": "probe is dead"}})),
+            )
+            .mount(&server)
+            .await;
+
+        let key = "vng_secret_used_in_this_test";
+        let client = ApiClient::new(server.uri(), key.into())
+            .unwrap()
+            .with_log(crate::diaglog::Logger::open(&path, crate::diaglog::Level::Error, key));
+        let err = client.get_probe().await.unwrap_err();
+        assert!(err.to_string().contains("probe is dead"));
+        drop(client);
+
+        let body = read_log(&path);
+        assert!(body.contains("GET /api/probe"), "the endpoint is named: {body}");
+        assert!(body.contains("422"), "with the status: {body}");
+        assert!(body.contains("probe is dead"), "and what the server said: {body}");
+        assert!(!body.contains(key), "but never the key: {body}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn a_healthy_call_stays_out_of_an_error_level_log() {
+        // Off by default costs nothing, and `error` has to stay quiet on a
+        // working session or nobody will leave it on.
+        let dir = std::env::temp_dir().join("nc_client_log_quiet_test");
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("cockpit.log");
+
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path_matcher("/api/version"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"apiVersion": 116})))
+            .mount(&server)
+            .await;
+
+        let client = ApiClient::new(server.uri(), "vng_k".into())
+            .unwrap()
+            .with_log(crate::diaglog::Logger::open(
+                &path,
+                crate::diaglog::Level::Error,
+                "vng_k",
+            ));
+        client.get_api_version().await.unwrap();
+        drop(client);
+
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        let body = std::fs::read_to_string(&path).unwrap_or_default();
+        assert!(body.is_empty(), "a successful call is debug-level: {body}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[tokio::test]
     async fn unauthorized_maps_to_api_key_hint() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/api/version"))
+            .and(path_matcher("/api/version"))
             .respond_with(ResponseTemplate::new(401))
             .mount(&server)
             .await;
@@ -1251,7 +1396,7 @@ mod tests {
     async fn get_error_includes_status_and_body() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/api/version"))
+            .and(path_matcher("/api/version"))
             .respond_with(ResponseTemplate::new(500).set_body_string("upstream boom"))
             .mount(&server)
             .await;
@@ -1265,7 +1410,7 @@ mod tests {
         // send_with_body path (PATCH): a JSON `error.message` is surfaced verbatim.
         let server = MockServer::start().await;
         Mock::given(method("PATCH"))
-            .and(path("/api/probe/9"))
+            .and(path_matcher("/api/probe/9"))
             .respond_with(ResponseTemplate::new(422).set_body_json(serde_json::json!({
                 "error": { "message": "target must be in the same sector" }
             })))
@@ -1283,7 +1428,7 @@ mod tests {
     async fn body_error_without_json_falls_back_to_raw_text() {
         let server = MockServer::start().await;
         Mock::given(method("PATCH"))
-            .and(path("/api/probe/9"))
+            .and(path_matcher("/api/probe/9"))
             .respond_with(ResponseTemplate::new(500).set_body_string("plain failure"))
             .mount(&server)
             .await;
@@ -1299,7 +1444,7 @@ mod tests {
     async fn slow_response_times_out_rather_than_hanging() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/api/version"))
+            .and(path_matcher("/api/version"))
             .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(5)))
             .mount(&server)
             .await;
@@ -1315,7 +1460,7 @@ mod tests {
     async fn successful_request_records_a_sample() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/api/version"))
+            .and(path_matcher("/api/version"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"apiVersion": 96})))
             .mount(&server)
             .await;
@@ -1335,7 +1480,7 @@ mod tests {
     async fn timeout_is_recorded_as_a_timeout_sample() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/api/version"))
+            .and(path_matcher("/api/version"))
             .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(5)))
             .mount(&server)
             .await;
@@ -1353,7 +1498,7 @@ mod tests {
     async fn clones_share_the_metrics_ring() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/api/version"))
+            .and(path_matcher("/api/version"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"apiVersion": 96})))
             .mount(&server)
             .await;
@@ -1372,7 +1517,7 @@ mod tests {
     async fn too_many_requests_yields_a_typed_error_with_the_retry_delay() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/api/version"))
+            .and(path_matcher("/api/version"))
             .respond_with(
                 ResponseTemplate::new(429)
                     .insert_header("retry-after", "12")
@@ -1409,7 +1554,7 @@ mod tests {
     async fn quota_headers_are_absorbed_from_successful_responses() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/api/version"))
+            .and(path_matcher("/api/version"))
             .respond_with(
                 ResponseTemplate::new(200)
                     .insert_header("x-ratelimit-limit", "120")
@@ -1434,7 +1579,7 @@ mod tests {
     async fn clones_share_the_rate_limit_window() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/api/version"))
+            .and(path_matcher("/api/version"))
             .respond_with(ResponseTemplate::new(429).insert_header("retry-after", "7"))
             .mount(&server)
             .await;
@@ -1451,7 +1596,7 @@ mod tests {
         // the literal /api/probe/mannies/{id} answers 405 (rename PATCH only).
         let server = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/api/probe/5/mannies/mny_1"))
+            .and(path_matcher("/api/probe/5/mannies/mny_1"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "manny": {
                     "id": "mny_1", "name": "manny-01",
@@ -1477,7 +1622,7 @@ mod tests {
         // piloted probe's (API v104). Player-level path: no {probeId}.
         let server = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/api/visited-sectors"))
+            .and(path_matcher("/api/visited-sectors"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "visitedSectors": [{
                     "relativeCoordinates": {"x": 3, "y": -5, "z": 4},
@@ -1503,7 +1648,7 @@ mod tests {
     async fn unread_message_count_reads_the_filtered_total() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/api/probe/messages"))
+            .and(path_matcher("/api/probe/messages"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "messages": [],
                 // The page is capped at 1, but `total` counts every unread one.
@@ -1522,7 +1667,7 @@ mod tests {
         // mirror — the literal /api/probe/mannies/tasks answers 405.
         let server = MockServer::start().await;
         Mock::given(method("POST"))
-            .and(path("/api/probe/5/mannies/tasks"))
+            .and(path_matcher("/api/probe/5/mannies/tasks"))
             .respond_with(ResponseTemplate::new(202).set_body_json(serde_json::json!({
                 "results": [
                     {"manny": {"id": "m1", "name": "a", "location": {"type": "sector"},
@@ -1562,7 +1707,7 @@ mod tests {
     async fn a_rejected_batch_surfaces_the_server_message() {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
-            .and(path("/api/probe/5/mannies/tasks"))
+            .and(path_matcher("/api/probe/5/mannies/tasks"))
             .respond_with(ResponseTemplate::new(422).set_body_json(serde_json::json!({
                 "error": {"code": "invalid_mining_target", "message": "This object cannot be mined by a Manny."}
             })))

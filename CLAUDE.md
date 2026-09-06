@@ -23,6 +23,7 @@ The binary reads `~/.config/neumann-cockpit/config.toml` at startup:
 base_url = "https://neumann-probe.net"
 api_key  = "vng_..."
 theme    = "mono-green"   # color mode (optional)
+log      = "error"        # diagnostic log verbosity (optional)
 polarity = "auto"         # dark/light terminal ground (optional)
 hints    = true           # show the contextual hints line (optional)
 notifications = true      # desktop notification on long-task completion (optional)
@@ -31,6 +32,7 @@ notifications = true      # desktop notification on long-task completion (option
 - `theme` — cockpit color mode, seven of them: `mono-green` (default), `mono-amber`, `phosphor-semantic` (green base + green/yellow/red status), `modern-16` (named ANSI for terminals without truecolor), plus the lore modes `culture`, `deep-space` and `rust-belt`. `F2` cycles it at runtime.
 - `polarity` — terminal ground: `auto` (default, detected at boot via OSC 11), `dark` or `light`. `F3` flips it at runtime.
 - `hints` — show the contextual hints line at the bottom (`F1` toggles at runtime). Defaults `true`.
+- `log` — diagnostic log verbosity: `off`, `error` (default), `info`, `debug` (issue #309). `NEUMANN_COCKPIT_LOG` overrides it for one run.
 - `notifications` — emit a desktop notification (OSC 9 + terminal bell, `src/notify.rs`, issue #203) when a long task finishes: a travel arriving, or a Manny completing a long task (mining, crafting, repair, salvage, upgrade…). Completions are detected in `update_probe` / `update_mannies` (busy→idle diff), staged in `AppState::pending_notifications`, and drained by the event loop. Defaults `true`.
 
 Unknown keys are ignored, so legacy configs (`ui`, `phosphor`, `animations`, `theme = "retro"`) still load.
@@ -60,6 +62,14 @@ Once the link is up (or the pilot continues offline), it hands off to `run()`, w
 ### Headless script runner (`src/headless.rs`, #198 extension)
 
 `main()` checks `headless::script_arg(argv)` **before** touching the terminal: `--script <file>` / `-s <file>` / `--script=<file>` runs `headless::run()` and `process::exit`s with its code; a bare launch is the interactive cockpit, unchanged. The runner plays an action script from a file with **no TUI**: it loads the config non-interactively (no key onboarding — errors to stderr), opens the same SQLite DB, `fetch_all`s and waits until the probe + mannies rosters are primed, then parses the file (one command per line; blank lines and `#` comments skipped) via `parse_script_line` and runs it through the **same** `advance_script` executor (sequential, fork/join, late binding). It reuses the cockpit's `fetch_*` spawners and a minimal `ApiMessage` dispatch (refresh `probe`/`mannies`/`sector`; route the six MVP verb errors to `script_note_error`). Ship's-log entries are streamed to stdout (`HH:MM:SS » narrated summary`, plus `✓`/`✗` per step and a final status line) **and** persisted to the `events` table, so a headless run appears in the next TUI session's ship's log. Exit code: `0` on completion, `1` if the script halted on an error. This is the first non-TUI surface; #229 tracks a headless **status** mode sharing the same seams.
+
+### Diagnostic log (`src/diaglog.rs`, #309)
+
+A TUI owns the screen, so a failure is reported as a toast that expires in five seconds or a chip that vanishes with the condition — nothing survives, and two bugs have had to be instructed backwards from screenshots. `cockpit.log` sits beside the database under the state dir (`diaglog::log_path`) and is **not** the ship's log: that one records narrated pilot *actions*, this one records what the server said.
+
+Three properties, each load-bearing. It **never blocks the event loop** — lines cross a channel to a writer thread, the same shape as `store::spawn_writer`. It **never leaks the API key** — `redact` runs in the writer, not at the call sites, scrubbing both the key verbatim and any `Bearer <token>`, because a log file is the artefact a pilot pastes into a bug report. And **off costs nothing** — `Logger::log` takes a closure, so a message below the threshold is never built (tests assert this by panicking inside the closure).
+
+`Level` is ordered (`Off < Error < Info < Debug`). The default `error` keeps a healthy session silent while still answering "what did the server say?": `ApiClient::record_with_detail` is the single choke point every send path already passes through, logging failures at `error` **with the server's message resolved first** and successes at `debug`. `AppState::log` covers the decisions a pilot cannot reconstruct later — a halted queue lane, a halted script step, a probe switch (the queue being per-probe, #291) — and `main` logs the boot line and the persistence-degraded *transition* (the flag is sticky and the tick would repeat it). The file rotates to `cockpit.log.1` past `ROTATE_AT_BYTES`; `--diagnostic` prints its resolved path, and the help overlay carries a Diagnostics section.
 
 ### API diagnostics (`src/api/metrics.rs` + `headless::run_diagnostic`, #247)
 
@@ -155,6 +165,8 @@ One unified phosphor theme (there is no classic/retro split any more). `theme.rs
 **Boot** (`src/app/boot.rs` + `cockpit_v2::render_boot`) — on startup the probe core boots first (centre pane self-check), then the eight subsystems come online centre-out, each typing a themed teletype self-check (SUDDAR array, SCUT link, autofactory, manny bay…). Once done it holds on `ANY KEY TO CONTINUE` in the centre pane; any key drops into the live cockpit (or skips the animation). Driven by the bounded boot tick.
 
 The four reused panels (Probe / Inventory / Scanner / Mannies) build a `Vec<Line>` and render it as one `Paragraph` scrolled through `cockpit_v2::scroll_offset`, the same helper the grid panes use — laying rows out as fixed 1-row rects silently drops everything past the pane height, cursor included (#292). `scroll_offset` takes the selected entry's **line span** `(first, last)`, so a pane whose entry is a block (a zoomed Storage container with its rules and free capacity, a Manny with its task and location lines) is never cut off at its tail (#293). They keep their internal content colours; gauge colors: green > 50 %, yellow 25–50 %, red < 25 %. Movement progress is derived from `started_at` / `arrival_at` client-side. Scanner history shows symbol + coords + distance and scrolls with the selection.
+
+The Scanner is **two scrollable columns** — the observation detail on the left, the history on the right — so `AppState::scanner_focus` (`ScannerFocus::{History, Detail}`, #347) decides which one the shared navigation keys drive: `h`/`←` reaches for the detail, `l`/`→` comes back to the history, `Tab` toggles, and the divider between them takes the accent colour on the focused side so the mode is never invisible. `scan_detail_scroll` is what the detail column moves; it used to be read at render time and never advanced, so a long observation was truncated with no way to reach the rest. The bound is **exact** rather than estimated (unlike the Manny detail, #337): `scanner_detail_lines` is the very list the renderer draws and the paragraph carries no wrapping, so its line count is its rendered height.
 
 A pane whose list overflows its frame says so: `theme::scroll_markers` draws `▲` just below the top border corner and `▼` just above the bottom one, in the border's own colour (#326). Drawn **on** the border rather than in the content, so a short pane spends no content row on it. It takes the same `(offset, total)` pair handed to `Paragraph::scroll`; the two `List`-backed surfaces (the Mannies roster, the Scanner history column) read their offset back from `ListState` after the render, since the widget resolves its own scroll.
 

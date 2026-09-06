@@ -268,6 +268,7 @@ async fn onboard(
                             api_key: key,
                             theme: None,
                             polarity: None,
+                            log: None,
                             hints: true,
                             boot: true,
                             notifications: true,

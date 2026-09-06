@@ -22,9 +22,9 @@ use crate::app::{
     DrillLevel, DropCargoInput, DropStorageContainerInput, FabricationInput, GotoVisitedInput, ImproveInput, InputMode,
     InspectInput, LogEvent, MenuAction, MessagesInput, MindSnapshotInput, MineInput, MissionsCategory, MissionsInput,
     ObjectActionInput, Pane, ProbeSwitchInput, RecallInput, RecoverInput, RefuelInput, RemoteMineInput,
-    RenameContainerInput, RenameMannyInput, RenameProbeInput, RepairInput, SalvageInput, ScanMode, ScutCorridorInput,
-    ScutNetworkInput, ShareBlueprintInput, StorageMoveInput, TransferDeuteriumInput, TransferProbeInput, TravelInput,
-    WaypointsInput, LIST_PAGE,
+    RenameContainerInput, RenameMannyInput, RenameProbeInput, RepairInput, SalvageInput, ScanMode, ScannerFocus,
+    ScutCorridorInput, ScutNetworkInput, ShareBlueprintInput, StorageMoveInput, TransferDeuteriumInput,
+    TransferProbeInput, TravelInput, WaypointsInput, LIST_PAGE,
 };
 
 pub fn handle_cockpit_event(code: KeyCode, state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
@@ -52,6 +52,11 @@ pub fn handle_cockpit_event(code: KeyCode, state: &mut AppState, client: &ApiCli
         // A detail view has no cursor to move: the same keys scroll it
         // (issue #337), so this must come before the list routing.
         _ if state.detail_view_active() && scroll_detail(code, state) => {}
+        // The Scanner is two scrollable columns, so the focus decides which
+        // one the shared nav keys drive (issue #347).
+        _ if state.active_pane == Pane::Scanner
+            && state.scanner_focus == ScannerFocus::Detail
+            && scroll_scan_detail(code, state) => {}
         KeyCode::Down | KeyCode::Char('j') => state.pane_cursor_down(),
         KeyCode::Up | KeyCode::Char('k') => state.pane_cursor_up(),
         // Paging + jump to ends, for lists that grow over a session (scan
@@ -60,6 +65,21 @@ pub fn handle_cockpit_event(code: KeyCode, state: &mut AppState, client: &ApiCli
         KeyCode::PageUp => state.pane_cursor_page_up(),
         KeyCode::Home => state.pane_cursor_top(),
         KeyCode::End => state.pane_cursor_bottom(),
+        // On the Scanner these move between the two columns rather than
+        // drilling: the detail is the left column, the history the right one,
+        // so the keys point where the eye does (issue #347).
+        KeyCode::Right | KeyCode::Char('l') if state.active_pane == Pane::Scanner => {
+            state.scanner_focus = ScannerFocus::History;
+        }
+        KeyCode::Left | KeyCode::Char('h') if state.active_pane == Pane::Scanner => {
+            state.scanner_focus = ScannerFocus::Detail;
+        }
+        KeyCode::Tab if state.active_pane == Pane::Scanner => {
+            state.scanner_focus = match state.scanner_focus {
+                ScannerFocus::History => ScannerFocus::Detail,
+                ScannerFocus::Detail => ScannerFocus::History,
+            };
+        }
         KeyCode::Right | KeyCode::Char('l') => drill_in(state, client, tx),
         KeyCode::Left | KeyCode::Char('h') => {
             drill_out(state);
@@ -131,6 +151,30 @@ fn scroll_detail(code: KeyCode, state: &mut AppState) -> bool {
 
 /// Rows of slack allowed over the estimated detail height — see [`scroll_detail`].
 const DETAIL_SCROLL_SLACK: usize = 2;
+
+/// Scroll the Scanner's observation detail (issue #347). Returns `true` when
+/// the key was consumed.
+///
+/// Unlike the Manny detail (#337) the bound here is **exact**: the detail
+/// paragraph is drawn without wrapping, so its line count is its rendered
+/// height, and `scanner_detail_lines` is the very list the renderer draws.
+fn scroll_scan_detail(code: KeyCode, state: &mut AppState) -> bool {
+    let (_, height) = crate::ui::cockpit_v2::active_pane_inner_size(state);
+    let total = crate::ui::panels::scanner::scanner_detail_lines(state, state.palette()).len();
+    let max = total.saturating_sub(height as usize);
+    let cur = state.scan_detail_scroll;
+    let next = match code {
+        KeyCode::Down | KeyCode::Char('j') => (cur + 1).min(max),
+        KeyCode::Up | KeyCode::Char('k') => cur.saturating_sub(1),
+        KeyCode::PageDown => (cur + LIST_PAGE).min(max),
+        KeyCode::PageUp => cur.saturating_sub(LIST_PAGE),
+        KeyCode::Home => 0,
+        KeyCode::End => max,
+        _ => return false,
+    };
+    state.scan_detail_scroll = next;
+    true
+}
 
 /// `Enter` action for the active pane: panes with a discrete action set open
 /// the contextual menu; panes backed by a rich wizard reuse its overlay.

@@ -446,6 +446,16 @@ impl AppState {
     /// whole queue and marks the oldest running step failed — the pilot inspects,
     /// fixes, and resumes.
     pub fn fail_queue(&mut self, msg: String) {
+        // A halted lane is exactly the thing a pilot comes back to and cannot
+        // explain: the toast that said why is long gone (issue #309).
+        let recipe = self
+            .craft_queue
+            .iter()
+            .find(|s| s.is_running())
+            .map(|s| s.recipe_name.clone())
+            .unwrap_or_else(|| "?".into());
+        let detail = msg.clone();
+        self.log.error(move || format!("queue halted on «{recipe}» — {detail}"));
         if let Some(step) = self.craft_queue.iter_mut().find(|s| s.is_running()) {
             step.state = StepState::Failed(msg);
         }
