@@ -1,5 +1,12 @@
 # Changelog
 
+## [104.4.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.4.0...neumann-cockpit-v104.4.1) (2026-09-06)
+
+
+### Bug Fixes
+
+* **scanner:** scrollable observation detail, a diagnostic log, and a clippy gate that sees the tests ([#350](https://github.com/MagiCrazy/neumann-cockpit/issues/350)) ([237436c](https://github.com/MagiCrazy/neumann-cockpit/commit/237436c3b305fc90a03b40c1711d381058f8a7d6))
+
 ## [104.4.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.3.0...neumann-cockpit-v104.4.0) (2026-09-06)
 
 
