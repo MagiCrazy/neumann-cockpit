@@ -170,6 +170,12 @@ pub fn handle_event(event: Event, state: &mut AppState, client: &ApiClient, tx: 
     // Toasts and inline errors are transient: any keypress dismisses them.
     state.toast = None;
     state.error = None;
+    // Any key wakes the cockpit from the starfield, and that key is spent on
+    // the waking (issue #206): a pilot returning to a sleeping cockpit should
+    // not fire whatever they happened to press.
+    if state.ambiance.note_input() {
+        return;
+    }
     let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
     let in_scan_input = matches!(state.scan_mode, ScanMode::Input(_));
     let in_direction_pick = matches!(state.scan_mode, ScanMode::DirectionPick);
@@ -189,6 +195,21 @@ pub fn handle_event(event: Event, state: &mut AppState, client: &ApiClient, tx: 
         // F2 cycles the cockpit color mode.
         state.color_mode = state.color_mode.cycle();
         state.set_toast(format!("color mode: {}", state.color_mode.label()));
+        state.stage_settings_save();
+        return;
+    }
+
+    if k.code == KeyCode::F(6) {
+        // F6 switches the whole ambiance off — entropy, SCUT pulse and the
+        // starfield together (issues #204, #205, #206). One key, because an
+        // effect a pilot cannot stop is hostile, and "j'en veux plus" is a
+        // request for it to stop *now*, not on the next launch.
+        state.ambiance.enabled = !state.ambiance.enabled;
+        state.set_toast(if state.ambiance.enabled {
+            "ambiance on".to_string()
+        } else {
+            "ambiance off".to_string()
+        });
         state.stage_settings_save();
         return;
     }
@@ -518,6 +539,41 @@ mod tests {
 
         press(&mut state, KeyCode::F(4));
         assert!(state.notifications_enabled);
+    }
+
+    #[tokio::test]
+    async fn f6_switches_the_whole_ambiance_off_and_remembers_it() {
+        // One key for all three effects (#204, #205, #206): an effect a pilot
+        // cannot stop is hostile, and "j'en veux plus" means now.
+        let mut state = AppState::default();
+        state.ambiance.enabled = true;
+
+        press(&mut state, KeyCode::F(6));
+        assert!(!state.ambiance.enabled);
+        assert!(state.active_toast().is_some_and(|t| t.contains("off")));
+        assert!(state.pending_settings_save, "and it survives the relaunch");
+
+        press(&mut state, KeyCode::F(6));
+        assert!(state.ambiance.enabled);
+    }
+
+    #[tokio::test]
+    async fn the_key_that_wakes_the_cockpit_is_spent_on_the_waking() {
+        // Coming back to a sleeping cockpit must not fire whatever key the
+        // pilot happened to hit (#206).
+        let mut state = AppState::default();
+        state.ambiance.enabled = true;
+        state.ambiance.force_idle();
+        state.ambiance.tick(true);
+        assert!(state.ambiance.attract);
+
+        press(&mut state, KeyCode::Char('e'));
+        assert!(!state.ambiance.attract, "the starfield is dismissed");
+        assert_eq!(state.active_pane, Pane::Probe, "and the pane did not change under it");
+
+        // The next key is the pilot's own.
+        press(&mut state, KeyCode::Char('e'));
+        assert_eq!(state.active_pane, Pane::Scanner);
     }
 
     #[tokio::test]

@@ -230,6 +230,7 @@ pub fn commit_key_at(path: &std::path::Path, base_url: &str, key: &str) -> Resul
         polarity: None,
         log: None,
         update_check: None,
+        ambiance: true,
         hints: true,
         boot: true,
         notifications: true,

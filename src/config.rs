@@ -47,6 +47,11 @@ pub struct Config {
     /// `base_url`.
     #[serde(default)]
     pub update_check: Option<bool>,
+    /// Cockpit ambiance: entropy, SCUT signal age, attract mode (issues #204,
+    /// #205, #206). One switch for all of it — an effect a pilot cannot stop
+    /// is hostile. `F6` toggles it at runtime and writes the answer back.
+    #[serde(default = "default_true")]
+    pub ambiance: bool,
 }
 
 fn default_true() -> bool {
@@ -107,6 +112,7 @@ struct RawConfig {
     polarity: Option<String>,
     log: Option<String>,
     update_check: Option<bool>,
+    ambiance: Option<bool>,
     hints: Option<bool>,
     boot: Option<bool>,
     notifications: Option<bool>,
@@ -154,6 +160,7 @@ pub(crate) fn load_status_at(path: &std::path::Path) -> ConfigStatus {
         polarity: raw.polarity,
         log: raw.log,
         update_check: raw.update_check,
+        ambiance: raw.ambiance.unwrap_or(true),
         hints: raw.hints.unwrap_or(true),
         boot: raw.boot.unwrap_or(true),
         notifications: raw.notifications.unwrap_or(true),
@@ -197,7 +204,8 @@ fn generated_body(base_url: &str, api_key: &str) -> String {
          #boot = true               # the startup self-check animation\n\
          #notifications = true      # desktop notification on a long task finishing\n\
          #log = \"error\"            # diagnostics: off error info debug\n\
-         #update_check = false      # ask GitHub for the latest release at boot\n"
+         #update_check = false      # ask GitHub for the latest release at boot\n\
+         #ambiance = true           # F6 · entropy, SCUT signal age, attract mode\n"
     )
 }
 
@@ -210,6 +218,7 @@ pub struct Settings {
     pub polarity: String,
     pub hints: bool,
     pub notifications: bool,
+    pub ambiance: bool,
 }
 
 /// Record the pilot's answer about the release check, without touching
@@ -241,6 +250,7 @@ pub fn save_settings_at(path: &std::path::Path, settings: &Settings) -> Result<(
         ("polarity", format!("{:?}", settings.polarity)),
         ("hints", settings.hints.to_string()),
         ("notifications", settings.notifications.to_string()),
+        ("ambiance", settings.ambiance.to_string()),
     ] {
         body = upsert_key(&body, key, &value);
     }
@@ -324,6 +334,7 @@ mod tests {
             polarity: None,
             log: None,
             update_check: None,
+            ambiance: true,
             base_url: "x".into(),
             api_key: "x".into(),
             theme: theme.map(String::from),
@@ -383,6 +394,7 @@ mod tests {
             polarity: "dark".into(),
             hints,
             notifications: true,
+            ambiance: true,
         }
     }
 

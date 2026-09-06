@@ -35,3 +35,9 @@ api_key  = "vng_your_api_key_here"
 # request the cockpit makes outside base_url, so it is off unless you say
 # otherwise — the first run asks and writes your answer here.
 #update_check = false
+
+# Cockpit ambiance: cosmic-ray entropy on the pane frames, the SCUT marker
+# breathing with a relayed Manny's distance, and a starfield when the cockpit
+# is left alone. One switch for all of it — F6 toggles it at runtime and
+# writes your answer back here. Set false if you never want any of it.
+#ambiance = true

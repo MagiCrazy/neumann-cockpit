@@ -49,6 +49,7 @@ const LEFT: &[Section] = &[
             ("F2", "cycle color mode (7, incl. lore)"),
             ("F3", "dark / light terminal ground"),
             ("F4", "mute / unmute notifications"),
+            ("F6", "ambiance on / off (all effects)"),
             ("F5", "refresh"),
             ("", "F1-F4 are remembered in config.toml"),
             ("?", "this help"),

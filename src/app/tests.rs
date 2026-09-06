@@ -925,6 +925,48 @@ fn another_probes_queue_comes_back_parked() {
     );
 }
 
+// ── ambiance (issues #204, #205, #206) ────────────────────────────────────
+
+#[test]
+fn the_starfield_refuses_to_cover_anything_that_needs_the_pilot() {
+    // A screensaver that hides a destroyed probe is worse than no screensaver.
+    let mut state = AppState::default();
+    assert!(state.attract_allowed(), "an idle, quiet cockpit may drift");
+
+    state.booting = true;
+    assert!(!state.attract_allowed(), "not during the boot sequence");
+    state.booting = false;
+
+    state.error = Some("remote link down".into());
+    assert!(!state.attract_allowed(), "not over an error");
+    state.error = None;
+
+    state.help_open = true;
+    assert!(!state.attract_allowed(), "not over an open overlay");
+    state.help_open = false;
+
+    state.movement_arrival = Some(chrono::Utc::now());
+    assert!(!state.attract_allowed(), "not while the probe is travelling");
+    state.movement_arrival = None;
+
+    assert!(state.attract_allowed(), "and allowed again once all of that clears");
+}
+
+#[test]
+fn an_unread_alert_keeps_the_cockpit_awake() {
+    let mut state = AppState::default();
+    state.alerts = vec![serde_json::from_str(
+        r#"{"id": 1, "type": "probe_damaged", "status": "unread",
+             "message": "hull breach", "phase": "warning"}"#,
+    )
+    .unwrap()];
+    assert_eq!(state.unread_alert_count(), 1);
+    assert!(
+        !state.attract_allowed(),
+        "something unread is exactly what a starfield must not hide"
+    );
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────
 
 fn make_manny(id: &str, location_type: &str, can_receive_orders: bool, task: Option<&str>) -> Manny {
