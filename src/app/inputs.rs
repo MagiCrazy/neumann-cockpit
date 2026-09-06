@@ -731,6 +731,7 @@ pub enum ActiveWizard {
     Alerts(AlertsInput),
     RenameContainer(RenameContainerInput),
     Logbook(LogbookInput),
+    DiscardComms(DiscardCommsInput),
     ContainerRules(ContainerRulesInput),
     StorageMove(StorageMoveInput),
     DropCargo(DropCargoInput),
@@ -747,6 +748,44 @@ pub enum ActiveWizard {
 ///
 /// A page is prose, so the editor is two plain text buffers rather than a
 /// pick-list — and both are bounded client-side (`LOGBOOK_TITLE_MAX`,
+/// How many entries one bulk discard may remove (issue #366).
+///
+/// The endpoint deletes one entry per request, and the server meters ~120
+/// requests a minute per token: a pilot clearing a hundred alerts after a
+/// battle would spend the whole window on housekeeping and then watch the
+/// cockpit stall. The confirmation says how many of the total it will take,
+/// and the rest are one more `X` away.
+pub const DISCARD_BATCH_MAX: usize = 20;
+
+/// Discarding a Comms entry for good (API v112, issue #366).
+///
+/// Deleting is not acknowledging — one says "seen", the other "gone" — so it
+/// gets its own key and its own confirmation rather than riding on `Enter`.
+/// `warnings` says which of the two lists the entry came from; the id is
+/// carried rather than the cursor, since a refresh landing mid-confirmation
+/// would otherwise retarget the deletion onto whatever slid into that row.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub enum DiscardCommsInput {
+    #[default]
+    Inactive,
+    /// Discarding the entry under the cursor. `unread` is carried so the
+    /// prompt can say so: an unread entry has never been read by anyone.
+    One {
+        warnings: bool,
+        id: i64,
+        message: String,
+        unread: bool,
+    },
+    /// Discarding every acknowledged entry in the list, up to
+    /// `DISCARD_BATCH_MAX`. `total` is how many are acknowledged in all, so
+    /// the prompt can say what it is leaving behind.
+    Acknowledged {
+        warnings: bool,
+        ids: Vec<i64>,
+        total: usize,
+    },
+}
+
 /// `LOGBOOK_CONTENT_MAX`) so an over-long page is refused here instead of
 /// spending a 400 to find out.
 #[derive(Debug, Clone, Default, PartialEq)]

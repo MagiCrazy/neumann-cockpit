@@ -3,13 +3,14 @@ pub(crate) mod assemble;
 pub(crate) mod blueprint;
 pub(crate) mod containers;
 pub(crate) mod craft;
+pub(crate) mod discard;
 pub(crate) mod drop_container;
 pub(crate) mod fleet;
 pub(crate) mod help;
 pub(crate) mod improve;
 pub(crate) mod inventory_detail;
 pub(crate) mod jettison;
-pub(crate) mod logbook;
+mod logbook;
 pub(crate) mod map;
 pub(crate) mod messages;
 pub(crate) mod mine;
@@ -117,6 +118,10 @@ const WIZARD_OVERLAYS: &[(OverlayGuard, OverlayRender)] = &[
     (|s| matches!(s.active_wizard, ActiveWizard::Waypoints(_)), render_waypoints_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::RenameContainer(_)), render_rename_container_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::Logbook(_)), render_logbook_overlay),
+    (
+        |s| matches!(s.active_wizard, ActiveWizard::DiscardComms(_)),
+        discard::render_discard_comms_overlay,
+    ),
     (|s| matches!(s.active_wizard, ActiveWizard::ContainerRules(_)), render_container_rules_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::StorageMove(_)), render_storage_move_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::Script(_)), render_script_overlay),

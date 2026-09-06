@@ -11,6 +11,7 @@ mod cockpit;
 mod command;
 mod containers;
 mod craft;
+mod discard;
 mod fleet;
 mod geometry;
 mod improve;
@@ -85,6 +86,10 @@ const WIZARD_INPUTS: &[(WizardGuard, WizardHandler)] = &[
     (|s| matches!(s.active_wizard, ActiveWizard::RenameProbe(_)), handle_rename_probe_event),
     (|s| matches!(s.active_wizard, ActiveWizard::Jettison(_)), handle_jettison_event),
     (|s| matches!(s.active_wizard, ActiveWizard::Logbook(_)), logbook::handle_logbook_event),
+    (
+        |s| matches!(s.active_wizard, ActiveWizard::DiscardComms(_)),
+        discard::handle_discard_comms_event,
+    ),
     (|s| matches!(s.active_wizard, ActiveWizard::Fabrication(_)), handle_fabrication_event),
     (|s| matches!(s.active_wizard, ActiveWizard::Improve(_)), handle_improve_event),
     (|s| matches!(s.active_wizard, ActiveWizard::Salvage(_)), handle_salvage_event),

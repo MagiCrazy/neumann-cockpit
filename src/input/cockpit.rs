@@ -19,12 +19,12 @@ use crate::api::tasks::{
 use crate::api::types::{MannyTask, MannyTaskVisibility};
 use crate::app::{
     ActiveWizard, ApiMessage, AppState, AssembleProbeInput, CommandLine, CommsCategory, DeployInput, DetachInput,
-    DrillLevel, DropCargoInput, DropStorageContainerInput, FabricationInput, GotoVisitedInput, ImproveInput, InputMode,
-    InspectInput, LogEvent, LogbookInput, MenuAction, MessagesInput, MindSnapshotInput, MineInput, MissionsCategory,
-    MissionsInput, ObjectActionInput, Pane, ProbeSwitchInput, RecallInput, RecoverInput, RefuelInput, RemoteMineInput,
-    RenameContainerInput, RenameMannyInput, RenameProbeInput, RepairInput, SalvageInput, ScanMode, ScannerFocus,
-    ScutCorridorInput, ScutNetworkInput, ShareBlueprintInput, StorageMoveInput, TransferDeuteriumInput,
-    TransferProbeInput, TravelInput, WaypointsInput, LIST_PAGE,
+    DiscardCommsInput, DrillLevel, DropCargoInput, DropStorageContainerInput, FabricationInput, GotoVisitedInput,
+    ImproveInput, InputMode, InspectInput, LogEvent, LogbookInput, MenuAction, MessagesInput, MindSnapshotInput,
+    MineInput, MissionsCategory, MissionsInput, ObjectActionInput, Pane, ProbeSwitchInput, RecallInput, RecoverInput,
+    RefuelInput, RemoteMineInput, RenameContainerInput, RenameMannyInput, RenameProbeInput, RepairInput, SalvageInput,
+    ScanMode, ScannerFocus, ScutCorridorInput, ScutNetworkInput, ShareBlueprintInput, StorageMoveInput,
+    TransferDeuteriumInput, TransferProbeInput, TravelInput, WaypointsInput, DISCARD_BATCH_MAX, LIST_PAGE,
 };
 
 pub fn handle_cockpit_event(code: KeyCode, state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
@@ -98,6 +98,18 @@ pub fn handle_cockpit_event(code: KeyCode, state: &mut AppState, client: &ApiCli
             if state.active_pane == Pane::Missions && state.missions_category() == Some(MissionsCategory::Logbook) =>
         {
             logbook_key(code, state);
+        }
+        // Discarding a Comms entry for good (issue #366). Scoped to the
+        // Alerts/Warnings lists, where `x` has no other meaning, and kept off
+        // `Enter` on purpose: acknowledging and discarding are different acts.
+        KeyCode::Char('x') | KeyCode::Char('X')
+            if state.active_pane == Pane::Comms
+                && matches!(
+                    state.comms_drill(),
+                    Some(CommsCategory::Alerts) | Some(CommsCategory::Warnings)
+                ) =>
+        {
+            comms_discard_key(code, state);
         }
         // Storage: toggle server order ↔ alphabetical (issue #333).
         KeyCode::Char('s') if state.active_pane == Pane::Storage => {
@@ -268,6 +280,45 @@ fn logbook_key(code: KeyCode, state: &mut AppState) {
             }
             None => state.set_toast("no page selected"),
         },
+        _ => {}
+    }
+}
+
+/// `x` discards the selected Comms entry, `X` every acknowledged one
+/// (issue #366). Both ask first: the deletion is permanent and server-side.
+fn comms_discard_key(code: KeyCode, state: &mut AppState) {
+    let warnings = state.comms_drill() == Some(CommsCategory::Warnings);
+    let cursor = state.pane_nav[Pane::Comms.index()].cursor;
+    match code {
+        KeyCode::Char('x') => {
+            let list = if warnings {
+                &state.damage_warnings
+            } else {
+                &state.alerts
+            };
+            match list.get(cursor) {
+                Some(entry) => {
+                    let input = DiscardCommsInput::One {
+                        warnings,
+                        id: entry.id,
+                        message: entry.message.clone(),
+                        unread: entry.is_unread(),
+                    };
+                    state.active_wizard = ActiveWizard::DiscardComms(input);
+                }
+                None => state.set_toast("nothing selected"),
+            }
+        }
+        KeyCode::Char('X') => {
+            let all = state.acknowledged_comms_ids(warnings);
+            if all.is_empty() {
+                state.set_toast("nothing acknowledged to discard");
+                return;
+            }
+            let total = all.len();
+            let ids = all.into_iter().take(DISCARD_BATCH_MAX).collect();
+            state.active_wizard = ActiveWizard::DiscardComms(DiscardCommsInput::Acknowledged { warnings, ids, total });
+        }
         _ => {}
     }
 }

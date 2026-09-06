@@ -925,6 +925,41 @@ impl AppState {
         }
     }
 
+    /// Drop a deleted Comms entry from its list (issue #366).
+    ///
+    /// The 204 is proof it is gone, so the row goes rather than the whole
+    /// list being refetched. The pane cursor is clamped here too: it indexes
+    /// the list, and a delete at the tail would otherwise leave it pointing
+    /// past the end.
+    pub fn remove_comms_entry(&mut self, warnings: bool, id: i64) {
+        let list = if warnings {
+            &mut self.damage_warnings
+        } else {
+            &mut self.alerts
+        };
+        list.retain(|e| e.id != id);
+        let len = list.len();
+        let nav = &mut self.pane_nav[Pane::Comms.index()];
+        if len == 0 {
+            nav.cursor = 0;
+        } else if nav.cursor >= len {
+            nav.cursor = len - 1;
+        }
+    }
+
+    /// The acknowledged entries of one Comms list, oldest first (issue #366).
+    ///
+    /// Bulk discard is the operation a pilot wants after a battle, and it is
+    /// also the one that can throw away something they have not read — so it
+    /// never sees an unread entry at all. Oldest first because that is the
+    /// half of a long list nobody is coming back to.
+    pub fn acknowledged_comms_ids(&self, warnings: bool) -> Vec<i64> {
+        let list = if warnings { &self.damage_warnings } else { &self.alerts };
+        let mut acked: Vec<&crate::api::types::ProbeAlert> = list.iter().filter(|e| !e.is_unread()).collect();
+        acked.sort_by_key(|e| e.created_at);
+        acked.iter().map(|e| e.id).collect()
+    }
+
     /// Whether the active movement can still be cancelled (issue #365).
     ///
     /// The server accepts the cancel **only during preparation** and answers

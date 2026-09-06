@@ -79,6 +79,7 @@ const RIGHT: &[Section] = &[
             ("Logbook", "c write · e edit · x delete"),
             ("", "Ctrl-S saves a page"),
             ("Comms", "categories: messages, alerts, warnings"),
+            ("", "x discard one · X discard acknowledged"),
             ("Map", "travel, visited, waypoints, safe corridors"),
             ("Probe", "switch, rename, improve, SCUT inspect,"),
             ("", "share blueprint"),

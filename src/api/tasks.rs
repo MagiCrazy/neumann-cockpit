@@ -217,6 +217,32 @@ pub fn fetch_ack_alert(id: i64, client: ApiClient, tx: mpsc::Sender<ApiMessage>)
     );
 }
 
+/// Discard an alert or a damage warning for good (issue #366). The two live
+/// on one spawner because the caller already carries the `warnings` flag that
+/// says which list the entry came from, and the reply has to name it: the
+/// event loop drops the row from that list rather than refetching, a 204
+/// being proof enough that it is gone.
+pub fn fetch_delete_comms_entry(
+    warnings: bool,
+    probe_id: u64,
+    id: i64,
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+) {
+    spawn_action(
+        tx,
+        async move {
+            if warnings {
+                client.delete_damage_warning(probe_id, id).await
+            } else {
+                client.delete_alert(probe_id, id).await
+            }
+        },
+        move |_| ApiMessage::CommsEntryDeleted { warnings, id },
+        ApiMessage::CommsDeleteError,
+    );
+}
+
 pub fn fetch_ack_damage_warning(id: i64, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     spawn_action(
         tx,

@@ -967,6 +967,93 @@ fn an_unread_alert_keeps_the_cockpit_awake() {
     );
 }
 
+// ── discarding Comms entries (issue #366) ─────────────────────────────────
+
+fn alert(id: i64, status: &str, created_at: &str) -> crate::api::types::ProbeAlert {
+    serde_json::from_str(&format!(
+        r#"{{"id": {id}, "type": "probe_damaged", "status": "{status}",
+             "message": "hull breach", "phase": "warning",
+             "createdAt": "{created_at}"}}"#
+    ))
+    .unwrap()
+}
+
+#[test]
+fn a_bulk_discard_never_sees_an_unread_entry() {
+    // The operation a pilot wants after a battle is also the one that can
+    // throw away something nobody has read. It must not be able to.
+    let mut state = AppState::default();
+    state.alerts = vec![
+        alert(1, "read", "2026-09-01T00:00:00Z"),
+        alert(2, "unread", "2026-09-02T00:00:00Z"),
+        alert(3, "read", "2026-09-03T00:00:00Z"),
+    ];
+    assert_eq!(
+        state.acknowledged_comms_ids(false),
+        vec![1, 3],
+        "acknowledged only, oldest first"
+    );
+    assert_eq!(
+        state.acknowledged_comms_ids(true),
+        Vec::<i64>::new(),
+        "the warnings list is separate and empty"
+    );
+}
+
+#[test]
+fn a_bulk_discard_is_bounded_by_the_rate_limit() {
+    // One request per entry against a ~120/min budget: a hundred alerts would
+    // spend the whole window on housekeeping.
+    let mut state = AppState::default();
+    state.alerts = (1..=DISCARD_BATCH_MAX as i64 + 5)
+        .map(|id| alert(id, "read", "2026-09-01T00:00:00Z"))
+        .collect();
+    let all = state.acknowledged_comms_ids(false);
+    assert_eq!(all.len(), DISCARD_BATCH_MAX + 5, "the helper reports everything");
+    let batch: Vec<i64> = all.into_iter().take(DISCARD_BATCH_MAX).collect();
+    assert_eq!(batch.len(), DISCARD_BATCH_MAX, "the caller takes one batch at a time");
+}
+
+#[test]
+fn removing_an_entry_keeps_the_cursor_on_the_list() {
+    // The Comms cursor indexes the list; a delete at the tail would otherwise
+    // leave it pointing past the end.
+    let mut state = AppState::default();
+    state.alerts = vec![
+        alert(1, "read", "2026-09-01T00:00:00Z"),
+        alert(2, "read", "2026-09-02T00:00:00Z"),
+    ];
+    state.pane_nav[Pane::Comms.index()].cursor = 1;
+
+    state.remove_comms_entry(false, 2);
+    assert_eq!(state.alerts.len(), 1);
+    assert_eq!(
+        state.pane_nav[Pane::Comms.index()].cursor,
+        0,
+        "clamped onto the last row"
+    );
+
+    state.remove_comms_entry(false, 1);
+    assert!(state.alerts.is_empty());
+    assert_eq!(
+        state.pane_nav[Pane::Comms.index()].cursor,
+        0,
+        "an empty list rests at zero"
+    );
+}
+
+#[test]
+fn discarding_an_alert_leaves_the_warnings_alone() {
+    // The two lists share a pane and a key; they must not share an id space.
+    let mut state = AppState::default();
+    state.alerts = vec![alert(7, "read", "2026-09-01T00:00:00Z")];
+    state.damage_warnings = vec![alert(7, "read", "2026-09-01T00:00:00Z")];
+
+    state.remove_comms_entry(false, 7);
+    assert!(state.alerts.is_empty());
+    assert_eq!(state.damage_warnings.len(), 1, "same id, different list");
+}
+
 // ── cancelling a movement (issue #365) ────────────────────────────────────
 
 /// A probe carrying a movement in the given phase.

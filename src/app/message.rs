@@ -10,6 +10,13 @@ pub enum ApiMessage {
     LatestRelease(String),
     /// The active movement was cancelled and its deuterium refunded (#365).
     MoveCancelled,
+    /// An alert (`warnings: false`) or damage warning was permanently
+    /// deleted (issue #366).
+    CommsEntryDeleted {
+        warnings: bool,
+        id: i64,
+    },
+    CommsDeleteError(String),
     MoveCancelError(String),
     // ── Probe logbook (API v90, issue #254) ──────────────────────────────
     LogbookPagesFetched(Vec<crate::api::types::LogbookPageSummary>),
