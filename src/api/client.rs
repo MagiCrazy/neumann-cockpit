@@ -1,10 +1,10 @@
 use super::metrics::{endpoint_label, Metrics, MetricsHandle, RequestSample};
 use super::ratelimit::{retry_after_from, RateLimitHandle, RateLimitState, RateLimited};
 use super::types::{
-    BlueprintShareResult, ContainerInventory, CraftingRecipe, DamageWarningRule, EndpointId, Manny, MannyDetail,
-    MannyRoster, MannyTaskRequest, Mission, Pagination, Probe, ProbeAlert, ProbeImprovement, ProbeInventory,
-    ProbeListResponse, ProbeMessage, ProbeModel, ProbeMovement, ProbeSentMessage, ScutNetwork, SectorObservation,
-    StorageContainer, VisitedSector,
+    BlueprintShareResult, ContainerInventory, CraftingRecipe, DamageWarningRule, EndpointId, LogbookPage,
+    LogbookPageSummary, Manny, MannyDetail, MannyRoster, MannyTaskRequest, Mission, Pagination, Probe, ProbeAlert,
+    ProbeImprovement, ProbeInventory, ProbeListResponse, ProbeMessage, ProbeModel, ProbeMovement, ProbeSentMessage,
+    ScutNetwork, SectorObservation, StorageContainer, VisitedSector,
 };
 use anyhow::{Context, Result};
 use reqwest::{Client, StatusCode, Url};
@@ -305,6 +305,57 @@ impl ApiClient {
         let decoded = resp.json::<T>().await;
         self.record(label, elapsed, Some(status.as_u16()), false, decoded.is_err());
         decoded.with_context(|| format!("Parsing {method} {path}"))
+    }
+
+    /// Send a request that answers **204 No Content**, decoding nothing.
+    ///
+    /// Every other send path deserializes a body, and a `DELETE` that returns
+    /// none would count as an undecodable 2xx — an outage, by the rule the
+    /// metrics ring follows (#247). So this path records the outcome the same
+    /// way but never asks for a body.
+    async fn send_no_content(&self, method: reqwest::Method, path: &str) -> Result<()> {
+        let label = endpoint_label(method.as_str(), path);
+        let start = Instant::now();
+        let sent = self
+            .client
+            .request(method.clone(), self.url(path))
+            .bearer_auth(&self.api_key)
+            .send()
+            .await;
+        let elapsed = start.elapsed();
+        let resp = match sent {
+            Ok(r) => r,
+            Err(e) => {
+                self.record(label, elapsed, None, e.is_timeout(), false);
+                return Err(e).with_context(|| format!("{method} {path}"));
+            }
+        };
+        let status = resp.status();
+        let throttled = status == StatusCode::TOO_MANY_REQUESTS;
+        let retry_after_secs = self.note_rate_limit_headers(resp.headers(), throttled);
+        if !status.is_success() {
+            let msg = if throttled {
+                match retry_after_secs {
+                    Some(secs) => format!("rate limited, retry in {secs}s"),
+                    None => "rate limited, no Retry-After given".to_string(),
+                }
+            } else if status == StatusCode::UNAUTHORIZED {
+                "Unauthorized — check your api_key in config.toml".to_string()
+            } else {
+                let text = resp.text().await.unwrap_or_default();
+                serde_json::from_str::<serde_json::Value>(&text)
+                    .ok()
+                    .and_then(|v| v["error"]["message"].as_str().map(String::from))
+                    .unwrap_or(text)
+            };
+            self.record_with_detail(label, elapsed, Some(status.as_u16()), false, false, Some(&msg));
+            if throttled {
+                return Err(anyhow::Error::new(RateLimited { retry_after_secs }));
+            }
+            anyhow::bail!("{msg}");
+        }
+        self.record(label, elapsed, Some(status.as_u16()), false, false);
+        Ok(())
     }
 
     async fn post<T: for<'de> Deserialize<'de>, B: Serialize>(&self, path: &str, body: &B) -> Result<T> {
@@ -1185,6 +1236,93 @@ impl ApiClient {
             .post::<Resp, _>(&self.probe_path("/storage-moves"), &serde_json::Value::Object(body))
             .await?;
         Ok((r.manny, r.inventory))
+    }
+
+    // ── Probe logbook (API v90, issue #254) ───────────────────────────────
+    //
+    // Mirror-only, like the single-Manny GET and the task batch: the spec
+    // exposes these under `{probeId}` alone, so the piloted probe's id is
+    // passed explicitly rather than going through `probe_path`.
+
+    /// List the probe's logbook pages (summaries — the body arrives with
+    /// [`Self::get_logbook_page`]). The server pages at 10 by default; the
+    /// cockpit asks for the maximum, a logbook being something a pilot reads
+    /// whole rather than paginates through.
+    pub async fn get_logbook_pages(&self, probe_id: u64) -> Result<Vec<LogbookPageSummary>> {
+        #[derive(Deserialize)]
+        struct Resp {
+            pages: Vec<LogbookPageSummary>,
+        }
+        Ok(self
+            .get::<Resp>(&format!("/api/probe/{probe_id}/logbook-pages?limit=100"))
+            .await?
+            .pages)
+    }
+
+    pub async fn get_logbook_page(&self, probe_id: u64, page_id: u64) -> Result<LogbookPage> {
+        #[derive(Deserialize)]
+        struct Resp {
+            page: LogbookPage,
+        }
+        Ok(self
+            .get::<Resp>(&format!("/api/probe/{probe_id}/logbook-page/{page_id}"))
+            .await?
+            .page)
+    }
+
+    pub async fn create_logbook_page(&self, probe_id: u64, title: &str, content: &str) -> Result<LogbookPage> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Body<'a> {
+            title: &'a str,
+            content: &'a str,
+        }
+        #[derive(Deserialize)]
+        struct Resp {
+            page: LogbookPage,
+        }
+        Ok(self
+            .post::<Resp, _>(&format!("/api/probe/{probe_id}/logbook-page"), &Body { title, content })
+            .await?
+            .page)
+    }
+
+    /// Update a page. Both fields are optional server-side (`minProperties: 1`),
+    /// but the editor always carries both, so both are sent.
+    pub async fn update_logbook_page(
+        &self,
+        probe_id: u64,
+        page_id: u64,
+        title: &str,
+        content: &str,
+    ) -> Result<LogbookPage> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Body<'a> {
+            title: &'a str,
+            content: &'a str,
+        }
+        #[derive(Deserialize)]
+        struct Resp {
+            page: LogbookPage,
+        }
+        Ok(self
+            .patch::<Resp, _>(
+                &format!("/api/probe/{probe_id}/logbook-page/{page_id}"),
+                &Body { title, content },
+            )
+            .await?
+            .page)
+    }
+
+    /// Delete a page. The server answers 204 with no body, so nothing is
+    /// decoded — `send_no_content` exists for exactly this shape.
+    pub async fn delete_logbook_page(&self, probe_id: u64, page_id: u64) -> Result<()> {
+        self.send_no_content(
+            reqwest::Method::DELETE,
+            &format!("/api/probe/{probe_id}/logbook-page/{page_id}"),
+        )
+        .await
     }
 
     pub async fn get_storage_containers(&self) -> Result<Vec<StorageContainer>> {

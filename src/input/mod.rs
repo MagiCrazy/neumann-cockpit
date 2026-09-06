@@ -15,6 +15,7 @@ mod fleet;
 mod geometry;
 mod improve;
 mod jettison;
+mod logbook;
 mod map;
 mod messages;
 mod mine;
@@ -83,6 +84,7 @@ const WIZARD_INPUTS: &[(WizardGuard, WizardHandler)] = &[
     (|s| matches!(s.active_wizard, ActiveWizard::AssembleProbe(_)), handle_assemble_probe_event),
     (|s| matches!(s.active_wizard, ActiveWizard::RenameProbe(_)), handle_rename_probe_event),
     (|s| matches!(s.active_wizard, ActiveWizard::Jettison(_)), handle_jettison_event),
+    (|s| matches!(s.active_wizard, ActiveWizard::Logbook(_)), logbook::handle_logbook_event),
     (|s| matches!(s.active_wizard, ActiveWizard::Fabrication(_)), handle_fabrication_event),
     (|s| matches!(s.active_wizard, ActiveWizard::Improve(_)), handle_improve_event),
     (|s| matches!(s.active_wizard, ActiveWizard::Salvage(_)), handle_salvage_event),
@@ -240,6 +242,14 @@ pub fn handle_event(event: Event, state: &mut AppState, client: &ApiClient, tx: 
 
     if matches!(state.mode, InputMode::Command(_)) {
         handle_command_event(k.code, state, client, tx);
+        return;
+    }
+
+    // Ctrl-S commits an open logbook page (issue #254). Resolved here, like
+    // the console resize below, because the wizard handlers take a bare
+    // `KeyCode` and `Enter` is a newline inside a page.
+    if ctrl && k.code == KeyCode::Char('s') && matches!(state.active_wizard, ActiveWizard::Logbook(_)) {
+        logbook::submit_logbook_page(state, client, tx);
         return;
     }
 
