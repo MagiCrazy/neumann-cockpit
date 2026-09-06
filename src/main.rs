@@ -446,6 +446,18 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                     // urgent, and a modal about housekeeping in the middle of
                     // a mining run would be an intrusion.
                     ApiMessage::LatestRelease(tag) => state.note_latest_release(&tag),
+                    // The movement was called off and the deuterium refunded
+                    // (issue #365). Refetch rather than infer: the gauge moves
+                    // and the movement disappears, neither of which the
+                    // cockpit can compute for itself.
+                    ApiMessage::MoveCancelled => {
+                        state.set_toast("travel cancelled — deuterium refunded");
+                        fetch_all(client.clone(), tx.clone());
+                        state.loading = true;
+                    }
+                    // A cancel that raced the end of preparation answers 409;
+                    // the server's own wording explains it better than we can.
+                    ApiMessage::MoveCancelError(msg) => state.set_error(msg),
                     // ── Probe logbook (issue #254) ───────────────────────
                     ApiMessage::LogbookPagesFetched(pages) => {
                         state.logbook_error = None;

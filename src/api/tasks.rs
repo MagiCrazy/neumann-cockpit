@@ -617,6 +617,18 @@ pub fn fetch_transfer_manny(manny_id: String, target_probe_id: u64, client: ApiC
     );
 }
 
+/// Cancel the active movement (issue #365). The probe is refetched on success
+/// by the event loop: the refund changes the fuel gauge and the movement is
+/// gone, neither of which the cockpit can infer.
+pub fn fetch_cancel_move(probe_id: u64, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    spawn_action(
+        tx,
+        async move { client.cancel_move(probe_id).await.map(|_| ()) },
+        |_| ApiMessage::MoveCancelled,
+        ApiMessage::MoveCancelError,
+    );
+}
+
 // ── Probe logbook (API v90, issue #254) ──────────────────────────────────────
 //
 // Mirror-only endpoints, so each carries the piloted probe's id explicitly.

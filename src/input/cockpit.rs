@@ -12,8 +12,8 @@ use tokio::sync::mpsc;
 use super::geometry::{is_list_nav_key, list_move};
 use crate::api::client::ApiClient;
 use crate::api::tasks::{
-    fetch_ack_alert, fetch_ack_damage_warning, fetch_alerts, fetch_all, fetch_damage_warnings, fetch_inspect,
-    fetch_logbook_page, fetch_logbook_pages, fetch_messages, fetch_reassign_reservations, fetch_recover,
+    fetch_ack_alert, fetch_ack_damage_warning, fetch_alerts, fetch_all, fetch_cancel_move, fetch_damage_warnings,
+    fetch_inspect, fetch_logbook_page, fetch_logbook_pages, fetch_messages, fetch_reassign_reservations, fetch_recover,
     fetch_scut_network, fetch_sector, fetch_sent_messages, fetch_set_default_probe, fetch_storage_container_detail,
 };
 use crate::api::types::{MannyTask, MannyTaskVisibility};
@@ -706,6 +706,25 @@ fn fire_menu_action(action: MenuAction, state: &mut AppState, client: &ApiClient
                     fetch_set_default_probe(id, name.clone(), client.clone(), tx.clone());
                     state.log_event(LogEvent::set_default_probe(&name, Some(id)));
                 }
+            }
+            return;
+        }
+        // Cancel a movement still in preparation (issue #365). No extra
+        // confirmation: the menu already takes two deliberate keystrokes, and
+        // the act refunds rather than destroys — re-issuing the course costs
+        // nothing.
+        MenuAction::CancelMove => {
+            if let Some(probe_id) = state.probe_id() {
+                if let Some(target) = state
+                    .probe
+                    .as_ref()
+                    .and_then(|p| p.movement.as_ref())
+                    .map(|m| (m.target.x as i32, m.target.y as i32, m.target.z as i32))
+                {
+                    let (x, y, z) = target;
+                    state.log_event(LogEvent::travel_cancelled(x, y, z, state.active_probe_id));
+                }
+                fetch_cancel_move(probe_id, client.clone(), tx.clone());
             }
             return;
         }

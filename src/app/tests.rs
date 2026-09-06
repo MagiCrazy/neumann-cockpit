@@ -967,6 +967,67 @@ fn an_unread_alert_keeps_the_cockpit_awake() {
     );
 }
 
+// ── cancelling a movement (issue #365) ────────────────────────────────────
+
+/// A probe carrying a movement in the given phase.
+fn probe_moving(phase: &str) -> crate::api::types::Probe {
+    serde_json::from_str(&format!(
+        r#"{{"id": 4, "name": "t", "status": "idle",
+            "fuel": {{"deuterium": 50.0, "maxDeuterium": 100.0}}, "sensorMode": "normal",
+            "sector": null,
+            "movement": {{"status": "{phase}",
+                "origin": {{"x": 0.0, "y": 0.0, "z": 0.0}},
+                "target": {{"x": 4.0, "y": -2.0, "z": 0.0}},
+                "distance": 6, "fuelCostDeuterium": 3.0,
+                "startedAt": "2026-09-06T10:00:00Z", "arrivalAt": "2026-09-06T10:30:00Z"}},
+            "systems": null,
+            "inventory": {{"capacity": 10.0, "usedCapacity": 1.0, "freeCapacity": 9.0,
+                "items": [], "resourceStocks": [], "externalTanks": [], "containers": []}}}}"#
+    ))
+    .unwrap()
+}
+
+#[test]
+fn a_movement_is_cancellable_only_while_it_prepares() {
+    // The server accepts the cancel during preparation and answers 409 after,
+    // so the predicate that offers the action has to match that window.
+    let mut state = AppState::default();
+    assert!(!state.movement_cancellable(), "no probe, nothing to cancel");
+
+    state.probe = Some(probe_moving("preparing"));
+    assert!(state.movement_cancellable(), "preparing is the window");
+
+    for gone in ["accelerating", "cruising", "decelerating", "arrived", "idle"] {
+        state.probe = Some(probe_moving(gone));
+        assert!(
+            !state.movement_cancellable(),
+            "{gone} is past the window — offering it would just spend a 409"
+        );
+    }
+}
+
+#[test]
+fn the_probe_menu_offers_the_cancel_only_in_that_window() {
+    let mut state = AppState::default();
+    state.active_pane = crate::app::Pane::Probe;
+
+    state.probe = Some(probe_moving("cruising"));
+    let menu = state.build_context_menu().expect("the probe pane has a menu");
+    assert!(
+        !menu.items.iter().any(|i| i.action == MenuAction::CancelMove),
+        "not offered once the probe is under way"
+    );
+
+    state.probe = Some(probe_moving("preparing"));
+    let menu = state.build_context_menu().expect("the probe pane has a menu");
+    let item = menu
+        .items
+        .iter()
+        .find(|i| i.action == MenuAction::CancelMove)
+        .expect("offered while preparing");
+    assert!(item.enabled, "a synced probe gives the id the mirror path needs");
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────
 
 fn make_manny(id: &str, location_type: &str, can_receive_orders: bool, task: Option<&str>) -> Manny {

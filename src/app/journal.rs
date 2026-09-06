@@ -51,6 +51,15 @@ impl LogEvent {
         )
     }
 
+    /// "Called off the course for «(x, y, z)»; the deuterium is back in the tank."
+    pub fn travel_cancelled(x: i32, y: i32, z: i32, probe_id: Option<u64>) -> Self {
+        Self::action(
+            kind::TRAVEL,
+            format!("Called off the course for «({x}, {y}, {z})»; the deuterium is back in the tank."),
+            probe_id,
+        )
+    }
+
     /// "Dispatched a manny to mine {amount} «resources», hauling to «dest»."
     pub fn mine(resources: &str, amount: f64, destination: &str, probe_id: Option<u64>) -> Self {
         Self::action(

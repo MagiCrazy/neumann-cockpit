@@ -925,6 +925,22 @@ impl AppState {
         }
     }
 
+    /// Whether the active movement can still be cancelled (issue #365).
+    ///
+    /// The server accepts the cancel **only during preparation** and answers
+    /// 409 afterwards, so this is the predicate that decides whether the
+    /// action is offered at all. It reads `phase` before `status`, the same
+    /// way the Probe pane does — the server reports the last movement even
+    /// after it completes, so presence alone means nothing.
+    pub fn movement_cancellable(&self) -> bool {
+        self.probe.as_ref().and_then(|p| p.movement.as_ref()).is_some_and(|m| {
+            matches!(
+                m.phase.as_ref().unwrap_or(&m.status),
+                crate::api::types::MovementPhase::Preparing
+            )
+        })
+    }
+
     /// Whether the starfield may cover the screen (issue #206).
     ///
     /// It refuses while anything needs the pilot — a screensaver that hides a

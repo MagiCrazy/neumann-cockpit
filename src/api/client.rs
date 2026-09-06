@@ -1238,6 +1238,18 @@ impl ApiClient {
         Ok((r.manny, r.inventory))
     }
 
+    /// Cancel the active movement (API v105), refunding the reserved
+    /// deuterium.
+    ///
+    /// Only works **while the movement is still in preparation**: the server
+    /// answers 409 once that window has closed, and 404 when there is no
+    /// active movement at all. Mirror-only, so the piloted probe's id is
+    /// passed explicitly.
+    pub async fn cancel_move(&self, probe_id: u64) -> Result<()> {
+        self.send_no_content(reqwest::Method::DELETE, &format!("/api/probe/{probe_id}/move"))
+            .await
+    }
+
     // ── Probe logbook (API v90, issue #254) ───────────────────────────────
     //
     // Mirror-only, like the single-Manny GET and the task batch: the spec

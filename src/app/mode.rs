@@ -32,6 +32,8 @@ pub enum MenuAction {
     // Inventory pane
     Jettison,
     MoveStock,
+    /// Cancel the active movement while it is still in preparation (#365).
+    CancelMove,
     /// Deploy a waypoint bookmark from inventory onto a sector object.
     Deploy,
     // Probe pane
@@ -313,6 +315,18 @@ impl super::AppState {
                     disabled_reason: (!active.is_reachable).then(|| "out of SCUT range".to_string()),
                 });
             }
+        }
+        // Cancel a movement still in preparation (API v105). Offered *only*
+        // inside that window: once preparation is over the server answers 409,
+        // and a menu entry that mostly fails is worse than none.
+        if self.movement_cancellable() {
+            let known = self.probe_id().is_some();
+            items.push(MenuItem {
+                action: MenuAction::CancelMove,
+                label: "Cancel travel".into(),
+                enabled: known,
+                disabled_reason: (!known).then(|| "waiting for a probe sync".to_string()),
+            });
         }
         // Rename the piloted probe — available whenever we know its id.
         let can_rename = self.active_probe_identity().is_some();
