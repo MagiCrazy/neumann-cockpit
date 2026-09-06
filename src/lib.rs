@@ -18,6 +18,7 @@
 pub mod api;
 pub mod app;
 pub mod config;
+pub mod diaglog;
 pub mod headless;
 pub mod input;
 pub mod notify;

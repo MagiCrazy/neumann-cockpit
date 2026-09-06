@@ -120,6 +120,15 @@ const RIGHT: &[Section] = &[
         ],
     ),
     (
+        "Diagnostics",
+        &[
+            ("cockpit.log", "failures, beside the database"),
+            ("", "state dir; --diagnostic prints the path"),
+            ("config log =", "off | error | info | debug"),
+            ("NEUMANN_COCKPIT_LOG", "override for one run"),
+        ],
+    ),
+    (
         "Action script  ( :script )",
         &[
             ("i", "insert a command line"),

@@ -427,6 +427,8 @@ fn print_diagnostic_report(
         metrics.total_decode_errors()
     );
     println!("slow flag: p95 > {} ms", SLOW_THRESHOLD_MS as i64);
+    // Where the failures went, for whoever is already chasing one (issue #309).
+    println!("log file : {}", crate::diaglog::log_path().display());
     if let Some(rl) = rate_limit {
         if let Some(limit) = rl.limit {
             let remaining = rl.remaining.map(|r| r.to_string()).unwrap_or_else(|| "?".into());

@@ -23,6 +23,7 @@ The binary reads `~/.config/neumann-cockpit/config.toml` at startup:
 base_url = "https://neumann-probe.net"
 api_key  = "vng_..."
 theme    = "mono-green"   # color mode (optional)
+log      = "error"        # diagnostic log verbosity (optional)
 polarity = "auto"         # dark/light terminal ground (optional)
 hints    = true           # show the contextual hints line (optional)
 notifications = true      # desktop notification on long-task completion (optional)
@@ -31,6 +32,7 @@ notifications = true      # desktop notification on long-task completion (option
 - `theme` — cockpit color mode, seven of them: `mono-green` (default), `mono-amber`, `phosphor-semantic` (green base + green/yellow/red status), `modern-16` (named ANSI for terminals without truecolor), plus the lore modes `culture`, `deep-space` and `rust-belt`. `F2` cycles it at runtime.
 - `polarity` — terminal ground: `auto` (default, detected at boot via OSC 11), `dark` or `light`. `F3` flips it at runtime.
 - `hints` — show the contextual hints line at the bottom (`F1` toggles at runtime). Defaults `true`.
+- `log` — diagnostic log verbosity: `off`, `error` (default), `info`, `debug` (issue #309). `NEUMANN_COCKPIT_LOG` overrides it for one run.
 - `notifications` — emit a desktop notification (OSC 9 + terminal bell, `src/notify.rs`, issue #203) when a long task finishes: a travel arriving, or a Manny completing a long task (mining, crafting, repair, salvage, upgrade…). Completions are detected in `update_probe` / `update_mannies` (busy→idle diff), staged in `AppState::pending_notifications`, and drained by the event loop. Defaults `true`.
 
 Unknown keys are ignored, so legacy configs (`ui`, `phosphor`, `animations`, `theme = "retro"`) still load.
@@ -60,6 +62,14 @@ Once the link is up (or the pilot continues offline), it hands off to `run()`, w
 ### Headless script runner (`src/headless.rs`, #198 extension)
 
 `main()` checks `headless::script_arg(argv)` **before** touching the terminal: `--script <file>` / `-s <file>` / `--script=<file>` runs `headless::run()` and `process::exit`s with its code; a bare launch is the interactive cockpit, unchanged. The runner plays an action script from a file with **no TUI**: it loads the config non-interactively (no key onboarding — errors to stderr), opens the same SQLite DB, `fetch_all`s and waits until the probe + mannies rosters are primed, then parses the file (one command per line; blank lines and `#` comments skipped) via `parse_script_line` and runs it through the **same** `advance_script` executor (sequential, fork/join, late binding). It reuses the cockpit's `fetch_*` spawners and a minimal `ApiMessage` dispatch (refresh `probe`/`mannies`/`sector`; route the six MVP verb errors to `script_note_error`). Ship's-log entries are streamed to stdout (`HH:MM:SS » narrated summary`, plus `✓`/`✗` per step and a final status line) **and** persisted to the `events` table, so a headless run appears in the next TUI session's ship's log. Exit code: `0` on completion, `1` if the script halted on an error. This is the first non-TUI surface; #229 tracks a headless **status** mode sharing the same seams.
+
+### Diagnostic log (`src/diaglog.rs`, #309)
+
+A TUI owns the screen, so a failure is reported as a toast that expires in five seconds or a chip that vanishes with the condition — nothing survives, and two bugs have had to be instructed backwards from screenshots. `cockpit.log` sits beside the database under the state dir (`diaglog::log_path`) and is **not** the ship's log: that one records narrated pilot *actions*, this one records what the server said.
+
+Three properties, each load-bearing. It **never blocks the event loop** — lines cross a channel to a writer thread, the same shape as `store::spawn_writer`. It **never leaks the API key** — `redact` runs in the writer, not at the call sites, scrubbing both the key verbatim and any `Bearer <token>`, because a log file is the artefact a pilot pastes into a bug report. And **off costs nothing** — `Logger::log` takes a closure, so a message below the threshold is never built (tests assert this by panicking inside the closure).
+
+`Level` is ordered (`Off < Error < Info < Debug`). The default `error` keeps a healthy session silent while still answering "what did the server say?": `ApiClient::record_with_detail` is the single choke point every send path already passes through, logging failures at `error` **with the server's message resolved first** and successes at `debug`. `AppState::log` covers the decisions a pilot cannot reconstruct later — a halted queue lane, a halted script step, a probe switch (the queue being per-probe, #291) — and `main` logs the boot line and the persistence-degraded *transition* (the flag is sticky and the tick would repeat it). The file rotates to `cockpit.log.1` past `ROTATE_AT_BYTES`; `--diagnostic` prints its resolved path, and the help overlay carries a Diagnostics section.
 
 ### API diagnostics (`src/api/metrics.rs` + `headless::run_diagnostic`, #247)
 

@@ -112,11 +112,30 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
         link_ok,
         polarity,
     } = ready;
+    // The diagnostic log opens as soon as the config is known (issue #309):
+    // the API key is what it must never write, so the writer is given it here
+    // rather than trusting every call site to keep it out.
+    let log = neumann_cockpit::diaglog::Logger::open(
+        &neumann_cockpit::diaglog::log_path(),
+        config.log_level(),
+        &config.api_key,
+    );
+    log.info(|| {
+        format!(
+            "boot neumann-cockpit/{} base_url={} api={} link={}",
+            env!("CARGO_PKG_VERSION"),
+            config.base_url,
+            api_version.map(|v| v.to_string()).unwrap_or_else(|| "?".into()),
+            if link_ok { "up" } else { "down" },
+        )
+    });
+
     // Mutable so a probe switch can retarget every subsequent call (auto-refresh
     // + actions) at the newly-active probe — see the reconcile after handle_event.
-    let mut client = client;
+    let mut client = client.with_log(log.clone());
     let (tx, mut rx) = mpsc::channel::<ApiMessage>(32);
     let mut state = AppState {
+        log: log.clone(),
         hints_visible: config.hints,
         color_mode: config.color_mode(),
         polarity,
@@ -160,7 +179,15 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
     loop {
         // Surface a persistence failure raised by the writer thread (#216).
         if let Some(degraded) = &persist_degraded {
-            state.persistence_degraded = degraded.load(std::sync::atomic::Ordering::Relaxed);
+            let now = degraded.load(std::sync::atomic::Ordering::Relaxed);
+            // Log the transition, not the state: the flag is sticky and this
+            // runs every tick (issue #309).
+            if now && !state.persistence_degraded {
+                state
+                    .log
+                    .error(|| "persistence degraded — a write to the archive failed".to_string());
+            }
+            state.persistence_degraded = now;
         }
 
         // Mirror the shared rate-limit back-off (API v104). Read from the

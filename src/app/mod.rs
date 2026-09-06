@@ -208,6 +208,10 @@ pub struct AppState {
     pub scan_detail_scroll: usize,
     /// Which Scanner column the navigation keys drive (issue #347).
     pub scanner_focus: ScannerFocus,
+    /// Diagnostic log (issue #309), so the decisions the sequencers make are
+    /// still explicable after the toast that announced them has expired.
+    /// Disabled by default, which is what every test gets.
+    pub log: crate::diaglog::Logger,
     pub scan_filter: ScanFilter,
     /// Some(idx) when the scanner panel is in object-browsing mode.
     pub scanner_obj_selection: Option<usize>,
@@ -435,6 +439,9 @@ impl AppState {
             return false;
         }
         self.active_probe_id = new;
+        // The queue is per-probe and a switch parks it (#291), so which probe
+        // was being piloted when is part of explaining a stalled lane later.
+        self.log.info(move || format!("piloting probe {id}"));
         true
     }
 
