@@ -431,7 +431,7 @@ fn inventory_pane_scrolls_to_the_selected_stock() {
 }
 
 #[test]
-fn zoomed_storage_shows_the_last_containers_free_line() {
+fn the_zoomed_hold_shows_the_selected_containers_free_line() {
     // Issue #293: in zoom a container is a block (header + free capacity), but
     // the scroller anchored the *header* to the bottom row, so the free line of
     // the last container fell one row past the edge.
@@ -439,7 +439,9 @@ fn zoomed_storage_shows_the_last_containers_free_line() {
     let containers: Vec<String> = (0..12)
         .map(|i| {
             format!(
-                r#"{{"id": "c{i:02}", "kind": "storage", "label": "Container {i:02}",
+                // Short labels: the row truncates the name to make room for
+                // the cursor marker, and this test is about the free line.
+                r#"{{"id": "c{i:02}", "kind": "storage", "label": "Hold {i:02}",
                      "sortOrder": {i}, "capacity": 100.0, "usedCapacity": {i}.0,
                      "freeCapacity": 9{i}.0, "rules": {{}}}}"#
             )
@@ -458,13 +460,14 @@ fn zoomed_storage_shows_the_last_containers_free_line() {
         ))
         .unwrap(),
     );
-    state.active_pane = Pane::Storage;
+    state.active_pane = Pane::Hold;
     state.zoomed = true;
-    // Cursor on the last container — the reported case.
-    state.pane_nav[Pane::Storage.index()].cursor = 11;
+    // Cursor on the last container — the reported case of #293, which the
+    // merge (#345) must not reintroduce now that the rules live in a column.
+    state.inventory_selection = 11;
 
     let text = buffer_text(&render_cockpit(&state, 80, 20));
-    assert!(text.contains("Container 11"), "the selected container is in view");
+    assert!(text.contains("Hold 11"), "the selected container is in view");
     assert!(text.contains("free 911.00"), "and so is its free-capacity line: {text}");
 }
 
@@ -861,7 +864,7 @@ fn probe_with_unsorted_containers() -> AppState {
         )
         .unwrap(),
     );
-    state.active_pane = Pane::Storage;
+    state.active_pane = Pane::Hold;
     state
 }
 
@@ -883,7 +886,7 @@ fn sorting_containers_is_case_insensitive_and_defaults_to_the_server_order() {
         "a-z ignores case, so a lowercase name does not sort last"
     );
     let title = buffer_text(&render_cockpit(&state, 80, 24));
-    assert!(title.contains("STORAGE · a-z"), "the pane says how it is sorted");
+    assert!(title.contains("containers · a-z"), "the section says how it is sorted");
 }
 
 #[test]
@@ -891,7 +894,7 @@ fn toggling_the_sort_keeps_the_cursor_on_the_same_container() {
     // The cursor indexes into the ordering, so re-sorting under it would
     // silently retarget every Storage action (issue #333).
     let mut state = probe_with_unsorted_containers();
-    state.pane_nav[Pane::Storage.index()].cursor = 0; // "Zulu"
+    state.pane_nav[Pane::Log.index()].cursor = 0; // "Zulu"
     assert_eq!(state.storage_selected_container_id().as_deref(), Some("c1"));
 
     state.storage_toggle_sort();
@@ -900,7 +903,7 @@ fn toggling_the_sort_keeps_the_cursor_on_the_same_container() {
         Some("c1"),
         "still on Zulu, now at the end of the list"
     );
-    assert_eq!(state.pane_nav[Pane::Storage.index()].cursor, 2);
+    assert_eq!(state.pane_nav[Pane::Log.index()].cursor, 2);
 }
 
 // -- polarity (issue #233) -------------------------------------------------
@@ -1038,4 +1041,95 @@ fn a_newer_release_is_a_quiet_chip_and_an_older_one_is_nothing() {
     assert_eq!(state.update_available.as_deref(), Some("999.0.0"));
     let text = buffer_text(&render_cockpit(&state, 110, 24));
     assert!(text.contains("999.0.0"), "the version is named: {text}");
+}
+
+// -- the merged HOLD pane (issue #345) -------------------------------------
+
+#[test]
+fn the_hold_holds_stocks_and_containers_in_one_list() {
+    // The two panes answered the same question, and one already drew the
+    // other's list inert. Now there is one, and the containers are rows.
+    use crate::app::InventoryRow;
+    let mut state = probe_with_unsorted_containers();
+
+    let rows = state.inventory_rows();
+    assert_eq!(rows.len(), 3, "three containers, no stocks in this fixture");
+    assert!(matches!(rows[0], InventoryRow::Container { .. }));
+
+    let text = buffer_text(&render_cockpit(&state, 46, 14));
+    assert!(text.contains("HOLD"), "the pane is named for what it is: {text}");
+    assert!(text.contains("CARGO"), "the probe's own capacity is here");
+    assert!(text.contains("containers"), "and so are the containers");
+
+    // The cursor addresses them: moving down walks onto the second one.
+    state.inventory_next();
+    match state.selected_inventory_row() {
+        Some(InventoryRow::Container { id }) => assert_eq!(id, "c2"),
+        other => panic!("expected the second container, got {other:?}"),
+    }
+}
+
+#[test]
+fn the_hold_menu_follows_the_kind_of_row_under_the_cursor() {
+    // No action from either old pane is lost; which ones are offered depends
+    // on what is selected.
+    use crate::app::MenuAction;
+    let mut state = probe_with_unsorted_containers();
+    state.active_pane = Pane::Hold;
+
+    let container_menu = state.build_context_menu().expect("a container menu");
+    let labels: Vec<&str> = container_menu.items.iter().map(|i| i.label.as_str()).collect();
+    assert!(labels.iter().any(|l| l.starts_with("Rename")), "{labels:?}");
+    assert!(labels.iter().any(|l| l.contains("routing rules")), "{labels:?}");
+    assert!(
+        !container_menu.items.iter().any(|i| i.action == MenuAction::Jettison),
+        "a container is not jettisoned from the hold"
+    );
+
+    // With no container selected, the stock/item actions are what is offered.
+    state.probe.as_mut().unwrap().inventory.containers.clear();
+    let hold_menu = state.build_context_menu().expect("the hold always offers something");
+    assert!(hold_menu.items.iter().any(|i| i.action == MenuAction::Jettison));
+    assert!(hold_menu.items.iter().any(|i| i.action == MenuAction::Fabricate));
+}
+
+#[test]
+fn the_zoomed_hold_shows_routing_without_a_second_look() {
+    // The one thing genuinely unique to the old Storage pane was the routing
+    // rules, and they were buried behind a zoom *and* a scroll.
+    let mut state = probe_with_unsorted_containers();
+    state.probe.as_mut().unwrap().inventory.containers[0].rules.priority = vec!["metals".into(), "ice".into()];
+    state.active_pane = Pane::Hold;
+    state.zoomed = true;
+    state.inventory_selection = 0; // "Zulu", the one with the rules
+
+    let text = buffer_text(&render_cockpit(&state, 80, 18));
+    assert!(
+        text.contains("priority: metals, ice"),
+        "the routing is on screen: {text}"
+    );
+    assert!(text.contains("free"), "and so is the free capacity");
+}
+
+// -- the ship's log gets its own pane (issue #345) --------------------------
+
+#[test]
+fn the_ship_log_is_its_own_pane_and_missions_is_a_plain_list() {
+    use crate::app::LogEvent;
+    let mut state = AppState::default();
+    state.journal = vec![LogEvent::action("test", "mined «Rock 01»", None)];
+
+    state.active_pane = Pane::Log;
+    let text = buffer_text(&render_cockpit(&state, 90, 24));
+    assert!(text.contains("SHIP'S LOG"), "the pane is titled: {text}");
+    assert!(text.contains("mined"), "and shows the journal: {text}");
+
+    // Missions no longer carries it, so its root is the mission list itself.
+    state.active_pane = Pane::Missions;
+    let missions = buffer_text(&render_cockpit(&state, 90, 24));
+    assert!(missions.contains("no active missions"), "{missions}");
+    assert!(
+        !missions.contains("Ship's log"),
+        "the category root is gone: {missions}"
+    );
 }

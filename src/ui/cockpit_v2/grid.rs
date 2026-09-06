@@ -65,7 +65,7 @@ mod tests {
         assert!(panes.iter().any(|(p, _)| *p == Pane::Mannies));
         // …and Mannies is bottom-right, so the window is the bottom-right 2×2.
         let set: Vec<Pane> = panes.iter().map(|(p, _)| *p).collect();
-        for expected in [Pane::Probe, Pane::Missions, Pane::Storage, Pane::Mannies] {
+        for expected in [Pane::Probe, Pane::Missions, Pane::Log, Pane::Mannies] {
             assert!(set.contains(&expected), "{expected:?} should be visible");
         }
     }

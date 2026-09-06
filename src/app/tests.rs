@@ -2161,7 +2161,7 @@ fn probe_menu_improve_enabled_only_with_an_orderable_improvement() {
 #[test]
 fn inventory_context_menu_present_but_disabled_when_empty() {
     let mut state = AppState::default();
-    state.active_pane = Pane::Inventory;
+    state.active_pane = Pane::Hold;
     let menu = state.build_context_menu().expect("inventory menu");
     assert_eq!(menu.items.len(), 3);
     // Nothing loaded → every action disabled with a reason.
@@ -2173,7 +2173,7 @@ fn inventory_context_menu_present_but_disabled_when_empty() {
 #[test]
 fn inventory_menu_offers_deploy_only_with_a_held_bookmark() {
     let mut state = AppState::default();
-    state.active_pane = Pane::Inventory;
+    state.active_pane = Pane::Hold;
     state.probe = Some(
         serde_json::from_str(
             r#"{
@@ -2837,9 +2837,11 @@ fn sharing_needs_coverage_a_blueprint_and_a_probe_id() {
 // ── crafting-reservation reassignment (#301 phase 2, API v116) ────────────
 
 #[test]
-fn the_storage_menu_offers_reassignment_once_the_probe_is_known() {
+fn the_container_menu_offers_reassignment_once_the_probe_is_known() {
+    // Containers live in the HOLD pane now (issue #345), and the menu keys off
+    // the selected row's kind rather than off the pane.
     let mut state = AppState::default();
-    state.active_pane = Pane::Storage;
+    state.active_pane = Pane::Hold;
     state.probe = Some(
         serde_json::from_str(
             r#"{"id": 4, "name": "t", "status": "idle",
@@ -2853,7 +2855,12 @@ fn the_storage_menu_offers_reassignment_once_the_probe_is_known() {
         )
         .unwrap(),
     );
-    let menu = state.build_context_menu().expect("storage menu");
+    // The only row is the container, so the cursor is already on it.
+    assert!(matches!(
+        state.selected_inventory_row(),
+        Some(crate::app::InventoryRow::Container { .. })
+    ));
+    let menu = state.build_context_menu().expect("container menu");
     let item = menu
         .items
         .iter()
@@ -2861,11 +2868,16 @@ fn the_storage_menu_offers_reassignment_once_the_probe_is_known() {
         .expect("reassignment offered");
     assert!(item.enabled, "a synced probe gives the id the mirror path needs");
 
-    // The endpoint exists only on the {probeId} mirror, so without a probe sync
-    // there is no path to call — say so rather than fail at request time.
+    // The endpoint exists only on the {probeId} mirror, so without a probe
+    // sync there is no path to call. The HOLD pane still has a menu — its
+    // stock and item actions — but no container is selected, so the
+    // container-only entries are simply not among them (issue #345).
     state.probe = None;
-    let menu = state.build_context_menu();
-    assert!(menu.is_none(), "no probe, no container list, no menu");
+    let menu = state.build_context_menu().expect("the hold always offers something");
+    assert!(
+        !menu.items.iter().any(|i| i.action == MenuAction::ReassignReservations),
+        "no container selected, no container actions"
+    );
 }
 
 // ── safe SCUT corridors (#257, API v96) ───────────────────────────────────

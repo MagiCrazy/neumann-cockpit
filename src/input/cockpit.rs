@@ -20,11 +20,11 @@ use crate::api::types::{MannyTask, MannyTaskVisibility};
 use crate::app::{
     ActiveWizard, ApiMessage, AppState, AssembleProbeInput, CommandLine, CommsCategory, DeployInput, DetachInput,
     DrillLevel, DropCargoInput, DropStorageContainerInput, FabricationInput, GotoVisitedInput, ImproveInput, InputMode,
-    InspectInput, LogEvent, MenuAction, MessagesInput, MindSnapshotInput, MineInput, MissionsCategory, MissionsInput,
-    ObjectActionInput, Pane, ProbeSwitchInput, RecallInput, RecoverInput, RefuelInput, RemoteMineInput,
-    RenameContainerInput, RenameMannyInput, RenameProbeInput, RepairInput, SalvageInput, ScanMode, ScannerFocus,
-    ScutCorridorInput, ScutNetworkInput, ShareBlueprintInput, StorageMoveInput, TransferDeuteriumInput,
-    TransferProbeInput, TravelInput, WaypointsInput, LIST_PAGE,
+    InspectInput, LogEvent, MenuAction, MessagesInput, MindSnapshotInput, MineInput, MissionsInput, ObjectActionInput,
+    Pane, ProbeSwitchInput, RecallInput, RecoverInput, RefuelInput, RemoteMineInput, RenameContainerInput,
+    RenameMannyInput, RenameProbeInput, RepairInput, SalvageInput, ScanMode, ScannerFocus, ScutCorridorInput,
+    ScutNetworkInput, ShareBlueprintInput, StorageMoveInput, TransferDeuteriumInput, TransferProbeInput, TravelInput,
+    WaypointsInput, LIST_PAGE,
 };
 
 pub fn handle_cockpit_event(code: KeyCode, state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
@@ -93,7 +93,7 @@ pub fn handle_cockpit_event(code: KeyCode, state: &mut AppState, client: &ApiCli
         // Jump to the next idle Manny (focuses the Mannies pane).
         KeyCode::Char('i') => state.cycle_to_next_idle_manny(),
         // Storage: toggle server order ↔ alphabetical (issue #333).
-        KeyCode::Char('s') if state.active_pane == Pane::Storage => {
+        KeyCode::Char('s') if state.active_pane == Pane::Hold => {
             state.storage_toggle_sort();
             let how = if state.storage_sort_alpha { "a-z" } else { "probe order" };
             state.set_toast(format!("containers sorted: {how}"));
@@ -183,31 +183,26 @@ fn scroll_scan_detail(code: KeyCode, state: &mut AppState) -> bool {
 /// the contextual menu; panes backed by a rich wizard reuse its overlay.
 fn open_actions(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
     match state.active_pane {
-        Pane::Mannies | Pane::Inventory | Pane::Probe | Pane::Storage | Pane::Scanner | Pane::Map => {
-            match state.build_context_menu() {
-                Some(menu) if !menu.items.is_empty() => state.mode = InputMode::Menu(menu),
-                _ => state.set_toast("no actions here"),
+        Pane::Mannies | Pane::Hold | Pane::Probe | Pane::Scanner | Pane::Map => match state.build_context_menu() {
+            Some(menu) if !menu.items.is_empty() => state.mode = InputMode::Menu(menu),
+            _ => state.set_toast("no actions here"),
+        },
+        Pane::Missions => {
+            let in_detail = matches!(
+                state.pane_nav[Pane::Missions.index()].drill.last(),
+                Some(DrillLevel::Mission(_))
+            );
+            if in_detail {
+                // Viewing a mission's steps — no extra action.
+            } else if state.missions.is_empty() {
+                state.set_toast("no missions");
+            } else {
+                let selection = state.pane_nav[Pane::Missions.index()].cursor;
+                state.active_wizard = ActiveWizard::Missions(MissionsInput::Browsing { selection });
             }
         }
-        Pane::Missions => match state.missions_category() {
-            // Root: Enter enters the selected category, like `l`.
-            None => missions_activate(state),
-            Some(MissionsCategory::ShipsLog) => state.set_toast("ship's log — read only"),
-            Some(MissionsCategory::Missions) => {
-                let in_detail = matches!(
-                    state.pane_nav[Pane::Missions.index()].drill.last(),
-                    Some(DrillLevel::Mission(_))
-                );
-                if in_detail {
-                    // Viewing a mission's steps — no extra action.
-                } else if state.missions.is_empty() {
-                    state.set_toast("no missions");
-                } else {
-                    let selection = state.pane_nav[Pane::Missions.index()].cursor;
-                    state.active_wizard = ActiveWizard::Missions(MissionsInput::Browsing { selection });
-                }
-            }
-        },
+        // The ship's log is a record, not a console (issue #345).
+        Pane::Log => state.set_toast("ship's log — read only"),
         Pane::Comms => comms_activate(state, client, tx),
         Pane::Sector => open_sector_object_actions(state),
     }
@@ -255,26 +250,18 @@ fn comms_activate(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<Ap
 /// Missions activation for `l` (and root `Enter`): at the root, enter the
 /// selected category (missions list / ship's log); in the missions list, drill
 /// into the selected mission's steps. The ship's log is read-only.
+/// `l` on the Missions pane: a mission drills into its steps. One level, now
+/// that the category root is gone (issue #345).
 fn missions_activate(state: &mut AppState) {
     let cursor = state.pane_nav[Pane::Missions.index()].cursor;
-    match state.missions_category() {
-        None => {
-            if let Some(&cat) = MissionsCategory::ALL.get(cursor) {
-                state.missions_enter_category(cat);
-            }
+    let drilled = matches!(
+        state.pane_nav[Pane::Missions.index()].drill.last(),
+        Some(DrillLevel::Mission(_))
+    );
+    if !drilled {
+        if let Some(id) = state.missions.get(cursor).map(|m| m.id.clone()) {
+            state.missions_drill_into(id);
         }
-        Some(MissionsCategory::Missions) => {
-            let drilled = matches!(
-                state.pane_nav[Pane::Missions.index()].drill.last(),
-                Some(DrillLevel::Mission(_))
-            );
-            if !drilled {
-                if let Some(id) = state.missions.get(cursor).map(|m| m.id.clone()) {
-                    state.missions_drill_into(id);
-                }
-            }
-        }
-        Some(MissionsCategory::ShipsLog) => {}
     }
 }
 
@@ -292,8 +279,8 @@ fn drill_in(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessa
         return;
     }
     state.pane_drill_in();
-    if state.active_pane == Pane::Storage {
-        if let Some(DrillLevel::Container(id)) = state.pane_nav[Pane::Storage.index()].drill.last().cloned() {
+    if state.active_pane == Pane::Hold {
+        if let Some(DrillLevel::Container(id)) = state.pane_nav[Pane::Hold.index()].drill.last().cloned() {
             state.storage_container_detail = None;
             state.storage_container_detail_error = None;
             fetch_storage_container_detail(id, client.clone(), tx.clone());
@@ -303,7 +290,7 @@ fn drill_in(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessa
 
 /// Drill out one level, clearing any transient detail loaded for the level.
 fn drill_out(state: &mut AppState) {
-    if state.active_pane == Pane::Storage {
+    if state.active_pane == Pane::Hold {
         state.storage_container_detail = None;
         state.storage_container_detail_error = None;
     }
@@ -396,7 +383,7 @@ fn fire_menu_action(action: MenuAction, state: &mut AppState, client: &ApiClient
         }
         // The Inventory pane opens the catalog with no builder pre-chosen; the
         // Mannies-pane variant (with a builder) is handled further down.
-        MenuAction::Fabricate if state.active_pane == Pane::Inventory => {
+        MenuAction::Fabricate if state.active_pane == Pane::Hold => {
             if state.fabrication_recipes().is_empty() {
                 state.error = Some("recipes not loaded yet — F5 to refresh".into());
             } else {

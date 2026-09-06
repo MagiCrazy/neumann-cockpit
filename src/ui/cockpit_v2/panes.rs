@@ -9,7 +9,7 @@
 use crate::api::types::{
     Manny, MannyLocationType, MannyTaskVisibility, MissionStatus, MissionStepStatus, SectorObject, SectorObjectType,
 };
-use crate::app::{AppState, CommsCategory, DrillLevel, MissionsCategory, Pane};
+use crate::app::{AppState, CommsCategory, DrillLevel, Pane};
 use crate::ui::panels::mannies::{
     manny_artificial_detection, manny_crafting_detail, manny_mining_detail, manny_task_eta, manny_task_label,
     manny_task_progress,
@@ -515,11 +515,6 @@ fn solar_system_zoom_lines(obj: &SectorObject, p: Palette) -> Vec<Line<'static>>
 }
 
 pub fn render_missions(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {
-    match state.missions_category() {
-        None => return render_missions_root(frame, area, state, active, p),
-        Some(MissionsCategory::ShipsLog) => return render_ship_log(frame, area, state, active, p),
-        Some(MissionsCategory::Missions) => {}
-    }
     if let Some(DrillLevel::Mission(id)) = state.pane_nav[Pane::Missions.index()].drill.last() {
         return render_mission_detail(frame, area, state, id, active, p);
     }
@@ -594,52 +589,7 @@ fn render_mission_detail(frame: &mut Frame, area: Rect, state: &AppState, id: &s
 }
 
 /// Missions root: two selectable rows (active missions, ship's log) with counts
-/// and a one-line preview of the latest entry, mirroring the Comms root.
-fn render_missions_root(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {
-    let dim = Style::default().fg(p.dim);
-    let text = Style::default().fg(p.text);
-    let cur = cursor(state, Pane::Missions);
-    let active_missions = state
-        .missions
-        .iter()
-        .filter(|m| matches!(m.status, MissionStatus::Active))
-        .count();
-    let mission_preview = state.missions.first().map(|m| format!("▸ {}", comms_preview(&m.title)));
-    let log_preview = state
-        .journal
-        .first()
-        .map(|e| format!("· {}", comms_preview(&e.summary.replace(['«', '»'], ""))));
-    let rows = [
-        ("Missions", state.missions.len(), Some(active_missions), mission_preview),
-        ("Ship's log", state.journal.len(), None, log_preview),
-    ];
-    let mut lines = Vec::new();
-    let mut sel_line = None;
-    for (i, (label, total, active_count, preview)) in rows.iter().enumerate() {
-        if i == cur {
-            sel_line = Some((lines.len(), lines.len()));
-        }
-        let mut spans = vec![
-            Span::styled(format!("{label:<11} "), row_style(active, i == cur).patch(text)),
-            Span::styled(format!("{total}"), dim),
-        ];
-        if let Some(n) = active_count {
-            if *n > 0 {
-                spans.push(Span::styled(format!("  ({n} active)"), Style::default().fg(p.accent)));
-            }
-        }
-        lines.push(Line::from(spans));
-        let preview = preview.clone().unwrap_or_else(|| "—".to_string());
-        lines.push(Line::from(Span::styled(format!("  {preview}"), dim)));
-    }
-    render_body(frame, area, " MISSIONS ", active, p, lines, sel_line);
-}
-
-/// The ship's log: newest-first captain's-log lines. The timestamp is dimmed,
-/// entities (wrapped in `«…»` by the constructors) take the accent colour, and
-/// server-reconstructed events render in the warning colour. Scrolls with the
-/// cursor.
-fn render_ship_log(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {
+pub fn render_ship_log(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {
     let dim = Style::default().fg(p.dim);
     let mut lines = Vec::new();
     let mut sel_line = None;
@@ -648,7 +598,7 @@ fn render_ship_log(frame: &mut Frame, area: Rect, state: &AppState, active: bool
     if entries.is_empty() {
         lines.push(Line::styled("ship's log empty — your actions will appear here", dim));
     } else {
-        let cur = cursor(state, Pane::Missions);
+        let cur = cursor(state, Pane::Log);
         // Compact: truncate each line to the pane width with an ellipsis.
         // Zoomed: full width, so the whole captain's-log sentence reads out.
         let width = area.width.saturating_sub(2) as usize;
@@ -727,110 +677,17 @@ fn narrative_spans(summary: &str, base: Style, accent: Style) -> Vec<Span<'stati
     spans
 }
 
-pub fn render_storage(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {
-    let dim = Style::default().fg(p.dim);
-    let text = Style::default().fg(p.text);
-    let cur = cursor(state, Pane::Storage);
-    let zoomed = state.zoomed;
-    let mut lines = Vec::new();
-    let mut sel_line = None;
-
-    // Drilled into a container: render its contents inline (fetched on drill-in).
-    if let Some(DrillLevel::Container(id)) = state.pane_nav[Pane::Storage.index()].drill.last() {
-        return render_container_contents(frame, area, state, id, active, p);
-    }
-
-    // Containers come with the probe (probe.inventory.containers), so the pane
-    // fills as soon as the probe loads — Enter opens the full browser. The
-    // order is `storage_containers_ordered`, which the cursor indexes into too
-    // (issue #333).
-    let ordered = state.storage_containers_ordered();
-    match (state.probe.as_ref(), ordered.is_empty()) {
-        (None, _) => lines.push(Line::styled("no data", dim)),
-        (Some(_), true) => lines.push(Line::styled("no storage containers", dim)),
-        (Some(_), false) => {
-            const W: usize = 8;
-            for (i, c) in ordered.iter().enumerate() {
-                let selected = active && i == cur;
-                let ratio = if c.capacity > 0.0 {
-                    (c.used_capacity / c.capacity).clamp(0.0, 1.0)
-                } else {
-                    0.0
-                };
-                let filled = (ratio * W as f64).round() as usize;
-                let name_style = if selected {
-                    Style::default().fg(p.accent).add_modifier(Modifier::BOLD)
-                } else {
-                    text
-                };
-                let sec = if selected { Style::default().fg(p.accent) } else { dim };
-                let label: String = c.label.chars().take(12).collect();
-                let mut spans = vec![
-                    Span::styled(if selected { "▶ " } else { "  " }, Style::default().fg(p.accent)),
-                    Span::styled(format!("{label:<12}   "), name_style),
-                    Span::styled("▓".repeat(filled), Style::default().fg(fill_color(p, 1.0 - ratio))),
-                    Span::styled("░".repeat(W - filled), dim),
-                    Span::styled(format!(" {:.0}%", ratio * 100.0), sec),
-                ];
-                let rules = &c.rules;
-                if !rules.priority.is_empty() || !rules.exclusion.is_empty() || !rules.strict_exclusion.is_empty() {
-                    spans.push(Span::styled(" ⚙", Style::default().fg(p.accent)));
-                }
-                if i == cur {
-                    sel_line = Some((lines.len(), lines.len()));
-                }
-                lines.push(Line::from(spans));
-
-                // Zoom: routing rules and free capacity per container.
-                if zoomed {
-                    if !rules.priority.is_empty() {
-                        lines.push(Line::styled(
-                            format!("    priority: {}", rules.priority.join(", ")),
-                            dim,
-                        ));
-                    }
-                    if !rules.exclusion.is_empty() {
-                        lines.push(Line::styled(
-                            format!("    exclude:  {}", rules.exclusion.join(", ")),
-                            dim,
-                        ));
-                    }
-                    if !rules.strict_exclusion.is_empty() {
-                        lines.push(Line::styled(
-                            format!("    strict:   {}", rules.strict_exclusion.join(", ")),
-                            dim,
-                        ));
-                    }
-                    lines.push(Line::styled(
-                        format!("    free {:.2} of {:.2}", c.free_capacity, c.capacity),
-                        dim,
-                    ));
-                    // The entry is a block in zoom: hand the scroller its last
-                    // line too, or the free-capacity line of the last container
-                    // falls just past the bottom edge (issue #293).
-                    if i == cur {
-                        if let Some((first, _)) = sel_line {
-                            sel_line = Some((first, lines.len() - 1));
-                        }
-                    }
-                }
-            }
-        }
-    }
-    // The title carries the ordering, so a pane sorted by name says so rather
-    // than looking like the server order shuffled (issue #333).
-    let title = if state.storage_sort_alpha {
-        " STORAGE · a-z "
-    } else {
-        " STORAGE "
-    };
-    render_body(frame, area, title, active, p, lines, sel_line);
-}
-
 /// Inline contents of a container (drill-in `l` on the Storage pane): capacity,
 /// resource stocks, and unit items. Fetched on drill-in; shows a placeholder
 /// until the detail arrives.
-fn render_container_contents(frame: &mut Frame, area: Rect, state: &AppState, id: &str, active: bool, p: Palette) {
+pub(crate) fn render_container_contents(
+    frame: &mut Frame,
+    area: Rect,
+    state: &AppState,
+    id: &str,
+    active: bool,
+    p: Palette,
+) {
     let dim = Style::default().fg(p.dim);
     let text = Style::default().fg(p.text);
     let mut lines: Vec<Line> = Vec::new();
