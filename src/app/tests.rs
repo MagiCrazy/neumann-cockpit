@@ -798,6 +798,133 @@ fn a_prefix_runs_the_command_it_names() {
     assert!(state.help_open, "`:he` opened the help");
 }
 
+// ── queue persistence (issue #324) ────────────────────────────────────────
+
+fn queued(recipe: &str, repeat: u32, completed: u32) -> crate::app::QueuedCraft {
+    let mut step = crate::app::QueuedCraft::new(
+        crate::app::Fabricator::Manny,
+        format!("{recipe}_id"),
+        recipe.to_string(),
+        None,
+        None,
+    );
+    step.repeat = repeat;
+    step.completed = completed;
+    step.duration_secs = 600;
+    step
+}
+
+#[test]
+fn a_queue_round_trips_through_storage() {
+    let mut state = AppState::default();
+    state.craft_queue = vec![queued("steel_plate", 3, 1), queued("linear_actuator", 1, 0)];
+    state.queue_paused = true;
+
+    let stored = state.stored_queue();
+    assert_eq!(stored.steps.len(), 2);
+    assert!(stored.paused, "the pause state travels with the steps");
+
+    let mut restored = AppState::default();
+    restored.restore_queues(std::collections::HashMap::from([(0, stored)]));
+    assert_eq!(restored.craft_queue.len(), 2);
+    assert_eq!(restored.craft_queue[0].recipe_name, "steel_plate");
+    assert_eq!(restored.craft_queue[0].repeat, 3);
+    assert_eq!(restored.craft_queue[0].completed, 1, "progress is not replayed");
+    assert!(restored.queue_paused);
+}
+
+#[test]
+fn finished_and_failed_steps_are_not_carried_over() {
+    // A done step has nothing left to do, and a failed one is a decision the
+    // pilot already saw — restoring either would just be clutter.
+    let mut state = AppState::default();
+    let mut done = queued("steel_plate", 1, 1);
+    done.state = crate::app::StepState::Done;
+    let mut failed = queued("linear_actuator", 1, 0);
+    failed.state = crate::app::StepState::Failed("no metals".into());
+    state.craft_queue = vec![done, failed, queued("integrated_circuit", 1, 0)];
+
+    let stored = state.stored_queue();
+    assert_eq!(stored.steps.len(), 1, "only the live step survives");
+    assert_eq!(stored.steps[0].recipe_name, "integrated_circuit");
+}
+
+#[test]
+fn a_craft_in_flight_comes_back_paused_and_is_never_re_fired() {
+    // The acceptance criterion of #324: at crash time a running step may have
+    // completed, half-completed, or never been accepted, and the cockpit was
+    // not there to see. Re-firing on a guess spends the pilot's resources
+    // twice, so it comes back pending **with the queue paused**.
+    let mut state = AppState::default();
+    let mut running = queued("steel_plate", 2, 0);
+    running.state = crate::app::StepState::Running { observed_busy: true };
+    running.fired_at = Some(chrono::Utc::now());
+    state.craft_queue = vec![running];
+    state.queue_paused = false; // it was running happily
+
+    let stored = state.stored_queue();
+    assert!(stored.steps[0].running, "storage remembers it was in flight");
+    assert!(!stored.paused, "and that the pilot had not paused it");
+
+    let mut restored = AppState::default();
+    restored.restore_queues(std::collections::HashMap::from([(0, stored)]));
+    assert!(
+        restored.queue_paused,
+        "an unreconcilable step must not resume on its own"
+    );
+    assert!(
+        matches!(restored.craft_queue[0].state, crate::app::StepState::Pending),
+        "it comes back pending, for the pilot to decide"
+    );
+    assert!(
+        restored.craft_queue[0].fired_at.is_some(),
+        "but keeps when it fired, so the duration fallback can still count it done"
+    );
+}
+
+#[test]
+fn an_unpinned_binding_is_dropped_on_restore_but_a_pinned_one_is_kept() {
+    // Late binding (#235): an unpinned step took whichever Manny was free, and
+    // that Manny may not even be aboard after a restart. A pinned one was a
+    // deliberate choice and is honoured.
+    let mut state = AppState::default();
+    let mut auto = queued("steel_plate", 1, 0);
+    auto.builder_manny_id = Some("m1".into());
+    auto.builder_manny_name = Some("Grey Area".into());
+    let mut pinned = queued("linear_actuator", 1, 0);
+    pinned.pinned = true;
+    pinned.builder_manny_id = Some("m2".into());
+    pinned.builder_manny_name = Some("Sleeper Service".into());
+    state.craft_queue = vec![auto, pinned];
+
+    let mut restored = AppState::default();
+    restored.restore_queues(std::collections::HashMap::from([(0, state.stored_queue())]));
+    assert_eq!(restored.craft_queue[0].builder_manny_id, None, "re-binds freely");
+    assert_eq!(
+        restored.craft_queue[1].builder_manny_id.as_deref(),
+        Some("m2"),
+        "a pinned builder is the pilot's decision"
+    );
+}
+
+#[test]
+fn another_probes_queue_comes_back_parked() {
+    // One queue per probe (#291): only the piloted one runs, the rest wait
+    // where the switch left them.
+    let mut state = AppState::default();
+    state.active_probe_id = Some(7);
+    let mut other = AppState::default();
+    other.craft_queue = vec![queued("steel_plate", 1, 0)];
+
+    state.restore_queues(std::collections::HashMap::from([(3, other.stored_queue())]));
+    assert!(state.craft_queue.is_empty(), "not this probe's queue");
+    assert_eq!(
+        state.parked_queues.get(&Some(3)).map(|q| q.steps.len()),
+        Some(1),
+        "parked under its own probe"
+    );
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────
 
 fn make_manny(id: &str, location_type: &str, can_receive_orders: bool, task: Option<&str>) -> Manny {
@@ -2161,7 +2288,7 @@ fn probe_menu_improve_enabled_only_with_an_orderable_improvement() {
 #[test]
 fn inventory_context_menu_present_but_disabled_when_empty() {
     let mut state = AppState::default();
-    state.active_pane = Pane::Inventory;
+    state.active_pane = Pane::Hold;
     let menu = state.build_context_menu().expect("inventory menu");
     assert_eq!(menu.items.len(), 3);
     // Nothing loaded → every action disabled with a reason.
@@ -2173,7 +2300,7 @@ fn inventory_context_menu_present_but_disabled_when_empty() {
 #[test]
 fn inventory_menu_offers_deploy_only_with_a_held_bookmark() {
     let mut state = AppState::default();
-    state.active_pane = Pane::Inventory;
+    state.active_pane = Pane::Hold;
     state.probe = Some(
         serde_json::from_str(
             r#"{
@@ -2837,9 +2964,11 @@ fn sharing_needs_coverage_a_blueprint_and_a_probe_id() {
 // ── crafting-reservation reassignment (#301 phase 2, API v116) ────────────
 
 #[test]
-fn the_storage_menu_offers_reassignment_once_the_probe_is_known() {
+fn the_container_menu_offers_reassignment_once_the_probe_is_known() {
+    // Containers live in the HOLD pane now (issue #345), and the menu keys off
+    // the selected row's kind rather than off the pane.
     let mut state = AppState::default();
-    state.active_pane = Pane::Storage;
+    state.active_pane = Pane::Hold;
     state.probe = Some(
         serde_json::from_str(
             r#"{"id": 4, "name": "t", "status": "idle",
@@ -2853,7 +2982,12 @@ fn the_storage_menu_offers_reassignment_once_the_probe_is_known() {
         )
         .unwrap(),
     );
-    let menu = state.build_context_menu().expect("storage menu");
+    // The only row is the container, so the cursor is already on it.
+    assert!(matches!(
+        state.selected_inventory_row(),
+        Some(crate::app::InventoryRow::Container { .. })
+    ));
+    let menu = state.build_context_menu().expect("container menu");
     let item = menu
         .items
         .iter()
@@ -2861,11 +2995,16 @@ fn the_storage_menu_offers_reassignment_once_the_probe_is_known() {
         .expect("reassignment offered");
     assert!(item.enabled, "a synced probe gives the id the mirror path needs");
 
-    // The endpoint exists only on the {probeId} mirror, so without a probe sync
-    // there is no path to call — say so rather than fail at request time.
+    // The endpoint exists only on the {probeId} mirror, so without a probe
+    // sync there is no path to call. The HOLD pane still has a menu — its
+    // stock and item actions — but no container is selected, so the
+    // container-only entries are simply not among them (issue #345).
     state.probe = None;
-    let menu = state.build_context_menu();
-    assert!(menu.is_none(), "no probe, no container list, no menu");
+    let menu = state.build_context_menu().expect("the hold always offers something");
+    assert!(
+        !menu.items.iter().any(|i| i.action == MenuAction::ReassignReservations),
+        "no container selected, no container actions"
+    );
 }
 
 // ── safe SCUT corridors (#257, API v96) ───────────────────────────────────
@@ -3592,7 +3731,7 @@ fn a_craft_that_finished_unobserved_completes_on_its_duration() {
 
     // Long past the recipe's duration with the builder idle: it ran its course.
     s.craft_queue[0].duration_secs = 1;
-    s.craft_queue[0].fired_at = Some(std::time::Instant::now() - std::time::Duration::from_secs(5));
+    s.craft_queue[0].fired_at = Some(chrono::Utc::now() - chrono::Duration::seconds(5));
     s.advance_queue();
     assert!(
         matches!(s.craft_queue[0].state, StepState::Done),

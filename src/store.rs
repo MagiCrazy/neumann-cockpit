@@ -67,6 +67,28 @@ CREATE TABLE IF NOT EXISTS telemetry (
 CREATE INDEX IF NOT EXISTS idx_telemetry_probe
     ON telemetry (probe_id, id);
 
+-- The production queue, per probe (issue #324). Tasks already dispatched live
+-- server-side and complete whether or not the cockpit runs; the *plan* did
+-- not, so a crash lost every step that had not fired yet. Rows are replaced
+-- wholesale per probe: a queue is small and always written as one.
+CREATE TABLE IF NOT EXISTS queue_steps (
+    probe_id     INTEGER NOT NULL,   -- 0 = the player's default probe
+    position     INTEGER NOT NULL,
+    fabricator   TEXT NOT NULL,
+    recipe_id    TEXT NOT NULL,
+    recipe_name  TEXT NOT NULL,
+    builder_id   TEXT,
+    builder_name TEXT,
+    pinned       INTEGER NOT NULL,
+    repeat_count INTEGER NOT NULL,
+    completed    INTEGER NOT NULL,
+    duration_secs INTEGER NOT NULL,
+    running      INTEGER NOT NULL,   -- was this step in flight when we stopped?
+    fired_at     TEXT,               -- RFC 3339; wall clock, so it survives
+    paused       INTEGER NOT NULL,
+    PRIMARY KEY (probe_id, position)
+);
+
 -- Small key/value corner for cross-session bookkeeping that is neither
 -- configuration (which the pilot edits) nor a time series. First user: when
 -- the release check last ran, so a relaunch does not re-ask GitHub (#339).
@@ -96,6 +118,104 @@ pub const TELEMETRY_WINDOW: usize = 512;
 fn ensure_columns(conn: &Connection) {
     // observed_by — scan provenance (API v81 multi-probe).
     let _ = conn.execute("ALTER TABLE sector_observations ADD COLUMN observed_by INTEGER", []);
+}
+
+/// One persisted queue: the steps plus whether the pilot had it paused.
+pub struct StoredQueue {
+    pub steps: Vec<StoredStep>,
+    pub paused: bool,
+}
+
+/// A queue step as it survives a restart (issue #324). Deliberately a plain
+/// row rather than `QueuedCraft`: only `Pending`/`Running` are worth keeping —
+/// a `Done` step has nothing left to do and a `Failed` one is a decision the
+/// pilot already saw — so the state collapses to one `running` flag.
+pub struct StoredStep {
+    pub fabricator: String,
+    pub recipe_id: String,
+    pub recipe_name: String,
+    pub builder_id: Option<String>,
+    pub builder_name: Option<String>,
+    pub pinned: bool,
+    pub repeat: u32,
+    pub completed: u32,
+    pub duration_secs: u64,
+    pub running: bool,
+    pub fired_at: Option<String>,
+}
+
+/// Replace one probe's stored queue. `probe_id` is `0` for the default probe,
+/// mirroring `AppState::active_probe_id`'s `None`.
+pub fn save_queue(conn: &Connection, probe_id: u64, queue: &StoredQueue) -> rusqlite::Result<()> {
+    conn.execute("DELETE FROM queue_steps WHERE probe_id = ?1", [probe_id as i64])?;
+    for (position, step) in queue.steps.iter().enumerate() {
+        conn.execute(
+            "INSERT INTO queue_steps (probe_id, position, fabricator, recipe_id, recipe_name,
+                 builder_id, builder_name, pinned, repeat_count, completed, duration_secs,
+                 running, fired_at, paused)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+            rusqlite::params![
+                probe_id as i64,
+                position as i64,
+                step.fabricator,
+                step.recipe_id,
+                step.recipe_name,
+                step.builder_id,
+                step.builder_name,
+                step.pinned as i64,
+                step.repeat as i64,
+                step.completed as i64,
+                step.duration_secs as i64,
+                step.running as i64,
+                step.fired_at,
+                queue.paused as i64,
+            ],
+        )?;
+    }
+    Ok(())
+}
+
+/// Every stored queue, keyed by probe id (`0` = default probe).
+pub fn load_queues(conn: &Connection) -> std::collections::HashMap<u64, StoredQueue> {
+    let mut out: std::collections::HashMap<u64, StoredQueue> = std::collections::HashMap::new();
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT probe_id, fabricator, recipe_id, recipe_name, builder_id, builder_name,
+                pinned, repeat_count, completed, duration_secs, running, fired_at, paused
+         FROM queue_steps ORDER BY probe_id, position",
+    ) else {
+        return out;
+    };
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, i64>(0)? as u64,
+            StoredStep {
+                fabricator: r.get(1)?,
+                recipe_id: r.get(2)?,
+                recipe_name: r.get(3)?,
+                builder_id: r.get(4)?,
+                builder_name: r.get(5)?,
+                pinned: r.get::<_, i64>(6)? != 0,
+                repeat: r.get::<_, i64>(7)? as u32,
+                completed: r.get::<_, i64>(8)? as u32,
+                duration_secs: r.get::<_, i64>(9)? as u64,
+                running: r.get::<_, i64>(10)? != 0,
+                fired_at: r.get(11)?,
+            },
+            r.get::<_, i64>(12)? != 0,
+        ))
+    });
+    if let Ok(rows) = rows {
+        for row in rows.flatten() {
+            let (probe_id, step, paused) = row;
+            let entry = out.entry(probe_id).or_insert(StoredQueue {
+                steps: Vec::new(),
+                paused,
+            });
+            entry.paused = paused;
+            entry.steps.push(step);
+        }
+    }
+    out
 }
 
 /// Read one bookkeeping value. `None` when absent or unreadable — every caller
@@ -128,6 +248,8 @@ pub enum PersistMsg {
     AppendEvent(LogEvent),
     /// Append a telemetry sample (append-only vital-ratio time series).
     AppendTelemetry(TelemetrySample),
+    /// Replace one probe's stored production queue (issue #324).
+    SaveQueue { probe_id: u64, queue: Box<StoredQueue> },
 }
 
 /// What `migrate_legacy_json` did, so the boot preflight can report it.
@@ -369,6 +491,7 @@ pub fn spawn_writer(conn: Connection) -> (Sender<PersistMsg>, Arc<AtomicBool>) {
                 PersistMsg::UpsertObservation(obs) => upsert_observation(&conn, &obs),
                 PersistMsg::AppendEvent(ev) => append_event(&conn, &ev),
                 PersistMsg::AppendTelemetry(s) => append_telemetry(&conn, &s),
+                PersistMsg::SaveQueue { probe_id, queue } => save_queue(&conn, probe_id, &queue),
             };
             if result.is_err() {
                 flag.store(true, Ordering::Relaxed);
@@ -381,6 +504,67 @@ pub fn spawn_writer(conn: Connection) -> (Sender<PersistMsg>, Arc<AtomicBool>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_stored_queue_round_trips_per_probe() {
+        // Rows are replaced wholesale per probe, so a shrinking queue must not
+        // leave orphans behind (issue #324).
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        let step = |name: &str| StoredStep {
+            fabricator: "manny".into(),
+            recipe_id: format!("{name}_id"),
+            recipe_name: name.into(),
+            builder_id: None,
+            builder_name: None,
+            pinned: false,
+            repeat: 2,
+            completed: 1,
+            duration_secs: 600,
+            running: false,
+            fired_at: None,
+        };
+
+        save_queue(
+            &conn,
+            0,
+            &StoredQueue {
+                steps: vec![step("steel_plate"), step("linear_actuator")],
+                paused: true,
+            },
+        )
+        .unwrap();
+        save_queue(
+            &conn,
+            7,
+            &StoredQueue {
+                steps: vec![step("integrated_circuit")],
+                paused: false,
+            },
+        )
+        .unwrap();
+
+        let loaded = load_queues(&conn);
+        assert_eq!(loaded.len(), 2, "one entry per probe");
+        let default = &loaded[&0];
+        assert_eq!(default.steps.len(), 2);
+        assert_eq!(default.steps[0].recipe_name, "steel_plate", "order is kept");
+        assert_eq!(default.steps[0].completed, 1);
+        assert!(default.paused);
+        assert!(!loaded[&7].paused, "each probe keeps its own pause state");
+
+        // Re-saving shorter leaves nothing behind.
+        save_queue(
+            &conn,
+            0,
+            &StoredQueue {
+                steps: vec![step("steel_plate")],
+                paused: false,
+            },
+        )
+        .unwrap();
+        assert_eq!(load_queues(&conn)[&0].steps.len(), 1);
+    }
 
     #[test]
     fn meta_round_trips_and_treats_a_missing_key_as_never_happened() {

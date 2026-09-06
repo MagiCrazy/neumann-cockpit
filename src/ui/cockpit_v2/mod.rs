@@ -12,7 +12,7 @@ mod menu;
 mod panes;
 /// Shared by the reused panels (`ui/panels/`), which scroll their line list
 /// the same way the grid panes do (issues #292, #293).
-pub(crate) use panes::{manny_detail_height, scroll_offset};
+pub(crate) use panes::{manny_detail_height, render_container_contents, scroll_offset};
 
 use crate::app::{AppState, DrillLevel, Pane};
 use crate::ui::panels::{render_inventory_panel, render_mannies_panel, render_probe_panel, render_scanner_panel};
@@ -177,7 +177,7 @@ fn render_pane(frame: &mut Frame, area: Rect, pane: Pane, state: &AppState, acti
     match pane {
         // Reused classic renderers keep their own colours for now.
         Pane::Probe => render_probe_panel(frame, area, state, active),
-        Pane::Inventory => render_inventory_panel(frame, area, state, active),
+        Pane::Hold => render_inventory_panel(frame, area, state, active),
         Pane::Scanner => {
             if state.zoomed {
                 panes::render_scanner_neighbors(frame, area, state, active);
@@ -200,7 +200,9 @@ fn render_pane(frame: &mut Frame, area: Rect, pane: Pane, state: &AppState, acti
         Pane::Comms => panes::render_comms(frame, area, state, active, p),
         Pane::Sector => panes::render_sector(frame, area, state, active, p),
         Pane::Missions => panes::render_missions(frame, area, state, active, p),
-        Pane::Storage => panes::render_storage(frame, area, state, active, p),
+        // The freed pane (issue #345): the ship's log graduates out of the
+        // Missions pane, where CLAUDE.md always said it was only parked.
+        Pane::Log => panes::render_log(frame, area, state, active, p),
     }
 }
 

@@ -10,9 +10,20 @@ use ratatui::{
 use crate::ui::theme::{block_gauge_line, item_icon, pane_block, ratio_color};
 // ── Inventory panel ───────────────────────────────────────────────────────────
 
+/// The HOLD pane (issue #345): the probe's own cargo **and** its containers,
+/// which used to be two panes answering the same question from two angles —
+/// and one of which already drew the other's list, inert.
+///
+/// Compact is one flat list (stocks → containers → items → tanks); zoom splits
+/// it in two so the selected container's routing rules are permanently visible
+/// instead of needing a zoom *and* a scroll to reach.
 pub(crate) fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focused: bool) {
     let p = state.palette();
-    let block = pane_block(" INVENTORY ", focused, p);
+    // Drilled into a container: its live contents, fetched on drill-in.
+    if let Some(crate::app::DrillLevel::Container(id)) = state.pane_nav[crate::app::Pane::Hold.index()].drill.last() {
+        return crate::ui::cockpit_v2::render_container_contents(frame, area, state, id, focused, p);
+    }
+    let block = pane_block(" HOLD ", focused, p);
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
@@ -30,7 +41,6 @@ pub(crate) fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppS
     };
 
     let items_expanded = focused && !inv.items.is_empty();
-    let containers_rows = containers_row_count(inv, focused);
     let tanks_rows = tanks_row_count(inv, focused);
 
     // Every row is one Line, collected then rendered as a single scrolled
@@ -86,6 +96,77 @@ pub(crate) fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppS
             Span::styled(format!("{:.3}", stock.amount), Style::default().fg(p.text)),
             Span::styled(" ECE", Style::default().fg(p.dim)),
         ]));
+    }
+
+    // ── Containers ── selectable rows now, not decoration (#345).
+    //
+    // Zoomed, they move to a column of their own with the selected one's
+    // routing rules under them: that is the question the old Storage pane
+    // answered and the one a flat list buries. `container_lines` therefore
+    // collects them separately, but the cursor indices stay in one order —
+    // stocks, then containers, then items — matching `inventory_rows`.
+    let containers = state.storage_containers_ordered();
+    let mut container_lines: Vec<Line> = Vec::new();
+    let mut container_sel: Option<usize> = None;
+    let zoomed = state.zoomed;
+    if !containers.is_empty() {
+        let sink = if zoomed { &mut container_lines } else { &mut lines };
+        sink.push(Line::from(Span::styled(
+            if state.storage_sort_alpha {
+                "── containers · a-z ──"
+            } else {
+                "── containers ──"
+            },
+            Style::default().fg(p.dim),
+        )));
+        for c in &containers {
+            let selected = focused && nav_idx == state.inventory_selection;
+            nav_idx += 1;
+            let sink = if zoomed { &mut container_lines } else { &mut lines };
+            if selected {
+                if zoomed {
+                    container_sel = Some(sink.len());
+                } else {
+                    sel_line = Some(sink.len());
+                }
+            }
+            let ratio = if c.capacity > 0.0 {
+                (c.used_capacity / c.capacity).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            let name: String = c.label.chars().take(11).collect();
+            let rules = &c.rules;
+            let routed =
+                !rules.priority.is_empty() || !rules.exclusion.is_empty() || !rules.strict_exclusion.is_empty();
+            let mut spans = vec![sel_prefix(selected)];
+            spans.extend(block_gauge_line(&name, ratio, &format!("{:.0}%", ratio * 100.0), p.accent, p).spans);
+            if routed {
+                spans.push(Span::styled(" ⚙", Style::default().fg(p.accent)));
+            }
+            sink.push(Line::from(spans));
+            // Zoomed, the selected container states its routing in full — the
+            // whole point of giving it a column.
+            if zoomed && selected {
+                let dim = Style::default().fg(p.dim);
+                for (label, rule) in [
+                    ("priority", &rules.priority),
+                    ("exclude ", &rules.exclusion),
+                    ("strict  ", &rules.strict_exclusion),
+                ] {
+                    if !rule.is_empty() {
+                        sink.push(Line::styled(format!("    {label}: {}", rule.join(", ")), dim));
+                    }
+                }
+                if !routed {
+                    sink.push(Line::styled("    no routing rules", dim));
+                }
+                sink.push(Line::styled(
+                    format!("    free {:.2} of {:.2}", c.free_capacity, c.capacity),
+                    dim,
+                ));
+            }
+        }
     }
 
     // ── Items ──
@@ -149,29 +230,6 @@ pub(crate) fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppS
         ]));
     }
 
-    // ── Containers ── (display only, expanded view)
-    if containers_rows > 0 {
-        lines.push(Line::from(Span::styled("── containers ──", Style::default().fg(p.dim))));
-
-        let mut containers: Vec<_> = inv.containers.iter().collect();
-        containers.sort_by_key(|c| c.sort_order);
-        for c in containers {
-            let name: String = c.label.chars().take(9).collect();
-            let ratio = if c.capacity > 0.0 {
-                (c.used_capacity / c.capacity).clamp(0.0, 1.0)
-            } else {
-                0.0
-            };
-            lines.push(block_gauge_line(
-                &name,
-                ratio,
-                &format!("{:.1}/{:.1}", c.used_capacity, c.capacity),
-                p.accent,
-                p,
-            ));
-        }
-    }
-
     // ── External tanks ── (display only, expanded view)
     if tanks_rows > 0 {
         lines.push(Line::from(Span::styled("── tanks ──", Style::default().fg(p.dim))));
@@ -194,16 +252,29 @@ pub(crate) fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppS
         .map(|c| crate::ui::cockpit_v2::scroll_offset((c, c), lines.len(), inner.height as usize))
         .unwrap_or(0);
     let total = lines.len();
-    frame.render_widget(Paragraph::new(lines).scroll((offset, 0)), inner);
-    crate::ui::theme::scroll_markers(frame, area, offset, total, focused, p);
-}
-
-pub(crate) fn containers_row_count(inv: &crate::api::types::ProbeInventory, focused: bool) -> usize {
-    if focused && !inv.containers.is_empty() {
-        1 + inv.containers.len()
-    } else {
-        0
+    if container_lines.is_empty() {
+        frame.render_widget(Paragraph::new(lines).scroll((offset, 0)), inner);
+        crate::ui::theme::scroll_markers(frame, area, offset, total, focused, p);
+        return;
     }
+    // Two columns, zoomed: the hold on the left, the containers and the
+    // selected one's routing on the right.
+    use ratatui::layout::{Constraint, Direction, Layout};
+    use ratatui::widgets::{Block, Borders};
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(inner);
+    frame.render_widget(Paragraph::new(lines).scroll((offset, 0)), cols[0]);
+    let divider = Block::default()
+        .borders(Borders::LEFT)
+        .border_style(Style::default().fg(p.dim));
+    let right = divider.inner(cols[1]);
+    frame.render_widget(divider, cols[1]);
+    let c_off = container_sel
+        .map(|c| crate::ui::cockpit_v2::scroll_offset((c, c), container_lines.len(), right.height as usize))
+        .unwrap_or(0);
+    frame.render_widget(Paragraph::new(container_lines).scroll((c_off, 0)), right);
 }
 
 pub(crate) fn tanks_row_count(inv: &crate::api::types::ProbeInventory, focused: bool) -> usize {

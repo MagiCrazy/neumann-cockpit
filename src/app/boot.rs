@@ -28,12 +28,12 @@ const BOOT_AUTO_CONTINUE: u64 = BOOT_SEQUENCE_END + 22;
 const OTHER_ORDER: [Pane; 8] = [
     Pane::Map,
     Pane::Missions,
-    Pane::Storage,
+    Pane::Log,
     Pane::Sector,
     Pane::Scanner,
     Pane::Comms,
     Pane::Mannies,
-    Pane::Inventory,
+    Pane::Hold,
 ];
 
 /// Boot frame at which a pane comes online: the probe immediately, the rest
@@ -137,19 +137,19 @@ impl AppState {
                 ("PRIORITY", s("SET")),
                 ("LOG", s("OK")),
             ],
-            Pane::Inventory => vec![
-                ("AUTOFACTORY", s("IDLE")),
-                ("FEEDSTOCK", s("SYNC")),
+            Pane::Hold => vec![
                 ("CARGO", s("SYNC")),
-                ("MATTER PRINTER", s("OK")),
+                ("FEEDSTOCK", s("SYNC")),
+                ("HOLDS", s("INDEXED")),
+                ("ROUTING", s("OK")),
                 ("MANIFEST", s("SEALED")),
             ],
-            Pane::Storage => vec![
-                ("HOLDS", s("INDEXED")),
-                ("BINS", s("SYNC")),
-                ("ROUTING", s("OK")),
-                ("CAPACITY", s("OK")),
-                ("SEALS", s("OK")),
+            Pane::Log => vec![
+                ("LOGBOOK", s("OPEN")),
+                ("INK", s("OK")),
+                ("WITNESS", s("SYNC")),
+                ("ARCHIVE", s("SEALED")),
+                ("CHRONOMETER", s("OK")),
             ],
             Pane::Mannies => vec![
                 ("MANNY BAY", s("UNLOCKED")),
@@ -169,7 +169,7 @@ mod tests {
     #[test]
     fn probe_reveals_first_corners_last() {
         assert_eq!(boot_reveal_frame(Pane::Probe), 0);
-        assert!(boot_reveal_frame(Pane::Inventory) > boot_reveal_frame(Pane::Map));
+        assert!(boot_reveal_frame(Pane::Hold) > boot_reveal_frame(Pane::Map));
     }
 
     #[test]

@@ -217,6 +217,16 @@ pub struct AppState {
     /// the state layer owns no filesystem, and a render pass must never block
     /// on a write.
     pub pending_settings_save: bool,
+    /// Set when the production queue changed and should be written back
+    /// (issue #324). Drained by the event loop, like `pending_journal`.
+    pub pending_queue_save: bool,
+    /// The active probe's server logbook pages (API v90, issue #254), fetched
+    /// lazily when the Logbook category is opened. `None` until then, so the
+    /// pane can say "loading" rather than "empty".
+    pub logbook_pages: Option<Vec<crate::api::types::LogbookPageSummary>>,
+    /// The page being read, once its body has arrived.
+    pub logbook_page: Option<crate::api::types::LogbookPage>,
+    pub logbook_error: Option<String>,
     /// A published release newer than this build, if the check ran and found
     /// one (issue #339). Display only — the cockpit never updates itself.
     pub update_available: Option<String>,

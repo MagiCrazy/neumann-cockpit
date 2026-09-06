@@ -144,9 +144,17 @@ impl super::AppState {
     pub fn build_context_menu(&self) -> Option<ContextMenu> {
         match self.active_pane {
             super::Pane::Mannies => self.mannies_context_menu(),
-            super::Pane::Inventory => Some(self.inventory_context_menu()),
+            // The Hold's menu depends on which kind of row the cursor is on:
+            // a container is renamed and routed, a stock is moved and thrown
+            // overboard (issue #345). No action from either old pane is lost.
+            super::Pane::Hold => match self.selected_inventory_row() {
+                Some(super::InventoryRow::Container { .. }) => self.storage_context_menu(),
+                _ => Some(self.inventory_context_menu()),
+            },
             super::Pane::Probe => self.probe_context_menu(),
-            super::Pane::Storage => self.storage_context_menu(),
+            // The Log pane is a read-only journal; the Hold's menu depends on
+            // which kind of row the cursor is on (issue #345).
+            super::Pane::Log => None,
             super::Pane::Scanner => Some(self.scanner_context_menu()),
             super::Pane::Map => Some(self.map_context_menu()),
             _ => None,
@@ -257,10 +265,15 @@ impl super::AppState {
         }
     }
 
+    /// The container half of the Hold menu (issue #345): what a container can
+    /// be told to do, as opposed to what a stock or an item can.
     fn storage_context_menu(&self) -> Option<ContextMenu> {
-        let cur = self.pane_nav[super::Pane::Storage.index()].cursor;
+        let id = match self.selected_inventory_row()? {
+            super::InventoryRow::Container { id } => id,
+            _ => return None,
+        };
         let ordered = self.storage_containers_ordered();
-        let c = ordered.get(cur)?;
+        let c = ordered.iter().find(|c| c.id == id)?;
         Some(ContextMenu {
             title: c.label.clone(),
             items: vec![

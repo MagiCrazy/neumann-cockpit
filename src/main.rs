@@ -12,8 +12,8 @@ use tokio::sync::mpsc;
 
 use neumann_cockpit::api::tasks::{
     fetch_all, fetch_api_version, fetch_atomic_printer_craft, fetch_craft, fetch_crafting_recipes, fetch_detach,
-    fetch_mannies, fetch_manny, fetch_manny_tasks, fetch_messages, fetch_mine, fetch_missions, fetch_move,
-    fetch_recover, fetch_repair, fetch_salvage, fetch_sent_messages, fetch_unread_message_count,
+    fetch_logbook_pages, fetch_mannies, fetch_manny, fetch_manny_tasks, fetch_messages, fetch_mine, fetch_missions,
+    fetch_move, fetch_recover, fetch_repair, fetch_salvage, fetch_sent_messages, fetch_unread_message_count,
 };
 use neumann_cockpit::app::{
     batch_tasks, ActiveWizard, ApiMessage, AppState, ColorMode, CraftFire, Fabricator, MessagesInput, MissionsInput,
@@ -108,6 +108,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
         scan_history,
         journal,
         telemetry,
+        queues,
         api_version,
         link_ok,
         polarity,
@@ -148,6 +149,11 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
         api_version,
         ..Default::default()
     };
+    // The production queue survives a restart (issue #324). Restored after the
+    // state is built so the piloted probe is known: its queue becomes live, the
+    // others go back to the parking `sync_queue_probe` left them in.
+    state.restore_queues(queues);
+
     // The remote link was already probed in the preflight; surface a down link
     // straight away so the pilot sees why data is missing (F5 retries).
     if !link_ok {
@@ -210,6 +216,20 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
         // background fetch whose errors are dropped silently.
         state.rate_limited_secs = client.throttled_for_secs();
         state.rate_limit_quota = client.quota();
+
+        // Persist the production queue when it changed (issue #324). Through
+        // the same writer thread as everything else, so it never blocks a
+        // frame — and dropped silently without one, a cockpit with no archive
+        // having nothing to persist to.
+        if std::mem::take(&mut state.pending_queue_save) {
+            if let Some(tx) = &persist_tx {
+                let probe_id = state.active_probe_id.unwrap_or(0);
+                let _ = tx.send(store::PersistMsg::SaveQueue {
+                    probe_id,
+                    queue: Box::new(state.stored_queue()),
+                });
+            }
+        }
 
         // Write back a runtime toggle (issue #331). Off the render path, and
         // a failure is a toast rather than a crash: losing a preference is not
@@ -396,6 +416,36 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                     // urgent, and a modal about housekeeping in the middle of
                     // a mining run would be an intrusion.
                     ApiMessage::LatestRelease(tag) => state.note_latest_release(&tag),
+                    // ── Probe logbook (issue #254) ───────────────────────
+                    ApiMessage::LogbookPagesFetched(pages) => {
+                        state.logbook_error = None;
+                        state.logbook_pages = Some(pages);
+                    }
+                    ApiMessage::LogbookPageFetched(page) => {
+                        state.logbook_error = None;
+                        state.logbook_page = Some(page);
+                    }
+                    ApiMessage::LogbookPageSaved(page) => {
+                        state.logbook_error = None;
+                        state.set_toast(format!("logbook page saved: {}", page.title));
+                        state.logbook_page = Some(page);
+                        // The list carries titles and timestamps, both of which
+                        // a save may have changed, so it is re-read rather than
+                        // patched in place.
+                        if let Some(id) = state.probe_id() {
+                            fetch_logbook_pages(id, client.clone(), tx.clone());
+                        }
+                    }
+                    ApiMessage::LogbookPageDeleted(id) => {
+                        state.set_toast("logbook page deleted");
+                        if state.logbook_page.as_ref().is_some_and(|p| p.id == id) {
+                            state.logbook_page = None;
+                        }
+                        if let Some(pages) = state.logbook_pages.as_mut() {
+                            pages.retain(|p| p.id != id);
+                        }
+                    }
+                    ApiMessage::LogbookError(msg) => state.logbook_error = Some(msg),
                     ApiMessage::ProbeUpdated(probe) => state.update_probe(probe),
                     ApiMessage::FleetFetched(list) => state.update_fleet(list),
                     ApiMessage::DefaultProbeSet(list, name) => {

@@ -730,6 +730,7 @@ pub enum ActiveWizard {
     Detach(DetachInput),
     Alerts(AlertsInput),
     RenameContainer(RenameContainerInput),
+    Logbook(LogbookInput),
     ContainerRules(ContainerRulesInput),
     StorageMove(StorageMoveInput),
     DropCargo(DropCargoInput),
@@ -739,4 +740,33 @@ pub enum ActiveWizard {
     Mine(MineInput),
     RemoteMine(RemoteMineInput),
     Script(ScriptInput),
+}
+
+/// Writing a logbook page (API v90, issue #254): the title, then the body,
+/// then a delete confirmation for the destructive half.
+///
+/// A page is prose, so the editor is two plain text buffers rather than a
+/// pick-list — and both are bounded client-side (`LOGBOOK_TITLE_MAX`,
+/// `LOGBOOK_CONTENT_MAX`) so an over-long page is refused here instead of
+/// spending a 400 to find out.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub enum LogbookInput {
+    #[default]
+    Inactive,
+    /// Typing the title. `page_id` is `None` for a new page.
+    Title {
+        page_id: Option<u64>,
+        title: String,
+        content: String,
+        error: Option<String>,
+    },
+    /// Typing the body.
+    Content {
+        page_id: Option<u64>,
+        title: String,
+        content: String,
+        error: Option<String>,
+    },
+    /// Confirming a deletion — destructive and server-side, so it asks.
+    ConfirmDelete { page_id: u64, title: String },
 }

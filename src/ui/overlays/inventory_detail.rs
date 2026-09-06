@@ -88,6 +88,10 @@ pub(crate) fn render_inventory_detail_overlay(frame: &mut Frame, area: Rect, sta
             }
             (item.name.clone(), lines)
         }
+        // A container has a drill-in of its own (`l` on the row) showing its
+        // live contents, so the read-only popup would only ever be a worse
+        // version of it.
+        InventoryRow::Container { .. } => return,
         InventoryRow::PassiveGroup { item_type } => {
             let items: Vec<_> = inv.items.iter().filter(|i| i.item_type == item_type).collect();
             let Some(first) = items.first() else { return };

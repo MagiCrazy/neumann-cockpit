@@ -10,9 +10,21 @@ pub fn is_active_item(item_type: &str) -> bool {
 /// One navigable row of the inventory panel, in display order.
 #[derive(Debug, Clone, PartialEq)]
 pub enum InventoryRow {
-    Stock { id: String },
-    ActiveItem { id: String },
-    PassiveGroup { item_type: String },
+    Stock {
+        id: String,
+    },
+    /// A storage container (issue #345). Containers were always *drawn* in
+    /// this pane but could not be selected — the Storage pane owned that. Now
+    /// that the two are one, they are rows like any other.
+    Container {
+        id: String,
+    },
+    ActiveItem {
+        id: String,
+    },
+    PassiveGroup {
+        item_type: String,
+    },
 }
 
 impl AppState {
@@ -41,6 +53,15 @@ impl AppState {
         let mut out: Vec<InventoryRow> = Vec::new();
         for stock in &inv.resource_stocks {
             out.push(InventoryRow::Stock { id: stock.id.clone() });
+        }
+        // Containers sit between the loose stocks and the items: the pilot
+        // reads "what do I hold" top-down, and a container is a holding.
+        // `storage_containers_ordered` is *the* ordering — the cursor indexes
+        // into this list, so every consumer must read the same slice (#333).
+        for container in self.storage_containers_ordered() {
+            out.push(InventoryRow::Container {
+                id: container.id.clone(),
+            });
         }
         for item in inv.items.iter().filter(|i| is_active_item(&i.item_type)) {
             out.push(InventoryRow::ActiveItem { id: item.id.clone() });
@@ -141,6 +162,9 @@ impl AppState {
             Some(InventoryRow::PassiveGroup { .. }) => {
                 Err("only resource stocks, mannies and SCUT relays can be jettisoned".into())
             }
+            // A container is detached or recovered by a Manny, never thrown
+            // overboard from the hold — its own menu offers those.
+            Some(InventoryRow::Container { .. }) => Err("a container is detached or recovered, not jettisoned".into()),
             None => Err("inventory is empty".into()),
         }
     }

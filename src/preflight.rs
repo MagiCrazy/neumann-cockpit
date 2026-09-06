@@ -78,6 +78,8 @@ pub struct Ready {
     pub scan_history: Vec<SectorObservation>,
     pub journal: Vec<LogEvent>,
     pub telemetry: Vec<crate::app::TelemetrySample>,
+    /// Production queues read from the archive, keyed by probe id (issue #324).
+    pub queues: std::collections::HashMap<u64, store::StoredQueue>,
     pub api_version: Option<u32>,
     pub link_ok: bool,
     /// Terminal ground resolved at boot: detected via OSC 11, or forced by the
@@ -272,19 +274,20 @@ pub async fn run(terminal: &mut Term, color: ColorMode, polarity: Polarity) -> R
     // ── ARCHIVE (local SQLite store) ────────────────────────────────────
     log.begin("ARCHIVE");
     redraw(terminal, &log, None, None, color, polarity)?;
-    let (conn, scan_history, journal, telemetry) = match store::open(&config::db_path()) {
+    let (conn, scan_history, journal, telemetry, queues) = match store::open(&config::db_path()) {
         Ok(mut conn) => {
             let outcome = store::migrate_legacy_json(&mut conn, &config::history_path())
                 .unwrap_or(store::MigrationOutcome::NoLegacyFile);
             let history = store::load_observations(&conn);
             let journal = store::load_events(&conn);
             let telemetry = store::load_telemetry(&conn);
+            let queues = store::load_queues(&conn);
             log.set(Status::Ok(archive_line(outcome, history.len(), journal.len())));
-            (Some(conn), history, journal, telemetry)
+            (Some(conn), history, journal, telemetry, queues)
         }
         Err(e) => {
             log.set(Status::Warn(format!("disabled: {e}")));
-            (None, Vec::new(), Vec::new(), Vec::new())
+            (None, Vec::new(), Vec::new(), Vec::new(), Default::default())
         }
     };
 
@@ -330,6 +333,7 @@ pub async fn run(terminal: &mut Term, color: ColorMode, polarity: Polarity) -> R
         scan_history,
         journal,
         telemetry,
+        queues,
         api_version,
         link_ok,
         polarity,

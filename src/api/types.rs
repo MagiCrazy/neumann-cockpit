@@ -298,6 +298,43 @@ pub struct ProbeInventory {
     pub containers: Vec<StorageContainer>,
 }
 
+// ── Probe logbook (API v90) ───────────────────────────────────────────────────
+//
+// The **manual** pages a pilot writes, stored server-side per probe. Distinct
+// from the local ship's log (`store`'s `events` table), which is the automatic
+// action journal: one is a captain writing, the other is the ship recording
+// (issue #254). Neither is migrated into the other.
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LogbookPageSummary {
+    pub id: u64,
+    pub probe_id: u64,
+    pub title: String,
+    pub sort_order: u64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// A page with its body. The list endpoint returns summaries only, so the
+/// content arrives on the single-page GET.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LogbookPage {
+    pub id: u64,
+    pub probe_id: u64,
+    pub title: String,
+    pub sort_order: u64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub content: String,
+}
+
+/// Server-side limits, mirrored so the editor can refuse over-long input
+/// locally instead of spending a 400 on it.
+pub const LOGBOOK_TITLE_MAX: usize = 120;
+pub const LOGBOOK_CONTENT_MAX: usize = 20_000;
+
 // ── Alerts & damage warnings ──────────────────────────────────────────────────
 //
 // `/api/probe/alerts` and `/api/probe/damage-warnings` both return the same

@@ -9,6 +9,7 @@ pub(crate) mod help;
 pub(crate) mod improve;
 pub(crate) mod inventory_detail;
 pub(crate) mod jettison;
+pub(crate) mod logbook;
 pub(crate) mod map;
 pub(crate) mod messages;
 pub(crate) mod mine;
@@ -39,6 +40,7 @@ pub(crate) use help::{help_row_count, render_help_overlay};
 pub(crate) use improve::render_improve_overlay;
 pub(crate) use inventory_detail::render_inventory_detail_overlay;
 pub(crate) use jettison::render_jettison_overlay;
+pub(crate) use logbook::render_logbook_overlay;
 pub(crate) use map::{render_goto_visited_overlay, render_map_overlay};
 pub(crate) use messages::render_messages_overlay;
 pub(crate) use mine::render_mine_overlay;
@@ -114,6 +116,7 @@ const WIZARD_OVERLAYS: &[(OverlayGuard, OverlayRender)] = &[
     (|s| matches!(s.active_wizard, ActiveWizard::ObjectAction(_)), render_object_action_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::Waypoints(_)), render_waypoints_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::RenameContainer(_)), render_rename_container_overlay),
+    (|s| matches!(s.active_wizard, ActiveWizard::Logbook(_)), render_logbook_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::ContainerRules(_)), render_container_rules_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::StorageMove(_)), render_storage_move_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::Script(_)), render_script_overlay),

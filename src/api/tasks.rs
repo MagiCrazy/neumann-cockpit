@@ -617,6 +617,68 @@ pub fn fetch_transfer_manny(manny_id: String, target_probe_id: u64, client: ApiC
     );
 }
 
+// ── Probe logbook (API v90, issue #254) ──────────────────────────────────────
+//
+// Mirror-only endpoints, so each carries the piloted probe's id explicitly.
+
+pub fn fetch_logbook_pages(probe_id: u64, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    spawn_action(
+        tx,
+        async move { client.get_logbook_pages(probe_id).await },
+        ApiMessage::LogbookPagesFetched,
+        ApiMessage::LogbookError,
+    );
+}
+
+pub fn fetch_logbook_page(probe_id: u64, page_id: u64, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    spawn_action(
+        tx,
+        async move { client.get_logbook_page(probe_id, page_id).await },
+        ApiMessage::LogbookPageFetched,
+        ApiMessage::LogbookError,
+    );
+}
+
+pub fn fetch_create_logbook_page(
+    probe_id: u64,
+    title: String,
+    content: String,
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+) {
+    spawn_action(
+        tx,
+        async move { client.create_logbook_page(probe_id, &title, &content).await },
+        ApiMessage::LogbookPageSaved,
+        ApiMessage::LogbookError,
+    );
+}
+
+pub fn fetch_update_logbook_page(
+    probe_id: u64,
+    page_id: u64,
+    title: String,
+    content: String,
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+) {
+    spawn_action(
+        tx,
+        async move { client.update_logbook_page(probe_id, page_id, &title, &content).await },
+        ApiMessage::LogbookPageSaved,
+        ApiMessage::LogbookError,
+    );
+}
+
+pub fn fetch_delete_logbook_page(probe_id: u64, page_id: u64, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    spawn_action(
+        tx,
+        async move { client.delete_logbook_page(probe_id, page_id).await.map(|_| page_id) },
+        ApiMessage::LogbookPageDeleted,
+        ApiMessage::LogbookError,
+    );
+}
+
 pub fn fetch_scut_network(network_id: i64, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
     spawn_action(
         tx,
