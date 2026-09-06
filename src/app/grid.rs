@@ -124,6 +124,10 @@ pub enum DrillLevel {
     SectorObject(usize),
     /// Which category the Comms pane is drilled into.
     CommsCat(CommsCategory),
+    /// Which half of the Log pane is open (issue #254).
+    LogCat(LogCategory),
+    /// A logbook page being read.
+    LogbookPage(u64),
 }
 
 /// The three sub-lists of the Comms pane, selectable at its root.
@@ -147,7 +151,28 @@ impl CommsCategory {
     pub const ALL: [CommsCategory; 3] = [CommsCategory::Messages, CommsCategory::Alerts, CommsCategory::Warnings];
 }
 
-/// The two sub-views of the Missions pane, selectable at its root: the active
+/// The two halves of the Log pane (issue #254). They are deliberately not
+/// merged: the ship's log is what the **ship** recorded — narrated actions,
+/// local, automatic, append-only — and the logbook is what the **pilot**
+/// wrote, stored server-side per probe. One is a flight recorder, the other a
+/// diary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LogCategory {
+    ShipsLog,
+    Logbook,
+}
+
+impl LogCategory {
+    pub fn label(self) -> &'static str {
+        match self {
+            LogCategory::ShipsLog => "Ship's log",
+            LogCategory::Logbook => "Logbook",
+        }
+    }
+
+    pub const ALL: [LogCategory; 2] = [LogCategory::ShipsLog, LogCategory::Logbook];
+}
+
 /// Per-pane navigation state: the cursor at the current level plus the
 /// drill-in breadcrumb below the pane root.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -193,8 +218,14 @@ impl super::AppState {
                 }
                 _ => self.missions.len(),
             },
-            // The ship's log is a flat list of entries.
-            Pane::Log => self.ship_log_entries().len(),
+            // Root: the two halves. Ship's log: its entries. Logbook: its
+            // pages — or zero while they are still on the wire (issue #254).
+            Pane::Log => match drill {
+                None => LogCategory::ALL.len(),
+                Some(DrillLevel::LogCat(LogCategory::ShipsLog)) => self.ship_log_entries().len(),
+                Some(DrillLevel::LogCat(LogCategory::Logbook)) => self.logbook_pages.as_ref().map_or(0, |p| p.len()),
+                _ => 0,
+            },
             // Drilled into a container, the cursor is frozen (contents are
             // rendered inline, read-only).
             Pane::Hold => match drill {
@@ -391,6 +422,29 @@ impl super::AppState {
         nav.cursor = 0;
     }
 
+    /// Which half of the Log pane is open, if any (issue #254).
+    pub fn log_category(&self) -> Option<LogCategory> {
+        self.pane_nav[Pane::Log.index()].drill.iter().find_map(|l| match l {
+            DrillLevel::LogCat(c) => Some(*c),
+            _ => None,
+        })
+    }
+
+    /// Enter one half of the Log pane.
+    pub fn log_enter_category(&mut self, cat: LogCategory) {
+        let nav = &mut self.pane_nav[Pane::Log.index()];
+        nav.drill.push(DrillLevel::LogCat(cat));
+        nav.cursor = 0;
+    }
+
+    /// The logbook page currently open for reading, if any.
+    pub fn logbook_open_page(&self) -> Option<u64> {
+        self.pane_nav[Pane::Log.index()].drill.iter().find_map(|l| match l {
+            DrillLevel::LogbookPage(id) => Some(*id),
+            _ => None,
+        })
+    }
+
     /// Drill from the missions list into the selected mission's steps.
     pub fn missions_drill_into(&mut self, id: String) {
         let nav = &mut self.pane_nav[Pane::Missions.index()];
@@ -473,6 +527,13 @@ impl super::AppState {
                     .find(|m| &m.id == id)
                     .map_or_else(|| "mission".to_string(), |m| m.title.clone()),
                 DrillLevel::CommsCat(cat) => cat.label().to_string(),
+                DrillLevel::LogCat(cat) => cat.label().to_string(),
+                DrillLevel::LogbookPage(id) => self
+                    .logbook_pages
+                    .iter()
+                    .flatten()
+                    .find(|p| p.id == *id)
+                    .map_or_else(|| "page".to_string(), |p| p.title.clone()),
                 DrillLevel::Container(id) => self
                     .storage_container(id)
                     .map_or_else(|| id.clone(), |c| c.label.clone()),

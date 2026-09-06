@@ -589,7 +589,131 @@ fn render_mission_detail(frame: &mut Frame, area: Rect, state: &AppState, id: &s
 }
 
 /// Missions root: two selectable rows (active missions, ship's log) with counts
-pub fn render_ship_log(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {
+/// The LOG pane (issues #345, #254): a root with two halves — what the ship
+/// recorded and what the pilot wrote — then the chosen one.
+pub fn render_log(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {
+    match state.log_category() {
+        None => render_log_root(frame, area, state, active, p),
+        Some(crate::app::LogCategory::ShipsLog) => render_ship_log(frame, area, state, active, p),
+        Some(crate::app::LogCategory::Logbook) => match state.logbook_open_page() {
+            Some(id) => render_logbook_page(frame, area, state, id, active, p),
+            None => render_logbook_list(frame, area, state, active, p),
+        },
+    }
+}
+
+/// The root: the two halves with a count each, so the pilot picks by what is
+/// in them rather than by name.
+fn render_log_root(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {
+    let dim = Style::default().fg(p.dim);
+    let text = Style::default().fg(p.text);
+    let cur = cursor(state, Pane::Log);
+    let mut lines = Vec::new();
+    let mut sel_line = None;
+    for (i, cat) in crate::app::LogCategory::ALL.iter().enumerate() {
+        if i == cur {
+            sel_line = Some((lines.len(), lines.len()));
+        }
+        let count = match cat {
+            crate::app::LogCategory::ShipsLog => Some(state.ship_log_entries().len()),
+            crate::app::LogCategory::Logbook => state.logbook_pages.as_ref().map(|p| p.len()),
+        };
+        lines.push(Line::from(vec![
+            Span::styled(if i == cur { "▶ " } else { "  " }, Style::default().fg(p.accent)),
+            Span::styled(format!("{:<12}", cat.label()), row_style(active, i == cur).patch(text)),
+            Span::styled(
+                match count {
+                    Some(n) => n.to_string(),
+                    None => "—".to_string(),
+                },
+                dim,
+            ),
+        ]));
+    }
+    render_body(frame, area, " SHIP'S LOG ", active, p, lines, sel_line);
+}
+
+/// The pilot's own pages: titles and when each was last touched.
+fn render_logbook_list(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {
+    let dim = Style::default().fg(p.dim);
+    let text = Style::default().fg(p.text);
+    let mut lines = Vec::new();
+    let mut sel_line = None;
+    match state.logbook_pages.as_ref() {
+        None => lines.push(Line::styled(
+            state
+                .logbook_error
+                .clone()
+                .unwrap_or_else(|| "fetching pages…".to_string()),
+            if state.logbook_error.is_some() {
+                Style::default().fg(p.crit)
+            } else {
+                dim
+            },
+        )),
+        Some(pages) if pages.is_empty() => {
+            lines.push(Line::styled("no pages yet — c writes one", dim));
+        }
+        Some(pages) => {
+            let cur = cursor(state, Pane::Log);
+            for (i, page) in pages.iter().enumerate() {
+                if i == cur {
+                    sel_line = Some((lines.len(), lines.len()));
+                }
+                let stamp = page.updated_at.with_timezone(&Local).format("%d/%m %H:%M").to_string();
+                lines.push(Line::from(vec![
+                    Span::styled(if i == cur { "▶ " } else { "  " }, Style::default().fg(p.accent)),
+                    Span::styled(page.title.clone(), row_style(active, i == cur).patch(text)),
+                    Span::styled(format!("  {stamp}"), dim),
+                ]));
+            }
+        }
+    }
+    render_body(frame, area, " LOGBOOK ", active, p, lines, sel_line);
+}
+
+/// One page, read. Wrapped rather than truncated: this is prose the pilot
+/// wrote, and cutting it at the pane edge would defeat the point.
+fn render_logbook_page(frame: &mut Frame, area: Rect, state: &AppState, id: u64, active: bool, p: Palette) {
+    let dim = Style::default().fg(p.dim);
+    let title = state
+        .logbook_pages
+        .iter()
+        .flatten()
+        .find(|page| page.id == id)
+        .map_or_else(|| "page".to_string(), |page| page.title.clone());
+    let heading = format!(" {title} ");
+    let block = pane_block(&heading, active, p);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let mut lines: Vec<Line> = Vec::new();
+    match state.logbook_page.as_ref().filter(|page| page.id == id) {
+        None => lines.push(Line::styled(
+            state
+                .logbook_error
+                .clone()
+                .unwrap_or_else(|| "fetching page…".to_string()),
+            dim,
+        )),
+        Some(page) => {
+            lines.push(Line::styled(
+                page.updated_at
+                    .with_timezone(&Local)
+                    .format("%d/%m/%Y %H:%M")
+                    .to_string(),
+                dim,
+            ));
+            lines.push(Line::raw(""));
+            for para in page.content.lines() {
+                lines.push(Line::styled(para.to_string(), Style::default().fg(p.text)));
+            }
+        }
+    }
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+}
+
+fn render_ship_log(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {
     let dim = Style::default().fg(p.dim);
     let mut lines = Vec::new();
     let mut sel_line = None;

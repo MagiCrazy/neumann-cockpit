@@ -12,8 +12,8 @@ use tokio::sync::mpsc;
 
 use neumann_cockpit::api::tasks::{
     fetch_all, fetch_api_version, fetch_atomic_printer_craft, fetch_craft, fetch_crafting_recipes, fetch_detach,
-    fetch_mannies, fetch_manny, fetch_manny_tasks, fetch_messages, fetch_mine, fetch_missions, fetch_move,
-    fetch_recover, fetch_repair, fetch_salvage, fetch_sent_messages, fetch_unread_message_count,
+    fetch_logbook_pages, fetch_mannies, fetch_manny, fetch_manny_tasks, fetch_messages, fetch_mine, fetch_missions,
+    fetch_move, fetch_recover, fetch_repair, fetch_salvage, fetch_sent_messages, fetch_unread_message_count,
 };
 use neumann_cockpit::app::{
     batch_tasks, ActiveWizard, ApiMessage, AppState, ColorMode, CraftFire, Fabricator, MessagesInput, MissionsInput,
@@ -396,6 +396,36 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                     // urgent, and a modal about housekeeping in the middle of
                     // a mining run would be an intrusion.
                     ApiMessage::LatestRelease(tag) => state.note_latest_release(&tag),
+                    // ── Probe logbook (issue #254) ───────────────────────
+                    ApiMessage::LogbookPagesFetched(pages) => {
+                        state.logbook_error = None;
+                        state.logbook_pages = Some(pages);
+                    }
+                    ApiMessage::LogbookPageFetched(page) => {
+                        state.logbook_error = None;
+                        state.logbook_page = Some(page);
+                    }
+                    ApiMessage::LogbookPageSaved(page) => {
+                        state.logbook_error = None;
+                        state.set_toast(format!("logbook page saved: {}", page.title));
+                        state.logbook_page = Some(page);
+                        // The list carries titles and timestamps, both of which
+                        // a save may have changed, so it is re-read rather than
+                        // patched in place.
+                        if let Some(id) = state.probe_id() {
+                            fetch_logbook_pages(id, client.clone(), tx.clone());
+                        }
+                    }
+                    ApiMessage::LogbookPageDeleted(id) => {
+                        state.set_toast("logbook page deleted");
+                        if state.logbook_page.as_ref().is_some_and(|p| p.id == id) {
+                            state.logbook_page = None;
+                        }
+                        if let Some(pages) = state.logbook_pages.as_mut() {
+                            pages.retain(|p| p.id != id);
+                        }
+                    }
+                    ApiMessage::LogbookError(msg) => state.logbook_error = Some(msg),
                     ApiMessage::ProbeUpdated(probe) => state.update_probe(probe),
                     ApiMessage::FleetFetched(list) => state.update_fleet(list),
                     ApiMessage::DefaultProbeSet(list, name) => {

@@ -1120,9 +1120,15 @@ fn the_ship_log_is_its_own_pane_and_missions_is_a_plain_list() {
     state.journal = vec![LogEvent::action("test", "mined «Rock 01»", None)];
 
     state.active_pane = Pane::Log;
+    // The root offers the two halves — what the ship recorded, what the pilot
+    // wrote (issue #254) — with a count each.
+    let root = buffer_text(&render_cockpit(&state, 90, 24));
+    assert!(root.contains("SHIP'S LOG"), "the pane is titled: {root}");
+    assert!(root.contains("Logbook"), "and offers the manual half: {root}");
+
+    state.log_enter_category(crate::app::LogCategory::ShipsLog);
     let text = buffer_text(&render_cockpit(&state, 90, 24));
-    assert!(text.contains("SHIP'S LOG"), "the pane is titled: {text}");
-    assert!(text.contains("mined"), "and shows the journal: {text}");
+    assert!(text.contains("mined"), "the journal reads out: {text}");
 
     // Missions no longer carries it, so its root is the mission list itself.
     state.active_pane = Pane::Missions;
@@ -1131,5 +1137,96 @@ fn the_ship_log_is_its_own_pane_and_missions_is_a_plain_list() {
     assert!(
         !missions.contains("Ship's log"),
         "the category root is gone: {missions}"
+    );
+}
+
+// -- the server logbook (issue #254) ---------------------------------------
+
+fn state_with_logbook_pages() -> AppState {
+    let mut state = AppState::default();
+    state.probe = Some(probe(50.0));
+    state.logbook_pages = Some(vec![serde_json::from_str(
+        r#"{"id": 7, "probeId": 1, "title": "Premier relais SCUT", "sortOrder": 1,
+             "createdAt": "2026-09-01T10:00:00Z", "updatedAt": "2026-09-02T11:30:00Z"}"#,
+    )
+    .unwrap()]);
+    state.active_pane = Pane::Log;
+    state.log_enter_category(crate::app::LogCategory::Logbook);
+    state
+}
+
+#[test]
+fn the_logbook_lists_pages_and_reads_one() {
+    let mut state = state_with_logbook_pages();
+    let list = buffer_text(&render_cockpit(&state, 90, 24));
+    assert!(list.contains("LOGBOOK"), "the half is titled: {list}");
+    assert!(list.contains("Premier relais SCUT"), "the page is listed: {list}");
+
+    // Drilled into the page, its body reads out — prose is wrapped, not cut.
+    state.pane_nav[Pane::Log.index()]
+        .drill
+        .push(crate::app::DrillLevel::LogbookPage(7));
+    state.logbook_page = Some(
+        serde_json::from_str(
+            r#"{"id": 7, "probeId": 1, "title": "Premier relais SCUT", "sortOrder": 1,
+                 "createdAt": "2026-09-01T10:00:00Z", "updatedAt": "2026-09-02T11:30:00Z",
+                 "content": "Le relais est stable."}"#,
+        )
+        .unwrap(),
+    );
+    let page = buffer_text(&render_cockpit(&state, 90, 24));
+    assert!(page.contains("Le relais est stable"), "the body is on screen: {page}");
+}
+
+#[test]
+fn the_logbook_says_it_is_still_fetching_rather_than_empty() {
+    // `None` and "no pages" are different answers, and showing the second for
+    // the first would have the pilot writing a page they already have.
+    let mut state = AppState::default();
+    state.active_pane = Pane::Log;
+    state.log_enter_category(crate::app::LogCategory::Logbook);
+    let text = buffer_text(&render_cockpit(&state, 90, 24));
+    assert!(text.contains("fetching"), "{text}");
+
+    state.logbook_pages = Some(Vec::new());
+    let empty = buffer_text(&render_cockpit(&state, 90, 24));
+    assert!(empty.contains("no pages yet"), "{empty}");
+}
+
+#[test]
+fn the_logbook_editor_shows_both_fields_and_its_commit_key() {
+    use crate::app::LogbookInput;
+    let mut state = AppState::default();
+    state.active_wizard = ActiveWizard::Logbook(LogbookInput::Content {
+        page_id: Some(7),
+        title: "Premier relais SCUT".into(),
+        content: "Le relais est stable.".into(),
+        error: None,
+    });
+    let text = buffer_text(&render_cockpit(&state, 90, 26));
+    assert!(text.contains("EDIT PAGE"), "an existing page says so: {text}");
+    assert!(text.contains("Premier relais SCUT"), "the title stays in view: {text}");
+    assert!(
+        text.contains("Le relais est stable"),
+        "and the body is editable: {text}"
+    );
+    // Enter is a newline in prose, so saving needs a key of its own.
+    assert!(text.contains("[Ctrl-S]"), "the commit key is advertised: {text}");
+}
+
+#[test]
+fn deleting_a_page_asks_first_and_says_what_survives() {
+    use crate::app::LogbookInput;
+    let mut state = AppState::default();
+    state.active_wizard = ActiveWizard::Logbook(LogbookInput::ConfirmDelete {
+        page_id: 7,
+        title: "Premier relais SCUT".into(),
+    });
+    let text = buffer_text(&render_cockpit(&state, 90, 24));
+    assert!(text.contains("DELETE PAGE"));
+    assert!(text.contains("Premier relais SCUT"), "it names what goes: {text}");
+    assert!(
+        text.contains("ship's log is untouched"),
+        "the two journals are separate, and the pilot should know it: {text}"
     );
 }

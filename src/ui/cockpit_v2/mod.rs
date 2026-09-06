@@ -202,7 +202,7 @@ fn render_pane(frame: &mut Frame, area: Rect, pane: Pane, state: &AppState, acti
         Pane::Missions => panes::render_missions(frame, area, state, active, p),
         // The freed pane (issue #345): the ship's log graduates out of the
         // Missions pane, where CLAUDE.md always said it was only parked.
-        Pane::Log => panes::render_ship_log(frame, area, state, active, p),
+        Pane::Log => panes::render_log(frame, area, state, active, p),
     }
 }
 
