@@ -21,7 +21,6 @@
 
 use super::*;
 use crate::api::types::{MannyLocationType, MannyTask};
-use std::time::Instant;
 
 /// Cap on queue length; enqueuing past it is dropped with a toast so a runaway
 /// `[Q]` never silently balloons into hundreds of API calls.
@@ -72,7 +71,10 @@ pub struct QueuedCraft {
     pub duration_secs: u64,
     /// When the current iteration's order was staged. With `duration_secs` it
     /// bounds how long a `Running` step may wait for a busy it will never see.
-    pub fired_at: Option<Instant>,
+    ///
+    /// Wall clock, not `Instant`: the queue survives a restart (issue #324),
+    /// and a monotonic clock means nothing across one.
+    pub fired_at: Option<DateTime<Utc>>,
 }
 
 impl QueuedCraft {
@@ -132,7 +134,123 @@ impl QueuedCraft {
     fn ran_its_course(&self) -> bool {
         match (self.duration_secs, self.fired_at) {
             (0, _) | (_, None) => false,
-            (secs, Some(t)) => t.elapsed().as_secs() >= secs,
+            // A clock that moved backwards yields a negative span, which is not
+            // "it ran its course" — the fallback must never fire early.
+            (secs, Some(t)) => (Utc::now() - t).num_seconds() >= secs as i64,
+        }
+    }
+}
+
+// ── Persistence (issue #324) ──────────────────────────────────────────────
+//
+// Tasks already dispatched to Mannies live **server-side** and complete
+// whether or not the cockpit runs — which is why overnight batches work. The
+// queue itself did not: a crash lost every step that had not fired yet. The
+// work already ordered survived; the plan did not, which is the wrong half to
+// lose for a pilot who queues hours of production and walks away.
+
+impl QueuedCraft {
+    /// This step as a storable row. Only `Pending` and `Running` are worth
+    /// keeping: a `Done` step has nothing left to do, and a `Failed` one is a
+    /// decision the pilot has already seen.
+    fn to_stored(&self) -> Option<crate::store::StoredStep> {
+        if self.is_terminal() {
+            return None;
+        }
+        Some(crate::store::StoredStep {
+            fabricator: match self.fabricator {
+                Fabricator::AtomicPrinter => "atomic_printer".into(),
+                Fabricator::Manny => "manny".into(),
+            },
+            recipe_id: self.recipe_id.clone(),
+            recipe_name: self.recipe_name.clone(),
+            builder_id: self.builder_manny_id.clone(),
+            builder_name: self.builder_manny_name.clone(),
+            pinned: self.pinned,
+            repeat: self.repeat,
+            completed: self.completed,
+            duration_secs: self.duration_secs,
+            running: self.is_running(),
+            fired_at: self.fired_at.map(|t| t.to_rfc3339()),
+        })
+    }
+
+    /// Rebuild a step from storage.
+    ///
+    /// A step that was **in flight** cannot be trusted as running: the order may
+    /// have completed, half-completed, or never been accepted, and the cockpit
+    /// was not there to see. It comes back `Pending` with its `fired_at` intact,
+    /// so `ran_its_course` can still count it complete if enough time has
+    /// passed — the same reconciliation #291 added for a craft whose busy
+    /// window was missed. Re-firing on a guess would spend the pilot's
+    /// resources twice.
+    fn from_stored(stored: &crate::store::StoredStep) -> Self {
+        QueuedCraft {
+            fabricator: match stored.fabricator.as_str() {
+                "atomic_printer" => Fabricator::AtomicPrinter,
+                _ => Fabricator::Manny,
+            },
+            recipe_id: stored.recipe_id.clone(),
+            recipe_name: stored.recipe_name.clone(),
+            // An unpinned binding was to a Manny that may not even be aboard
+            // any more; late binding will find a builder again (#235).
+            builder_manny_id: stored.pinned.then(|| stored.builder_id.clone()).flatten(),
+            builder_manny_name: stored.pinned.then(|| stored.builder_name.clone()).flatten(),
+            pinned: stored.pinned,
+            repeat: stored.repeat,
+            completed: stored.completed,
+            state: StepState::Pending,
+            duration_secs: stored.duration_secs,
+            fired_at: stored
+                .fired_at
+                .as_deref()
+                .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
+                .map(|t| t.with_timezone(&Utc)),
+        }
+    }
+}
+
+impl AppState {
+    /// The piloted probe's queue in storable form.
+    pub fn stored_queue(&self) -> crate::store::StoredQueue {
+        crate::store::StoredQueue {
+            steps: self.craft_queue.iter().filter_map(QueuedCraft::to_stored).collect(),
+            paused: self.queue_paused,
+        }
+    }
+
+    /// Ask the event loop to write the piloted probe's queue (issue #324).
+    /// Staged rather than written here, like every other persistence path.
+    pub fn stage_queue_save(&mut self) {
+        self.pending_queue_save = true;
+    }
+
+    /// Restore the queues read at boot.
+    ///
+    /// The piloted probe's becomes the live queue; the others are parked, so a
+    /// probe switch finds them exactly where #291 left them. A queue that had a
+    /// step in flight comes back **paused**: that step could not be reconciled
+    /// without watching it, and resuming a queue whose first move is a guess is
+    /// how a pilot loses a batch of components.
+    pub fn restore_queues(&mut self, stored: std::collections::HashMap<u64, crate::store::StoredQueue>) {
+        for (probe_id, queue) in stored {
+            let steps: Vec<QueuedCraft> = queue.steps.iter().map(QueuedCraft::from_stored).collect();
+            if steps.is_empty() {
+                continue;
+            }
+            let was_in_flight = queue.steps.iter().any(|s| s.running);
+            let paused = queue.paused || was_in_flight;
+            let key = (probe_id != 0).then_some(probe_id);
+            if key == self.active_probe_id {
+                self.craft_queue = steps;
+                self.queue_paused = paused;
+                self.queue_probe = Some(self.active_probe_id);
+                if was_in_flight {
+                    self.set_toast("queue restored, paused — a craft was in flight");
+                }
+            } else {
+                self.parked_queues.insert(key, ParkedQueue { steps, paused });
+            }
         }
     }
 }
@@ -184,6 +302,7 @@ impl AppState {
                 last.repeat += craft.repeat;
                 let (name, n) = (last.recipe_name.clone(), last.repeat);
                 self.set_toast(format!("queued {name} ×{n}"));
+                self.stage_queue_save();
                 return;
             }
         }
@@ -194,6 +313,7 @@ impl AppState {
         let name = craft.recipe_name.clone();
         self.craft_queue.push(craft);
         self.set_toast(format!("queued {name}"));
+        self.stage_queue_save();
     }
 
     /// Pause or resume the queue. The queue auto-runs whenever it has work, so
@@ -205,16 +325,19 @@ impl AppState {
         } else {
             "queue running"
         });
+        self.stage_queue_save();
     }
 
     pub fn queue_remove(&mut self, idx: usize) {
         if idx < self.craft_queue.len() {
             self.craft_queue.remove(idx);
+            self.stage_queue_save();
         }
     }
 
     pub fn queue_clear(&mut self) {
         self.craft_queue.clear();
+        self.stage_queue_save();
     }
 
     /// Adjust a step's repeat count (never below what's already done, min 1).
@@ -222,6 +345,7 @@ impl AppState {
         if let Some(s) = self.craft_queue.get_mut(idx) {
             let floor = s.completed.max(1) as i32;
             s.repeat = (s.repeat as i32 + delta).max(floor) as u32;
+            self.stage_queue_save();
         }
     }
 
@@ -335,6 +459,10 @@ impl AppState {
     /// per-lane busy→idle transition; started crafts are staged in `queue_fire`.
     /// Cheap and idempotent — called every loop tick.
     pub fn advance_queue(&mut self) {
+        // Progress made during this tick — a completion, a new iteration
+        // firing — is worth persisting: a restart mid-batch must not replay
+        // the iterations already done (issue #324).
+        let mut save = false;
         self.sync_queue_probe();
         if self.queue_paused {
             return;
@@ -377,11 +505,13 @@ impl AppState {
             };
             if finished {
                 step.completed += 1;
+                save = true;
                 if step.completed >= step.repeat {
                     step.state = StepState::Done;
                 } else {
                     step.state = StepState::Running { observed_busy: false };
-                    step.fired_at = Some(Instant::now());
+                    step.fired_at = Some(Utc::now());
+                    save = true;
                     fires.push((fire_of(step), step.recipe_name.clone(), log_of(step).1));
                 }
             }
@@ -421,7 +551,8 @@ impl AppState {
                 if !lane_running && builder_free {
                     let step = &mut self.craft_queue[i];
                     step.state = StepState::Running { observed_busy: false };
-                    step.fired_at = Some(Instant::now());
+                    step.fired_at = Some(Utc::now());
+                    save = true;
                     fires.push((fire_of(step), step.recipe_name.clone(), log_of(step).1));
                 } else if self.craft_queue[i].is_auto() {
                     // The binding did not lead to a start (the lane it landed on
@@ -435,9 +566,15 @@ impl AppState {
             i += 1;
         }
 
+        if !fires.is_empty() {
+            save = true;
+        }
         for (f, name, atomic) in fires {
             self.queue_fire.push(f);
             self.log_event(LogEvent::craft(&name, atomic, self.active_probe_id));
+        }
+        if save {
+            self.stage_queue_save();
         }
     }
 
@@ -460,6 +597,7 @@ impl AppState {
             step.state = StepState::Failed(msg);
         }
         self.queue_paused = true;
+        self.stage_queue_save();
     }
 
     /// Whether the queue is actively working (unpaused with a pending/running
