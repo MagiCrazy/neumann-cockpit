@@ -7,11 +7,11 @@ use ratatui::{
     Frame,
 };
 
-use crate::ui::theme::{block_gauge_line, item_icon, palette, pane_block, ratio_color};
+use crate::ui::theme::{block_gauge_line, item_icon, pane_block, ratio_color};
 // ── Inventory panel ───────────────────────────────────────────────────────────
 
 pub(crate) fn render_inventory_panel(frame: &mut Frame, area: Rect, state: &AppState, focused: bool) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let block = pane_block(" INVENTORY ", focused, p);
     let inner = block.inner(area);
     frame.render_widget(block, area);

@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::api::types::ProbeModel;
 use crate::app::{assembly_bill, AppState, Fabricator, BASE_RESOURCES};
-use crate::ui::theme::{format_duration, palette};
+use crate::ui::theme::format_duration;
 
 use super::{render_footer, FooterKey};
 
@@ -16,7 +16,7 @@ use super::{render_footer, FooterKey};
 /// each expandable into its ingredient sub-tree, and a right panel rolling the
 /// selected node up to base resources.
 pub(crate) fn render_tree_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     frame.render_widget(Clear, area);
     let block = Block::default()
         .title(" TECH TREE ".to_owned())

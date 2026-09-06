@@ -73,9 +73,15 @@ async fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
+    // Ask the terminal whether its ground is dark or light **before** the
+    // preflight starts an `EventStream`: the OSC 11 reply would otherwise land
+    // in the middle of the key events (issue #233). Bounded and failure-proof —
+    // a terminal that does not answer costs 100 ms and yields `Dark`.
+    let polarity = neumann_cockpit::termbg::detect_polarity();
+
     // Preflight: config check + first-run onboarding, local archive migration,
     // and the remote link check — all drawn in-screen.
-    let ready = match preflight::run(&mut terminal, ColorMode::default()).await {
+    let ready = match preflight::run(&mut terminal, ColorMode::default(), polarity).await {
         Ok(preflight::Outcome::Ready(r)) => *r,
         Ok(preflight::Outcome::Quit) => {
             restore_terminal()?;
@@ -104,6 +110,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
         telemetry,
         api_version,
         link_ok,
+        polarity,
     } = ready;
     // Mutable so a probe switch can retarget every subsequent call (auto-refresh
     // + actions) at the newly-active probe — see the reconcile after handle_event.
@@ -112,6 +119,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
     let mut state = AppState {
         hints_visible: config.hints,
         color_mode: config.color_mode(),
+        polarity,
         booting: config.boot,
         scan_history,
         journal,

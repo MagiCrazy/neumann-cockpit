@@ -8,7 +8,7 @@ use ratatui::{
 };
 
 use super::{centered_rect, render_footer, render_pick_list, FooterKey, KeyTone};
-use crate::ui::theme::{format_duration, palette};
+use crate::ui::theme::format_duration;
 /// A mining-target picker row: `#n [name][ danger]  metals 1.20  ice 0.55 …`.
 /// Thin wrapper over the shared [`super::probe_object_label`] so every
 /// asteroid/object picker renders identically.
@@ -45,7 +45,7 @@ pub(crate) fn estimate_mine_duration(target_amount: f64, travel_deducted: bool) 
 }
 
 pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let ActiveWizard::Mine(mine) = &state.active_wizard else {
         return;
     };
@@ -68,7 +68,7 @@ pub(crate) fn render_mine_overlay(frame: &mut Frame, area: Rect, state: &AppStat
             render_pick_list(
                 frame,
                 area,
-                palette(state.color_mode),
+                state.palette(),
                 &format!(" MINE — {manny_name} "),
                 62,
                 height,

@@ -5,7 +5,7 @@
 //! the alternate screen so a missing config never flashes a console and
 //! vanishes.
 
-use crate::app::{ColorMode, Pane};
+use crate::app::{ColorMode, Pane, Polarity};
 use crate::preflight::{Status, Step};
 use crate::ui::cockpit_v2::grid;
 use crate::ui::theme::{palette, pane_block};
@@ -28,8 +28,9 @@ pub(crate) fn render(
     entry: Option<&str>,
     note: Option<&str>,
     color: ColorMode,
+    polarity: Polarity,
 ) {
-    let p = palette(color);
+    let p = palette(color, polarity);
     let dim = Style::default().fg(p.dim);
 
     let rows = Layout::default()
@@ -138,8 +139,18 @@ mod tests {
     fn text(steps: &[Step], entry: Option<&str>, note: Option<&str>) -> String {
         // Large enough for the 3×3 boot grid (Probe pane centre).
         let mut t = Terminal::new(TestBackend::new(100, 33)).unwrap();
-        t.draw(|f| render(f, f.area(), steps, entry, note, ColorMode::default()))
-            .unwrap();
+        t.draw(|f| {
+            render(
+                f,
+                f.area(),
+                steps,
+                entry,
+                note,
+                ColorMode::default(),
+                Polarity::default(),
+            )
+        })
+        .unwrap();
         t.backend().buffer().content.iter().map(|c| c.symbol()).collect()
     }
 

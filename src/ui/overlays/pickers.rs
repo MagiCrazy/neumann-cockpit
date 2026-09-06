@@ -2,7 +2,6 @@ use crate::app::{
     ActiveWizard, AppState, DeployInput, DetachInput, DropCargoInput, InspectInput, MindSnapshotInput, RecallInput,
     RecoverInput, RefuelInput, RenameMannyInput, SalvageInput, ScutRelayInput,
 };
-use crate::ui::theme::palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -13,7 +12,7 @@ use ratatui::{
 
 use super::{centered_rect, render_footer, render_pick_list, FooterKey};
 pub(crate) fn render_salvage_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let ActiveWizard::Salvage(salvage) = &state.active_wizard else {
         return;
     };
@@ -92,7 +91,7 @@ pub(crate) fn render_salvage_overlay(frame: &mut Frame, area: Rect, state: &AppS
 }
 
 pub(crate) fn render_drop_cargo_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let ActiveWizard::DropCargo(DropCargoInput::Confirm { manny_name, error, .. }) = &state.active_wizard else {
         return;
     };
@@ -144,7 +143,7 @@ pub(crate) fn render_drop_cargo_overlay(frame: &mut Frame, area: Rect, state: &A
 }
 
 pub(crate) fn render_recall_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let ActiveWizard::Recall(RecallInput::Confirm {
         manny_name,
         remote,
@@ -209,7 +208,7 @@ pub(crate) fn render_recall_overlay(frame: &mut Frame, area: Rect, state: &AppSt
 }
 
 pub(crate) fn render_refuel_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let ActiveWizard::Refuel(RefuelInput::Confirm { manny_name, error, .. }) = &state.active_wizard else {
         return;
     };
@@ -256,7 +255,7 @@ pub(crate) fn render_refuel_overlay(frame: &mut Frame, area: Rect, state: &AppSt
 }
 
 pub(crate) fn render_scut_relay_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let ActiveWizard::ScutRelay(ScutRelayInput::EnterNetworkName {
         manny_name,
         relay_name,
@@ -316,7 +315,7 @@ pub(crate) fn render_scut_relay_overlay(frame: &mut Frame, area: Rect, state: &A
 }
 
 pub(crate) fn render_mind_snapshot_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let ActiveWizard::MindSnapshot(MindSnapshotInput::Confirm { error }) = &state.active_wizard else {
         return;
     };
@@ -374,7 +373,7 @@ pub(crate) fn render_mind_snapshot_overlay(frame: &mut Frame, area: Rect, state:
 }
 
 pub(crate) fn render_rename_manny_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let ActiveWizard::RenameManny(RenameMannyInput::Typing {
         manny_name, buf, error, ..
     }) = &state.active_wizard
@@ -428,7 +427,7 @@ pub(crate) fn render_rename_manny_overlay(frame: &mut Frame, area: Rect, state: 
 }
 
 pub(crate) fn render_deploy_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let ActiveWizard::Deploy(deploy) = &state.active_wizard else {
         return;
     };
@@ -526,7 +525,7 @@ pub(crate) fn render_deploy_overlay(frame: &mut Frame, area: Rect, state: &AppSt
 }
 
 pub(crate) fn render_inspect_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let ActiveWizard::Inspect(InspectInput::PickTarget {
         manny_name,
         candidates,
@@ -561,7 +560,7 @@ pub(crate) fn render_inspect_overlay(frame: &mut Frame, area: Rect, state: &AppS
 }
 
 pub(crate) fn render_recover_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let ActiveWizard::Recover(RecoverInput::PickContainer {
         manny_name,
         candidates,
@@ -591,7 +590,7 @@ pub(crate) fn render_recover_overlay(frame: &mut Frame, area: Rect, state: &AppS
 }
 
 pub(crate) fn render_detach_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let ActiveWizard::Detach(detach) = &state.active_wizard else {
         return;
     };

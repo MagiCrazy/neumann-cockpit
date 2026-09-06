@@ -16,7 +16,7 @@ pub(crate) use panes::{manny_detail_height, scroll_offset};
 
 use crate::app::{AppState, DrillLevel, Pane};
 use crate::ui::panels::{render_inventory_panel, render_mannies_panel, render_probe_panel, render_scanner_panel};
-use crate::ui::theme::{palette, pane_block, Palette};
+use crate::ui::theme::{pane_block, Palette};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -54,7 +54,7 @@ pub(crate) fn active_pane_inner_size(state: &AppState) -> (u16, u16) {
 
 pub fn render(frame: &mut Frame, state: &AppState) {
     let area = frame.area();
-    let p = palette(state.color_mode);
+    let p = state.palette();
 
     if state.booting {
         render_boot(frame, area, state, p);

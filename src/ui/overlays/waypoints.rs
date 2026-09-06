@@ -1,5 +1,4 @@
 use crate::app::{ActiveWizard, AppState, WaypointKind, WaypointsInput};
-use crate::ui::theme::palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -10,7 +9,7 @@ use ratatui::{
 
 use super::{centered_rect, render_footer, FooterKey};
 pub(crate) fn render_waypoints_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let ActiveWizard::Waypoints(WaypointsInput::Browsing { entries, selection }) = &state.active_wizard else {
         return;
     };

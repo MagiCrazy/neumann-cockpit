@@ -1,5 +1,4 @@
 use crate::app::{ActiveWizard, AppState, ImproveInput};
-use crate::ui::theme::palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -26,7 +25,7 @@ pub(crate) fn render_improve_overlay(frame: &mut Frame, area: Rect, state: &AppS
             error,
             ..
         } => {
-            let p = palette(state.color_mode);
+            let p = state.palette();
             let names: Vec<&str> = mannies.iter().map(|(_, n)| n.as_str()).collect();
             let prompt = format!("Install {improvement_name} with:");
             let height = (names.len() as u16 + 6).clamp(8, 20);
@@ -50,7 +49,7 @@ pub(crate) fn render_improve_overlay(frame: &mut Frame, area: Rect, state: &AppS
 /// Two-panel catalog: the improvement list on the left, the selected one's
 /// detail (status, duration, ingredient have/need, description) on the right.
 fn render_catalog(frame: &mut Frame, area: Rect, state: &AppState, selection: usize, error: Option<&str>) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let items = &state.probe_improvements;
     let sel = items.get(selection);
 

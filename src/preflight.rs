@@ -24,8 +24,8 @@ use tokio::time::timeout;
 use crate::api::client::ApiClient;
 use crate::api::ratelimit::RateLimited;
 use crate::api::types::SectorObservation;
-use crate::app::ColorMode;
 use crate::app::LogEvent;
+use crate::app::{ColorMode, Polarity};
 use crate::config::{self, Config, ConfigStatus, DEFAULT_BASE_URL};
 use crate::store;
 
@@ -80,6 +80,9 @@ pub struct Ready {
     pub telemetry: Vec<crate::app::TelemetrySample>,
     pub api_version: Option<u32>,
     pub link_ok: bool,
+    /// Terminal ground resolved at boot: detected via OSC 11, or forced by the
+    /// config's `polarity` key (issue #233).
+    pub polarity: Polarity,
 }
 
 /// The result of the preflight: either resources to run, or a clean quit
@@ -101,13 +104,17 @@ type Term = Terminal<CrosstermBackend<io::Stdout>>;
 /// Run the preflight sequence, drawing each step in the Probe pane as it
 /// completes. Returns once the link is up, or the pilot chooses to continue in
 /// degraded mode, or quits.
-pub async fn run(terminal: &mut Term, color: ColorMode) -> Result<Outcome> {
+pub async fn run(terminal: &mut Term, color: ColorMode, polarity: Polarity) -> Result<Outcome> {
+    // The detected ground is the default; a config that forces one wins, but
+    // the file has not been read yet — so the first frames use the detection
+    // and the CONFIG step below corrects it if the pilot decided.
+    let mut polarity = polarity;
     let mut log = BootLog::default();
     let mut events = EventStream::new();
 
     // ── CONFIG ──────────────────────────────────────────────────────────
     log.begin("CONFIG");
-    redraw(terminal, &log, None, None, color)?;
+    redraw(terminal, &log, None, None, color, polarity)?;
     let mut config = match Config::load_status() {
         ConfigStatus::Ready(c) => {
             log.set(Status::Ok("loaded".into()));
@@ -115,7 +122,7 @@ pub async fn run(terminal: &mut Term, color: ColorMode) -> Result<Outcome> {
         }
         ConfigStatus::Invalid(msg) => {
             log.set(Status::Warn(format!("invalid: {msg}")));
-            match onboard(terminal, &log, &mut events, color).await? {
+            match onboard(terminal, &log, &mut events, color, polarity).await? {
                 Some(c) => {
                     log.set(Status::Ok("configured".into()));
                     c
@@ -123,7 +130,7 @@ pub async fn run(terminal: &mut Term, color: ColorMode) -> Result<Outcome> {
                 None => return Ok(Outcome::Quit),
             }
         }
-        ConfigStatus::NeedsKey => match onboard(terminal, &log, &mut events, color).await? {
+        ConfigStatus::NeedsKey => match onboard(terminal, &log, &mut events, color, polarity).await? {
             Some(c) => {
                 log.set(Status::Ok("configured".into()));
                 c
@@ -132,9 +139,14 @@ pub async fn run(terminal: &mut Term, color: ColorMode) -> Result<Outcome> {
         },
     };
 
+    // The pilot's decision outranks the terminal's answer, in both directions.
+    if let crate::app::PolarityPref::Forced(forced) = config.polarity_pref() {
+        polarity = forced;
+    }
+
     // ── ARCHIVE (local SQLite store) ────────────────────────────────────
     log.begin("ARCHIVE");
-    redraw(terminal, &log, None, None, color)?;
+    redraw(terminal, &log, None, None, color, polarity)?;
     let (conn, scan_history, journal, telemetry) = match store::open(&config::db_path()) {
         Ok(mut conn) => {
             let outcome = store::migrate_legacy_json(&mut conn, &config::history_path())
@@ -165,7 +177,7 @@ pub async fn run(terminal: &mut Term, color: ColorMode) -> Result<Outcome> {
     let mut throttled = false;
     let (link_ok, api_version) = loop {
         log.set(Status::Pending);
-        redraw(terminal, &log, None, None, color)?;
+        redraw(terminal, &log, None, None, color, polarity)?;
         match timeout(LINK_TIMEOUT, client.get_api_version()).await {
             Ok(Ok(v)) => {
                 log.set(Status::Ok(format!("online · v{v}")));
@@ -185,11 +197,11 @@ pub async fn run(terminal: &mut Term, color: ColorMode) -> Result<Outcome> {
         } else {
             "[R]etry   [K] re-enter key\n[Enter] continue offline"
         };
-        redraw(terminal, &log, None, Some(actions), color)?;
+        redraw(terminal, &log, None, Some(actions), color, polarity)?;
         match wait_action(&mut events).await {
             LinkAction::Retry => continue,
             LinkAction::Continue => break (false, None),
-            LinkAction::ReenterKey => match onboard(terminal, &log, &mut events, color).await? {
+            LinkAction::ReenterKey => match onboard(terminal, &log, &mut events, color, polarity).await? {
                 Some(c) => {
                     config = c;
                     client = ApiClient::new(config.base_url.clone(), config.api_key.clone())?;
@@ -208,6 +220,7 @@ pub async fn run(terminal: &mut Term, color: ColorMode) -> Result<Outcome> {
         telemetry,
         api_version,
         link_ok,
+        polarity,
     })))
 }
 
@@ -220,11 +233,12 @@ async fn onboard(
     log: &BootLog,
     events: &mut EventStream,
     color: ColorMode,
+    polarity: Polarity,
 ) -> Result<Option<Config>> {
     let mut buf = String::new();
     let mut error: Option<String> = None;
     loop {
-        redraw(terminal, log, Some(&buf), error.as_deref(), color)?;
+        redraw(terminal, log, Some(&buf), error.as_deref(), color, polarity)?;
         let Some(ev) = events.next().await else { return Ok(None) };
         let Ok(Event::Key(k)) = ev else { continue };
         if k.kind != KeyEventKind::Press {
@@ -253,6 +267,7 @@ async fn onboard(
                             base_url: DEFAULT_BASE_URL.into(),
                             api_key: key,
                             theme: None,
+                            polarity: None,
                             hints: true,
                             boot: true,
                             notifications: true,
@@ -267,8 +282,15 @@ async fn onboard(
     }
 }
 
-fn redraw(terminal: &mut Term, log: &BootLog, entry: Option<&str>, note: Option<&str>, color: ColorMode) -> Result<()> {
-    terminal.draw(|f| crate::ui::preflight::render(f, f.area(), &log.steps, entry, note, color))?;
+fn redraw(
+    terminal: &mut Term,
+    log: &BootLog,
+    entry: Option<&str>,
+    note: Option<&str>,
+    color: ColorMode,
+    polarity: Polarity,
+) -> Result<()> {
+    terminal.draw(|f| crate::ui::preflight::render(f, f.area(), &log.steps, entry, note, color, polarity))?;
     Ok(())
 }
 

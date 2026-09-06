@@ -1,5 +1,5 @@
 use crate::app::{AppState, ScanMode};
-use crate::ui::theme::{palette, Palette};
+use crate::ui::theme::Palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::Style,
@@ -14,7 +14,7 @@ use super::{centered_rect, render_footer, FooterKey};
 /// are handled by the shared scan-input router in `input/mod.rs`; this only
 /// renders the prompt.
 pub(crate) fn render_scan_input_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     match &state.scan_mode {
         ScanMode::Input(buf) => render_coord_input(frame, area, buf, p),
         ScanMode::DirectionPick => render_direction_pick(frame, area, state),
@@ -65,7 +65,7 @@ fn render_coord_input(frame: &mut Frame, area: Rect, buf: &str, p: Palette) {
 }
 
 fn render_direction_pick(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let popup = centered_rect(52, 7, area);
     frame.render_widget(Clear, popup);
     let block = Block::default()

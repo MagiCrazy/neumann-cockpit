@@ -31,6 +31,11 @@ pub struct Config {
     /// to stay silent (issue #203).
     #[serde(default = "default_true")]
     pub notifications: bool,
+    /// Terminal ground: `"auto"` (default) asks the terminal at boot via
+    /// OSC 11, `"dark"` / `"light"` decide for it. `F3` overrides at runtime
+    /// either way (issue #233).
+    #[serde(default)]
+    pub polarity: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -38,15 +43,22 @@ fn default_true() -> bool {
 }
 
 impl Config {
-    /// Cockpit color mode, read from the `theme` key.
+    /// Cockpit color mode, read from the `theme` key. An unknown label falls
+    /// back to the default rather than erroring: the load contract is tolerant,
+    /// and a typo should not keep the pilot out of the cockpit.
     pub fn color_mode(&self) -> crate::app::ColorMode {
-        use crate::app::ColorMode;
-        match self.theme.as_deref() {
-            Some("mono-amber") => ColorMode::MonoAmber,
-            Some("phosphor-semantic") => ColorMode::PhosphorSemantic,
-            Some("modern-16") => ColorMode::Modern16,
-            _ => ColorMode::MonoGreen,
-        }
+        self.theme
+            .as_deref()
+            .and_then(crate::app::ColorMode::from_label)
+            .unwrap_or_default()
+    }
+
+    /// What the `polarity` key asks for; `auto` when absent or unrecognised.
+    pub fn polarity_pref(&self) -> crate::app::PolarityPref {
+        self.polarity
+            .as_deref()
+            .and_then(crate::app::PolarityPref::from_label)
+            .unwrap_or_default()
     }
 }
 
@@ -58,6 +70,7 @@ struct RawConfig {
     base_url: Option<String>,
     api_key: Option<String>,
     theme: Option<String>,
+    polarity: Option<String>,
     hints: Option<bool>,
     boot: Option<bool>,
     notifications: Option<bool>,
@@ -101,6 +114,7 @@ fn load_status_at(path: &std::path::Path) -> ConfigStatus {
         base_url: raw.base_url.unwrap_or_else(|| DEFAULT_BASE_URL.to_string()),
         api_key: key,
         theme: raw.theme,
+        polarity: raw.polarity,
         hints: raw.hints.unwrap_or(true),
         boot: raw.boot.unwrap_or(true),
         notifications: raw.notifications.unwrap_or(true),
@@ -157,6 +171,7 @@ mod tests {
 
     fn cfg(theme: Option<&str>) -> Config {
         Config {
+            polarity: None,
             base_url: "x".into(),
             api_key: "x".into(),
             theme: theme.map(String::from),
@@ -172,20 +187,40 @@ mod tests {
         assert_eq!(cfg(Some("mono-amber")).color_mode(), ColorMode::MonoAmber);
         assert_eq!(cfg(Some("phosphor-semantic")).color_mode(), ColorMode::PhosphorSemantic);
         assert_eq!(cfg(Some("modern-16")).color_mode(), ColorMode::Modern16);
+        assert_eq!(cfg(Some("culture")).color_mode(), ColorMode::Culture);
+        assert_eq!(cfg(Some("deep-space")).color_mode(), ColorMode::DeepSpace);
+        assert_eq!(cfg(Some("rust-belt")).color_mode(), ColorMode::RustBelt);
         // Unknown/absent → default mono-green.
         assert_eq!(cfg(None).color_mode(), ColorMode::MonoGreen);
         assert_eq!(cfg(Some("bogus")).color_mode(), ColorMode::MonoGreen);
     }
 
     #[test]
-    fn color_mode_cycles_through_all_four() {
+    fn every_color_mode_round_trips_through_its_label() {
         use crate::app::ColorMode;
-        let m = ColorMode::MonoGreen;
-        let m = m.cycle();
-        assert_eq!(m, ColorMode::MonoAmber);
-        let m = m.cycle().cycle();
-        assert_eq!(m, ColorMode::Modern16);
-        assert_eq!(m.cycle(), ColorMode::MonoGreen);
+        // Config label ⇄ mode, for every mode: a new variant that forgets its
+        // `from_label` arm would be selectable by F2 but not by config.
+        for mode in ColorMode::ALL {
+            assert_eq!(cfg(Some(mode.label())).color_mode(), mode, "{}", mode.label());
+        }
+    }
+
+    #[test]
+    fn polarity_key_parses_and_defaults_to_auto() {
+        use crate::app::{Polarity, PolarityPref};
+        let with = |p: Option<&str>| Config {
+            polarity: p.map(String::from),
+            ..cfg(None)
+        };
+        assert_eq!(with(None).polarity_pref(), PolarityPref::Auto);
+        assert_eq!(with(Some("auto")).polarity_pref(), PolarityPref::Auto);
+        assert_eq!(with(Some("dark")).polarity_pref(), PolarityPref::Forced(Polarity::Dark));
+        assert_eq!(
+            with(Some("light")).polarity_pref(),
+            PolarityPref::Forced(Polarity::Light)
+        );
+        // A typo must not keep the pilot out of the cockpit.
+        assert_eq!(with(Some("bogus")).polarity_pref(), PolarityPref::Auto);
     }
 
     fn tmp(name: &str) -> PathBuf {

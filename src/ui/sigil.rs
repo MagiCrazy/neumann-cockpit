@@ -93,7 +93,7 @@ mod tests {
 
     #[test]
     fn renders_four_lines() {
-        let p = crate::ui::theme::palette(crate::app::ColorMode::MonoGreen);
+        let p = crate::ui::theme::palette(crate::app::ColorMode::MonoGreen, crate::app::Polarity::Dark);
         assert_eq!(sigil_lines(5, p, "  ").len(), 4);
     }
 }

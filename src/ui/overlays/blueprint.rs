@@ -3,12 +3,11 @@
 use ratatui::{layout::Rect, Frame};
 
 use crate::app::{ActiveWizard, AppState, ShareBlueprintInput};
-use crate::ui::theme::palette;
 
 use super::render_pick_list;
 
 pub(crate) fn render_share_blueprint_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let ActiveWizard::ShareBlueprint(share) = &state.active_wizard else {
         return;
     };

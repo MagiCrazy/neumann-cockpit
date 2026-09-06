@@ -1,4 +1,3 @@
-use crate::ui::theme::palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -20,7 +19,7 @@ fn rel(sector: &ProbeSector) -> String {
 }
 
 pub(crate) fn render_scut_network_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let ActiveWizard::ScutNetwork(scut_network) = &state.active_wizard else {
         return;
     };
@@ -31,7 +30,7 @@ pub(crate) fn render_scut_network_overlay(frame: &mut Frame, area: Rect, state: 
             render_pick_list(
                 frame,
                 area,
-                palette(state.color_mode),
+                state.palette(),
                 " SCUT NETWORK ",
                 52,
                 height,

@@ -23,7 +23,24 @@ serde_json  = "1"
 tokio       = { version = "1", features = ["full"] }
 toml        = "1.0"
 
+
 [dev-dependencies]
 pretty_assertions = "1"
 # Local HTTP mock server for client.rs error/timeout tests (offline, no network).
 wiremock = "0.6"
+
+[target."cfg(windows)".dependencies]
+# OSC 11 detection on Windows reads the console input handle directly (see
+# src/termbg.rs). `ReadFile` lives behind Win32_System_IO, which
+# Win32_Storage_FileSystem does not imply.
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_Threading",
+] }
+
+# OSC 11 terminal-background detection (issue #233) needs a bounded read on
+# /dev/tty; poll(2) is the only way to bound it without blocking the boot.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

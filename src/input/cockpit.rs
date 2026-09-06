@@ -26,7 +26,6 @@ use crate::app::{
     ScutNetworkInput, ShareBlueprintInput, StorageMoveInput, TransferDeuteriumInput, TransferProbeInput, TravelInput,
     WaypointsInput, LIST_PAGE,
 };
-use crate::ui::theme::palette;
 
 pub fn handle_cockpit_event(code: KeyCode, state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
     // Cockpit keys (ertdfgcvb, jkhl, z, q, …) are all lowercase, but CapsLock —
@@ -111,7 +110,7 @@ fn scroll_detail(code: KeyCode, state: &mut AppState) -> bool {
         return false;
     };
     let (width, height) = crate::ui::cockpit_v2::active_pane_inner_size(state);
-    let total = crate::ui::cockpit_v2::manny_detail_height(state, &id, width, palette(state.color_mode));
+    let total = crate::ui::cockpit_v2::manny_detail_height(state, &id, width, state.palette());
     // The estimate is a floor (word wrapping can add a row), so allow a little
     // slack — the renderer clamps the offset for real, which makes overscroll
     // impossible and keeps the last row reachable when the estimate is short.

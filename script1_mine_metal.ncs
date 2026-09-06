@@ -1,0 +1,6 @@
+# stay in the current sector (3,-5,4)
+# metal asteroid targeted by its exact id (shown in the zoomed Sector view: `z`)
+# names with spaces (or a keyword inside) go in double quotes
+detach "Metal C #1" by manny-10 mode hidden_on_asteroid at c4d44bd03a7ccc94b37b
+mine metals 0.20 by manny-06,manny-07,manny-08,manny-09,manny-10 at c4d44bd03a7ccc94b37b to "Metal C #1"
+recover by manny-10 at "Metal C #1"

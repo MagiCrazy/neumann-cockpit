@@ -8,12 +8,12 @@ use ratatui::{
     Frame,
 };
 
-use crate::ui::theme::{format_duration, palette, pane_block, scroll_markers, Palette};
+use crate::ui::theme::{format_duration, pane_block, scroll_markers, Palette};
 use chrono::Utc;
 // ── Mannies panel ─────────────────────────────────────────────────────────────
 
 pub(crate) fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppState, focused: bool) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let block = pane_block(" MANNIES ", focused, p);
     let inner = block.inner(area);
     frame.render_widget(block, area);

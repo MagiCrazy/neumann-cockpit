@@ -11,8 +11,8 @@ use ratatui::{
 
 use crate::ui::sigil::sigil_lines;
 use crate::ui::theme::{
-    block_gauge_line, format_duration, movement_phase_label, palette, pane_block, probe_status_label,
-    probe_status_style, ratio_color, text_sparkline,
+    block_gauge_line, format_duration, movement_phase_label, pane_block, probe_status_label, probe_status_style,
+    ratio_color, text_sparkline,
 };
 
 /// How many recent samples the zoomed telemetry sparklines show.
@@ -20,7 +20,7 @@ const SPARK_WIDTH: usize = 24;
 // ── Probe panel ───────────────────────────────────────────────────────────────
 
 pub(crate) fn render_probe_panel(frame: &mut Frame, area: Rect, state: &AppState, focused: bool) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let block = pane_block(" PROBE ", focused, p);
     let inner = block.inner(area);
     frame.render_widget(block, area);

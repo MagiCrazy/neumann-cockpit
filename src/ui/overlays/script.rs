@@ -1,5 +1,4 @@
 use crate::app::{ActiveWizard, AppState, ScriptInput, StepState};
-use crate::ui::theme::palette;
 use crate::ui::theme::Palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -18,7 +17,7 @@ pub(crate) fn render_script_overlay(frame: &mut Frame, area: Rect, state: &AppSt
     let ActiveWizard::Script(script) = &state.active_wizard else {
         return;
     };
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let (inserting, buf, error, selection) = match script {
         ScriptInput::Insert { buf, error } => (true, buf.as_str(), error.as_deref(), 0),
         ScriptInput::Normal { selection } => (false, "", None, *selection),

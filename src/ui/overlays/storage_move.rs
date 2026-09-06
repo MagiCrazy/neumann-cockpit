@@ -1,5 +1,5 @@
 use crate::app::{ActiveWizard, AppState, StorageMoveInput, MOVE_RESOURCE_TYPES};
-use crate::ui::theme::{palette, Palette};
+use crate::ui::theme::Palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -53,7 +53,7 @@ fn field_row(p: Palette, label: &str, value: String, active: bool, editing: bool
 }
 
 pub(crate) fn render_storage_move_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let ActiveWizard::StorageMove(storage_move) = &state.active_wizard else {
         return;
     };

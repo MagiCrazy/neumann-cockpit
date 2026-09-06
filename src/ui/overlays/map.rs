@@ -9,7 +9,7 @@ use ratatui::{
 };
 
 use super::{centered_rect, render_footer, render_pick_list, FooterKey};
-use crate::ui::theme::{format_duration, map_cell_symbol, palette};
+use crate::ui::theme::{format_duration, map_cell_symbol};
 
 /// Picker over visited sectors (most-recent first, as returned by the API):
 /// coordinates, distance from the probe, and visit count.
@@ -17,7 +17,7 @@ pub(crate) fn render_goto_visited_overlay(frame: &mut Frame, area: Rect, state: 
     let crate::app::GotoVisitedInput::Picking { selection } = state.goto_visited else {
         return;
     };
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let probe = state.probe_sector_coords();
     let labels: Vec<String> = state
         .visited_sectors
@@ -106,7 +106,7 @@ pub(crate) fn sector_brief(s: &SectorObservation) -> String {
 }
 
 pub(crate) fn render_map_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     use std::collections::HashMap;
 
     let popup = centered_rect(66, 24, area);

@@ -192,6 +192,15 @@ pub fn handle_event(event: Event, state: &mut AppState, client: &ApiClient, tx: 
         return;
     }
 
+    if k.code == KeyCode::F(3) {
+        // F3 flips the dark/light ground (issue #233). Detection only sets the
+        // default: a terminal that answered wrong, or never answered, is one
+        // keystroke from being corrected.
+        state.polarity = state.polarity.toggle();
+        state.set_toast(format!("polarity: {}", state.polarity.label()));
+        return;
+    }
+
     if matches!(state.mode, InputMode::Command(_)) {
         handle_command_event(k.code, state, client, tx);
         return;
@@ -402,6 +411,22 @@ mod tests {
         assert_eq!(state.detail_scroll(), 0);
         press(&mut state, KeyCode::Char('k'));
         assert_eq!(state.detail_scroll(), 0, "a viewport does not wrap to the end");
+    }
+
+    #[tokio::test]
+    async fn f3_flips_the_terminal_polarity() {
+        // Detection only sets the default: a terminal that answered wrong, or
+        // never answered, is one keystroke from being corrected (issue #233).
+        use crate::app::Polarity;
+        let mut state = AppState::default();
+        assert_eq!(state.polarity, Polarity::Dark, "the safe assumption");
+
+        press(&mut state, KeyCode::F(3));
+        assert_eq!(state.polarity, Polarity::Light);
+        assert!(state.active_toast().is_some_and(|t| t.contains("light")));
+
+        press(&mut state, KeyCode::F(3));
+        assert_eq!(state.polarity, Polarity::Dark, "and back");
     }
 
     #[tokio::test]

@@ -1,10 +1,19 @@
 base_url = "https://neumann-probe.net"
 api_key  = "vng_your_api_key_here"
 
-# Color mode for the cockpit interface: "mono-green" (default), "mono-amber",
-# "phosphor-semantic", or "modern-16" (named ANSI for limited terminals).
-# F2 cycles it at runtime.
+# Color mode for the cockpit interface. Phosphor modes imitate an old monitor:
+# "mono-green" (default), "mono-amber", "phosphor-semantic" (green base with
+# green/yellow/red status), "modern-16" (named ANSI for limited terminals).
+# Lore modes dress the cockpit in the game's own universe, and are semantic
+# throughout: "culture" (Mind violet), "deep-space" (navy and ice),
+# "rust-belt" (salvage copper). F2 cycles them at runtime.
 #theme = "mono-green"
+
+# Terminal ground. "auto" (default) asks the terminal at boot with an OSC 11
+# query and picks foregrounds that contrast with its actual background;
+# "dark" or "light" decide for it and skip the query. F3 flips it at runtime
+# either way. Terminals that never answer (tmux, some SSH) fall back to dark.
+#polarity = "auto"
 # Show the contextual hints line at the bottom (F1 toggles at runtime).
 #hints = true
 # Play the boot self-check animation on startup. Set false to drop straight

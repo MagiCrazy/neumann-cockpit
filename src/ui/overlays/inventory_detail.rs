@@ -1,5 +1,5 @@
 use crate::app::{AppState, InventoryRow};
-use crate::ui::theme::{palette, Palette};
+use crate::ui::theme::Palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::Style,
@@ -19,7 +19,7 @@ pub(crate) fn detail_kv(p: Palette, key: &str, value: String) -> Line<'static> {
 }
 
 pub(crate) fn render_inventory_detail_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
-    let p = palette(state.color_mode);
+    let p = state.palette();
     let Some(probe) = &state.probe else { return };
     let Some(row) = state.selected_inventory_row() else {
         return;

@@ -61,7 +61,7 @@ pub(crate) use waypoints::render_waypoints_overlay;
 
 use crate::api::types::DangerLevel;
 use crate::app::{ActiveWizard, AppState, GotoVisitedInput, ProbeSwitchInput, ScanMode, RESOURCE_LABELS};
-use crate::ui::theme::{palette, Palette};
+use crate::ui::theme::Palette;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -147,7 +147,7 @@ pub(crate) fn render_active_overlays(frame: &mut Frame, area: Rect, state: &AppS
         render_scan_input_overlay(frame, area, state);
     }
     if state.help_open {
-        render_help_overlay(frame, area, palette(state.color_mode), state.help_scroll);
+        render_help_overlay(frame, area, state.palette(), state.help_scroll);
     }
 }
 
@@ -403,7 +403,7 @@ pub(crate) fn render_pick_list(
 #[cfg(test)]
 mod tests {
     use super::{object_pick_label, render_active_overlays, render_pick_list, DangerLevel};
-    use crate::app::{ActiveWizard, AppState, ColorMode, TravelInput};
+    use crate::app::{ActiveWizard, AppState, ColorMode, Polarity, TravelInput};
     use crate::ui::theme::palette;
     use ratatui::{backend::TestBackend, Terminal};
 
@@ -441,7 +441,7 @@ mod tests {
                 render_pick_list(
                     f,
                     f.area(),
-                    palette(ColorMode::MonoGreen),
+                    palette(ColorMode::MonoGreen, Polarity::Dark),
                     " DETACH ",
                     50,
                     // The clamp every caller applies: a viewport far smaller
