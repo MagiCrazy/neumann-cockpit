@@ -1,5 +1,12 @@
 # Changelog
 
+## [104.4.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.3.0...neumann-cockpit-v104.4.0) (2026-09-06)
+
+
+### Features
+
+* **theme:** three lore color modes and a dark/light polarity axis ([#344](https://github.com/MagiCrazy/neumann-cockpit/issues/344)) ([1939bfc](https://github.com/MagiCrazy/neumann-cockpit/commit/1939bfc33dbf85f93f303e380d960d27dbf80fda))
+
 ## [104.3.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.2.2...neumann-cockpit-v104.3.0) (2026-09-05)
 
 
