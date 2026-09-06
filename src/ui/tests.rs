@@ -1220,6 +1220,49 @@ fn deleting_a_page_asks_first_and_says_what_survives() {
 }
 
 #[test]
+fn discarding_an_unread_alert_says_so_before_it_goes() {
+    // Acknowledging and discarding are different acts, and the prompt for the
+    // destructive one has to admit when nobody has read the entry (#366).
+    use crate::app::DiscardCommsInput;
+    let mut state = AppState::default();
+    state.active_wizard = ActiveWizard::DiscardComms(DiscardCommsInput::One {
+        warnings: false,
+        id: 3,
+        message: "hull breach on deck two".into(),
+        unread: true,
+    });
+    let text = buffer_text(&render_cockpit(&state, 90, 24));
+    assert!(text.contains("DISCARD ALERT"));
+    assert!(text.contains("hull breach"), "it names what goes: {text}");
+    assert!(text.contains("still unread"), "and warns it was never seen: {text}");
+    assert!(
+        text.contains("permanently"),
+        "and that it is not an acknowledge: {text}"
+    );
+}
+
+#[test]
+fn a_bulk_discard_says_what_it_leaves_behind() {
+    use crate::app::DiscardCommsInput;
+    let mut state = AppState::default();
+    state.active_wizard = ActiveWizard::DiscardComms(DiscardCommsInput::Acknowledged {
+        warnings: true,
+        ids: (1..=20).collect(),
+        total: 34,
+    });
+    let text = buffer_text(&render_cockpit(&state, 90, 24));
+    assert!(text.contains("DISCARD ACKNOWLEDGED WARNINGS"));
+    assert!(
+        text.contains("nothing unread is touched"),
+        "the bound is stated: {text}"
+    );
+    assert!(
+        text.contains("14 acknowledged remain"),
+        "and so is the remainder, or the pilot thinks the list is clear: {text}"
+    );
+}
+
+#[test]
 fn the_missions_root_offers_the_logbook_and_admits_it_has_not_looked() {
     // `None` (never fetched) and `0` (fetched, empty) are different answers,
     // and the root must not claim the second while meaning the first (#254).

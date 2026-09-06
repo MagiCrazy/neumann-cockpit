@@ -1250,6 +1250,26 @@ impl ApiClient {
             .await
     }
 
+    /// Permanently delete an alert (API v112).
+    ///
+    /// Distinct from acknowledging: `PATCH` says "seen", this says "gone".
+    /// The server answers 404 for an unknown alert or one belonging to another
+    /// probe, and 204 with no body on success — hence `send_no_content`.
+    /// Mirror-only, so the piloted probe's id is passed explicitly.
+    pub async fn delete_alert(&self, probe_id: u64, id: i64) -> Result<()> {
+        self.send_no_content(reqwest::Method::DELETE, &format!("/api/probe/{probe_id}/alerts/{id}"))
+            .await
+    }
+
+    /// Permanently delete a damage warning (API v112). See `delete_alert`.
+    pub async fn delete_damage_warning(&self, probe_id: u64, id: i64) -> Result<()> {
+        self.send_no_content(
+            reqwest::Method::DELETE,
+            &format!("/api/probe/{probe_id}/damage-warnings/{id}"),
+        )
+        .await
+    }
+
     // ── Probe logbook (API v90, issue #254) ───────────────────────────────
     //
     // Mirror-only, like the single-Manny GET and the task batch: the spec

@@ -523,6 +523,16 @@ impl super::AppState {
         {
             parts.push("Enter act");
         }
+        // Discarding is only offered where it exists (issue #366), and it is
+        // advertised because a destructive key nobody knows about is useless.
+        if pane == Pane::Comms
+            && matches!(
+                self.comms_drill(),
+                Some(CommsCategory::Alerts) | Some(CommsCategory::Warnings)
+            )
+        {
+            parts.push("x discard · X acked");
+        }
         if pane == Pane::Storage && !drilled {
             parts.push("s sort");
         }

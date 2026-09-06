@@ -458,6 +458,16 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                     // A cancel that raced the end of preparation answers 409;
                     // the server's own wording explains it better than we can.
                     ApiMessage::MoveCancelError(msg) => state.set_error(msg),
+                    // The entry is gone for good (issue #366). The 204 is
+                    // proof, so the row is dropped locally instead of paying
+                    // for a refetch — which for a bulk discard would be one
+                    // refetch per deletion.
+                    ApiMessage::CommsEntryDeleted { warnings, id } => {
+                        state.remove_comms_entry(warnings, id);
+                    }
+                    // A 404 here means the entry was already gone (a second
+                    // cockpit, a replay); the server's wording says which.
+                    ApiMessage::CommsDeleteError(msg) => state.set_error(msg),
                     // ── Probe logbook (issue #254) ───────────────────────
                     ApiMessage::LogbookPagesFetched(pages) => {
                         state.logbook_error = None;
