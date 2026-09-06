@@ -1127,3 +1127,117 @@ fn the_attract_screen_names_the_probe_and_says_how_to_leave() {
     assert!(text.contains("T"), "and the probe is named");
     assert!(!text.contains("MISSIONS"), "the grid really is covered");
 }
+
+// -- the server logbook (issue #254) ---------------------------------------
+
+fn state_with_logbook_pages() -> AppState {
+    let mut state = AppState::default();
+    state.probe = Some(probe(50.0));
+    state.logbook_pages = Some(vec![serde_json::from_str(
+        r#"{"id": 7, "probeId": 1, "title": "Premier relais SCUT", "sortOrder": 1,
+             "createdAt": "2026-09-01T10:00:00Z", "updatedAt": "2026-09-02T11:30:00Z"}"#,
+    )
+    .unwrap()]);
+    state.active_pane = Pane::Missions;
+    state.missions_enter_category(crate::app::MissionsCategory::Logbook);
+    state
+}
+
+#[test]
+fn the_logbook_lists_pages_and_reads_one() {
+    let mut state = state_with_logbook_pages();
+    let list = buffer_text(&render_cockpit(&state, 90, 24));
+    assert!(list.contains("LOGBOOK"), "the half is titled: {list}");
+    assert!(list.contains("Premier relais SCUT"), "the page is listed: {list}");
+
+    // Drilled into the page, its body reads out — prose is wrapped, not cut.
+    state.pane_nav[Pane::Missions.index()]
+        .drill
+        .push(crate::app::DrillLevel::LogbookPage(7));
+    state.logbook_page = Some(
+        serde_json::from_str(
+            r#"{"id": 7, "probeId": 1, "title": "Premier relais SCUT", "sortOrder": 1,
+                 "createdAt": "2026-09-01T10:00:00Z", "updatedAt": "2026-09-02T11:30:00Z",
+                 "content": "Le relais est stable."}"#,
+        )
+        .unwrap(),
+    );
+    let page = buffer_text(&render_cockpit(&state, 90, 24));
+    assert!(page.contains("Le relais est stable"), "the body is on screen: {page}");
+}
+
+#[test]
+fn the_logbook_says_it_is_still_fetching_rather_than_empty() {
+    // `None` and "no pages" are different answers, and showing the second for
+    // the first would have the pilot writing a page they already have.
+    let mut state = AppState::default();
+    state.active_pane = Pane::Missions;
+    state.missions_enter_category(crate::app::MissionsCategory::Logbook);
+    let text = buffer_text(&render_cockpit(&state, 90, 24));
+    assert!(text.contains("fetching"), "{text}");
+
+    state.logbook_pages = Some(Vec::new());
+    let empty = buffer_text(&render_cockpit(&state, 90, 24));
+    assert!(empty.contains("no pages yet"), "{empty}");
+}
+
+#[test]
+fn the_logbook_editor_shows_both_fields_and_its_commit_key() {
+    use crate::app::LogbookInput;
+    let mut state = AppState::default();
+    state.active_wizard = ActiveWizard::Logbook(LogbookInput::Content {
+        page_id: Some(7),
+        title: "Premier relais SCUT".into(),
+        content: "Le relais est stable.".into(),
+        error: None,
+    });
+    let text = buffer_text(&render_cockpit(&state, 90, 26));
+    assert!(text.contains("EDIT PAGE"), "an existing page says so: {text}");
+    assert!(text.contains("Premier relais SCUT"), "the title stays in view: {text}");
+    assert!(
+        text.contains("Le relais est stable"),
+        "and the body is editable: {text}"
+    );
+    // Enter is a newline in prose, so saving needs a key of its own.
+    assert!(text.contains("[Ctrl-S]"), "the commit key is advertised: {text}");
+}
+
+#[test]
+fn deleting_a_page_asks_first_and_says_what_survives() {
+    use crate::app::LogbookInput;
+    let mut state = AppState::default();
+    state.active_wizard = ActiveWizard::Logbook(LogbookInput::ConfirmDelete {
+        page_id: 7,
+        title: "Premier relais SCUT".into(),
+    });
+    let text = buffer_text(&render_cockpit(&state, 90, 24));
+    assert!(text.contains("DELETE PAGE"));
+    assert!(text.contains("Premier relais SCUT"), "it names what goes: {text}");
+    assert!(
+        text.contains("ship's log is untouched"),
+        "the two journals are separate, and the pilot should know it: {text}"
+    );
+}
+
+#[test]
+fn the_missions_root_offers_the_logbook_and_admits_it_has_not_looked() {
+    // `None` (never fetched) and `0` (fetched, empty) are different answers,
+    // and the root must not claim the second while meaning the first (#254).
+    let mut state = AppState::default();
+    state.active_pane = Pane::Missions;
+
+    let text = buffer_text(&render_cockpit(&state, 70, 20));
+    assert!(text.contains("Missions"), "the three categories are listed: {text}");
+    assert!(text.contains("Ship's log"));
+    assert!(text.contains("Logbook"));
+    let row = text.lines().find(|l| l.contains("Logbook")).unwrap();
+    assert!(
+        row.contains('\u{2014}'),
+        "an unfetched logbook shows a dash, not a zero: {row}"
+    );
+
+    state.logbook_pages = Some(Vec::new());
+    let fetched = buffer_text(&render_cockpit(&state, 70, 20));
+    let row = fetched.lines().find(|l| l.contains("Logbook")).unwrap();
+    assert!(row.contains('0'), "once fetched and empty, it says zero: {row}");
+}

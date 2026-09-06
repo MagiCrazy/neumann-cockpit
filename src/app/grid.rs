@@ -124,8 +124,10 @@ pub enum DrillLevel {
     SectorObject(usize),
     /// Which category the Comms pane is drilled into.
     CommsCat(CommsCategory),
-    /// Which category the Missions pane is drilled into (Missions / Ship's log).
+    /// Which category the Missions pane is drilled into.
     MissionsCat(MissionsCategory),
+    /// A logbook page being read (issue #254).
+    LogbookPage(u64),
 }
 
 /// The three sub-lists of the Comms pane, selectable at its root.
@@ -149,12 +151,20 @@ impl CommsCategory {
     pub const ALL: [CommsCategory; 3] = [CommsCategory::Messages, CommsCategory::Alerts, CommsCategory::Warnings];
 }
 
-/// The two sub-views of the Missions pane, selectable at its root: the active
-/// missions list and the ship's log (parked here until it earns its own pane).
+/// The three sub-views of the Missions pane, selectable at its root: the
+/// active missions list, the ship's log, and the pilot's own logbook.
+///
+/// The two journals sit side by side and are deliberately **not** merged
+/// (issue #254): the ship's log is what the *ship* recorded — narrated
+/// actions, local, automatic, append-only — and the logbook is what the
+/// *pilot* wrote, stored server-side per probe. One is a flight recorder, the
+/// other a diary. Grouping them here keeps journaling in one place; if the
+/// pane merge (#345) ever lands, all three move together.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MissionsCategory {
     Missions,
     ShipsLog,
+    Logbook,
 }
 
 impl MissionsCategory {
@@ -162,11 +172,16 @@ impl MissionsCategory {
         match self {
             MissionsCategory::Missions => "Missions",
             MissionsCategory::ShipsLog => "Ship's log",
+            MissionsCategory::Logbook => "Logbook",
         }
     }
 
     /// Root-row order in the Missions pane.
-    pub const ALL: [MissionsCategory; 2] = [MissionsCategory::Missions, MissionsCategory::ShipsLog];
+    pub const ALL: [MissionsCategory; 3] = [
+        MissionsCategory::Missions,
+        MissionsCategory::ShipsLog,
+        MissionsCategory::Logbook,
+    ];
 }
 
 /// Per-pane navigation state: the cursor at the current level plus the
@@ -211,11 +226,16 @@ impl super::AppState {
             Pane::Missions => match drill {
                 None => MissionsCategory::ALL.len(),
                 Some(DrillLevel::MissionsCat(MissionsCategory::ShipsLog)) => self.ship_log_entries().len(),
+                // Its pages — or zero while they are still on the wire (#254).
+                Some(DrillLevel::MissionsCat(MissionsCategory::Logbook)) => {
+                    self.logbook_pages.as_ref().map_or(0, |p| p.len())
+                }
                 Some(DrillLevel::Mission(id)) => {
                     self.missions.iter().find(|m| &m.id == id).map_or(0, |m| m.steps.len())
                 }
                 _ => self.missions.len(),
             },
+
             // Drilled into a container, the cursor is frozen (contents are
             // rendered inline, read-only).
             Pane::Storage => match drill {
@@ -431,6 +451,17 @@ impl super::AppState {
         nav.cursor = 0;
     }
 
+    /// The logbook page currently open for reading, if any (issue #254).
+    pub fn logbook_open_page(&self) -> Option<u64> {
+        self.pane_nav[Pane::Missions.index()]
+            .drill
+            .iter()
+            .find_map(|l| match l {
+                DrillLevel::LogbookPage(id) => Some(*id),
+                _ => None,
+            })
+    }
+
     /// Drill from the missions list into the selected mission's steps.
     pub fn missions_drill_into(&mut self, id: String) {
         let nav = &mut self.pane_nav[Pane::Missions.index()];
@@ -514,6 +545,12 @@ impl super::AppState {
                     .map_or_else(|| "mission".to_string(), |m| m.title.clone()),
                 DrillLevel::CommsCat(cat) => cat.label().to_string(),
                 DrillLevel::MissionsCat(cat) => cat.label().to_string(),
+                DrillLevel::LogbookPage(id) => self
+                    .logbook_pages
+                    .iter()
+                    .flatten()
+                    .find(|p| p.id == *id)
+                    .map_or_else(|| "page".to_string(), |p| p.title.clone()),
                 DrillLevel::Container(id) => self
                     .storage_container(id)
                     .map_or_else(|| id.clone(), |c| c.label.clone()),

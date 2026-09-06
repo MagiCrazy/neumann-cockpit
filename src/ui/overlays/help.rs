@@ -76,6 +76,8 @@ const RIGHT: &[Section] = &[
             ("", "drop cargo, recall/abandon, rename"),
             ("Inventory", "fabricate, jettison, move stock"),
             ("Missions", "browse steps, abandon"),
+            ("Logbook", "c write · e edit · x delete"),
+            ("", "Ctrl-S saves a page"),
             ("Comms", "categories: messages, alerts, warnings"),
             ("Map", "travel, visited, waypoints, safe corridors"),
             ("Probe", "switch, rename, improve, SCUT inspect,"),

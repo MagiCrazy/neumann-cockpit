@@ -13,15 +13,15 @@ use super::geometry::{is_list_nav_key, list_move};
 use crate::api::client::ApiClient;
 use crate::api::tasks::{
     fetch_ack_alert, fetch_ack_damage_warning, fetch_alerts, fetch_all, fetch_damage_warnings, fetch_inspect,
-    fetch_messages, fetch_reassign_reservations, fetch_recover, fetch_scut_network, fetch_sector, fetch_sent_messages,
-    fetch_set_default_probe, fetch_storage_container_detail,
+    fetch_logbook_page, fetch_logbook_pages, fetch_messages, fetch_reassign_reservations, fetch_recover,
+    fetch_scut_network, fetch_sector, fetch_sent_messages, fetch_set_default_probe, fetch_storage_container_detail,
 };
 use crate::api::types::{MannyTask, MannyTaskVisibility};
 use crate::app::{
     ActiveWizard, ApiMessage, AppState, AssembleProbeInput, CommandLine, CommsCategory, DeployInput, DetachInput,
     DrillLevel, DropCargoInput, DropStorageContainerInput, FabricationInput, GotoVisitedInput, ImproveInput, InputMode,
-    InspectInput, LogEvent, MenuAction, MessagesInput, MindSnapshotInput, MineInput, MissionsCategory, MissionsInput,
-    ObjectActionInput, Pane, ProbeSwitchInput, RecallInput, RecoverInput, RefuelInput, RemoteMineInput,
+    InspectInput, LogEvent, LogbookInput, MenuAction, MessagesInput, MindSnapshotInput, MineInput, MissionsCategory,
+    MissionsInput, ObjectActionInput, Pane, ProbeSwitchInput, RecallInput, RecoverInput, RefuelInput, RemoteMineInput,
     RenameContainerInput, RenameMannyInput, RenameProbeInput, RepairInput, SalvageInput, ScanMode, ScannerFocus,
     ScutCorridorInput, ScutNetworkInput, ShareBlueprintInput, StorageMoveInput, TransferDeuteriumInput,
     TransferProbeInput, TravelInput, WaypointsInput, LIST_PAGE,
@@ -92,6 +92,13 @@ pub fn handle_cockpit_event(code: KeyCode, state: &mut AppState, client: &ApiCli
         KeyCode::Char('?') => state.help_open = true,
         // Jump to the next idle Manny (focuses the Mannies pane).
         KeyCode::Char('i') => state.cycle_to_next_idle_manny(),
+        // Logbook writing keys (issue #254). Scoped to the Logbook half of the
+        // Log pane, so `c` and `x` keep their cockpit meanings everywhere else.
+        KeyCode::Char('c') | KeyCode::Char('e') | KeyCode::Char('x')
+            if state.active_pane == Pane::Missions && state.missions_category() == Some(MissionsCategory::Logbook) =>
+        {
+            logbook_key(code, state);
+        }
         // Storage: toggle server order ↔ alphabetical (issue #333).
         KeyCode::Char('s') if state.active_pane == Pane::Storage => {
             state.storage_toggle_sort();
@@ -191,8 +198,11 @@ fn open_actions(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiM
         }
         Pane::Missions => match state.missions_category() {
             // Root: Enter enters the selected category, like `l`.
-            None => missions_activate(state),
+            None => missions_activate(state, client, tx),
+            // Both journals are records, not consoles. The logbook is written
+            // with its own keys (c/e/x), not through Enter (issue #254).
             Some(MissionsCategory::ShipsLog) => state.set_toast("ship's log — read only"),
+            Some(MissionsCategory::Logbook) => missions_activate(state, client, tx),
             Some(MissionsCategory::Missions) => {
                 let in_detail = matches!(
                     state.pane_nav[Pane::Missions.index()].drill.last(),
@@ -209,6 +219,8 @@ fn open_actions(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiM
             }
         },
         Pane::Comms => comms_activate(state, client, tx),
+        // Enter is drill-in here: the halves and the pages are what there is
+        // to act on, and writing has its own keys (c/e/x).
         Pane::Sector => open_sector_object_actions(state),
     }
 }
@@ -216,6 +228,52 @@ fn open_actions(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiM
 /// Comms activation, shared by `Enter` and `l`: at the root, pick a category
 /// (Messages opens its overlay; Alerts/Warnings drill into an in-pane list);
 /// inside Alerts/Warnings, acknowledge the selected entry.
+/// `c` writes a new page, `e` edits the selected one, `x` asks before deleting
+/// it (issue #254). Editing loads the body already fetched for the reader; a
+/// page whose body has not arrived yet cannot be edited, and says so.
+fn logbook_key(code: KeyCode, state: &mut AppState) {
+    let cursor = state.pane_nav[Pane::Missions.index()].cursor;
+    let selected = state
+        .logbook_pages
+        .as_ref()
+        .and_then(|pages| pages.get(cursor))
+        .map(|p| (p.id, p.title.clone()));
+    match code {
+        KeyCode::Char('c') => {
+            state.active_wizard = ActiveWizard::Logbook(LogbookInput::Title {
+                page_id: None,
+                title: String::new(),
+                content: String::new(),
+                error: None,
+            });
+        }
+        KeyCode::Char('e') => match selected {
+            Some((id, title)) => match state.logbook_page.as_ref().filter(|p| p.id == id) {
+                Some(page) => {
+                    state.active_wizard = ActiveWizard::Logbook(LogbookInput::Title {
+                        page_id: Some(id),
+                        title,
+                        content: page.content.clone(),
+                        error: None,
+                    });
+                }
+                // Editing a body we have not read would silently truncate it.
+                None => state.set_toast("open the page first (l), then edit"),
+            },
+            None => state.set_toast("no page selected"),
+        },
+        KeyCode::Char('x') => match selected {
+            Some((page_id, title)) => {
+                state.active_wizard = ActiveWizard::Logbook(LogbookInput::ConfirmDelete { page_id, title });
+            }
+            None => state.set_toast("no page selected"),
+        },
+        _ => {}
+    }
+}
+
+/// `l`/`Enter` on the Log pane: enter a half, then read a logbook page
+/// (issues #345, #254). The pages are fetched lazily, when the half is opened
 fn comms_activate(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
     let cursor = state.pane_nav[Pane::Comms.index()].cursor;
     match state.comms_drill() {
@@ -255,12 +313,26 @@ fn comms_activate(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<Ap
 /// Missions activation for `l` (and root `Enter`): at the root, enter the
 /// selected category (missions list / ship's log); in the missions list, drill
 /// into the selected mission's steps. The ship's log is read-only.
-fn missions_activate(state: &mut AppState) {
+/// `l`/`Enter` on the Missions pane: enter a category, then drill one level —
+/// a mission into its steps, a logbook page into its body (issue #254).
+///
+/// The logbook's pages are fetched **lazily**, when the category is opened: a
+/// pilot who never writes never pays the call.
+fn missions_activate(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
     let cursor = state.pane_nav[Pane::Missions.index()].cursor;
     match state.missions_category() {
         None => {
-            if let Some(&cat) = MissionsCategory::ALL.get(cursor) {
-                state.missions_enter_category(cat);
+            let Some(&cat) = MissionsCategory::ALL.get(cursor) else {
+                return;
+            };
+            state.missions_enter_category(cat);
+            if cat == MissionsCategory::Logbook {
+                match state.probe_id() {
+                    Some(id) => fetch_logbook_pages(id, client.clone(), tx.clone()),
+                    // Mirror-only endpoints: without a probe sync there is no
+                    // path to call, so say so rather than fail at request time.
+                    None => state.logbook_error = Some("waiting for a probe sync".into()),
+                }
             }
         }
         Some(MissionsCategory::Missions) => {
@@ -274,7 +346,21 @@ fn missions_activate(state: &mut AppState) {
                 }
             }
         }
+        // A flat read: nothing to drill into.
         Some(MissionsCategory::ShipsLog) => {}
+        Some(MissionsCategory::Logbook) => {
+            if state.logbook_open_page().is_some() {
+                return;
+            }
+            let page = state.logbook_pages.as_ref().and_then(|p| p.get(cursor)).map(|p| p.id);
+            if let (Some(page_id), Some(probe_id)) = (page, state.probe_id()) {
+                state.logbook_page = None;
+                state.pane_nav[Pane::Missions.index()]
+                    .drill
+                    .push(DrillLevel::LogbookPage(page_id));
+                fetch_logbook_page(probe_id, page_id, client.clone(), tx.clone());
+            }
+        }
     }
 }
 
@@ -288,7 +374,7 @@ fn drill_in(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessa
     }
     // Missions likewise (categories → missions list → steps, or ship's log).
     if state.active_pane == Pane::Missions {
-        missions_activate(state);
+        missions_activate(state, client, tx);
         return;
     }
     state.pane_drill_in();
