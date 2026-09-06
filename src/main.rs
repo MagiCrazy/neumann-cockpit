@@ -48,6 +48,20 @@ async fn main() -> Result<()> {
         let code = neumann_cockpit::headless::run_diagnostic(rounds).await?;
         std::process::exit(code);
     }
+    // Headless status views: `--status <probe|sector|mannies|scut|all>`, with
+    // `--json` for machine output (#229). After the diagnostic, so its own
+    // `--status latency` alias keeps winning.
+    if let Some(request) = neumann_cockpit::status::status_arg(&args) {
+        let code = neumann_cockpit::status::run(request).await?;
+        std::process::exit(code);
+    }
+    // A misspelt or bare `--status` is a mistake in a script, not a request
+    // for the cockpit: opening the TUI over it would hang a cron job.
+    if let Some(unknown) = neumann_cockpit::status::unknown_status_view(&args) {
+        eprintln!("unknown status view: {unknown:?}");
+        eprintln!("{}", neumann_cockpit::status::usage());
+        std::process::exit(2);
+    }
 
     // Enter the alternate screen FIRST — before any fallible startup. A missing
     // or keyless config used to error out of `main` before the terminal was set

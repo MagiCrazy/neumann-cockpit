@@ -23,6 +23,7 @@ pub mod headless;
 pub mod input;
 pub mod notify;
 pub mod preflight;
+pub mod status;
 pub mod store;
 pub mod termbg;
 pub mod ui;

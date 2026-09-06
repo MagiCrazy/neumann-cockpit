@@ -11,6 +11,8 @@ cargo build --release
 cargo run            # run the TUI (requires config, see below)
 cargo run -- --script run.ncs   # headless: play an action script, no TUI (see Headless)
 cargo run -- --diagnostic       # headless: API latency/health report to stdout (see Diagnostics)
+cargo run -- --status probe     # headless: one read-only view of live state (see Headless status)
+cargo run -- --status all --json  # ... as JSON, for a statusline or a monitor
 cargo clippy         # lints
 cargo test           # unit tests (app, input, store, client) + TestBackend render tests (ui/tests.rs) + serde fixtures (tests/)
 ```
@@ -85,6 +87,16 @@ A TUI owns the screen, so a failure is reported as a toast that expires in five 
 Three properties, each load-bearing. It **never blocks the event loop** — lines cross a channel to a writer thread, the same shape as `store::spawn_writer`. It **never leaks the API key** — `redact` runs in the writer, not at the call sites, scrubbing both the key verbatim and any `Bearer <token>`, because a log file is the artefact a pilot pastes into a bug report. And **off costs nothing** — `Logger::log` takes a closure, so a message below the threshold is never built (tests assert this by panicking inside the closure).
 
 `Level` is ordered (`Off < Error < Info < Debug`). The default `error` keeps a healthy session silent while still answering "what did the server say?": `ApiClient::record_with_detail` is the single choke point every send path already passes through, logging failures at `error` **with the server's message resolved first** and successes at `debug`. `AppState::log` covers the decisions a pilot cannot reconstruct later — a halted queue lane, a halted script step, a probe switch (the queue being per-probe, #291) — and `main` logs the boot line and the persistence-degraded *transition* (the flag is sticky and the tick would repeat it). The file rotates to `cockpit.log.1` past `ROTATE_AT_BYTES`; `--diagnostic` prints its resolved path, and the help overlay carries a Diagnostics section.
+
+### Headless status views (`src/status.rs`, #229)
+
+`--status <probe|sector|mannies|scut|all> [--json]` — the third non-TUI surface, after the script runner and the diagnostic: a read-only report of live state, printed and gone, so the cockpit can answer a question without being *opened* (a statusline, a monitoring check, a shell script deciding whether it is worth logging in).
+
+Two constraints shape it. **Each view fetches only what it needs**: `fetch_all` costs seven requests, and a statusline polling `--status probe` every ten seconds through that would eat the per-token window on its own (~120/min, API v104), so `probe`, `sector` and `mannies` cost one request each, `scut` one or two, `all` three — and the report says how many it spent. **`--json` is a contract**: once a statusline depends on the key names, renaming one silently breaks someone's bar, so the tests pin the names rather than only the values. The human output is plain text, never ANSI, one fact per line on a fixed column, because it is piped as often as it is read.
+
+`--status latency` remains the diagnostic's alias and is resolved first (`headless::diagnostic_arg`); `status_arg` returns `None` for it explicitly rather than relying on that order. A misspelt or bare `--status` exits `2` with the usage line instead of opening the cockpit — in a cron job that would hang.
+
+One defect this surfaced, found only by running it against the live server: the API keeps reporting the **last** movement after it completes, so a stationary probe comes back carrying a `movement` whose arrival is in the past. `is_travelling` reads the phase (`Arrived`/`Failed`/`Destroyed`/`Idle` are not journeys), the same rule the probe pane already applies.
 
 ### API diagnostics (`src/api/metrics.rs` + `headless::run_diagnostic`, #247)
 
