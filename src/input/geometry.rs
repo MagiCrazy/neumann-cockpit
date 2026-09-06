@@ -202,7 +202,7 @@ mod tests {
 
     #[test]
     fn face_d2_all_even_sum() {
-        for axis in [b'x', b'y', b'z'] {
+        for axis in *b"xyz" {
             for (a, b, c) in face_d2(axis) {
                 assert_eq!((a + b + c) % 2, 0, "odd sum at ({a},{b},{c}) axis={}", axis as char);
             }

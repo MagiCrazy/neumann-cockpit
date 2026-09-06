@@ -20,43 +20,6 @@ pub(crate) fn next_target_container(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::next_target_container;
-
-    fn c(id: &str) -> (String, String) {
-        (id.into(), format!("container {id}"))
-    }
-
-    #[test]
-    fn cycles_none_through_containers_back_to_none() {
-        let list = vec![c("a"), c("b")];
-        let s0 = next_target_container(None, &list);
-        assert_eq!(s0.as_ref().map(|(id, _)| id.as_str()), Some("a"));
-        let s1 = next_target_container(s0.as_ref(), &list);
-        assert_eq!(s1.as_ref().map(|(id, _)| id.as_str()), Some("b"));
-        let s2 = next_target_container(s1.as_ref(), &list);
-        assert_eq!(s2, None);
-    }
-
-    #[test]
-    fn no_containers_stays_none() {
-        assert_eq!(next_target_container(None, &[]), None);
-    }
-
-    #[test]
-    fn stale_selection_resets_to_first() {
-        let list = vec![c("a")];
-        let stale = c("gone");
-        assert_eq!(
-            next_target_container(Some(&stale), &list)
-                .as_ref()
-                .map(|(id, _)| id.as_str()),
-            Some("a")
-        );
-    }
-}
-
 pub(super) fn handle_mine_event(
     code: KeyCode,
     state: &mut AppState,
@@ -456,5 +419,42 @@ pub(super) fn handle_remote_mine_event(
             }
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::next_target_container;
+
+    fn c(id: &str) -> (String, String) {
+        (id.into(), format!("container {id}"))
+    }
+
+    #[test]
+    fn cycles_none_through_containers_back_to_none() {
+        let list = vec![c("a"), c("b")];
+        let s0 = next_target_container(None, &list);
+        assert_eq!(s0.as_ref().map(|(id, _)| id.as_str()), Some("a"));
+        let s1 = next_target_container(s0.as_ref(), &list);
+        assert_eq!(s1.as_ref().map(|(id, _)| id.as_str()), Some("b"));
+        let s2 = next_target_container(s1.as_ref(), &list);
+        assert_eq!(s2, None);
+    }
+
+    #[test]
+    fn no_containers_stays_none() {
+        assert_eq!(next_target_container(None, &[]), None);
+    }
+
+    #[test]
+    fn stale_selection_resets_to_first() {
+        let list = vec![c("a")];
+        let stale = c("gone");
+        assert_eq!(
+            next_target_container(Some(&stale), &list)
+                .as_ref()
+                .map(|(id, _)| id.as_str()),
+            Some("a")
+        );
     }
 }

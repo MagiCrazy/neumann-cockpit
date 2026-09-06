@@ -32,7 +32,10 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       # `cargo check` is subsumed by clippy, which type-checks too.
-      - run: cargo clippy --locked -- -D warnings
+      # `--all-targets` so the lint applies to the test suite as well: without
+      # it a third of the codebase — the part that decides whether a regression
+      # is caught — was never linted (issue #349).
+      - run: cargo clippy --locked --all-targets -- -D warnings
 
   test:
     runs-on: ubuntu-latest
