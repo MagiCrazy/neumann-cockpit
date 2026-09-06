@@ -1,5 +1,12 @@
 # Changelog
 
+## [105.0.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.7.0...neumann-cockpit-v105.0.0) (2026-09-06)
+
+
+### Features
+
+* **travel:** cancel a movement still in preparation ([#365](https://github.com/MagiCrazy/neumann-cockpit/issues/365)) ([#369](https://github.com/MagiCrazy/neumann-cockpit/issues/369)) ([c11d053](https://github.com/MagiCrazy/neumann-cockpit/commit/c11d0536709cbaa0d6c591b261ca3a254085366c))
+
 ## [104.7.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.6.0...neumann-cockpit-v104.7.0) (2026-09-06)
 
 
