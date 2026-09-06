@@ -116,7 +116,7 @@ impl Config {
 
 /// Path-injectable core of `Config::load_status`, so tests never touch the real
 /// user config.
-fn load_status_at(path: &std::path::Path) -> ConfigStatus {
+pub(crate) fn load_status_at(path: &std::path::Path) -> ConfigStatus {
     let content = match std::fs::read_to_string(path) {
         Ok(c) => c,
         Err(_) => return ConfigStatus::NeedsKey,
@@ -149,7 +149,7 @@ pub fn write_config(base_url: &str, api_key: &str) -> Result<PathBuf> {
 }
 
 /// Path-injectable core of `write_config`.
-fn write_config_at(path: &std::path::Path, base_url: &str, api_key: &str) -> Result<()> {
+pub(crate) fn write_config_at(path: &std::path::Path, base_url: &str, api_key: &str) -> Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).with_context(|| format!("creating config dir {}", parent.display()))?;
     }
