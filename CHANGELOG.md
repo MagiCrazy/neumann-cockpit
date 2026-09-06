@@ -1,5 +1,12 @@
 # Changelog
 
+## [104.5.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.4.1...neumann-cockpit-v104.5.0) (2026-09-06)
+
+
+### Features
+
+* **queue:** persist the production queue across restarts ([#324](https://github.com/MagiCrazy/neumann-cockpit/issues/324)) ([#354](https://github.com/MagiCrazy/neumann-cockpit/issues/354)) ([fc2b360](https://github.com/MagiCrazy/neumann-cockpit/commit/fc2b3603dce9cb553e5127fef14f7ac46f7cb212))
+
 ## [104.4.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.4.0...neumann-cockpit-v104.4.1) (2026-09-06)
 
 
