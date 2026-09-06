@@ -212,6 +212,15 @@ pub struct AppState {
     /// still explicable after the toast that announced them has expired.
     /// Disabled by default, which is what every test gets.
     pub log: crate::diaglog::Logger,
+    /// Set when a runtime toggle changed something worth remembering (issue
+    /// #331). Staged rather than written here, mirroring `pending_journal`:
+    /// the state layer owns no filesystem, and a render pass must never block
+    /// on a write.
+    pub pending_settings_save: bool,
+    /// Whether long-task completions still beep (`F4`, issue #331). Seeded
+    /// from the `notifications` config key; a cockpit that beeps with no way
+    /// to see or stop it is hostile in a shared room.
+    pub notifications_enabled: bool,
     pub scan_filter: ScanFilter,
     /// Some(idx) when the scanner panel is in object-browsing mode.
     pub scanner_obj_selection: Option<usize>,
@@ -883,6 +892,21 @@ impl AppState {
     /// can be forgotten at a call site.
     pub(crate) fn palette(&self) -> crate::ui::theme::Palette {
         crate::ui::theme::palette(self.color_mode, self.polarity)
+    }
+
+    /// The runtime settings as they stand, for the config writer (issue #331).
+    pub fn settings(&self) -> crate::config::Settings {
+        crate::config::Settings {
+            theme: self.color_mode.label().to_string(),
+            polarity: self.polarity.label().to_string(),
+            hints: self.hints_visible,
+            notifications: self.notifications_enabled,
+        }
+    }
+
+    /// Note that a toggle changed; the event loop writes it back.
+    pub fn stage_settings_save(&mut self) {
+        self.pending_settings_save = true;
     }
 
     pub fn next_refresh_instant(&self) -> Instant {

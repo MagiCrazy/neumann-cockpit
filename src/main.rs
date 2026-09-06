@@ -137,6 +137,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
     let mut state = AppState {
         log: log.clone(),
         hints_visible: config.hints,
+        notifications_enabled: config.notifications,
         color_mode: config.color_mode(),
         polarity,
         booting: config.boot,
@@ -196,6 +197,23 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
         state.rate_limited_secs = client.throttled_for_secs();
         state.rate_limit_quota = client.quota();
 
+        // Write back a runtime toggle (issue #331). Off the render path, and
+        // a failure is a toast rather than a crash: losing a preference is not
+        // worth taking the cockpit down for.
+        if std::mem::take(&mut state.pending_settings_save) {
+            let settings = state.settings();
+            if let Err(e) =
+                neumann_cockpit::config::save_settings_at(&neumann_cockpit::config::config_path(), &settings)
+            {
+                let msg = format!("could not save settings: {e}");
+                state.log.error({
+                    let msg = msg.clone();
+                    move || msg
+                });
+                state.set_toast(msg);
+            }
+        }
+
         // Drain ship's-log entries staged by the previous tick's handlers:
         // persist each and prepend to the in-memory journal (newest first,
         // capped), mirroring how sector observations are persisted.
@@ -225,7 +243,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
         // (so they never accumulate); emit only when the pilot enabled them.
         if !state.pending_notifications.is_empty() {
             let staged = std::mem::take(&mut state.pending_notifications);
-            if config.notifications {
+            if state.notifications_enabled {
                 for msg in staged {
                     neumann_cockpit::notify::desktop_notify(&msg);
                 }

@@ -98,7 +98,10 @@ pub fn handle_cockpit_event(code: KeyCode, state: &mut AppState, client: &ApiCli
             let how = if state.storage_sort_alpha { "a-z" } else { "probe order" };
             state.set_toast(format!("containers sorted: {how}"));
         }
-        KeyCode::F(1) => state.hints_visible = !state.hints_visible,
+        KeyCode::F(1) => {
+            state.hints_visible = !state.hints_visible;
+            state.stage_settings_save();
+        }
         // Esc backs out one step: leave zoom first, then drill up.
         KeyCode::Esc => {
             if state.zoomed {

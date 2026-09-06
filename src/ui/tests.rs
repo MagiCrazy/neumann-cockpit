@@ -999,3 +999,20 @@ fn the_scanner_detail_can_be_read_to_its_end() {
     assert!(bottom.contains("Rock 11"), "the tail is now reachable: {bottom}");
     assert!(bottom.contains("\u{25b2}"), "and the pane says it continues above");
 }
+
+// -- notification mute indicator (issue #331) ------------------------------
+
+#[test]
+fn the_status_bar_shows_whether_the_cockpit_will_beep() {
+    let mut state = AppState::default();
+    state.probe = Some(probe(50.0));
+
+    state.notifications_enabled = true;
+    let on = buffer_text(&render_cockpit(&state, 110, 24));
+    assert!(on.contains("\u{266a}"), "the note is shown when sound is on");
+    assert!(!on.contains("off"), "and nothing more: {on}");
+
+    state.notifications_enabled = false;
+    let muted = buffer_text(&render_cockpit(&state, 110, 24));
+    assert!(muted.contains("\u{266a} off"), "muted says so plainly: {muted}");
+}
