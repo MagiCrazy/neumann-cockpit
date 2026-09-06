@@ -30,3 +30,8 @@ api_key  = "vng_your_api_key_here"
 # explicable an hour later. The API key is never written to it.
 # NEUMANN_COCKPIT_LOG overrides this for a single run.
 #log = "error"
+
+# Ask GitHub for the latest release at boot, once a day. This is the only
+# request the cockpit makes outside base_url, so it is off unless you say
+# otherwise — the first run asks and writes your answer here.
+#update_check = false

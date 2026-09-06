@@ -217,6 +217,9 @@ pub struct AppState {
     /// the state layer owns no filesystem, and a render pass must never block
     /// on a write.
     pub pending_settings_save: bool,
+    /// A published release newer than this build, if the check ran and found
+    /// one (issue #339). Display only — the cockpit never updates itself.
+    pub update_available: Option<String>,
     /// Whether long-task completions still beep (`F4`, issue #331). Seeded
     /// from the `notifications` config key; a cockpit that beeps with no way
     /// to see or stop it is hostile in a shared room.
@@ -892,6 +895,19 @@ impl AppState {
     /// can be forgotten at a call site.
     pub(crate) fn palette(&self) -> crate::ui::theme::Palette {
         crate::ui::theme::palette(self.color_mode, self.polarity)
+    }
+
+    /// Absorb the latest published tag: remembered only when it is actually
+    /// newer than this build (issue #339), so the chip is never a false alarm.
+    pub fn note_latest_release(&mut self, tag: &str) {
+        if crate::update::is_newer(tag, crate::update::current_version()) {
+            let version = tag.rsplit('v').next().unwrap_or(tag).to_string();
+            self.log.info({
+                let version = version.clone();
+                move || format!("release {version} is newer than this build")
+            });
+            self.update_available = Some(version);
+        }
     }
 
     /// The runtime settings as they stand, for the config writer (issue #331).

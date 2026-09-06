@@ -31,6 +31,7 @@ notifications = true      # desktop notification on long-task completion (option
 
 - `theme` — cockpit color mode, seven of them: `mono-green` (default), `mono-amber`, `phosphor-semantic` (green base + green/yellow/red status), `modern-16` (named ANSI for terminals without truecolor), plus the lore modes `culture`, `deep-space` and `rust-belt`. `F2` cycles it at runtime.
 - `polarity` — terminal ground: `auto` (default, detected at boot via OSC 11), `dark` or `light`. `F3` flips it at runtime.
+- `update_check` — ask GitHub for the latest release at boot (issue #339). **Absent means not yet asked**: the first run asks once and writes the answer.
 - `hints` — show the contextual hints line at the bottom (`F1` toggles at runtime). Defaults `true`.
 - `log` — diagnostic log verbosity: `off`, `error` (default), `info`, `debug` (issue #309). `NEUMANN_COCKPIT_LOG` overrides it for one run.
 - `notifications` — emit a desktop notification (OSC 9 + terminal bell, `src/notify.rs`, issue #203); `F4` mutes it at runtime and the status bar carries `♪` / `♪ off` when a long task finishes: a travel arriving, or a Manny completing a long task (mining, crafting, repair, salvage, upgrade…). Completions are detected in `update_probe` / `update_mannies` (busy→idle diff), staged in `AppState::pending_notifications`, and drained by the event loop. Defaults `true`.
@@ -64,6 +65,14 @@ Once the link is up (or the pilot continues offline), it hands off to `run()`, w
 ### Headless script runner (`src/headless.rs`, #198 extension)
 
 `main()` checks `headless::script_arg(argv)` **before** touching the terminal: `--script <file>` / `-s <file>` / `--script=<file>` runs `headless::run()` and `process::exit`s with its code; a bare launch is the interactive cockpit, unchanged. The runner plays an action script from a file with **no TUI**: it loads the config non-interactively (no key onboarding — errors to stderr), opens the same SQLite DB, `fetch_all`s and waits until the probe + mannies rosters are primed, then parses the file (one command per line; blank lines and `#` comments skipped) via `parse_script_line` and runs it through the **same** `advance_script` executor (sequential, fork/join, late binding). It reuses the cockpit's `fetch_*` spawners and a minimal `ApiMessage` dispatch (refresh `probe`/`mannies`/`sector`; route the six MVP verb errors to `script_note_error`). Ship's-log entries are streamed to stdout (`HH:MM:SS » narrated summary`, plus `✓`/`✗` per step and a final status line) **and** persisted to the `events` table, so a headless run appears in the next TUI session's ship's log. Exit code: `0` on completion, `1` if the script halted on an error. This is the first non-TUI surface; #229 tracks a headless **status** mode sharing the same seams.
+
+### Release check (`src/update.rs`, #339)
+
+A pilot who installed from the releases page has no way to learn a newer version exists. Two things make this more than an HTTP call.
+
+It is the **first request outside `base_url`**: everything else goes to the probe server the pilot configured, and asking GitHub tells a third party they never entered that this machine runs the cockpit. So it is opt-in, asked once by the preflight (`UPDATE_CONSENT_PROMPT`, which names github.com rather than merely asking) and written to `update_check`; `UpdatePref::Unset` is distinct from `Disabled`, since silence is not consent, and a refusal is written as firmly as an agreement so the question is never repeated. Agreement is capped at one query a day by a stamp in the `meta` table — a small key/value corner in the same SQLite database — written when the check *fires* rather than when it answers, so a GitHub that never replies is not re-asked in a relaunch loop. `check_due` treats an absent, unreadable **or future** stamp as due, so a clock that moved backwards self-heals instead of disabling the check.
+
+And the **tag is not the crate version**: release-please tags this repository `neumann-cockpit-v104.4.0`, so `parse_tag` strips the prefix and refuses anything that is not that shape rather than mis-comparing it. The crate major tracks the API version, so `is_newer` is a plain "greater than" — a major bump is an ordinary release, not a warning. The query runs in a background task off the boot path, every failure is silent, and the result is a dim `⬆ vN` status-bar chip: housekeeping, never a toast.
 
 ### Diagnostic log (`src/diaglog.rs`, #309)
 

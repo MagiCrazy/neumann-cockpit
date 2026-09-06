@@ -41,6 +41,12 @@ pub struct Config {
     /// one-off debugging run.
     #[serde(default)]
     pub log: Option<String>,
+    /// Whether to ask GitHub for the latest release at boot (issue #339).
+    /// Absent means **not yet asked**: the first run asks once and writes the
+    /// answer, because this is the only request the cockpit makes outside
+    /// `base_url`.
+    #[serde(default)]
+    pub update_check: Option<bool>,
 }
 
 fn default_true() -> bool {
@@ -56,6 +62,16 @@ impl Config {
             .as_deref()
             .and_then(crate::app::ColorMode::from_label)
             .unwrap_or_default()
+    }
+
+    /// What the pilot decided about the release check. Absent is `Unset`, not
+    /// `false`: the difference is whether they have been asked.
+    pub fn update_pref(&self) -> crate::update::UpdatePref {
+        match self.update_check {
+            None => crate::update::UpdatePref::Unset,
+            Some(true) => crate::update::UpdatePref::Enabled,
+            Some(false) => crate::update::UpdatePref::Disabled,
+        }
     }
 
     /// Diagnostic log level: the `NEUMANN_COCKPIT_LOG` environment variable
@@ -90,6 +106,7 @@ struct RawConfig {
     theme: Option<String>,
     polarity: Option<String>,
     log: Option<String>,
+    update_check: Option<bool>,
     hints: Option<bool>,
     boot: Option<bool>,
     notifications: Option<bool>,
@@ -136,6 +153,7 @@ pub(crate) fn load_status_at(path: &std::path::Path) -> ConfigStatus {
         theme: raw.theme,
         polarity: raw.polarity,
         log: raw.log,
+        update_check: raw.update_check,
         hints: raw.hints.unwrap_or(true),
         boot: raw.boot.unwrap_or(true),
         notifications: raw.notifications.unwrap_or(true),
@@ -178,7 +196,8 @@ fn generated_body(base_url: &str, api_key: &str) -> String {
          #hints = true              # F1 · the contextual hints line\n\
          #boot = true               # the startup self-check animation\n\
          #notifications = true      # desktop notification on a long task finishing\n\
-         #log = \"error\"            # diagnostics: off error info debug\n"
+         #log = \"error\"            # diagnostics: off error info debug\n\
+         #update_check = false      # ask GitHub for the latest release at boot\n"
     )
 }
 
@@ -191,6 +210,18 @@ pub struct Settings {
     pub polarity: String,
     pub hints: bool,
     pub notifications: bool,
+}
+
+/// Record the pilot's answer about the release check, without touching
+/// anything else in the file (issue #339). Separate from [`Settings`] because
+/// it is asked once rather than toggled.
+pub fn save_update_pref_at(path: &std::path::Path, enabled: bool) -> Result<()> {
+    let body = std::fs::read_to_string(path).unwrap_or_default();
+    let body = upsert_key(&body, "update_check", &enabled.to_string());
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).with_context(|| format!("creating config dir {}", parent.display()))?;
+    }
+    std::fs::write(path, body).with_context(|| format!("writing {}", path.display()))
 }
 
 /// Rewrite `path` so it carries `settings`, **preserving everything else**.
@@ -292,6 +323,7 @@ mod tests {
         Config {
             polarity: None,
             log: None,
+            update_check: None,
             base_url: "x".into(),
             api_key: "x".into(),
             theme: theme.map(String::from),

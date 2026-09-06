@@ -83,6 +83,8 @@ pub struct Ready {
     /// Terminal ground resolved at boot: detected via OSC 11, or forced by the
     /// config's `polarity` key (issue #233).
     pub polarity: Polarity,
+    /// Whether the pilot agreed to the release check (issue #339).
+    pub update_check: bool,
 }
 
 /// The result of the preflight: either resources to run, or a clean quit
@@ -190,6 +192,14 @@ impl LinkOutcome {
     }
 }
 
+/// The consent prompt for the release check (issue #339), shown once.
+///
+/// It names the third party and what leaves the machine, because that is the
+/// whole of what is being agreed to — and it is the only request the cockpit
+/// makes outside the configured `base_url`.
+pub const UPDATE_CONSENT_PROMPT: &str = "check github.com for new releases at startup?\n\
+     it sends nothing but the request itself   [Y]es   [N]o";
+
 /// The actions offered under a failed link. Offering "re-enter key" to a pilot
 /// whose key is fine and whose quota is spent is the wrong advice, so the
 /// throttled wording drops it.
@@ -217,6 +227,7 @@ pub fn commit_key_at(path: &std::path::Path, base_url: &str, key: &str) -> Resul
         theme: None,
         polarity: None,
         log: None,
+        update_check: None,
         hints: true,
         boot: true,
         notifications: true,
@@ -305,6 +316,13 @@ pub async fn run(terminal: &mut Term, color: ColorMode, polarity: Polarity) -> R
         }
     };
 
+    // Asked once, after the link step: a first run that has just typed a key
+    // has enough context to answer, and a returning pilot is never asked.
+    let update_check = match config.update_pref() {
+        crate::update::UpdatePref::Unset => ask_update_consent(terminal, &log, &mut events, color, polarity).await?,
+        pref => pref.enabled(),
+    };
+
     Ok(Outcome::Ready(Box::new(Ready {
         config,
         client,
@@ -315,6 +333,7 @@ pub async fn run(terminal: &mut Term, color: ColorMode, polarity: Polarity) -> R
         api_version,
         link_ok,
         polarity,
+        update_check,
     })))
 }
 
@@ -388,6 +407,35 @@ async fn wait_action(events: &mut EventStream) -> LinkAction {
             None => return LinkAction::Continue,
         }
     }
+}
+
+/// Ask the release-check question, once, and remember the answer.
+///
+/// Returns whether the check may run. A pilot who declines is never asked
+/// again — `false` is written to the config just as firmly as `true`, because
+/// re-asking every launch would make the answer meaningless.
+async fn ask_update_consent(
+    terminal: &mut Term,
+    log: &BootLog,
+    events: &mut EventStream,
+    color: ColorMode,
+    polarity: Polarity,
+) -> Result<bool> {
+    redraw(terminal, log, None, Some(UPDATE_CONSENT_PROMPT), color, polarity)?;
+    let enabled = loop {
+        match events.next().await {
+            Some(Ok(Event::Key(k))) if k.kind == KeyEventKind::Press => match k.code {
+                KeyCode::Char('y') | KeyCode::Char('Y') => break true,
+                KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc | KeyCode::Enter => break false,
+                _ => {}
+            },
+            Some(_) => {}
+            // The event stream ending is not consent.
+            None => break false,
+        }
+    };
+    let _ = config::save_update_pref_at(&config::config_path(), enabled);
+    Ok(enabled)
 }
 
 /// The first line of an error, for a compact status column.
@@ -542,6 +590,43 @@ mod tests {
             Status::Fail("first line".into()),
             "the prompt has one row to say it in"
         );
+    }
+
+    // ── Release check consent (#339) ──────────────────────────────────────
+
+    #[test]
+    fn the_consent_prompt_names_the_third_party_and_offers_a_refusal() {
+        // This is the only request the cockpit makes outside `base_url`, so
+        // the prompt has to say who is being contacted, not just ask.
+        assert!(UPDATE_CONSENT_PROMPT.contains("github.com"), "{UPDATE_CONSENT_PROMPT}");
+        assert!(UPDATE_CONSENT_PROMPT.contains("[N]o"), "refusing must be offered");
+    }
+
+    #[test]
+    fn an_unanswered_config_is_asked_once_and_then_never_again() {
+        let path = tmp("update-pref");
+        let _ = std::fs::remove_file(&path);
+        config::write_config_at(&path, DEFAULT_BASE_URL, "vng_k").unwrap();
+
+        let pref = |path: &std::path::Path| match config::load_status_at(path) {
+            ConfigStatus::Ready(c) => c.update_pref(),
+            other => panic!("expected a usable config: {other:?}"),
+        };
+        assert_eq!(
+            pref(&path),
+            crate::update::UpdatePref::Unset,
+            "a generated file has not been answered yet"
+        );
+
+        // A refusal is written as firmly as an agreement: re-asking every
+        // launch would make the answer meaningless.
+        config::save_update_pref_at(&path, false).unwrap();
+        assert_eq!(pref(&path), crate::update::UpdatePref::Disabled);
+        assert!(!pref(&path).enabled());
+
+        config::save_update_pref_at(&path, true).unwrap();
+        assert_eq!(pref(&path), crate::update::UpdatePref::Enabled);
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]

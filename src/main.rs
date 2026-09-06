@@ -111,6 +111,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
         api_version,
         link_ok,
         polarity,
+        update_check,
     } = ready;
     // The diagnostic log opens as soon as the config is known (issue #309):
     // the API key is what it must never write, so the writer is given it here
@@ -159,6 +160,19 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
         Some((tx, degraded)) => (Some(tx), Some(degraded)),
         None => (None, None),
     };
+    // Ask GitHub for the latest release, in the background and only with the
+    // pilot's agreement (issue #339). Off the boot path entirely: a slow or
+    // unreachable GitHub must not delay a single frame, and the answer is
+    // welcome whenever it arrives — or never.
+    if update_check {
+        let tx = tx.clone();
+        tokio::spawn(async move {
+            if let Some(tag) = neumann_cockpit::update::fetch_latest_tag().await {
+                let _ = tx.send(ApiMessage::LatestRelease(tag)).await;
+            }
+        });
+    }
+
     let mut events = EventStream::new();
 
     // Short-lived tick that drives the boot assembly; runs only while booting.
@@ -377,6 +391,11 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
             Some(msg) = rx.recv() => {
                 state.loading = false;
                 match msg {
+                    // A newer release than this build (issue #339). Kept as a
+                    // quiet status-bar chip rather than a toast: it is never
+                    // urgent, and a modal about housekeeping in the middle of
+                    // a mining run would be an intrusion.
+                    ApiMessage::LatestRelease(tag) => state.note_latest_release(&tag),
                     ApiMessage::ProbeUpdated(probe) => state.update_probe(probe),
                     ApiMessage::FleetFetched(list) => state.update_fleet(list),
                     ApiMessage::DefaultProbeSet(list, name) => {
