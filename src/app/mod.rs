@@ -206,6 +206,8 @@ pub struct AppState {
     /// Size of the batch in flight (for the progress gauge).
     pub scan_batch_total: usize,
     pub scan_detail_scroll: usize,
+    /// Which Scanner column the navigation keys drive (issue #347).
+    pub scanner_focus: ScannerFocus,
     pub scan_filter: ScanFilter,
     /// Some(idx) when the scanner panel is in object-browsing mode.
     pub scanner_obj_selection: Option<usize>,

@@ -105,6 +105,22 @@ pub struct ScannerObjectEntry {
     pub attached: bool,
 }
 
+/// Which column of the Scanner pane the navigation keys drive (issue #347).
+///
+/// The pane is two columns — the observation detail on the left, the scan
+/// history on the right — and both are scrollable lists, so they cannot both
+/// own `j`/`k`. `h`/`←` and `l`/`→` move the focus between them, mirroring the
+/// production console's catalog ⇄ queue.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum ScannerFocus {
+    /// The scan-history list: the keys move the selection (the default, and
+    /// what the pane did before the detail could scroll at all).
+    #[default]
+    History,
+    /// The detail column: the keys scroll it.
+    Detail,
+}
+
 impl AppState {
     pub fn update_sector(&mut self, mut sector: SectorObservation) {
         sector.scanned_at = Some(Utc::now());

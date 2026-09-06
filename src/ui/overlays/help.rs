@@ -44,6 +44,7 @@ const LEFT: &[Section] = &[
             (":", "command line (see right)"),
             ("i", "jump to next idle Manny"),
             ("s", "Storage: sort a-z / probe order"),
+            ("h l / Tab", "Scanner: detail ⇄ history column"),
             ("F1", "toggle hints line"),
             ("F2", "cycle color mode (7, incl. lore)"),
             ("F3", "dark / light terminal ground"),

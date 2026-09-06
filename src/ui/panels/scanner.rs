@@ -2,7 +2,7 @@ use crate::api::types::{
     AsteroidTrajectory, AsteroidTrajectoryMode, AsteroidTrajectoryStatus, DangerLevel, MotorFuelStatus, ResourceShares,
     SectorObject, SectorObjectType, SensorMode,
 };
-use crate::app::AppState;
+use crate::app::{AppState, ScannerFocus};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -53,8 +53,17 @@ pub(crate) fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppSta
     let detail_area = cols[0];
     let history_area = cols[1];
 
+    // The divider between the two columns carries the focus: accent on the
+    // side the nav keys drive, dim otherwise (issue #347). Without it `Tab`
+    // would be a mode change with nothing on screen to say so.
+    let hist_focused = focused && state.scanner_focus == ScannerFocus::History;
     if history_len > 0 {
-        let hist_block = Block::default().borders(Borders::LEFT).border_style(dim);
+        let divider = if focused && !hist_focused {
+            Style::default().fg(p.accent)
+        } else {
+            dim
+        };
+        let hist_block = Block::default().borders(Borders::LEFT).border_style(divider);
         let hist_inner = hist_block.inner(history_area);
         frame.render_widget(hist_block, history_area);
 
@@ -76,7 +85,7 @@ pub(crate) fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppSta
 
         let list = List::new(items)
             .highlight_style(Style::default().add_modifier(Modifier::BOLD))
-            .highlight_symbol("▶ ");
+            .highlight_symbol(if hist_focused { "▶ " } else { "· " });
 
         let mut list_state = ListState::default();
         list_state.select(filtered.iter().position(|&i| i == state.scan_history_idx));
@@ -139,6 +148,36 @@ pub(crate) fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppSta
         return;
     }
 
+    // The remote-observation detail is built by `scanner_detail_lines`, which
+    // the input layer also calls to bound the scroll exactly (issue #347).
+    let lines = scanner_detail_lines(state, p);
+    let total = lines.len();
+    let offset = (state.scan_detail_scroll).min(total.saturating_sub(detail_area.height as usize));
+    frame.render_widget(Paragraph::new(lines).scroll((offset as u16, 0)), detail_area);
+    // The detail column is the scrollable half when it holds the focus; the
+    // markers ride the pane's own border either way (#326, #347).
+    if focused && state.scanner_focus == ScannerFocus::Detail {
+        scroll_markers(frame, area, offset as u16, total, focused, p);
+    }
+}
+
+/// The remote-observation detail as a line list — the same lines the pane
+/// renders, so the input layer can bound the scroll exactly (issue #347).
+///
+/// The paragraph is drawn **without** wrapping, so one line is one row and this
+/// count is the rendered height rather than an estimate.
+pub(crate) fn scanner_detail_lines<'a>(state: &'a AppState, p: Palette) -> Vec<Line<'a>> {
+    let dim = Style::default().fg(p.dim);
+    let text = Style::default().fg(p.text);
+    let Some(sector) = state.current_sector() else {
+        return Vec::new();
+    };
+    if state.viewing_probe_sector() {
+        return Vec::new(); // the redirect card is short and never scrolls
+    }
+    let coords = &sector.relative_coordinates;
+    let (cx, cy, cz) = (coords.x as i64, coords.y as i64, coords.z as i64);
+    let mut lines: Vec<Line> = Vec::new();
     // ── Remote / neighbor observation ──
     // Header: coords · distance · knowledge level. Sensors live in PROBE; the
     // scan-quality % is relegated to the zoom view.
@@ -263,10 +302,7 @@ pub(crate) fn render_scanner_panel(frame: &mut Frame, area: Rect, state: &AppSta
         }
     }
 
-    frame.render_widget(
-        Paragraph::new(lines).scroll((state.scan_detail_scroll as u16, 0)),
-        detail_area,
-    );
+    lines
 }
 
 /// Palette-aware interest colour for a scanned sector (drives the history list

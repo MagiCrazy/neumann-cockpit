@@ -462,6 +462,12 @@ impl super::AppState {
         if self.detail_view_active() {
             // No cursor here — the same keys move the viewport (issue #337).
             parts.push("jk scroll");
+        } else if pane == Pane::Scanner {
+            // Two columns, one set of keys (issue #347).
+            parts.push(match self.scanner_focus {
+                crate::app::ScannerFocus::History => "jk move · h detail",
+                crate::app::ScannerFocus::Detail => "jk scroll · l history",
+            });
         } else if !matches!(pane, Pane::Probe | Pane::Map) {
             parts.push("jk move");
         }
