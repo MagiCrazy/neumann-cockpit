@@ -5,6 +5,9 @@ use crate::api::types::{
 };
 
 pub enum ApiMessage {
+    /// The newest published release tag, when the pilot allowed the check
+    /// (issue #339). Best-effort: absent when the check is off or failed.
+    LatestRelease(String),
     ProbeUpdated(Probe),
     /// The player's fleet roster (`GET /api/probes`), fetched in `fetch_all`.
     /// Non-fatal. Drives the probe switcher; never resets the active probe.

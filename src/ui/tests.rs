@@ -999,3 +999,43 @@ fn the_scanner_detail_can_be_read_to_its_end() {
     assert!(bottom.contains("Rock 11"), "the tail is now reachable: {bottom}");
     assert!(bottom.contains("\u{25b2}"), "and the pane says it continues above");
 }
+
+// -- notification mute indicator (issue #331) ------------------------------
+
+#[test]
+fn the_status_bar_shows_whether_the_cockpit_will_beep() {
+    let mut state = AppState::default();
+    state.probe = Some(probe(50.0));
+
+    state.notifications_enabled = true;
+    let on = buffer_text(&render_cockpit(&state, 110, 24));
+    assert!(on.contains("\u{266a}"), "the note is shown when sound is on");
+    assert!(!on.contains("off"), "and nothing more: {on}");
+
+    state.notifications_enabled = false;
+    let muted = buffer_text(&render_cockpit(&state, 110, 24));
+    assert!(muted.contains("\u{266a} off"), "muted says so plainly: {muted}");
+}
+
+// -- update notice (issue #339) --------------------------------------------
+
+#[test]
+fn a_newer_release_is_a_quiet_chip_and_an_older_one_is_nothing() {
+    let mut state = AppState::default();
+    state.probe = Some(probe(50.0));
+
+    // Older and equal tags must not raise anything: a false "update
+    // available" is worse than none.
+    state.note_latest_release("neumann-cockpit-v0.0.1");
+    assert_eq!(state.update_available, None);
+    assert!(!buffer_text(&render_cockpit(&state, 110, 24)).contains("\u{2b06}"));
+
+    // A tag we cannot parse is not an update either.
+    state.note_latest_release("some-other-project-1.2.3");
+    assert_eq!(state.update_available, None);
+
+    state.note_latest_release("neumann-cockpit-v999.0.0");
+    assert_eq!(state.update_available.as_deref(), Some("999.0.0"));
+    let text = buffer_text(&render_cockpit(&state, 110, 24));
+    assert!(text.contains("999.0.0"), "the version is named: {text}");
+}

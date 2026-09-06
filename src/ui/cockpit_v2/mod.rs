@@ -408,6 +408,22 @@ fn render_status_line(frame: &mut Frame, area: Rect, state: &AppState, p: Palett
         };
         meta.push((label, style));
     }
+    // A newer release exists (issue #339). Dim and permanent: housekeeping,
+    // not an alarm — the pilot decides when to act on it.
+    if let Some(version) = &state.update_available {
+        meta.push((format!("⬆ v{version}"), dim));
+    }
+    // Notification state (issue #331): asked for explicitly, so both halves
+    // are shown rather than only the surprising one — the pilot wants to know
+    // the cockpit *will* beep as much as that it will not.
+    meta.push(if state.notifications_enabled {
+        ("♪".to_string(), dim)
+    } else {
+        (
+            "♪ off".to_string(),
+            Style::default().fg(p.warn).add_modifier(Modifier::BOLD),
+        )
+    });
     // Persistence degraded: the SQLite writer hit a failing write, so history
     // is no longer being saved (issue #216). Warn, bold, so it stands out.
     if state.persistence_degraded {

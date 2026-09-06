@@ -83,6 +83,8 @@ pub struct Ready {
     /// Terminal ground resolved at boot: detected via OSC 11, or forced by the
     /// config's `polarity` key (issue #233).
     pub polarity: Polarity,
+    /// Whether the pilot agreed to the release check (issue #339).
+    pub update_check: bool,
 }
 
 /// The result of the preflight: either resources to run, or a clean quit
@@ -101,6 +103,137 @@ enum LinkAction {
 
 type Term = Terminal<CrosstermBackend<io::Stdout>>;
 
+// ── Step decisions ────────────────────────────────────────────────────────
+//
+// The preflight is an async loop around a terminal, which is why none of it
+// was testable (issue #348). These are the *decisions* it makes, lifted out of
+// the drawing: each is a pure function of what the step returned, so the shell
+// below stays a shell and the reasoning can be asserted without a terminal, a
+// network or a real config directory.
+
+/// What the CONFIG step should do with the file it found.
+#[derive(Debug)]
+pub enum ConfigStep {
+    /// A usable config: carry on.
+    Use(Box<Config>),
+    /// Ask the pilot for a key, logging `reason` first.
+    Onboard { reason: Status },
+}
+
+/// Decide the CONFIG step. A file that exists but has no usable key is not an
+/// error — it is the first-run path, and the reason it took it is what the boot
+/// log shows.
+pub fn config_step(status: ConfigStatus) -> ConfigStep {
+    match status {
+        ConfigStatus::Ready(c) => ConfigStep::Use(Box::new(c)),
+        ConfigStatus::NeedsKey => ConfigStep::Onboard {
+            reason: Status::Pending,
+        },
+        ConfigStatus::Invalid(msg) => ConfigStep::Onboard {
+            reason: Status::Warn(format!("invalid: {msg}")),
+        },
+    }
+}
+
+/// The terminal's answer is only the default: a `polarity` key decides for it
+/// in both directions (issue #233).
+pub fn resolve_polarity(detected: Polarity, pref: crate::app::PolarityPref) -> Polarity {
+    match pref {
+        crate::app::PolarityPref::Auto => detected,
+        crate::app::PolarityPref::Forced(forced) => forced,
+    }
+}
+
+/// The ARCHIVE step's line: a one-time legacy import is worth saying out loud,
+/// the steady state is a pair of counts.
+pub fn archive_line(outcome: store::MigrationOutcome, sectors: usize, journal: usize) -> String {
+    match outcome {
+        store::MigrationOutcome::Imported(n) => format!("{sectors} sectors · migrated {n}"),
+        _ => format!("{sectors} sectors · {journal} log"),
+    }
+}
+
+/// What the REMOTE LINK probe found.
+#[derive(Debug, PartialEq)]
+pub enum LinkOutcome {
+    Online(u32),
+    /// The server answered, unhappily. `throttled` separates a spent quota from
+    /// every other failure, because the two need different advice.
+    Failed {
+        message: String,
+        throttled: bool,
+    },
+    /// No answer inside `LINK_TIMEOUT`.
+    TimedOut,
+}
+
+impl LinkOutcome {
+    /// Classify the probe's result. A 429 is a **healthy link with a spent
+    /// quota**, not a bad key (API v104) — telling them apart here is what
+    /// keeps the prompt below from sending a pilot to re-enter a good key.
+    pub fn classify(result: std::result::Result<Result<u32>, tokio::time::error::Elapsed>) -> Self {
+        match result {
+            Ok(Ok(v)) => LinkOutcome::Online(v),
+            Ok(Err(e)) => LinkOutcome::Failed {
+                throttled: e.downcast_ref::<RateLimited>().is_some(),
+                message: short_err(&e),
+            },
+            Err(_) => LinkOutcome::TimedOut,
+        }
+    }
+
+    /// The boot-log line for this outcome.
+    pub fn status(&self) -> Status {
+        match self {
+            LinkOutcome::Online(v) => Status::Ok(format!("online · v{v}")),
+            LinkOutcome::Failed { message, .. } => Status::Fail(message.clone()),
+            LinkOutcome::TimedOut => Status::Fail("timeout".into()),
+        }
+    }
+}
+
+/// The consent prompt for the release check (issue #339), shown once.
+///
+/// It names the third party and what leaves the machine, because that is the
+/// whole of what is being agreed to — and it is the only request the cockpit
+/// makes outside the configured `base_url`.
+pub const UPDATE_CONSENT_PROMPT: &str = "check github.com for new releases at startup?\n\
+     it sends nothing but the request itself   [Y]es   [N]o";
+
+/// The actions offered under a failed link. Offering "re-enter key" to a pilot
+/// whose key is fine and whose quota is spent is the wrong advice, so the
+/// throttled wording drops it.
+pub fn link_prompt(throttled: bool) -> &'static str {
+    if throttled {
+        "rate limited — the key is fine\n[R]etry after the delay   [Enter] continue offline"
+    } else {
+        "[R]etry   [K] re-enter key\n[Enter] continue offline"
+    }
+}
+
+/// Commit a freshly-entered API key: write it, then read the file back.
+///
+/// The re-read is what proves the file is usable; the fallback exists because a
+/// key we just wrote successfully must not be lost to a subsequent read failure
+/// — the pilot typed it, the cockpit should fly.
+pub fn commit_key_at(path: &std::path::Path, base_url: &str, key: &str) -> Result<Config> {
+    config::write_config_at(path, base_url, key)?;
+    if let ConfigStatus::Ready(c) = config::load_status_at(path) {
+        return Ok(c);
+    }
+    Ok(Config {
+        base_url: base_url.to_string(),
+        api_key: key.to_string(),
+        theme: None,
+        polarity: None,
+        log: None,
+        update_check: None,
+        hints: true,
+        boot: true,
+        notifications: true,
+    })
+}
+
 /// Run the preflight sequence, drawing each step in the Probe pane as it
 /// completes. Returns once the link is up, or the pilot chooses to continue in
 /// degraded mode, or quits.
@@ -115,13 +248,15 @@ pub async fn run(terminal: &mut Term, color: ColorMode, polarity: Polarity) -> R
     // ── CONFIG ──────────────────────────────────────────────────────────
     log.begin("CONFIG");
     redraw(terminal, &log, None, None, color, polarity)?;
-    let mut config = match Config::load_status() {
-        ConfigStatus::Ready(c) => {
+    let mut config = match config_step(Config::load_status()) {
+        ConfigStep::Use(c) => {
             log.set(Status::Ok("loaded".into()));
-            c
+            *c
         }
-        ConfigStatus::Invalid(msg) => {
-            log.set(Status::Warn(format!("invalid: {msg}")));
+        ConfigStep::Onboard { reason } => {
+            if !matches!(reason, Status::Pending) {
+                log.set(reason);
+            }
             match onboard(terminal, &log, &mut events, color, polarity).await? {
                 Some(c) => {
                     log.set(Status::Ok("configured".into()));
@@ -130,19 +265,9 @@ pub async fn run(terminal: &mut Term, color: ColorMode, polarity: Polarity) -> R
                 None => return Ok(Outcome::Quit),
             }
         }
-        ConfigStatus::NeedsKey => match onboard(terminal, &log, &mut events, color, polarity).await? {
-            Some(c) => {
-                log.set(Status::Ok("configured".into()));
-                c
-            }
-            None => return Ok(Outcome::Quit),
-        },
     };
 
-    // The pilot's decision outranks the terminal's answer, in both directions.
-    if let crate::app::PolarityPref::Forced(forced) = config.polarity_pref() {
-        polarity = forced;
-    }
+    polarity = resolve_polarity(polarity, config.polarity_pref());
 
     // ── ARCHIVE (local SQLite store) ────────────────────────────────────
     log.begin("ARCHIVE");
@@ -154,13 +279,7 @@ pub async fn run(terminal: &mut Term, color: ColorMode, polarity: Polarity) -> R
             let history = store::load_observations(&conn);
             let journal = store::load_events(&conn);
             let telemetry = store::load_telemetry(&conn);
-            let msg = match outcome {
-                store::MigrationOutcome::Imported(n) => {
-                    format!("{} sectors · migrated {n}", history.len())
-                }
-                _ => format!("{} sectors · {} log", history.len(), journal.len()),
-            };
-            log.set(Status::Ok(msg));
+            log.set(Status::Ok(archive_line(outcome, history.len(), journal.len())));
             (Some(conn), history, journal, telemetry)
         }
         Err(e) => {
@@ -174,30 +293,16 @@ pub async fn run(terminal: &mut Term, color: ColorMode, polarity: Polarity) -> R
     // with actions (retry / re-enter key / continue offline).
     log.begin("REMOTE LINK");
     let mut client = ApiClient::new(config.base_url.clone(), config.api_key.clone())?;
-    let mut throttled = false;
     let (link_ok, api_version) = loop {
         log.set(Status::Pending);
         redraw(terminal, &log, None, None, color, polarity)?;
-        match timeout(LINK_TIMEOUT, client.get_api_version()).await {
-            Ok(Ok(v)) => {
-                log.set(Status::Ok(format!("online · v{v}")));
-                break (true, Some(v));
-            }
-            Ok(Err(e)) => {
-                // A 429 is a healthy link with a spent quota, not a bad key:
-                // offering "re-enter key" here would send the pilot down the
-                // wrong path (API v104).
-                throttled = e.downcast_ref::<RateLimited>().is_some();
-                log.set(Status::Fail(short_err(&e)));
-            }
-            Err(_) => log.set(Status::Fail("timeout".into())),
+        let outcome = LinkOutcome::classify(timeout(LINK_TIMEOUT, client.get_api_version()).await);
+        log.set(outcome.status());
+        if let LinkOutcome::Online(v) = outcome {
+            break (true, Some(v));
         }
-        let actions = if throttled {
-            "rate limited — the key is fine\n[R]etry after the delay   [Enter] continue offline"
-        } else {
-            "[R]etry   [K] re-enter key\n[Enter] continue offline"
-        };
-        redraw(terminal, &log, None, Some(actions), color, polarity)?;
+        let throttled = matches!(outcome, LinkOutcome::Failed { throttled: true, .. });
+        redraw(terminal, &log, None, Some(link_prompt(throttled)), color, polarity)?;
         match wait_action(&mut events).await {
             LinkAction::Retry => continue,
             LinkAction::Continue => break (false, None),
@@ -211,6 +316,13 @@ pub async fn run(terminal: &mut Term, color: ColorMode, polarity: Polarity) -> R
         }
     };
 
+    // Asked once, after the link step: a first run that has just typed a key
+    // has enough context to answer, and a returning pilot is never asked.
+    let update_check = match config.update_pref() {
+        crate::update::UpdatePref::Unset => ask_update_consent(terminal, &log, &mut events, color, polarity).await?,
+        pref => pref.enabled(),
+    };
+
     Ok(Outcome::Ready(Box::new(Ready {
         config,
         client,
@@ -221,6 +333,7 @@ pub async fn run(terminal: &mut Term, color: ColorMode, polarity: Polarity) -> R
         api_version,
         link_ok,
         polarity,
+        update_check,
     })))
 }
 
@@ -257,23 +370,8 @@ async fn onboard(
                     error = Some("key can't be empty".into());
                     continue;
                 }
-                match config::write_config(DEFAULT_BASE_URL, &key) {
-                    Ok(_) => {
-                        if let ConfigStatus::Ready(c) = Config::load_status() {
-                            return Ok(Some(c));
-                        }
-                        // We just wrote a valid key; fall back to a direct build.
-                        return Ok(Some(Config {
-                            base_url: DEFAULT_BASE_URL.into(),
-                            api_key: key,
-                            theme: None,
-                            polarity: None,
-                            log: None,
-                            hints: true,
-                            boot: true,
-                            notifications: true,
-                        }));
-                    }
+                match commit_key_at(&config::config_path(), DEFAULT_BASE_URL, &key) {
+                    Ok(c) => return Ok(Some(c)),
                     Err(e) => error = Some(format!("write failed: {e}")),
                 }
             }
@@ -311,7 +409,233 @@ async fn wait_action(events: &mut EventStream) -> LinkAction {
     }
 }
 
+/// Ask the release-check question, once, and remember the answer.
+///
+/// Returns whether the check may run. A pilot who declines is never asked
+/// again — `false` is written to the config just as firmly as `true`, because
+/// re-asking every launch would make the answer meaningless.
+async fn ask_update_consent(
+    terminal: &mut Term,
+    log: &BootLog,
+    events: &mut EventStream,
+    color: ColorMode,
+    polarity: Polarity,
+) -> Result<bool> {
+    redraw(terminal, log, None, Some(UPDATE_CONSENT_PROMPT), color, polarity)?;
+    let enabled = loop {
+        match events.next().await {
+            Some(Ok(Event::Key(k))) if k.kind == KeyEventKind::Press => match k.code {
+                KeyCode::Char('y') | KeyCode::Char('Y') => break true,
+                KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc | KeyCode::Enter => break false,
+                _ => {}
+            },
+            Some(_) => {}
+            // The event stream ending is not consent.
+            None => break false,
+        }
+    };
+    let _ = config::save_update_pref_at(&config::config_path(), enabled);
+    Ok(enabled)
+}
+
 /// The first line of an error, for a compact status column.
 fn short_err(e: &anyhow::Error) -> String {
     e.to_string().lines().next().unwrap_or("error").to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    //! The boot path's *decisions* (issue #348). None of these needs a
+    //! terminal, a network or a real config directory — which is the whole
+    //! point: this is the code a pilot meets before anything is on screen, and
+    //! it exists because a Windows first run used to fail before the terminal
+    //! did.
+    use super::*;
+    use crate::app::{Polarity, PolarityPref};
+
+    fn tmp(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("nc_preflight_{name}.toml"))
+    }
+
+    // ── CONFIG ────────────────────────────────────────────────────────────
+
+    #[test]
+    fn a_usable_config_is_used_as_is() {
+        let path = tmp("ready");
+        let _ = std::fs::remove_file(&path);
+        config::write_config_at(&path, "https://example.test", "vng_realkey").unwrap();
+        match config_step(config::load_status_at(&path)) {
+            ConfigStep::Use(c) => {
+                assert_eq!(c.api_key, "vng_realkey");
+                assert_eq!(c.base_url, "https://example.test");
+            }
+            other => panic!("expected Use, got {other:?}"),
+        }
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn a_missing_key_is_the_first_run_path_not_an_error() {
+        // The file may not exist at all, or exist with the placeholder key
+        // from config.example.toml. Both mean "ask", and neither is a failure
+        // worth colouring the boot log with.
+        match config_step(config::load_status_at(&tmp("absent-nothing-here"))) {
+            ConfigStep::Onboard { reason } => assert!(
+                matches!(reason, Status::Pending),
+                "a first run is not a warning: {reason:?}"
+            ),
+            other => panic!("expected Onboard, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_malformed_config_says_why_before_asking() {
+        let path = tmp("malformed");
+        std::fs::write(&path, "this is not toml = = =").unwrap();
+        match config_step(config::load_status_at(&path)) {
+            ConfigStep::Onboard { reason } => match reason {
+                Status::Warn(msg) => assert!(msg.starts_with("invalid:"), "{msg}"),
+                other => panic!("a broken file has to be explained, not swallowed: {other:?}"),
+            },
+            other => panic!("expected Onboard, got {other:?}"),
+        }
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn a_committed_key_is_read_back_from_the_file() {
+        let path = tmp("commit");
+        let _ = std::fs::remove_file(&path);
+        let config = commit_key_at(&path, DEFAULT_BASE_URL, "vng_typed_by_the_pilot").unwrap();
+        assert_eq!(config.api_key, "vng_typed_by_the_pilot");
+        assert_eq!(config.base_url, DEFAULT_BASE_URL);
+        // And it really is on disk, not just in the returned struct.
+        assert!(matches!(config::load_status_at(&path), ConfigStatus::Ready(_)));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    // ── Polarity (#233) ───────────────────────────────────────────────────
+
+    #[test]
+    fn a_forced_polarity_outranks_the_terminals_answer() {
+        // Both directions: the pilot may be correcting a terminal that
+        // answered wrong, or one that never answered at all.
+        assert_eq!(resolve_polarity(Polarity::Dark, PolarityPref::Auto), Polarity::Dark);
+        assert_eq!(resolve_polarity(Polarity::Light, PolarityPref::Auto), Polarity::Light);
+        assert_eq!(
+            resolve_polarity(Polarity::Dark, PolarityPref::Forced(Polarity::Light)),
+            Polarity::Light
+        );
+        assert_eq!(
+            resolve_polarity(Polarity::Light, PolarityPref::Forced(Polarity::Dark)),
+            Polarity::Dark
+        );
+    }
+
+    // ── ARCHIVE ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn a_one_time_import_is_reported_and_the_steady_state_is_counts() {
+        assert_eq!(
+            archive_line(store::MigrationOutcome::Imported(42), 100, 7),
+            "100 sectors · migrated 42",
+            "a legacy import happens once and is worth saying"
+        );
+        for quiet in [
+            store::MigrationOutcome::AlreadyMigrated,
+            store::MigrationOutcome::NoLegacyFile,
+        ] {
+            assert_eq!(archive_line(quiet, 100, 7), "100 sectors · 7 log");
+        }
+    }
+
+    // ── REMOTE LINK ───────────────────────────────────────────────────────
+
+    #[test]
+    fn a_healthy_link_reports_its_api_version() {
+        let outcome = LinkOutcome::classify(Ok(Ok(116)));
+        assert_eq!(outcome, LinkOutcome::Online(116));
+        assert_eq!(outcome.status(), Status::Ok("online · v116".into()));
+    }
+
+    #[test]
+    fn a_spent_quota_is_told_apart_from_a_bad_key() {
+        // The distinction that matters: a 429 is a healthy link whose quota is
+        // gone, and offering "re-enter key" would send the pilot to change a
+        // key that is perfectly fine (API v104).
+        let throttled = LinkOutcome::classify(Ok(Err(anyhow::Error::new(RateLimited {
+            retry_after_secs: Some(30),
+        }))));
+        assert!(matches!(throttled, LinkOutcome::Failed { throttled: true, .. }));
+        assert!(link_prompt(true).contains("the key is fine"));
+        assert!(
+            !link_prompt(true).contains("re-enter key"),
+            "wrong advice: {}",
+            link_prompt(true)
+        );
+
+        let unauthorized = LinkOutcome::classify(Ok(Err(anyhow::anyhow!(
+            "Unauthorized — check your api_key in config.toml"
+        ))));
+        assert!(matches!(unauthorized, LinkOutcome::Failed { throttled: false, .. }));
+        assert!(link_prompt(false).contains("re-enter key"));
+    }
+
+    #[test]
+    fn a_failure_keeps_only_its_first_line() {
+        // anyhow chains contexts across lines; the boot grid has one row.
+        let outcome = LinkOutcome::classify(Ok(Err(anyhow::anyhow!("first line\nsecond line"))));
+        assert_eq!(
+            outcome.status(),
+            Status::Fail("first line".into()),
+            "the prompt has one row to say it in"
+        );
+    }
+
+    // ── Release check consent (#339) ──────────────────────────────────────
+
+    #[test]
+    fn the_consent_prompt_names_the_third_party_and_offers_a_refusal() {
+        // This is the only request the cockpit makes outside `base_url`, so
+        // the prompt has to say who is being contacted, not just ask.
+        assert!(UPDATE_CONSENT_PROMPT.contains("github.com"), "{UPDATE_CONSENT_PROMPT}");
+        assert!(UPDATE_CONSENT_PROMPT.contains("[N]o"), "refusing must be offered");
+    }
+
+    #[test]
+    fn an_unanswered_config_is_asked_once_and_then_never_again() {
+        let path = tmp("update-pref");
+        let _ = std::fs::remove_file(&path);
+        config::write_config_at(&path, DEFAULT_BASE_URL, "vng_k").unwrap();
+
+        let pref = |path: &std::path::Path| match config::load_status_at(path) {
+            ConfigStatus::Ready(c) => c.update_pref(),
+            other => panic!("expected a usable config: {other:?}"),
+        };
+        assert_eq!(
+            pref(&path),
+            crate::update::UpdatePref::Unset,
+            "a generated file has not been answered yet"
+        );
+
+        // A refusal is written as firmly as an agreement: re-asking every
+        // launch would make the answer meaningless.
+        config::save_update_pref_at(&path, false).unwrap();
+        assert_eq!(pref(&path), crate::update::UpdatePref::Disabled);
+        assert!(!pref(&path).enabled());
+
+        config::save_update_pref_at(&path, true).unwrap();
+        assert_eq!(pref(&path), crate::update::UpdatePref::Enabled);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn every_failure_offers_a_way_to_continue_offline() {
+        // Degraded mode is the whole reason the preflight exists: no failure
+        // may leave the pilot with nothing to press.
+        for prompt in [link_prompt(true), link_prompt(false)] {
+            assert!(prompt.contains("continue offline"), "{prompt}");
+            assert!(prompt.contains("[R]etry"), "{prompt}");
+        }
+    }
 }

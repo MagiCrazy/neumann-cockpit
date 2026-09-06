@@ -26,3 +26,4 @@ pub mod preflight;
 pub mod store;
 pub mod termbg;
 pub mod ui;
+pub mod update;

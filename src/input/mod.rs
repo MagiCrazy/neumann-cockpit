@@ -189,6 +189,21 @@ pub fn handle_event(event: Event, state: &mut AppState, client: &ApiClient, tx: 
         // F2 cycles the cockpit color mode.
         state.color_mode = state.color_mode.cycle();
         state.set_toast(format!("color mode: {}", state.color_mode.label()));
+        state.stage_settings_save();
+        return;
+    }
+
+    if k.code == KeyCode::F(4) {
+        // F4 mutes the long-task notifications (issue #331). A runtime toggle
+        // rather than a config-only key: the pilot who needs silence needs it
+        // now, not on the next launch.
+        state.notifications_enabled = !state.notifications_enabled;
+        state.set_toast(if state.notifications_enabled {
+            "notifications on".to_string()
+        } else {
+            "notifications muted".to_string()
+        });
+        state.stage_settings_save();
         return;
     }
 
@@ -198,6 +213,7 @@ pub fn handle_event(event: Event, state: &mut AppState, client: &ApiClient, tx: 
         // keystroke from being corrected.
         state.polarity = state.polarity.toggle();
         state.set_toast(format!("polarity: {}", state.polarity.label()));
+        state.stage_settings_save();
         return;
     }
 
@@ -466,6 +482,42 @@ mod tests {
         let held = state.scan_history_idx;
         press(&mut state, KeyCode::Char('j'));
         assert_eq!(state.scan_history_idx, held, "the history cursor stays put");
+    }
+
+    #[tokio::test]
+    async fn a_runtime_toggle_asks_to_be_remembered() {
+        // A toggle that is forgotten on the next launch reads as a setting
+        // that does not exist (issue #331). The write itself is the event
+        // loop's job; what the input layer owes is the request.
+        let mut state = AppState::default();
+        assert!(!state.pending_settings_save);
+
+        press(&mut state, KeyCode::F(2));
+        assert!(state.pending_settings_save, "F2 (theme) asks to be saved");
+
+        state.pending_settings_save = false;
+        press(&mut state, KeyCode::F(3));
+        assert!(state.pending_settings_save, "F3 (polarity) too");
+
+        state.pending_settings_save = false;
+        press(&mut state, KeyCode::F(1));
+        assert!(state.pending_settings_save, "and F1 (hints)");
+    }
+
+    #[tokio::test]
+    async fn f4_mutes_the_notifications_and_says_so() {
+        // "A cockpit that beeps with no way to see or stop it is hostile in a
+        // shared room" — so the state is both toggleable and visible.
+        let mut state = AppState::default();
+        state.notifications_enabled = true;
+
+        press(&mut state, KeyCode::F(4));
+        assert!(!state.notifications_enabled);
+        assert!(state.active_toast().is_some_and(|t| t.contains("muted")));
+        assert!(state.pending_settings_save, "silence has to survive a relaunch");
+
+        press(&mut state, KeyCode::F(4));
+        assert!(state.notifications_enabled);
     }
 
     #[tokio::test]

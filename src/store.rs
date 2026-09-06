@@ -66,6 +66,14 @@ CREATE TABLE IF NOT EXISTS telemetry (
 );
 CREATE INDEX IF NOT EXISTS idx_telemetry_probe
     ON telemetry (probe_id, id);
+
+-- Small key/value corner for cross-session bookkeeping that is neither
+-- configuration (which the pilot edits) nor a time series. First user: when
+-- the release check last ran, so a relaunch does not re-ask GitHub (#339).
+CREATE TABLE IF NOT EXISTS meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 ";
 
 /// How many recent ship's-log entries the cockpit loads into memory and keeps
@@ -89,6 +97,26 @@ fn ensure_columns(conn: &Connection) {
     // observed_by — scan provenance (API v81 multi-probe).
     let _ = conn.execute("ALTER TABLE sector_observations ADD COLUMN observed_by INTEGER", []);
 }
+
+/// Read one bookkeeping value. `None` when absent or unreadable — every caller
+/// treats a missing value as "never happened", which is the safe reading.
+pub fn meta_get(conn: &Connection, key: &str) -> Option<String> {
+    conn.query_row("SELECT value FROM meta WHERE key = ?1", [key], |r| r.get(0))
+        .ok()
+}
+
+/// Write one bookkeeping value, replacing any previous one.
+pub fn meta_set(conn: &Connection, key: &str, value: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT INTO meta (key, value) VALUES (?1, ?2)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        [key, value],
+    )?;
+    Ok(())
+}
+
+/// `meta` key: RFC 3339 stamp of the last release check (issue #339).
+pub const META_LAST_UPDATE_CHECK: &str = "last_update_check";
 
 /// Messages accepted by the persistence writer thread.
 pub enum PersistMsg {
@@ -353,6 +381,28 @@ pub fn spawn_writer(conn: Connection) -> (Sender<PersistMsg>, Arc<AtomicBool>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn meta_round_trips_and_treats_a_missing_key_as_never_happened() {
+        // The bookkeeping corner behind the release-check cap (#339): a
+        // missing value has to read as "never", or a fresh install would
+        // never run the check it just agreed to.
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+
+        assert_eq!(meta_get(&conn, META_LAST_UPDATE_CHECK), None);
+        meta_set(&conn, META_LAST_UPDATE_CHECK, "2026-09-06T12:00:00Z").unwrap();
+        assert_eq!(
+            meta_get(&conn, META_LAST_UPDATE_CHECK).as_deref(),
+            Some("2026-09-06T12:00:00Z")
+        );
+        // Writing again replaces rather than duplicating.
+        meta_set(&conn, META_LAST_UPDATE_CHECK, "2026-09-07T12:00:00Z").unwrap();
+        assert_eq!(
+            meta_get(&conn, META_LAST_UPDATE_CHECK).as_deref(),
+            Some("2026-09-07T12:00:00Z")
+        );
+    }
 
     #[test]
     fn writer_flags_degraded_on_failure_and_keeps_draining() {
