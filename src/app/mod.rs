@@ -217,6 +217,9 @@ pub struct AppState {
     /// the state layer owns no filesystem, and a render pass must never block
     /// on a write.
     pub pending_settings_save: bool,
+    /// Set when the production queue changed and should be written back
+    /// (issue #324). Drained by the event loop, like `pending_journal`.
+    pub pending_queue_save: bool,
     /// A published release newer than this build, if the check ran and found
     /// one (issue #339). Display only — the cockpit never updates itself.
     pub update_available: Option<String>,
