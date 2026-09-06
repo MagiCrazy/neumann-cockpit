@@ -1,5 +1,12 @@
 # Changelog
 
+## [104.7.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.6.0...neumann-cockpit-v104.7.0) (2026-09-06)
+
+
+### Features
+
+* **logbook:** the probe's server logbook, in the Missions pane ([#254](https://github.com/MagiCrazy/neumann-cockpit/issues/254)) ([#367](https://github.com/MagiCrazy/neumann-cockpit/issues/367)) ([ec8c5cf](https://github.com/MagiCrazy/neumann-cockpit/commit/ec8c5cf70d05d54c6d16104092b910bbf4b9cc9e))
+
 ## [104.6.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.5.0...neumann-cockpit-v104.6.0) (2026-09-06)
 
 
