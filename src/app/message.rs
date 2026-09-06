@@ -8,6 +8,9 @@ pub enum ApiMessage {
     /// The newest published release tag, when the pilot allowed the check
     /// (issue #339). Best-effort: absent when the check is off or failed.
     LatestRelease(String),
+    /// The active movement was cancelled and its deuterium refunded (#365).
+    MoveCancelled,
+    MoveCancelError(String),
     // ── Probe logbook (API v90, issue #254) ──────────────────────────────
     LogbookPagesFetched(Vec<crate::api::types::LogbookPageSummary>),
     LogbookPageFetched(crate::api::types::LogbookPage),
