@@ -27,6 +27,22 @@ use ratatui::{
     Frame,
 };
 
+/// The `≣ via SCUT` marker's style (issue #205).
+///
+/// A Manny watched through a relay is watched *from far away*, and the cockpit
+/// says so by letting its marker breathe — dim to bright and back on a slow
+/// beat, so the relay's distance is felt rather than merely labelled. The pulse
+/// never goes fully dark: the marker still carries meaning at its dimmest, and
+/// with ambiance off it holds full intensity, unchanged from before.
+fn scut_style(state: &AppState, p: Palette) -> Style {
+    let base = Style::default().fg(p.accent);
+    if state.ambiance.scut_pulse() < 0.7 {
+        base.add_modifier(Modifier::DIM)
+    } else {
+        base
+    }
+}
+
 /// Style for the selected row: highlighted only while the pane is active.
 fn row_style(active: bool, selected: bool) -> Style {
     if active && selected {
@@ -960,7 +976,7 @@ fn manny_detail_lines(state: &AppState, m: &Manny, p: Palette) -> Vec<Line<'stat
         None => lines.push(Line::styled("on probe", dim)),
     }
     if matches!(m.task_visibility, Some(MannyTaskVisibility::ScutNetwork)) {
-        lines.push(Line::styled("≣ via SCUT", Style::default().fg(p.accent)));
+        lines.push(Line::styled("≣ via SCUT", scut_style(state, p)));
     }
 
     // Cargo — what it is carrying (proxy for what it is mining/hauling).
@@ -1126,14 +1142,20 @@ pub fn render_mannies_overview(frame: &mut Frame, area: Rect, state: &AppState, 
             ),
             dim,
         ));
-        let mut loc_line = match state.manny_sector_coords(m) {
+        let loc_line = match state.manny_sector_coords(m) {
             Some((x, y, z)) => format!("    sector ({x}, {y}, {z})"),
             None => "    on probe".to_string(),
         };
         if matches!(m.task_visibility, Some(MannyTaskVisibility::ScutNetwork)) {
-            loc_line.push_str("  ≣ via SCUT");
+            // Split so the marker can carry the signal-age pulse while the
+            // location itself stays steady (issue #205).
+            lines.push(Line::from(vec![
+                Span::styled(loc_line, dim),
+                Span::styled("  ≣ via SCUT", scut_style(state, p)),
+            ]));
+        } else {
+            lines.push(Line::styled(loc_line, dim));
         }
-        lines.push(Line::styled(loc_line, dim));
         lines.push(Line::raw(""));
         if selected {
             if let Some((first, _)) = sel_line {

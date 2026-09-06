@@ -1039,3 +1039,91 @@ fn a_newer_release_is_a_quiet_chip_and_an_older_one_is_nothing() {
     let text = buffer_text(&render_cockpit(&state, 110, 24));
     assert!(text.contains("999.0.0"), "the version is named: {text}");
 }
+
+// -- ambiance (issues #204, #205, #206) ------------------------------------
+
+/// Tick until a cosmic ray is actually on screen, or give up. The generator is
+/// deliberately sparse, so a test that assumed one every tick would flake.
+fn with_a_glitch(state: &mut AppState) -> bool {
+    for _ in 0..400 {
+        state.ambiance.tick(false);
+        if state.ambiance.glitch_at(20).is_some() {
+            return true;
+        }
+    }
+    false
+}
+
+#[test]
+fn entropy_only_ever_lands_on_the_frame() {
+    // The rule the whole effect rests on: a cockpit that garbles a fuel
+    // reading for texture is a cockpit you stop trusting. So a flip may touch
+    // the border row and nothing else — the buffers are compared cell by cell.
+    let mut state = AppState::default();
+    state.probe = Some(probe(50.0));
+    let clean = render_cockpit(&state, 60, 16);
+
+    state.ambiance.enabled = true;
+    assert!(
+        with_a_glitch(&mut state),
+        "the generator produced no entropy in 400 ticks"
+    );
+    let dirty = render_cockpit(&state, 60, 16);
+
+    let area = clean.area;
+    let mut changed_rows: Vec<u16> = Vec::new();
+    for y in 0..area.height {
+        for x in 0..area.width {
+            if clean[(x, y)].symbol() != dirty[(x, y)].symbol() && !changed_rows.contains(&y) {
+                changed_rows.push(y);
+            }
+        }
+    }
+    assert!(!changed_rows.is_empty(), "the glitch did reach the screen");
+    // Every changed cell sits on a pane's top border, never in its content.
+    for y in &changed_rows {
+        for x in 0..area.width {
+            if clean[(x, *y)].symbol() != dirty[(x, *y)].symbol() {
+                let was = clean[(x, *y)].symbol().to_string();
+                assert!(
+                    was.chars().all(|c| !c.is_alphanumeric()),
+                    "entropy overwrote {was:?} at ({x},{y}) — that could have been data"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn switched_off_the_cockpit_renders_exactly_as_before() {
+    // The promise of the config key: opting out gives back the cockpit that
+    // existed before any of this was written.
+    let mut state = AppState::default();
+    state.probe = Some(probe(50.0));
+    let before = buffer_text(&render_cockpit(&state, 60, 16));
+
+    state.ambiance.enabled = true;
+    assert!(with_a_glitch(&mut state));
+    state.ambiance.enabled = false;
+    state.ambiance.tick(true);
+    state.ambiance.force_idle();
+    state.ambiance.tick(true);
+
+    let after = buffer_text(&render_cockpit(&state, 60, 16));
+    assert_eq!(after, before, "no entropy, and no starfield however long it idles");
+}
+
+#[test]
+fn the_attract_screen_names_the_probe_and_says_how_to_leave() {
+    let mut state = AppState::default();
+    state.probe = Some(probe(50.0));
+    state.ambiance.enabled = true;
+    state.ambiance.force_idle();
+    state.ambiance.tick(true);
+    assert!(state.ambiance.attract);
+
+    let text = buffer_text(&render_cockpit(&state, 74, 18));
+    assert!(text.contains("any key to resume"), "the way back is on screen: {text}");
+    assert!(text.contains("T"), "and the probe is named");
+    assert!(!text.contains("MISSIONS"), "the grid really is covered");
+}

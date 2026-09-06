@@ -61,6 +61,14 @@ pub fn render(frame: &mut Frame, state: &AppState) {
         return;
     }
 
+    // Attract mode (issue #206): the cockpit left alone long enough drifts.
+    // It only ever gets here when `attract_allowed` said the screen was free
+    // to take — nothing that needs the pilot is ever hidden behind stars.
+    if state.ambiance.attract {
+        render_attract(frame, area, state, p);
+        return;
+    }
+
     let status_h = if state.hints_visible { 2 } else { 1 };
     let rows = Layout::default()
         .direction(Direction::Vertical)
@@ -74,6 +82,9 @@ pub fn render(frame: &mut Frame, state: &AppState) {
         let panes = grid::visible_panes(rows[0], state.active_pane);
         for (pane, rect) in &panes {
             render_pane(frame, *rect, *pane, state, *pane == state.active_pane, p);
+            // A speck of noise on the frame, after the pane has drawn itself
+            // (issue #204). Nothing when ambiance is off.
+            crate::ui::theme::ambiance_entropy(frame, *rect, &state.ambiance, p);
         }
         panes.iter().map(|(pane, _)| *pane).collect()
     };
@@ -84,6 +95,51 @@ pub fn render(frame: &mut Frame, state: &AppState) {
         menu::render(frame, area, m, p);
     }
     crate::ui::overlays::render_active_overlays(frame, area, state);
+}
+
+/// The idle starfield (issue #206). Drifting stars, the probe's name held
+/// quietly at the centre, and one line saying how to come back.
+///
+/// It takes the whole screen, which is why `AppState::attract_allowed` guards
+/// it so tightly: a screensaver that hides a destroyed probe or an unread
+/// alert is worse than no screensaver at all.
+fn render_attract(frame: &mut Frame, area: Rect, state: &AppState, p: Palette) {
+    // Density scaled to the area so a small terminal is not a snowstorm.
+    let count = ((area.width as usize * area.height as usize) / 45).clamp(12, 220);
+    let stars = state.ambiance.starfield(area.width, area.height, count);
+    let dim = Style::default().fg(p.dim);
+    let faint = Style::default().fg(p.accent_dim);
+
+    for (i, (x, y, glyph)) in stars.iter().enumerate() {
+        if let Some(cell) = frame.buffer_mut().cell_mut((area.x + x, area.y + y)) {
+            // A third of the field sits in the brighter tone: without two
+            // depths it reads as static rather than as space.
+            cell.set_symbol(glyph).set_style(if i % 3 == 0 { dim } else { faint });
+        }
+    }
+
+    // The probe's name, centred — the one thing worth reading from across a
+    // room, and the reason this is an attract screen rather than a blank one.
+    let name = state
+        .probe
+        .as_ref()
+        .map(|probe| probe.name.clone())
+        .unwrap_or_else(|| "NEUMANN COCKPIT".to_string());
+    let lines = vec![
+        Line::from(Span::styled(
+            name.to_uppercase(),
+            Style::default().fg(p.accent).add_modifier(Modifier::BOLD),
+        )),
+        Line::default(),
+        Line::from(Span::styled("any key to resume", dim)),
+    ];
+    let mid = Rect {
+        x: area.x,
+        y: area.y + area.height.saturating_sub(3) / 2,
+        width: area.width,
+        height: 3.min(area.height),
+    };
+    frame.render_widget(Paragraph::new(lines).alignment(Alignment::Center), mid);
 }
 
 /// Boot self-check: the probe boots first, then each subsystem pane comes

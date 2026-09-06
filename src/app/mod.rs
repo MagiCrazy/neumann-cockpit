@@ -1,3 +1,4 @@
+mod ambiance;
 mod assembly;
 mod batch;
 mod boot;
@@ -23,6 +24,7 @@ mod travel;
 mod tree;
 mod waypoints;
 
+pub use ambiance::*;
 pub use assembly::*;
 pub use batch::*;
 pub use boot::{BOOT_CHARS_PER_FRAME, BOOT_LINE_STRIDE};
@@ -223,6 +225,9 @@ pub struct AppState {
     /// A published release newer than this build, if the check ran and found
     /// one (issue #339). Display only — the cockpit never updates itself.
     pub update_available: Option<String>,
+    /// Cockpit ambiance (issues #204, #205, #206) — entropy, SCUT signal age
+    /// and the attract mode, behind one switch (`F6`, config `ambiance`).
+    pub ambiance: Ambiance,
     /// Whether long-task completions still beep (`F4`, issue #331). Seeded
     /// from the `notifications` config key; a cockpit that beeps with no way
     /// to see or stop it is hostile in a shared room.
@@ -913,6 +918,24 @@ impl AppState {
         }
     }
 
+    /// Whether the starfield may cover the screen (issue #206).
+    ///
+    /// It refuses while anything needs the pilot — a screensaver that hides a
+    /// destroyed probe or an unread alert is worse than no screensaver — and
+    /// while the cockpit is doing something the pilot would want to watch.
+    pub fn attract_allowed(&self) -> bool {
+        self.probe_terminal_alert().is_none()
+            && self.unread_alert_count() == 0
+            && !self.booting
+            && self.error.is_none()
+            && matches!(self.mode, InputMode::Normal)
+            && matches!(self.active_wizard, ActiveWizard::None)
+            && !self.help_open
+            && !self.queue_active()
+            && !self.script_active()
+            && self.movement_arrival.is_none()
+    }
+
     /// The runtime settings as they stand, for the config writer (issue #331).
     pub fn settings(&self) -> crate::config::Settings {
         crate::config::Settings {
@@ -920,6 +943,7 @@ impl AppState {
             polarity: self.polarity.label().to_string(),
             hints: self.hints_visible,
             notifications: self.notifications_enabled,
+            ambiance: self.ambiance.enabled,
         }
     }
 

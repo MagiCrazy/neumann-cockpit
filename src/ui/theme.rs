@@ -255,6 +255,29 @@ pub(crate) fn pane_block(title: &str, active: bool, p: Palette) -> Block<'_> {
         .border_style(Style::default().fg(color))
 }
 
+/// Scatter a cosmic ray across a pane's **top border** (issue #204).
+///
+/// The border, deliberately: entropy never touches a number. A cockpit that
+/// garbles a fuel reading for effect is a cockpit you stop trusting, so a flip
+/// lands on the frame — where it reads as the ship being old, not as the
+/// instrument being wrong. Drawn after the block, so it replaces a frame cell
+/// rather than fighting it.
+pub(crate) fn ambiance_entropy(frame: &mut Frame, area: Rect, ambiance: &crate::app::Ambiance, p: Palette) {
+    if area.width < 4 || area.height < 2 {
+        return;
+    }
+    // The run is the top border between the corners: hitting a corner would
+    // read as a broken frame rather than as a speck of noise.
+    let run = area.width.saturating_sub(2);
+    let Some((slot, glyph)) = ambiance.glitch_at(run) else {
+        return;
+    };
+    let x = area.x + 1 + slot;
+    if let Some(cell) = frame.buffer_mut().cell_mut((x, area.y)) {
+        cell.set_symbol(glyph).set_style(Style::default().fg(p.accent_dim));
+    }
+}
+
 /// Overflow markers drawn **on** a pane's right border: `▲` just below the top
 /// corner when the list continues above the viewport, `▼` just above the
 /// bottom corner when it continues below (issue #326).

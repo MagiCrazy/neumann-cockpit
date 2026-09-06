@@ -89,8 +89,17 @@ impl AppState {
     /// where we already have them, thematic placeholders otherwise.
     pub fn boot_check_lines(&self, pane: Pane) -> Vec<(&'static str, String)> {
         let s = |x: &str| x.to_string();
+        // Ambiance adds chatter to the centre pane's self-check — the probe
+        // reporting on things no instrument really measures (issue #204).
+        // Empty when the switch is off, so the boot grid is unchanged.
+        let chatter = |mut lines: Vec<(&'static str, String)>| {
+            for (label, value) in self.ambiance.boot_chatter() {
+                lines.push((label, value.to_string()));
+            }
+            lines
+        };
         match pane {
-            Pane::Probe => vec![
+            Pane::Probe => chatter(vec![
                 ("MATRIX", s("OK")),
                 ("REACTOR", s("NOMINAL")),
                 ("SURGE DRIVE", s("ONLINE")),
@@ -98,7 +107,7 @@ impl AppState {
                 ("DEUTERIUM", s("SYNC")),
                 ("GUPPI", s("READY")),
                 ("CLOCK", s("2337")),
-            ],
+            ]),
             Pane::Scanner => vec![
                 ("SUDDAR ARRAY", s("6/6")),
                 ("SUBSPACE PING", s("OK")),

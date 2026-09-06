@@ -139,6 +139,17 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
     let mut state = AppState {
         log: log.clone(),
         hints_visible: config.hints,
+        ambiance: {
+            // Seeded from the clock so two cockpits started together do not
+            // glitch in lockstep (issues #204-#206).
+            let seed = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos() as u64)
+                .unwrap_or(0x9e37_79b9_7f4a_7c15);
+            let mut ambiance = neumann_cockpit::app::Ambiance::seeded(seed);
+            ambiance.enabled = config.ambiance;
+            ambiance
+        },
         notifications_enabled: config.notifications,
         color_mode: config.color_mode(),
         polarity,
@@ -399,6 +410,11 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
             }
 
             _ = ui_tick.tick() => {
+                // Ambiance advances on the same 1 s beat as everything else
+                // time-derived. The caller decides whether covering the screen
+                // is acceptable — this module does not know what an alert is.
+                let attract_ok = state.attract_allowed();
+                state.ambiance.tick(attract_ok);
                 // The redraw at the loop top makes live values tick; here we
                 // only fire the periodic refresh when it is due.
                 if !state.booting && state.periodic_refresh_due() {
