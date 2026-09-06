@@ -1,5 +1,13 @@
 # Changelog
 
+## [104.6.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.5.0...neumann-cockpit-v104.6.0) (2026-09-06)
+
+
+### Features
+
+* **ambiance:** atmospheric texture behind a single switch ([#204](https://github.com/MagiCrazy/neumann-cockpit/issues/204), [#205](https://github.com/MagiCrazy/neumann-cockpit/issues/205), [#206](https://github.com/MagiCrazy/neumann-cockpit/issues/206)) ([#356](https://github.com/MagiCrazy/neumann-cockpit/issues/356)) ([2d9e228](https://github.com/MagiCrazy/neumann-cockpit/commit/2d9e228a8d143236635d168ea3515eb0504b5571))
+* **status:** headless status views ([#229](https://github.com/MagiCrazy/neumann-cockpit/issues/229)) ([#358](https://github.com/MagiCrazy/neumann-cockpit/issues/358)) ([ea6e291](https://github.com/MagiCrazy/neumann-cockpit/commit/ea6e291d9c924251d4fbc54195551ec81149dc7e))
+
 ## [104.5.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v104.4.1...neumann-cockpit-v104.5.0) (2026-09-06)
 
 
