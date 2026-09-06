@@ -108,6 +108,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
         scan_history,
         journal,
         telemetry,
+        queues,
         api_version,
         link_ok,
         polarity,
@@ -148,6 +149,11 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
         api_version,
         ..Default::default()
     };
+    // The production queue survives a restart (issue #324). Restored after the
+    // state is built so the piloted probe is known: its queue becomes live, the
+    // others go back to the parking `sync_queue_probe` left them in.
+    state.restore_queues(queues);
+
     // The remote link was already probed in the preflight; surface a down link
     // straight away so the pilot sees why data is missing (F5 retries).
     if !link_ok {
@@ -210,6 +216,20 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
         // background fetch whose errors are dropped silently.
         state.rate_limited_secs = client.throttled_for_secs();
         state.rate_limit_quota = client.quota();
+
+        // Persist the production queue when it changed (issue #324). Through
+        // the same writer thread as everything else, so it never blocks a
+        // frame — and dropped silently without one, a cockpit with no archive
+        // having nothing to persist to.
+        if std::mem::take(&mut state.pending_queue_save) {
+            if let Some(tx) = &persist_tx {
+                let probe_id = state.active_probe_id.unwrap_or(0);
+                let _ = tx.send(store::PersistMsg::SaveQueue {
+                    probe_id,
+                    queue: Box::new(state.stored_queue()),
+                });
+            }
+        }
 
         // Write back a runtime toggle (issue #331). Off the render path, and
         // a failure is a toast rather than a crash: losing a preference is not
