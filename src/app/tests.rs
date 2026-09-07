@@ -967,6 +967,180 @@ fn an_unread_alert_keeps_the_cockpit_awake() {
     );
 }
 
+// ── motorized asteroids (issue #308) ──────────────────────────────────────
+
+/// One asteroid, with whatever motorization state the test needs.
+fn asteroid_objects(motorized: &str, fuel: &str, trajectory: &str) -> String {
+    format!(
+        r#"[{{"id": "rock-1", "type": "asteroid", "name": "Metal 8f1a",
+             "mannyMineable": true, "motorized": {motorized},
+             "motorFuelStatus": {fuel}, "trajectory": {trajectory}}},
+           {{"id": "star-1", "type": "star", "name": "Home"}},
+           {{"id": "hole-1", "type": "black_hole", "name": "The Drain"}}]"#
+    )
+}
+
+fn state_with_asteroid(motorized: &str, fuel: &str, trajectory: &str) -> AppState {
+    let mut state = AppState::default();
+    state.probe = Some(probe_at(0., 0., 0.));
+    state.scan_history = vec![make_sector_with_objects(
+        0.,
+        0.,
+        0.,
+        &asteroid_objects(motorized, fuel, trajectory),
+    )];
+    state.probe_improvements = vec![serde_json::from_str(
+        r#"{"id": "distributed_thrust_anchoring", "name": "Distributed Thrust Anchoring",
+            "description": "", "available": true, "done": false,
+            "durationSeconds": 60, "ingredients": []}"#,
+    )
+    .unwrap()];
+    state
+}
+
+/// The asteroid's scanner entry, whatever its position in the list.
+fn rock(state: &AppState) -> ScannerObjectEntry {
+    state
+        .scanner_objects()
+        .into_iter()
+        .find(|e| e.id == "rock-1")
+        .expect("the asteroid is listed")
+}
+
+#[test]
+fn every_neighbour_of_an_fcc_point_is_on_the_lattice() {
+    // The sector grid is face-centred cubic, which is why travel refuses an
+    // odd coordinate sum. A heading that broke that rule would be a 422 the
+    // pilot could not have predicted.
+    assert_eq!(FCC_NEIGHBOURS.len(), 12, "twelve face diagonals, never six");
+    for (dx, dy, dz) in FCC_NEIGHBOURS {
+        assert_eq!((dx + dy + dz) % 2, 0, "({dx},{dy},{dz}) leaves the lattice");
+        let moved = [dx, dy, dz].iter().filter(|v| **v != 0).count();
+        assert_eq!(moved, 2, "a direct neighbour moves exactly two axes");
+    }
+    // And they are distinct — a duplicated heading would be a dead row.
+    let mut seen = FCC_NEIGHBOURS.to_vec();
+    seen.sort_unstable();
+    seen.dedup();
+    assert_eq!(seen.len(), 12);
+}
+
+#[test]
+fn the_offered_actions_match_the_asteroid_state() {
+    // Each entry is gated on the state the server checks anyway, so the pilot
+    // never picks an action whose only outcome is a 422.
+    let plain = state_with_asteroid("false", "null", "null");
+    let actions = plain.actions_for_object(&rock(&plain));
+    assert!(actions.contains(&ObjectAction::MotorizeAsteroid), "{actions:?}");
+    assert!(
+        !actions.contains(&ObjectAction::AimAsteroid),
+        "an unmotorized rock cannot fly"
+    );
+
+    let empty = state_with_asteroid("true", "\"empty\"", "null");
+    let actions = empty.actions_for_object(&rock(&empty));
+    assert!(actions.contains(&ObjectAction::RefuelAsteroid));
+    assert!(
+        !actions.contains(&ObjectAction::AimAsteroid),
+        "a dry tank cannot launch"
+    );
+    assert!(
+        !actions.contains(&ObjectAction::MotorizeAsteroid),
+        "it already has an engine"
+    );
+
+    let full = state_with_asteroid("true", "\"full\"", "null");
+    let actions = full.actions_for_object(&rock(&full));
+    assert!(actions.contains(&ObjectAction::AimAsteroid));
+    assert!(!actions.contains(&ObjectAction::RefuelAsteroid), "the tank is full");
+}
+
+#[test]
+fn a_running_trajectory_locks_the_asteroid_out_of_everything_but_tracking() {
+    // The server refuses a refuel or a second launch while one runs, and the
+    // asteroid is busy being somewhere else.
+    let running = state_with_asteroid(
+        "true",
+        "\"full\"",
+        r#"{"id": "atr_1", "asteroidId": "rock-1", "mode": "sector_transfer",
+             "status": "crossing_sector", "startedAt": null, "nextTransitionAt": null}"#,
+    );
+    let actions = running.actions_for_object(&rock(&running));
+    assert_eq!(
+        actions
+            .iter()
+            .filter(|a| matches!(
+                a,
+                ObjectAction::MotorizeAsteroid | ObjectAction::RefuelAsteroid | ObjectAction::AimAsteroid
+            ))
+            .count(),
+        0,
+        "nothing but tracking while it is under way: {actions:?}"
+    );
+    assert!(actions.contains(&ObjectAction::TrackTrajectory));
+    assert_eq!(running.asteroid_trajectory_id("rock-1").as_deref(), Some("atr_1"));
+
+    // A finished trajectory is history the payload keeps reporting — the same
+    // trap the probe's own `movement` sets — and must not lock the rock up.
+    let done = state_with_asteroid(
+        "true",
+        "\"full\"",
+        r#"{"id": "atr_1", "asteroidId": "rock-1", "mode": "system_impact",
+             "status": "captured", "startedAt": null, "nextTransitionAt": null}"#,
+    );
+    let actions = done.actions_for_object(&rock(&done));
+    assert!(actions.contains(&ObjectAction::AimAsteroid), "{actions:?}");
+    assert_eq!(done.asteroid_trajectory_id("rock-1"), None);
+}
+
+#[test]
+fn motorizing_is_not_offered_without_the_blueprint() {
+    let mut state = state_with_asteroid("false", "null", "null");
+    state.probe_improvements.clear();
+    let actions = state.actions_for_object(&rock(&state));
+    assert!(
+        !actions.contains(&ObjectAction::MotorizeAsteroid),
+        "a menu entry that always answers distributed_thrust_anchoring_unavailable teaches nothing"
+    );
+}
+
+#[test]
+fn an_impact_never_offers_a_black_hole_or_the_asteroid_itself() {
+    // The server refuses a black hole outright (system_impact_black_hole_
+    // forbidden), and aiming a rock at itself is not a thing.
+    let state = state_with_asteroid("true", "\"full\"", "null");
+    let ids: Vec<String> = state.impact_targets("rock-1").into_iter().map(|t| t.id).collect();
+    assert_eq!(ids, vec!["star-1".to_string()], "only the star is eligible");
+}
+
+#[test]
+fn a_heading_says_whether_that_sector_has_ever_been_seen() {
+    let mut state = state_with_asteroid("true", "\"full\"", "null");
+    state.scan_history.push(make_sector_with_objects(1., 1., 0., "[]"));
+    let headings = state.transfer_headings();
+    assert_eq!(headings.len(), 12);
+    let seen = headings.iter().find(|h| (h.x, h.y, h.z) == (1, 1, 0)).unwrap();
+    assert!(seen.visited, "the scan history holds it");
+    let unseen = headings.iter().find(|h| (h.x, h.y, h.z) == (-1, -1, 0)).unwrap();
+    assert!(!unseen.visited, "aiming into the dark should read as such");
+}
+
+#[test]
+fn capture_odds_are_never_invented() {
+    // The spec's ten-points-per-empty-sector rule cannot be applied to
+    // `sectorsCrossed`, because the payload never says which crossings were
+    // empty. The cockpit reports counters, not a percentage of its own.
+    let t: crate::api::types::AsteroidTrajectory = serde_json::from_str(
+        r#"{"id": "atr_1", "asteroidId": "rock-1", "mode": "sector_transfer",
+             "status": "crossing_sector", "startedAt": null, "nextTransitionAt": null,
+             "sectorsCrossed": 3, "maximumSectorCrossings": 10}"#,
+    )
+    .unwrap();
+    let summary = crossing_summary(&t).unwrap();
+    assert_eq!(summary, "3/10 sectors crossed");
+    assert!(!summary.contains('%'), "no probability the server never stated");
+}
+
 // ── discarding Comms entries (issue #366) ─────────────────────────────────
 
 fn alert(id: i64, status: &str, created_at: &str) -> crate::api::types::ProbeAlert {

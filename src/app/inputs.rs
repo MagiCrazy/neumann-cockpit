@@ -732,6 +732,7 @@ pub enum ActiveWizard {
     RenameContainer(RenameContainerInput),
     Logbook(LogbookInput),
     DiscardComms(DiscardCommsInput),
+    AimAsteroid(AimAsteroidInput),
     ContainerRules(ContainerRulesInput),
     StorageMove(StorageMoveInput),
     DropCargo(DropCargoInput),
@@ -748,6 +749,60 @@ pub enum ActiveWizard {
 ///
 /// A page is prose, so the editor is two plain text buffers rather than a
 /// pick-list — and both are bounded client-side (`LOGBOOK_TITLE_MAX`,
+/// Aiming a full motorized asteroid (API v116, issue #308).
+///
+/// Two modes that share nothing but a first screen, which is why the wizard
+/// branches instead of collecting a superset of fields: the request body has
+/// `additionalProperties: false` on each arm, so a stray key from the other
+/// mode is a 422.
+///
+/// The vocabulary is load-bearing. A `system_impact` picks a **target** — a
+/// body in this system, and the asteroid arrives. A `sector_transfer` picks a
+/// **heading** — a direct FCC neighbour that sets a straight line the asteroid
+/// then follows, one sector every 24 h, until something captures it. Calling
+/// the second one a destination would be a lie the pilot only discovers when
+/// the rock sails past.
+#[derive(Debug, Clone, PartialEq)]
+pub enum AimAsteroidInput {
+    /// Choosing between the two modes.
+    PickMode {
+        asteroid_id: String,
+        asteroid_name: String,
+        selection: usize,
+    },
+    /// `system_impact`: the local body to hit.
+    PickImpactTarget {
+        asteroid_id: String,
+        asteroid_name: String,
+        targets: Vec<crate::app::ImpactTarget>,
+        selection: usize,
+    },
+    /// `system_impact`: the speed, in fractions of c, `(0, 0.5]`.
+    EnterSpeed {
+        asteroid_id: String,
+        asteroid_name: String,
+        target: crate::app::ImpactTarget,
+        buf: String,
+        error: Option<String>,
+    },
+    /// `sector_transfer`: which of the twelve neighbours sets the heading.
+    PickHeading {
+        asteroid_id: String,
+        asteroid_name: String,
+        headings: Vec<crate::app::Heading>,
+        selection: usize,
+    },
+    /// Last look before the tank is spent. Carries the finished request body,
+    /// so the confirm step cannot rebuild it differently from what was shown.
+    Confirm {
+        asteroid_id: String,
+        asteroid_name: String,
+        summary: String,
+        warning: Option<String>,
+        body: serde_json::Value,
+    },
+}
+
 /// How many entries one bulk discard may remove (issue #366).
 ///
 /// The endpoint deletes one entry per request, and the server meters ~120

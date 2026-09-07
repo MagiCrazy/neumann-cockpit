@@ -1,9 +1,10 @@
+pub(crate) mod aim;
 pub(crate) mod alerts;
 pub(crate) mod assemble;
 pub(crate) mod blueprint;
 pub(crate) mod containers;
 pub(crate) mod craft;
-pub(crate) mod discard;
+mod discard;
 pub(crate) mod drop_container;
 pub(crate) mod fleet;
 pub(crate) mod help;
@@ -121,6 +122,10 @@ const WIZARD_OVERLAYS: &[(OverlayGuard, OverlayRender)] = &[
     (
         |s| matches!(s.active_wizard, ActiveWizard::DiscardComms(_)),
         discard::render_discard_comms_overlay,
+    ),
+    (
+        |s| matches!(s.active_wizard, ActiveWizard::AimAsteroid(_)),
+        aim::render_aim_asteroid_overlay,
     ),
     (|s| matches!(s.active_wizard, ActiveWizard::ContainerRules(_)), render_container_rules_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::StorageMove(_)), render_storage_move_overlay),

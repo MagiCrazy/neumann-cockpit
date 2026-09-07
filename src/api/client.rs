@@ -1,15 +1,42 @@
 use super::metrics::{endpoint_label, Metrics, MetricsHandle, RequestSample};
 use super::ratelimit::{retry_after_from, RateLimitHandle, RateLimitState, RateLimited};
 use super::types::{
-    BlueprintShareResult, ContainerInventory, CraftingRecipe, DamageWarningRule, EndpointId, LogbookPage,
-    LogbookPageSummary, Manny, MannyDetail, MannyRoster, MannyTaskRequest, Mission, Pagination, Probe, ProbeAlert,
-    ProbeImprovement, ProbeInventory, ProbeListResponse, ProbeMessage, ProbeModel, ProbeMovement, ProbeSentMessage,
-    ScutNetwork, SectorObservation, StorageContainer, VisitedSector,
+    AsteroidTrajectory, BlueprintShareResult, ContainerInventory, CraftingRecipe, DamageWarningRule, EndpointId,
+    LogbookPage, LogbookPageSummary, Manny, MannyDetail, MannyRoster, MannyTaskRequest, Mission, Pagination, Probe,
+    ProbeAlert, ProbeImprovement, ProbeInventory, ProbeListResponse, ProbeMessage, ProbeModel, ProbeMovement,
+    ProbeSentMessage, ScutNetwork, SectorObservation, StorageContainer, VisitedSector,
 };
 use anyhow::{Context, Result};
 use reqwest::{Client, StatusCode, Url};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
+
+/// An HTTP error that kept its status code.
+///
+/// Every caller reads this through `to_string()`, which is why `Display` is
+/// the server's own message and nothing else — the status is carried for the
+/// handful of places where the code *is* the meaning. Occultation is one:
+/// `GET …/asteroid-trajectories/{id}` answers **409 with no data** during a
+/// stellar occultation window, which is a view being blocked, not a trajectory
+/// being lost (issue #308).
+#[derive(Debug)]
+pub struct HttpStatusError {
+    pub status: u16,
+    pub message: String,
+}
+
+impl std::fmt::Display for HttpStatusError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for HttpStatusError {}
+
+/// Whether an error is that 409.
+fn occluded(e: &anyhow::Error) -> bool {
+    e.downcast_ref::<HttpStatusError>().is_some_and(|h| h.status == 409)
+}
 
 #[derive(Clone)]
 pub struct ApiClient {
@@ -299,7 +326,10 @@ impl ApiClient {
             if throttled {
                 return Err(anyhow::Error::new(RateLimited { retry_after_secs }));
             }
-            anyhow::bail!("{msg}");
+            return Err(anyhow::Error::new(HttpStatusError {
+                status: status.as_u16(),
+                message: msg,
+            }));
         }
 
         let decoded = resp.json::<T>().await;
@@ -352,7 +382,10 @@ impl ApiClient {
             if throttled {
                 return Err(anyhow::Error::new(RateLimited { retry_after_secs }));
             }
-            anyhow::bail!("{msg}");
+            return Err(anyhow::Error::new(HttpStatusError {
+                status: status.as_u16(),
+                message: msg,
+            }));
         }
         self.record(label, elapsed, Some(status.as_u16()), false, false);
         Ok(())
@@ -400,7 +433,10 @@ impl ApiClient {
             if throttled {
                 return Err(anyhow::Error::new(RateLimited { retry_after_secs }));
             }
-            anyhow::bail!("{msg}");
+            return Err(anyhow::Error::new(HttpStatusError {
+                status: status.as_u16(),
+                message: msg,
+            }));
         }
 
         let decoded = resp.json::<T>().await;
@@ -1248,6 +1284,97 @@ impl ApiClient {
     pub async fn cancel_move(&self, probe_id: u64) -> Result<()> {
         self.send_no_content(reqwest::Method::DELETE, &format!("/api/probe/{probe_id}/move"))
             .await
+    }
+
+    // ── Motorized asteroids (API v108–v116, issue #308) ───────────────────
+    //
+    // All four paths are `{probeId}`-mirror only, like the single-Manny GET and
+    // the task batch, so the piloted probe's id is passed explicitly.
+
+    /// Install a deuterium engine on a local asteroid (API v116).
+    ///
+    /// Needs the Distributed Thrust Anchoring blueprint and an idle onboard
+    /// Manny. **On completion the asteroid receives a new opaque id**, so
+    /// anything holding the old one has to re-resolve.
+    pub async fn motorize_asteroid(&self, probe_id: u64, manny_id: &str, object_id: &str) -> Result<Manny> {
+        #[derive(Deserialize)]
+        struct Resp {
+            manny: Manny,
+        }
+        let path = format!("/api/probe/{probe_id}/mannies/{manny_id}/motorize-asteroid");
+        Ok(self
+            .send_with_body::<Resp, _>(
+                reqwest::Method::POST,
+                &path,
+                &serde_json::json!({ "objectId": object_id }),
+            )
+            .await?
+            .manny)
+    }
+
+    /// Refill an empty motorized asteroid's binary tank (API v116). Refused
+    /// while a trajectory is running.
+    pub async fn refuel_motorized_asteroid(&self, probe_id: u64, manny_id: &str, object_id: &str) -> Result<Manny> {
+        #[derive(Deserialize)]
+        struct Resp {
+            manny: Manny,
+        }
+        let path = format!("/api/probe/{probe_id}/mannies/{manny_id}/refuel-motorized-asteroid");
+        Ok(self
+            .send_with_body::<Resp, _>(
+                reqwest::Method::POST,
+                &path,
+                &serde_json::json!({ "objectId": object_id }),
+            )
+            .await?
+            .manny)
+    }
+
+    /// Launch a full motorized asteroid (API v116), consuming its tank.
+    ///
+    /// The body is built by the caller because the two modes are a discriminated
+    /// union with `additionalProperties: false` — sending a null field of the
+    /// other mode is a 422, so the request carries exactly the keys its mode
+    /// declares.
+    pub async fn launch_asteroid_trajectory(
+        &self,
+        probe_id: u64,
+        asteroid_id: &str,
+        body: &serde_json::Value,
+    ) -> Result<AsteroidTrajectory> {
+        #[derive(Deserialize)]
+        struct Resp {
+            trajectory: AsteroidTrajectory,
+        }
+        let path = format!("/api/probe/{probe_id}/asteroids/{asteroid_id}/trajectories");
+        Ok(self
+            .send_with_body::<Resp, _>(reqwest::Method::POST, &path, body)
+            .await?
+            .trajectory)
+    }
+
+    /// Read a trajectory's telemetry (API v116).
+    ///
+    /// Only answers while the piloted probe occupies the trajectory's current
+    /// sector, and during a stellar occultation window it answers **409 with no
+    /// data**. That is not a failure of the trajectory, so it is not reported
+    /// as one: the caller gets `Ok(None)` and says "occluded" rather than
+    /// "lost".
+    pub async fn get_asteroid_trajectory(
+        &self,
+        probe_id: u64,
+        trajectory_id: &str,
+    ) -> Result<Option<AsteroidTrajectory>> {
+        #[derive(Deserialize)]
+        struct Resp {
+            trajectory: AsteroidTrajectory,
+        }
+        let path = format!("/api/probe/{probe_id}/asteroid-trajectories/{trajectory_id}");
+        match self.get::<Resp>(&path).await {
+            Ok(r) => Ok(Some(r.trajectory)),
+            Err(e) if occluded(&e) => Ok(None),
+            Err(e) => Err(e),
+        }
     }
 
     /// Permanently delete an alert (API v112).

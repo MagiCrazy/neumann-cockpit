@@ -69,9 +69,26 @@ pub enum ObjectAction {
     DeployWaypoint,
     TurnOnRelay,
     InstallTransitBeacon,
+    /// Motorized asteroids (issue #308). Motorize and refuel are Manny orders
+    /// like mine or salvage; aiming is not — it opens its own wizard, because
+    /// the asteroid does the work and the Manny is not involved at all.
+    MotorizeAsteroid,
+    RefuelAsteroid,
+    AimAsteroid,
+    TrackTrajectory,
 }
 
 impl ObjectAction {
+    /// Whether the action is an order given to a Manny.
+    ///
+    /// Aiming and tracking are not: the asteroid carries its own engine, and
+    /// the crew has nothing to do with either. Sending them through the
+    /// Manny-first flow would refuse them whenever every Manny is busy, which
+    /// has no bearing on whether a rock can be launched.
+    pub fn needs_manny(&self) -> bool {
+        !matches!(self, ObjectAction::AimAsteroid | ObjectAction::TrackTrajectory)
+    }
+
     pub fn label(&self) -> &'static str {
         match self {
             ObjectAction::Mine => "mine",
@@ -81,6 +98,10 @@ impl ObjectAction {
             ObjectAction::DeployWaypoint => "deploy waypoint",
             ObjectAction::TurnOnRelay => "turn on relay",
             ObjectAction::InstallTransitBeacon => "install transit beacon",
+            ObjectAction::MotorizeAsteroid => "install engine",
+            ObjectAction::RefuelAsteroid => "refuel engine",
+            ObjectAction::AimAsteroid => "aim and launch",
+            ObjectAction::TrackTrajectory => "track trajectory",
         }
     }
 }
@@ -400,6 +421,7 @@ impl AppState {
             }
             (ObjectProvenance::TopLevel | ObjectProvenance::BookmarkTarget, SectorObjectType::Asteroid) => {
                 actions.push(ObjectAction::Inspect);
+                actions.extend(self.motorized_actions(&entry.id));
             }
             (ObjectProvenance::TopLevel, SectorObjectType::Manny) => {
                 actions.push(ObjectAction::Salvage);
@@ -426,8 +448,41 @@ impl AppState {
             }
             _ => {}
         }
+        if entry.provenance == ObjectProvenance::MinableTarget && entry.object_type == SectorObjectType::Asteroid {
+            actions.extend(self.motorized_actions(&entry.id));
+        }
         if entry.provenance == ObjectProvenance::TopLevel && self.inventory_waypoint_bookmark_id().is_some() {
             actions.push(ObjectAction::DeployWaypoint);
+        }
+        actions
+    }
+
+    /// The motorized-asteroid actions available on one asteroid (issue #308).
+    ///
+    /// Each entry is gated on the state the server would check anyway, so the
+    /// pilot never picks an action whose only outcome is a 422: motorization
+    /// needs the blueprint and an unmotorized rock, refuelling needs an empty
+    /// tank, aiming needs a full one, and all three are off while a trajectory
+    /// runs — the asteroid is already busy being somewhere else.
+    fn motorized_actions(&self, id: &str) -> Vec<ObjectAction> {
+        let mut actions = Vec::new();
+        match self.motorized_asteroid(id) {
+            None => {
+                if self.thrust_anchoring_known() {
+                    actions.push(ObjectAction::MotorizeAsteroid);
+                }
+            }
+            Some(_) => {
+                if self.asteroid_needs_fuel(id) {
+                    actions.push(ObjectAction::RefuelAsteroid);
+                }
+                if self.asteroid_ready_to_launch(id) {
+                    actions.push(ObjectAction::AimAsteroid);
+                }
+                if self.asteroid_trajectory_id(id).is_some() {
+                    actions.push(ObjectAction::TrackTrajectory);
+                }
+            }
         }
         actions
     }

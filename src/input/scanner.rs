@@ -3,10 +3,13 @@ use tokio::sync::mpsc;
 
 use super::geometry::{is_list_nav_key, list_nav};
 use crate::api::client::ApiClient;
-use crate::api::tasks::{fetch_inspect, fetch_install_beacon, fetch_recover, fetch_scut_network, fetch_turn_on_relay};
+use crate::api::tasks::{
+    fetch_inspect, fetch_install_beacon, fetch_motorize_asteroid, fetch_recover, fetch_refuel_asteroid,
+    fetch_scut_network, fetch_trajectory, fetch_turn_on_relay,
+};
 use crate::app::{
-    ActiveWizard, ApiMessage, AppState, DeployInput, LogEvent, MineInput, ObjectAction, ObjectActionInput,
-    SalvageInput, ScutCorridorInput, ScutNetworkInput, ScutRelayInput, WaypointsInput,
+    ActiveWizard, AimAsteroidInput, ApiMessage, AppState, DeployInput, LogEvent, MineInput, ObjectAction,
+    ObjectActionInput, SalvageInput, ScutCorridorInput, ScutNetworkInput, ScutRelayInput, WaypointsInput,
 };
 /// Send the chosen object action, reusing the existing wizards/endpoints.
 pub(super) fn dispatch_object_action(
@@ -77,6 +80,39 @@ pub(super) fn dispatch_object_action(
             Err(_) => {
                 state.error = Some("relay has an unexpected id format".into());
             }
+        },
+        // ── Motorized asteroids (issue #308) ─────────────────────────────
+        //
+        // Motorizing and refuelling are ordinary Manny orders. Both need the
+        // piloted probe's id: the endpoints are mirror-only.
+        ObjectAction::MotorizeAsteroid | ObjectAction::RefuelAsteroid => {
+            let Some(probe_id) = state.probe_id() else {
+                state.error = Some("waiting for a probe sync".into());
+                return;
+            };
+            if action == ObjectAction::MotorizeAsteroid {
+                fetch_motorize_asteroid(probe_id, manny_id, object_id, client.clone(), tx.clone());
+                state.log_event(LogEvent::motorize_asteroid(&object_name, state.active_probe_id));
+            } else {
+                fetch_refuel_asteroid(probe_id, manny_id, object_id, client.clone(), tx.clone());
+                state.log_event(LogEvent::refuel_asteroid(&object_name, state.active_probe_id));
+            }
+        }
+        // Aiming opens its own wizard: two modes, and each needs a target the
+        // pilot has to choose.
+        ObjectAction::AimAsteroid => {
+            state.active_wizard = ActiveWizard::AimAsteroid(AimAsteroidInput::PickMode {
+                asteroid_id: object_id,
+                asteroid_name: object_name,
+                selection: 0,
+            });
+        }
+        ObjectAction::TrackTrajectory => match state.probe_id() {
+            Some(probe_id) => match state.asteroid_trajectory_id(&object_id) {
+                Some(trajectory_id) => fetch_trajectory(probe_id, trajectory_id, client.clone(), tx.clone()),
+                None => state.error = Some("that asteroid is not under way".into()),
+            },
+            None => state.error = Some("waiting for a probe sync".into()),
         },
         ObjectAction::InstallTransitBeacon => match object_id.parse::<i64>() {
             Ok(relay_id) => {
@@ -322,6 +358,19 @@ pub(super) fn handle_object_action_event(
                         };
                         (object_id.clone(), object_name.clone(), actions[*selection])
                     };
+                    // The two asteroid actions that involve no crew skip the
+                    // Manny step entirely (issue #308).
+                    if !action.needs_manny() {
+                        dispatch_object_action(
+                            state,
+                            client,
+                            tx,
+                            action,
+                            (object_id, object_name),
+                            (String::new(), String::new()),
+                        );
+                        return;
+                    }
                     let mannies = state.collect_idle_onboard_mannies();
                     match mannies.len() {
                         0 => {

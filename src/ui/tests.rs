@@ -1220,6 +1220,64 @@ fn deleting_a_page_asks_first_and_says_what_survives() {
 }
 
 #[test]
+fn a_transfer_heading_never_reads_as_a_destination() {
+    // The single most misread thing about sector transfer: the neighbour sets
+    // a direction the asteroid follows until something captures it, and a
+    // pilot who reads it as "where it lands" only finds out when it sails
+    // past (issue #308).
+    use crate::app::{AimAsteroidInput, Heading};
+    let mut state = AppState::default();
+    state.active_wizard = ActiveWizard::AimAsteroid(AimAsteroidInput::PickHeading {
+        asteroid_id: "rock-1".into(),
+        asteroid_name: "Metal 8f1a".into(),
+        headings: vec![
+            Heading {
+                x: 1,
+                y: 1,
+                z: 0,
+                visited: true,
+            },
+            Heading {
+                x: -1,
+                y: 1,
+                z: 0,
+                visited: false,
+            },
+        ],
+        selection: 0,
+    });
+    let text = buffer_text(&render_cockpit(&state, 100, 30));
+    assert!(text.contains("HEADING"), "{text}");
+    assert!(
+        text.contains("not a destination"),
+        "the picker says what it is before the pilot commits: {text}"
+    );
+    assert!(text.contains("visited"), "a seen sector is marked: {text}");
+    assert!(text.contains("never scanned"), "and so is the dark: {text}");
+}
+
+#[test]
+fn the_launch_confirm_states_what_it_costs() {
+    use crate::app::AimAsteroidInput;
+    let mut state = AppState::default();
+    state.active_wizard = ActiveWizard::AimAsteroid(AimAsteroidInput::Confirm {
+        asteroid_id: "rock-1".into(),
+        asteroid_name: "Metal 8f1a".into(),
+        summary: "system impact on «Home» at 0.25c".into(),
+        warning: Some("the tank is spent on launch and cannot be recalled".into()),
+        body: serde_json::json!({}),
+    });
+    let text = buffer_text(&render_cockpit(&state, 100, 30));
+    assert!(text.contains("Metal 8f1a"), "it names the rock: {text}");
+    assert!(text.contains("0.25c"), "and the shot: {text}");
+    assert!(text.contains("cannot be recalled"), "{text}");
+    assert!(
+        text.contains("sent home"),
+        "launching interrupts every manny mining into a container on it: {text}"
+    );
+}
+
+#[test]
 fn discarding_an_unread_alert_says_so_before_it_goes() {
     // Acknowledging and discarding are different acts, and the prompt for the
     // destructive one has to admit when nobody has read the entry (#366).

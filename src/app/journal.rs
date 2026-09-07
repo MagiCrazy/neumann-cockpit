@@ -252,6 +252,33 @@ impl LogEvent {
         )
     }
 
+    // ── Motorized asteroids (issue #308) ─────────────────────────────────
+
+    /// Motorization ends by giving the asteroid a **new opaque id**, so the log
+    /// says so: it is the only record a pilot has of why a script's `at <id>`
+    /// stopped resolving.
+    pub fn motorize_asteroid(asteroid: &str, probe_id: Option<u64>) -> Self {
+        Self::action(
+            kind::ASTEROID,
+            format!("Dispatched a manny to fit a deuterium engine on «{asteroid}»; it will come back under a new id."),
+            probe_id,
+        )
+    }
+
+    pub fn refuel_asteroid(asteroid: &str, probe_id: Option<u64>) -> Self {
+        Self::action(
+            kind::ASTEROID,
+            format!("Dispatched a manny to refill the motor tank of «{asteroid}»."),
+            probe_id,
+        )
+    }
+
+    /// A launch is narrated with its own words per mode: one is a shot, the
+    /// other is a heading nobody controls once it is set.
+    pub fn launch_asteroid(asteroid: &str, summary: &str, probe_id: Option<u64>) -> Self {
+        Self::action(kind::ASTEROID, format!("Launched «{asteroid}» — {summary}."), probe_id)
+    }
+
     pub fn message_sent(recipient: &str, probe_id: Option<u64>) -> Self {
         Self::action(kind::MESSAGE, format!("Sent a message to «{recipient}»."), probe_id)
     }
@@ -287,6 +314,7 @@ pub mod kind {
     pub const DROP_CARGO: &str = "drop_cargo";
     pub const MIND_SNAPSHOT: &str = "mind_snapshot";
     pub const MISSION: &str = "mission";
+    pub const ASTEROID: &str = "asteroid";
     pub const RELAY: &str = "relay";
     pub const MESSAGE: &str = "message";
     pub const RULES: &str = "rules";

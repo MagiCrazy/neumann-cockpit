@@ -10,6 +10,15 @@ pub enum ApiMessage {
     LatestRelease(String),
     /// The active movement was cancelled and its deuterium refunded (#365).
     MoveCancelled,
+    /// A motorization or refuelling task was accepted (issue #308); the
+    /// Manny comes back already busy.
+    AsteroidMotorizing(crate::api::types::Manny),
+    AsteroidRefuelling(crate::api::types::Manny),
+    /// A motorized asteroid was launched (issue #308).
+    TrajectoryLaunched(crate::api::types::AsteroidTrajectory),
+    /// On-demand trajectory telemetry; `None` is the occultation 409, which
+    /// means the view is blocked, not that the asteroid is lost.
+    TrajectoryFetched(Option<crate::api::types::AsteroidTrajectory>),
     /// An alert (`warnings: false`) or damage warning was permanently
     /// deleted (issue #366).
     CommsEntryDeleted {
