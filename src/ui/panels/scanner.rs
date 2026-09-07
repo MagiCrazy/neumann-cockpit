@@ -533,6 +533,16 @@ pub(crate) fn sector_object_lines<'a>(obj: &'a SectorObject, compact: bool, p: P
             if let (Some(done), Some(planned)) = (t.completed_revolutions, t.planned_revolutions) {
                 spans.push(Span::styled(format!("  rev {done}/{planned}"), dim));
             }
+            // Sector crossings are reported as counters, never as odds
+            // (issue #308). The spec's rule — ten points of capture chance per
+            // *empty* sector crossed — cannot be applied to this number,
+            // because the payload never says which crossings were empty. A
+            // percentage here would be a claim of our own dressed as the
+            // server's, the same reason `is_safe_corridor` only ever answers
+            // on evidence.
+            if let Some(crossings) = crate::app::crossing_summary(t) {
+                spans.push(Span::styled(format!("  {crossings}"), dim));
+            }
             lines.push(Line::from(spans));
         }
         if let Some(captured) = &obj.captured_by_object_id {

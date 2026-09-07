@@ -217,6 +217,74 @@ pub fn fetch_ack_alert(id: i64, client: ApiClient, tx: mpsc::Sender<ApiMessage>)
     );
 }
 
+// ── Motorized asteroids (issue #308) ─────────────────────────────────────
+
+/// Install an engine on a local asteroid. The accepted task comes back with
+/// the Manny already busy, so it is merged into the roster in place — the
+/// `observed_busy` guard the sequencers rely on then sees it a tick earlier.
+pub fn fetch_motorize_asteroid(
+    probe_id: u64,
+    manny_id: String,
+    object_id: String,
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+) {
+    spawn_action(
+        tx,
+        async move { client.motorize_asteroid(probe_id, &manny_id, &object_id).await },
+        ApiMessage::AsteroidMotorizing,
+        ApiMessage::ActionError,
+    );
+}
+
+/// Refill an empty motorized asteroid's tank.
+pub fn fetch_refuel_asteroid(
+    probe_id: u64,
+    manny_id: String,
+    object_id: String,
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+) {
+    spawn_action(
+        tx,
+        async move { client.refuel_motorized_asteroid(probe_id, &manny_id, &object_id).await },
+        ApiMessage::AsteroidRefuelling,
+        ApiMessage::ActionError,
+    );
+}
+
+/// Launch a full motorized asteroid. Success refetches the sector rather than
+/// patching the scan: the launch changes the asteroid's fuel status and its
+/// embedded trajectory at once, and the scan is where both are read from.
+pub fn fetch_launch_trajectory(
+    probe_id: u64,
+    asteroid_id: String,
+    body: serde_json::Value,
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+) {
+    spawn_action(
+        tx,
+        async move { client.launch_asteroid_trajectory(probe_id, &asteroid_id, &body).await },
+        ApiMessage::TrajectoryLaunched,
+        ApiMessage::ActionError,
+    );
+}
+
+/// Read a trajectory's telemetry once, on demand.
+///
+/// Deliberately not polled: the trajectory is embedded in every detailed sector
+/// scan, so a poll would only buy a finer countdown at the cost of quota — and
+/// of a 409 to handle every occultation window. `None` **is** that 409.
+pub fn fetch_trajectory(probe_id: u64, trajectory_id: String, client: ApiClient, tx: mpsc::Sender<ApiMessage>) {
+    spawn_action(
+        tx,
+        async move { client.get_asteroid_trajectory(probe_id, &trajectory_id).await },
+        ApiMessage::TrajectoryFetched,
+        ApiMessage::ActionError,
+    );
+}
+
 /// Discard an alert or a damage warning for good (issue #366). The two live
 /// on one spawner because the caller already carries the `warnings` flag that
 /// says which list the entry came from, and the reply has to name it: the

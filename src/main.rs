@@ -13,11 +13,13 @@ use tokio::sync::mpsc;
 use neumann_cockpit::api::tasks::{
     fetch_all, fetch_api_version, fetch_atomic_printer_craft, fetch_craft, fetch_crafting_recipes, fetch_detach,
     fetch_logbook_pages, fetch_mannies, fetch_manny, fetch_manny_tasks, fetch_messages, fetch_mine, fetch_missions,
-    fetch_move, fetch_recover, fetch_repair, fetch_salvage, fetch_sent_messages, fetch_unread_message_count,
+    fetch_move, fetch_recover, fetch_repair, fetch_salvage, fetch_sector, fetch_sent_messages,
+    fetch_unread_message_count,
 };
 use neumann_cockpit::app::{
-    batch_tasks, ActiveWizard, ApiMessage, AppState, ColorMode, CraftFire, Fabricator, MessagesInput, MissionsInput,
-    Refetch, RefreshTarget, RemoteMineInput, ScriptAction, ScutCorridorInput, ScutNetworkInput, ShareBlueprintInput,
+    batch_tasks, trajectory_status_label, ActiveWizard, ApiMessage, AppState, ColorMode, CraftFire, Fabricator,
+    MessagesInput, MissionsInput, Refetch, RefreshTarget, RemoteMineInput, ScriptAction, ScutCorridorInput,
+    ScutNetworkInput, ShareBlueprintInput,
 };
 use neumann_cockpit::input::handle_event;
 use neumann_cockpit::preflight;
@@ -446,6 +448,28 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                     // urgent, and a modal about housekeeping in the middle of
                     // a mining run would be an intrusion.
                     ApiMessage::LatestRelease(tag) => state.note_latest_release(&tag),
+                    // ── Motorized asteroids (issue #308) ────────────────
+                    //
+                    // Both orders come back with the Manny already busy, so
+                    // it is merged in place; the sector is refetched because
+                    // motorization ends by replacing the asteroid's id and
+                    // refuelling ends by changing its fuel status, and the
+                    // scan is where both are read from.
+                    ApiMessage::AsteroidMotorizing(m) => {
+                        state.merge_mannies(vec![m]);
+                        state.set_toast("engine installation under way");
+                    }
+                    ApiMessage::AsteroidRefuelling(m) => {
+                        state.merge_mannies(vec![m]);
+                        state.set_toast("refuelling run under way");
+                    }
+                    // The launch consumed the tank and started a trajectory,
+                    // both of which live on the asteroid in the sector scan.
+                    ApiMessage::TrajectoryLaunched(t) => {
+                        state.set_toast(format!("asteroid away — {}", trajectory_status_label(t.status)));
+                        fetch_sector(None, client.clone(), tx.clone());
+                    }
+                    ApiMessage::TrajectoryFetched(t) => state.report_trajectory(t),
                     // The movement was called off and the deuterium refunded
                     // (issue #365). Refetch rather than infer: the gauge moves
                     // and the movement disappears, neither of which the

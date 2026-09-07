@@ -87,6 +87,7 @@ const RIGHT: &[Section] = &[
             ("", "move craft reservations out"),
             ("Sector", "object actions: mine, inspect,"),
             ("", "salvage, recover, deploy, relay"),
+            ("", "asteroid: engine, refuel, aim, track"),
         ],
     ),
     (

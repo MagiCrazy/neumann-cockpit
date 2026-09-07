@@ -4,6 +4,7 @@ use tokio::sync::mpsc;
 use crate::api::client::ApiClient;
 use crate::api::tasks::fetch_sector;
 use crate::app::{ActiveWizard, ApiMessage, AppState, GotoVisitedInput, InputMode, ProbeSwitchInput, ScanMode};
+mod aim;
 mod alerts;
 mod assemble;
 mod blueprint;
@@ -89,6 +90,10 @@ const WIZARD_INPUTS: &[(WizardGuard, WizardHandler)] = &[
     (
         |s| matches!(s.active_wizard, ActiveWizard::DiscardComms(_)),
         discard::handle_discard_comms_event,
+    ),
+    (
+        |s| matches!(s.active_wizard, ActiveWizard::AimAsteroid(_)),
+        aim::handle_aim_asteroid_event,
     ),
     (|s| matches!(s.active_wizard, ActiveWizard::Fabrication(_)), handle_fabrication_event),
     (|s| matches!(s.active_wizard, ActiveWizard::Improve(_)), handle_improve_event),

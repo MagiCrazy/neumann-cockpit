@@ -1,5 +1,6 @@
 mod ambiance;
 mod assembly;
+mod asteroids;
 mod batch;
 mod boot;
 mod color;
@@ -26,6 +27,7 @@ mod waypoints;
 
 pub use ambiance::*;
 pub use assembly::*;
+pub use asteroids::*;
 pub use batch::*;
 pub use boot::{BOOT_CHARS_PER_FRAME, BOOT_LINE_STRIDE};
 pub use color::*;
@@ -922,6 +924,26 @@ impl AppState {
                 move || format!("release {version} is newer than this build")
             });
             self.update_available = Some(version);
+        }
+    }
+
+    /// Report an on-demand trajectory read (issue #308).
+    ///
+    /// A toast is the whole surface on purpose: the trajectory is embedded in
+    /// every detailed sector scan, so the durable state is already on screen
+    /// in the Sector pane. What this read adds is freshness and the one thing
+    /// the scan cannot say — that the view is blocked right now.
+    ///
+    /// `None` is the occultation 409, and it must never read as a loss: a
+    /// countdown that degraded to "lost" here would report a rock as gone
+    /// while it is still on its way.
+    pub fn report_trajectory(&mut self, t: Option<crate::api::types::AsteroidTrajectory>) {
+        match t {
+            Some(t) => {
+                let crossings = crossing_summary(&t).map(|c| format!(" · {c}")).unwrap_or_default();
+                self.set_toast(format!("trajectory {}{crossings}", trajectory_status_label(t.status)));
+            }
+            None => self.set_toast("trajectory occluded — the star is in the way, not gone"),
         }
     }
 
