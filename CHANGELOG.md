@@ -1,5 +1,17 @@
 # Changelog
 
+## [116.0.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v112.0.0...neumann-cockpit-v116.0.0) (2026-09-11)
+
+
+### Features
+
+* **asteroids:** motorize, refuel and aim a motorized asteroid ([#308](https://github.com/MagiCrazy/neumann-cockpit/issues/308)) ([#373](https://github.com/MagiCrazy/neumann-cockpit/issues/373)) ([47633ab](https://github.com/MagiCrazy/neumann-cockpit/commit/47633abb7e54582ba0db1f5e77a60092ceacd5e4))
+
+
+### Bug Fixes
+
+* **blueprints:** offer the five shareable blueprints, and watch the drift ([#359](https://github.com/MagiCrazy/neumann-cockpit/issues/359)) ([#376](https://github.com/MagiCrazy/neumann-cockpit/issues/376)) ([d6443f2](https://github.com/MagiCrazy/neumann-cockpit/commit/d6443f2a8bbf7968751686252587c8d248b4c589))
+
 ## [112.0.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v105.0.0...neumann-cockpit-v112.0.0) (2026-09-06)
 
 
