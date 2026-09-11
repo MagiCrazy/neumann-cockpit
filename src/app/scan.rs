@@ -740,11 +740,20 @@ pub struct CorridorDestination {
     pub coords: (i32, i32, i32),
 }
 
-/// Blueprints the server accepts for sharing (API v116 path enum). Anything
-/// else is a 404 on the path itself, so the catalog is filtered against it
-/// rather than offering an improvement the endpoint cannot take.
-pub const SHAREABLE_BLUEPRINTS: [&str; 3] = [
+/// Blueprints the server accepts for sharing (the `improvementId` path enum).
+/// Anything else is a 404 on the path itself, so the catalog is filtered
+/// against it rather than offering an improvement the endpoint cannot take.
+///
+/// This is a hand-copied mirror of a server-side enum, and a mirror nobody
+/// checks goes stale silently: the list stayed at the three values of v116
+/// while the path grew to five, so two owned blueprints were simply absent
+/// from the wizard with nothing to report (#359). `tests/spec_drift.rs` now
+/// reads the enum back out of the newest vendored spec and fails when the two
+/// disagree — the guard is kept, and the drift is made loud.
+pub const SHAREABLE_BLUEPRINTS: [&str; 5] = [
     "deuterium_compression",
     "reinforced_container_couplings",
     "distributed_thrust_anchoring",
+    "anatiform_asteroid_sculpting",
+    "relativistic_path_clearing",
 ];

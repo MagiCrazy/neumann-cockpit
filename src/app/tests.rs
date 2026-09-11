@@ -3279,13 +3279,25 @@ fn only_known_and_shareable_blueprints_are_offered() {
             {"id":"reinforced_container_couplings","name":"Reinforced couplings","description":"",
              "available":false,"done":false,"durationSeconds":300,"ingredients":[]},
             {"id":"anatiform_asteroid_sculpting","name":"Duck sculpting","description":"",
+             "available":true,"done":false,"durationSeconds":300,"ingredients":[]},
+            {"id":"hypothetical_future_improvement","name":"Not in the path enum","description":"",
              "available":true,"done":false,"durationSeconds":300,"ingredients":[]}]"#,
     )
     .unwrap();
     let ids: Vec<String> = s.shareable_blueprints().into_iter().map(|(id, _)| id).collect();
-    // Unlocked or already installed counts as known; a locked one does not, and
-    // duck sculpting is not in the endpoint's path enum however known it is.
-    assert_eq!(ids, vec!["deuterium_compression", "distributed_thrust_anchoring"]);
+    // Unlocked or already installed counts as known; a locked one does not. The
+    // last entry stands for an improvement the server knows and the share path
+    // does not take: every id in v130 happens to be shareable, so the guard is
+    // exercised here rather than left untested until the enums diverge again
+    // (#359 — the drift itself is watched by tests/spec_drift.rs).
+    assert_eq!(
+        ids,
+        vec![
+            "deuterium_compression",
+            "distributed_thrust_anchoring",
+            "anatiform_asteroid_sculpting"
+        ]
+    );
 }
 
 #[test]
