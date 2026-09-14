@@ -15,7 +15,7 @@
 //!   asked once at first run and written to the config, and a pilot who
 //!   declines is never asked again.
 //! - **The tag is not the crate version.** release-please tags this repository
-//!   `neumann-cockpit-v104.4.0`, so the prefix has to come off before the
+//!   `neumann-cockpit-v131.0.0`, so the prefix has to come off before the
 //!   string is a version at all. And the crate **major tracks the API
 //!   version**, so a major bump is not a breaking change: the comparison is
 //!   "is the published version greater", never "the major differs, beware".

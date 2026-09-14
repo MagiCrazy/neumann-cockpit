@@ -108,4 +108,10 @@ Two rules keep release-please honest:
   proper changelog entry. An empty commit is fine:
   `git commit --allow-empty -m "chore: release X.Y.Z" -m "Release-As: X.Y.Z"`.
 
+  Put the footer **on the catch-up commit itself**, not afterwards. release-please
+  reads commit messages, and this repository squashes, so the footer has to be in
+  the squashed message — a PR description is not read. Forgetting it means the
+  release PR proposes an ordinary bump, and correcting that costs a second commit
+  and a regenerated release PR. That is exactly what happened going to v131.
+
 Happy hacking! 🛰️
