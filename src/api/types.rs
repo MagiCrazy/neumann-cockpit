@@ -87,6 +87,11 @@ pub enum MannyTask {
     Returning,
     WaitingForSpace,
     MovingStockage,
+    /// Moving contents between an onboard container and sector storage — a
+    /// detached container, or a shared germination depot. Arrived in the live
+    /// v130 spec *after* v130 was vendored, the document having changed under
+    /// a fixed version number (upstream gnieark/Von-Neumann-Game#63).
+    TransferringSectorStorage,
     DroppingStorageContainer,
     RefillingDeuteriumTank,
     TurningOnScutRelay,

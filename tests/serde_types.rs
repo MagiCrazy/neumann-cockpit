@@ -1246,3 +1246,13 @@ fn an_unknown_value_still_absorbs_rather_than_failing() {
     assert_eq!(obj.status, Some(SectorObjectStatus::Unknown));
     assert_eq!(obj.observed_class, Some(ObservedClass::Unknown));
 }
+
+#[test]
+fn the_sector_storage_task_is_named() {
+    // The live v130 document grew this value after v130 was vendored — the
+    // spec changed under a fixed version number, which no offline check could
+    // see (upstream gnieark/Von-Neumann-Game#63). Until it was typed, a Manny
+    // moving contents in or out of sector storage read as "?".
+    let t: MannyTask = deser("\"transferring_sector_storage\"");
+    assert_eq!(t, MannyTask::TransferringSectorStorage);
+}
