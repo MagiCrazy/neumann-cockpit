@@ -756,6 +756,60 @@ mod tests {
         );
     }
 
+    /// Default probe 5 (reachable), a reachable drone 6, an out-of-range 7.
+    fn fleet_picker_state() -> AppState {
+        let list: crate::api::types::ProbeListResponse = serde_json::from_str(
+            r#"{"defaultProbeId": 5, "probes": [
+                {"id": 5, "name": "Sonde de Magic", "status": "idle", "isDefault": true, "isReachable": true},
+                {"id": 6, "name": "Drone Beta", "status": "cruising", "isDefault": false, "isReachable": true},
+                {"id": 7, "name": "Drone Gamma", "status": "idle", "isDefault": false, "isReachable": false}
+            ]}"#,
+        )
+        .unwrap();
+        let mut state = AppState::default();
+        state.update_fleet(list);
+        state.probe_switch = ProbeSwitchInput::Picking { selection: 0 };
+        state
+    }
+
+    #[tokio::test]
+    async fn a_digit_pilots_the_nth_listed_probe() {
+        // The request (#334) was for *global* digit shortcuts. Roster order
+        // changes as drones are assembled and lost, so a global `2` would
+        // silently come to mean a different probe — and piloting the wrong one
+        // parks the other probe's production queue (#291). Inside the picker
+        // the list is on screen while the digit is pressed, so it cannot
+        // mislead: the same contract the context menu's accelerators have.
+        let mut state = fleet_picker_state();
+        press(&mut state, KeyCode::Char('2'));
+        assert_eq!(state.active_probe_id, Some(6), "the second listed probe");
+        assert!(
+            matches!(state.probe_switch, ProbeSwitchInput::Inactive),
+            "picker closed"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_digit_obeys_the_same_reachability_rule_as_enter() {
+        // One rule, not two that could drift apart: Drone Gamma is out of range.
+        let mut state = fleet_picker_state();
+        press(&mut state, KeyCode::Char('3'));
+        assert_eq!(state.active_probe_id, None, "refused, still on the default");
+        assert!(state.active_toast().is_some_and(|t| t.contains("SCUT range")));
+    }
+
+    #[tokio::test]
+    async fn a_digit_past_the_roster_is_dropped() {
+        // Dropped rather than wrapped: the row it would pick is not on screen.
+        let mut state = fleet_picker_state();
+        press(&mut state, KeyCode::Char('9'));
+        assert_eq!(state.active_probe_id, None);
+        assert!(
+            matches!(state.probe_switch, ProbeSwitchInput::Picking { .. }),
+            "the picker stays open"
+        );
+    }
+
     #[tokio::test]
     async fn opening_a_second_wizard_replaces_the_first() {
         // The structural guarantee: `active_wizard` is a single field, so a new

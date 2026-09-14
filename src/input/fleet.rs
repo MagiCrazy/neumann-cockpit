@@ -10,10 +10,35 @@ use crate::app::{
 
 use super::geometry::{is_list_nav_key, list_nav};
 
+/// Pilot the probe at `index` in the roster, closing the picker.
+///
+/// Shared by `Enter` and the digit accelerators so an unreachable probe is
+/// refused by exactly one rule rather than two that could drift apart.
+fn pilot_fleet_entry(state: &mut AppState, index: usize) {
+    let Some(p) = state.fleet.get(index) else {
+        return;
+    };
+    let (id, name, reachable) = (p.id, p.name.clone(), p.is_reachable);
+    state.probe_switch = ProbeSwitchInput::Inactive;
+    if !reachable {
+        state.set_toast(format!("{name} is out of SCUT range — cannot pilot"));
+    } else if state.set_active_probe(id) {
+        state.set_toast(format!("piloting {name}"));
+    }
+}
+
 /// Fleet picker (API v81 multi-probe): navigate the roster, `Enter` switches the
 /// piloted probe, `Esc` cancels. Switching is client-side only — the event loop
 /// reconciles the `ApiClient` and refetches. An unreachable probe is refused
 /// with a toast: piloting it would return only limited telemetry.
+///
+/// `1`-`9` pilot the nth listed probe directly (issue #334). The request was
+/// for *global* digit shortcuts, which this deliberately is not: roster order
+/// changes as drones are assembled and lost, so a global `3` would silently
+/// come to mean a different probe — and piloting the wrong one parks the other
+/// probe's production queue (#291). Inside the picker the list is on screen
+/// while the digit is pressed, so it cannot mislead, which is the same contract
+/// the context menu's accelerators already have (#325).
 pub(super) fn handle_probe_switch_event(code: KeyCode, state: &mut AppState) {
     let ProbeSwitchInput::Picking { selection } = state.probe_switch else {
         return;
@@ -26,15 +51,13 @@ pub(super) fn handle_probe_switch_event(code: KeyCode, state: &mut AppState) {
                 state.probe_switch = ProbeSwitchInput::Picking { selection: ns };
             }
         }
-        KeyCode::Enter => {
-            if let Some(p) = state.fleet.get(selection) {
-                let (id, name, reachable) = (p.id, p.name.clone(), p.is_reachable);
-                state.probe_switch = ProbeSwitchInput::Inactive;
-                if !reachable {
-                    state.set_toast(format!("{name} is out of SCUT range — cannot pilot"));
-                } else if state.set_active_probe(id) {
-                    state.set_toast(format!("piloting {name}"));
-                }
+        KeyCode::Enter => pilot_fleet_entry(state, selection),
+        KeyCode::Char(c @ '1'..='9') => {
+            let index = c as usize - '1' as usize;
+            // A digit past the roster is dropped rather than wrapped: the row
+            // it would pick is not on screen to be seen.
+            if index < count {
+                pilot_fleet_entry(state, index);
             }
         }
         _ => {}
