@@ -604,6 +604,66 @@ fn the_menu_cursor_is_visible_on_a_disabled_row() {
     assert!(!other.contains("▶"), "only the cursor row is marked: {other}");
 }
 
+// ── SCUT network view (issue #379) ───────────────────────────────────────
+
+/// A network fixture with `n` relays, enough to overflow the popup.
+fn scut_network(n: i64) -> crate::api::types::ScutNetwork {
+    let relay = |i: i64| {
+        serde_json::from_str::<crate::api::types::ScutRelay>(&format!(
+            r#"{{"id": {i}, "name": "R{i}", "status": "on", "coverageRadiusSectors": 2,
+                 "createdByProbeName": "Sanctioned Parts List",
+                 "sector": {{"relative": {{"x": {i}, "y": 0.0, "z": 0.0}}}}}}"#
+        ))
+        .unwrap()
+    };
+    crate::api::types::ScutNetwork {
+        id: 1,
+        name: "Meridian".into(),
+        relay_count: n,
+        covered_sector_count: 120,
+        relays: (0..n).map(relay).collect(),
+        probes: Vec::new(),
+    }
+}
+
+#[test]
+fn the_scut_network_view_reaches_its_last_relay() {
+    use crate::app::{ActiveWizard, ScutNetworkInput};
+    let mut state = AppState::default();
+    state.scut_network_view = Some(scut_network(40));
+    state.active_wizard = ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { error: None, offset: 0 });
+
+    let top = buffer_text(&render_cockpit(&state, 80, 24));
+    assert!(top.contains("(0,0,0)"), "the first relay is on screen");
+    assert!(!top.contains("(39,0,0)"), "and the last one is not — it overflows");
+    assert!(top.contains('▼'), "so the popup says there is more below");
+
+    // Scrolled to the end, the tail is reachable and the marker flips.
+    state.active_wizard = ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing {
+        error: None,
+        offset: 1_000, // past the end: the renderer clamps for real
+    });
+    let end = buffer_text(&render_cockpit(&state, 80, 24));
+    assert!(end.contains("(39,0,0)"), "the last relay is reachable");
+    assert!(end.contains('▲'), "and the marker points back up");
+    assert!(!end.contains('▼'), "nothing left below");
+}
+
+#[test]
+fn a_network_that_fits_shows_no_scroll_affordance() {
+    use crate::app::{ActiveWizard, ScutNetworkInput};
+    let mut state = AppState::default();
+    state.scut_network_view = Some(scut_network(2));
+    state.active_wizard = ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { error: None, offset: 0 });
+    let text = buffer_text(&render_cockpit(&state, 80, 24));
+    assert!(text.contains("(1,0,0)"), "both relays are on screen");
+    assert!(!text.contains('▼'), "a marker that cries wolf is worse than none");
+    assert!(
+        !text.contains("scroll"),
+        "and the footer does not offer a key with nothing to do"
+    );
+}
+
 // ── overflow markers (issue #326) ─────────────────────────────────────────
 
 /// Render just the markers over a pane-sized rect and return the buffer.

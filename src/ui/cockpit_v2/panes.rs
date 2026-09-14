@@ -794,7 +794,7 @@ fn render_ship_log(frame: &mut Frame, area: Rect, state: &AppState, active: bool
 
 /// Truncate a styled line to `max` display columns, appending an ellipsis when
 /// it overflows, while preserving each span's colour.
-fn truncate_spans(spans: Vec<Span<'static>>, max: usize) -> Vec<Span<'static>> {
+pub(crate) fn truncate_spans(spans: Vec<Span<'static>>, max: usize) -> Vec<Span<'static>> {
     let total: usize = spans.iter().map(|s| s.content.chars().count()).sum();
     if total <= max || max == 0 {
         return spans;

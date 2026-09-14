@@ -9,7 +9,7 @@
 
 pub(crate) mod grid;
 mod menu;
-mod panes;
+pub(crate) mod panes;
 /// Shared by the reused panels (`ui/panels/`), which scroll their line list
 /// the same way the grid panes do (issues #292, #293).
 pub(crate) use panes::{manny_detail_height, scroll_offset};
