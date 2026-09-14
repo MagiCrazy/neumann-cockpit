@@ -4093,9 +4093,20 @@ fn a_craft_that_finished_unobserved_completes_on_its_duration() {
         StepState::Running { observed_busy: false }
     ));
 
-    // Long past the recipe's duration with the builder idle: it ran its course.
+    // Due, but only just: since v117 only the scheduler worker finalises a
+    // task, so the duration elapsing is the earliest instant the server *might*
+    // consider the builder free — not proof that it does (issue #364).
     s.craft_queue[0].duration_secs = 1;
     s.craft_queue[0].fired_at = Some(chrono::Utc::now() - chrono::Duration::seconds(5));
+    s.advance_queue();
+    assert!(
+        matches!(s.craft_queue[0].state, StepState::Running { observed_busy: false }),
+        "the worker is given time to settle before we conclude anything"
+    );
+
+    // Past the settling margin with the builder still idle: it ran its course.
+    s.craft_queue[0].fired_at =
+        Some(chrono::Utc::now() - chrono::Duration::seconds(1 + crate::app::MANNY_POLL_MAX_SECS as i64 + 5));
     s.advance_queue();
     assert!(
         matches!(s.craft_queue[0].state, StepState::Done),

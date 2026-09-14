@@ -31,6 +31,15 @@ pub const QUEUE_MAX: usize = 32;
 /// visible on the next fetch.
 pub const QUEUE_POLL_SECS: u64 = 4;
 
+/// Grace left to the scheduler worker before the duration fallback concludes a
+/// craft is over (API v117, issue #364).
+///
+/// It is [`MANNY_POLL_MAX_SECS`] because that is the longest the cockpit will
+/// go without reading the roster: past it, at least one read has happened since
+/// the craft came due, so a builder still reported busy is genuinely busy and
+/// the fallback is not the signal being used anyway.
+const COMPLETION_SETTLE_SECS: u64 = crate::app::MANNY_POLL_MAX_SECS;
+
 #[derive(Clone, PartialEq)]
 pub enum StepState {
     /// Not started.
@@ -126,17 +135,28 @@ impl QueuedCraft {
     }
 
     /// Whether this iteration has been in flight for longer than the recipe
-    /// takes to build. The API exposes no per-Manny task history, so when the
-    /// builder's busy window was missed entirely — a short recipe between two
-    /// polls, or a craft that ran while its probe was not piloted — the recipe's
-    /// own duration is the only honest completion signal we have. Without it a
-    /// step that was never seen busy waits forever (issue #291).
+    /// takes to build, plus the settling margin. The API exposes no per-Manny
+    /// task history, so when the builder's busy window was missed entirely — a
+    /// short recipe between two polls, or a craft that ran while its probe was
+    /// not piloted — the recipe's own duration is the only honest completion
+    /// signal we have. Without it a step that was never seen busy waits forever
+    /// (issue #291).
+    ///
+    /// The margin is what **v117** made necessary (#364). A read used to be
+    /// able to finalise a task that had come due; now only the scheduler worker
+    /// applies the transition, and a GET reports the last persisted state. So
+    /// the recipe's duration elapsing no longer means the server considers the
+    /// builder free — it means the earliest instant at which it *might*. Firing
+    /// the lane's next craft on that instant draws a `manny_busy` rejection,
+    /// and a rejection pauses the whole queue (`fail_queue`), which is the
+    /// worst outcome for a pilot who queued hours of work and walked away.
+    /// This is a last resort, never a race to be first.
     fn ran_its_course(&self) -> bool {
         match (self.duration_secs, self.fired_at) {
             (0, _) | (_, None) => false,
             // A clock that moved backwards yields a negative span, which is not
             // "it ran its course" — the fallback must never fire early.
-            (secs, Some(t)) => (Utc::now() - t).num_seconds() >= secs as i64,
+            (secs, Some(t)) => (Utc::now() - t).num_seconds() >= (secs + COMPLETION_SETTLE_SECS) as i64,
         }
     }
 }
