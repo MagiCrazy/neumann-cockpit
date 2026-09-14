@@ -38,11 +38,16 @@ jobs:
         if: steps.release.outputs.releases_created == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          gh release list --limit 10 --json tagName,name \
+          # --repo is required: this workflow never checks the repository out,
+          # so gh has no git remote to infer it from and fails with
+          # "not a git repository". Adding a checkout would clone the whole
+          # tree just to let gh guess what we already know.
+          gh release list --repo "$REPO" --limit 10 --json tagName,name \
             --jq '.[] | select(.name | startswith("neumann-cockpit: ")) | [.tagName, .name] | @tsv' \
           | while IFS=$'\t' read -r tag name; do
               echo "retitling $tag: $name -> ${name#neumann-cockpit: }"
-              gh release edit "$tag" --title "${name#neumann-cockpit: }"
+              gh release edit "$tag" --repo "$REPO" --title "${name#neumann-cockpit: }"
             done
