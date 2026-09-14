@@ -1,5 +1,12 @@
 # Changelog
 
+## [131.0.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v131.0.0...neumann-cockpit-v131.0.1) (2026-09-14)
+
+
+### Bug Fixes
+
+* **ci:** tell gh which repository to retitle releases in ([#395](https://github.com/MagiCrazy/neumann-cockpit/issues/395)) ([50691f9](https://github.com/MagiCrazy/neumann-cockpit/commit/50691f9bd1fa07a6c26e35d89f3bd253a4cad31d))
+
 ## [131.0.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v116.1.0...neumann-cockpit-v131.0.0) (2026-09-14)
 
 
