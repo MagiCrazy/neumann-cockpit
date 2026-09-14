@@ -57,9 +57,9 @@ const LEFT: &[Section] = &[
         ],
     ),
     (
-        "In a menu",
+        "In a menu or the fleet picker",
         &[
-            ("1-9", "fire the nth item"),
+            ("1-9", "fire / pilot the nth item"),
             ("j k", "move"),
             ("Enter", "fire selected"),
             ("Esc", "close"),

@@ -25,7 +25,15 @@ pub(crate) fn render_probe_switch_overlay(frame: &mut Frame, area: Rect, state: 
     let labels: Vec<String> = state
         .fleet
         .iter()
-        .map(|pr| {
+        .enumerate()
+        .map(|(i, pr)| {
+            // The accelerator is printed, because a shortcut nobody can see is
+            // a shortcut nobody uses (issue #334). Past the ninth row there is
+            // no digit to offer, and the column stays blank rather than lying.
+            let key = match i {
+                i if i < 9 => format!("{} ", i + 1),
+                _ => "  ".to_string(),
+            };
             let mark = if pr.is_default {
                 "★"
             } else if Some(pr.id) == active {
@@ -38,7 +46,7 @@ pub(crate) fn render_probe_switch_overlay(frame: &mut Frame, area: Rect, state: 
             } else {
                 "   ⚠ out of SCUT range"
             };
-            format!("{mark} {}  ·  {}{reach}", pr.name, probe_status_label(&pr.status))
+            format!("{key}{mark} {}  ·  {}{reach}", pr.name, probe_status_label(&pr.status))
         })
         .collect();
     let refs: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
@@ -54,7 +62,7 @@ pub(crate) fn render_probe_switch_overlay(frame: &mut Frame, area: Rect, state: 
         &refs,
         selection,
         None,
-        "pilot",
+        "pilot (or 1-9)",
     );
 }
 
