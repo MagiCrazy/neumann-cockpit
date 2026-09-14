@@ -4093,9 +4093,20 @@ fn a_craft_that_finished_unobserved_completes_on_its_duration() {
         StepState::Running { observed_busy: false }
     ));
 
-    // Long past the recipe's duration with the builder idle: it ran its course.
+    // Due, but only just: since v117 only the scheduler worker finalises a
+    // task, so the duration elapsing is the earliest instant the server *might*
+    // consider the builder free — not proof that it does (issue #364).
     s.craft_queue[0].duration_secs = 1;
     s.craft_queue[0].fired_at = Some(chrono::Utc::now() - chrono::Duration::seconds(5));
+    s.advance_queue();
+    assert!(
+        matches!(s.craft_queue[0].state, StepState::Running { observed_busy: false }),
+        "the worker is given time to settle before we conclude anything"
+    );
+
+    // Past the settling margin with the builder still idle: it ran its course.
+    s.craft_queue[0].fired_at =
+        Some(chrono::Utc::now() - chrono::Duration::seconds(1 + crate::app::MANNY_POLL_MAX_SECS as i64 + 5));
     s.advance_queue();
     assert!(
         matches!(s.craft_queue[0].state, StepState::Done),
@@ -4863,4 +4874,81 @@ fn tree_lists_a_row_per_hull_model() {
     let hulls: Vec<&str> = rows.iter().filter(|r| r.is_assembly).map(|r| r.item.as_str()).collect();
     assert_eq!(hulls, vec!["generic", "deuterium_tanker"]);
     assert!(rows.iter().filter(|r| r.is_assembly).all(|r| r.expandable));
+}
+
+// ── v121: a damaged probe cannot leave (issue #364) ───────────────────────
+
+fn probe_with_integrity(integrity: f64) -> crate::api::types::Probe {
+    serde_json::from_str(&format!(
+        r#"{{
+        "id": 1, "name": "t", "status": "idle",
+        "fuel": {{"deuterium": 50.0, "maxDeuterium": 100.0}}, "sensorMode": "normal",
+        "sector": null, "movement": null,
+        "systems": {{"integrityPercent": {integrity}, "damagePercent": 0.0,
+                    "energyStored": null, "internalClockRate": null, "currentTask": null}},
+        "inventory": {{"capacity": 1.0, "usedCapacity": 0.0, "freeCapacity": 1.0,
+                      "items": [], "resourceStocks": [], "externalTanks": [], "containers": []}}
+    }}"#
+    ))
+    .unwrap()
+}
+
+#[test]
+fn travel_is_refused_below_ten_percent_integrity() {
+    // Since v121 the server answers probe_integrity_too_low, so the pilot used
+    // to pick coordinates, read a fuel bill and confirm before being told no by
+    // a round-trip they paid for (issue #364).
+    let mut s = AppState::default();
+    s.probe = Some(probe_with_integrity(9.0));
+    s.travel_go_sector(2, 0, 0);
+    let ActiveWizard::Travel(TravelInput::Confirming { error, .. }) = &s.active_wizard else {
+        panic!("the confirm screen opens either way — it is where the reason is read");
+    };
+    let msg = error.as_deref().expect("refused locally");
+    assert!(
+        msg.contains("9%") && msg.contains("10%"),
+        "says the hull and the floor: {msg}"
+    );
+
+    // At the floor exactly, the jump is allowed: the rule is "at least 10 %".
+    s.probe = Some(probe_with_integrity(10.0));
+    s.travel_go_sector(2, 0, 0);
+    let ActiveWizard::Travel(TravelInput::Confirming { error, .. }) = &s.active_wizard else {
+        panic!("confirming");
+    };
+    assert!(error.is_none(), "10 % is enough");
+}
+
+#[test]
+fn travel_claims_nothing_when_integrity_is_unknown() {
+    // Silence is not a claim: a probe that has not reported its systems is not
+    // a probe refused. The server stays the authority.
+    let mut s = AppState::default();
+    assert!(s.travel_block_reason().is_none(), "no probe at all");
+    s.probe = Some(
+        serde_json::from_str(
+            r#"{
+        "id": 1, "name": "t", "status": "idle",
+        "fuel": {"deuterium": 50.0}, "sensorMode": "normal",
+        "sector": null, "movement": null, "systems": null,
+        "inventory": {"capacity": 1.0, "usedCapacity": 0.0, "freeCapacity": 1.0,
+                      "items": [], "resourceStocks": [], "externalTanks": [], "containers": []}
+    }"#,
+        )
+        .unwrap(),
+    );
+    assert!(s.travel_block_reason().is_none(), "no integrity reported");
+}
+
+#[test]
+fn a_parity_error_outranks_the_integrity_refusal() {
+    // Both are local refusals; the one the pilot can fix by typing comes first.
+    let mut s = AppState::default();
+    s.probe = Some(probe_with_integrity(5.0));
+    s.active_wizard = ActiveWizard::Travel(TravelInput::Typing("1 0 0".into()));
+    s.travel_submit();
+    let ActiveWizard::Travel(TravelInput::Confirming { error, .. }) = &s.active_wizard else {
+        panic!("confirming");
+    };
+    assert_eq!(error.as_deref(), Some("x+y+z must be even"));
 }

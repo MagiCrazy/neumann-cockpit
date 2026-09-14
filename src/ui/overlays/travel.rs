@@ -1,4 +1,4 @@
-use crate::app::{ActiveWizard, AppState, TravelInput};
+use crate::app::{ActiveWizard, AppState, TravelInput, MIN_TRAVEL_INTEGRITY_PERCENT};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -8,7 +8,7 @@ use ratatui::{
 };
 
 use super::{centered_rect, render_footer, FooterKey};
-use crate::ui::theme::format_duration;
+use crate::ui::theme::{format_duration, ratio_color};
 pub(crate) fn render_travel_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
     let p = state.palette();
     let ActiveWizard::Travel(travel) = &state.active_wizard else {
@@ -125,6 +125,27 @@ pub(crate) fn render_travel_overlay(frame: &mut Frame, area: Rect, state: &AppSt
                 lines.push(Line::from(vec![
                     Span::styled("   ETA       ", Style::default().fg(p.dim)),
                     Span::styled(format_duration(mins * 60), Style::default().fg(p.warn)),
+                ]));
+            }
+
+            // Integrity earns a line here for the same reason fuel does: since
+            // v121 it is a precondition of the jump, not just a status (#364).
+            // Shown always, not only when it blocks — a hull at 12 % is the
+            // number a pilot wants before committing, and the refusal below is
+            // then a confirmation rather than a surprise.
+            if let Some(integrity) = state.probe_integrity() {
+                let color = if integrity < MIN_TRAVEL_INTEGRITY_PERCENT {
+                    p.crit
+                } else {
+                    ratio_color(integrity / 100.0, p)
+                };
+                lines.push(Line::from(vec![
+                    Span::styled("   Integrity ", Style::default().fg(p.dim)),
+                    Span::styled(format!("{integrity:.0}%"), Style::default().fg(color)),
+                    Span::styled(
+                        format!("  (min {MIN_TRAVEL_INTEGRITY_PERCENT:.0}%)"),
+                        Style::default().fg(p.dim),
+                    ),
                 ]));
             }
 

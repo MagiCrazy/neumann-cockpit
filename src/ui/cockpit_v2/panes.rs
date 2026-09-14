@@ -11,12 +11,13 @@ use crate::api::types::{
 };
 use crate::app::{AppState, CommsCategory, DrillLevel, MissionsCategory, Pane};
 use crate::ui::panels::mannies::{
-    manny_artificial_detection, manny_crafting_detail, manny_mining_detail, manny_task_eta, manny_task_label,
-    manny_task_progress,
+    manny_artificial_detection, manny_crafting_detail, manny_mining_detail, manny_storage_wait, manny_task_eta,
+    manny_task_label, manny_task_progress,
 };
 use crate::ui::panels::scanner::{resource_shares_line, sector_object_lines};
 use crate::ui::theme::{
-    block_gauge_line, object_color, object_icon, object_type_label, pane_block, ratio_color, scroll_markers, Palette,
+    block_gauge_line, format_duration, object_color, object_icon, object_type_label, pane_block, ratio_color,
+    scroll_markers, Palette,
 };
 use chrono::Local;
 use ratatui::{
@@ -1066,6 +1067,25 @@ fn manny_detail_lines(state: &AppState, m: &Manny, p: Palette) -> Vec<Line<'stat
             Span::styled(recipe, text),
         ]));
     }
+    // A storage wait is a seven-day countdown that ends in losing the cargo
+    // and then the Manny itself (API v123, #364). A label alone said none of
+    // that; the deadline is spelled out, and stated in crit for the last day.
+    if let Some(w) = manny_storage_wait(m) {
+        let style = if w.critical() {
+            Style::default().fg(p.crit).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(p.warn)
+        };
+        lines.push(Line::from(vec![
+            Span::styled("⌛ ", style),
+            Span::styled(format!("waiting {}", format_duration(w.elapsed_secs)), style),
+        ]));
+        lines.push(Line::styled(
+            format!("   abandons cargo in {}", format_duration(w.remaining_secs)),
+            style,
+        ));
+        lines.push(Line::styled("   then detaches if it cannot dock", dim));
+    }
     // A hidden container turned up by mining — flag it (recoverable).
     if manny_artificial_detection(m).is_some() {
         lines.push(Line::from(Span::styled(
@@ -1208,6 +1228,17 @@ pub fn render_mannies_overview(frame: &mut Frame, area: Rect, state: &AppState, 
             }
         }
         lines.push(Line::from(header));
+
+        // The storage wait, on its own row: the roster is where a pilot scans
+        // for trouble, and this is the only task with a destructive deadline.
+        if let Some(w) = manny_storage_wait(m) {
+            let style = if w.critical() {
+                Style::default().fg(p.crit).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(p.warn)
+            };
+            lines.push(Line::styled(format!("    ⌛ {}", w.summary()), style));
+        }
 
         // Mining target, when visible: asteroid · resources → destination.
         if let Some(d) = manny_mining_detail(m) {

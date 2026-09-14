@@ -74,7 +74,7 @@ const MANNY_POLL_MIN_SECS: u64 = 1;
 /// Ceiling on the hint. The ordinary 60 s cadence refreshes everything anyway,
 /// so trusting a longer hint would buy nothing and risk sitting on a stale
 /// roster if the server's estimate slips.
-const MANNY_POLL_MAX_SECS: u64 = 30;
+pub(crate) const MANNY_POLL_MAX_SECS: u64 = 30;
 
 /// What a fired refresh deadline should fetch. Watching Manny work no longer
 /// costs a full seven-endpoint refresh (API v104).

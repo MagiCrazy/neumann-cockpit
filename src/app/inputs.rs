@@ -495,6 +495,10 @@ pub enum MessagesInput {
     },
 }
 
+/// Minimum hull integrity the server requires to start a movement (API v121,
+/// issue #364). Below it, `POST …/move` answers `probe_integrity_too_low`.
+pub const MIN_TRAVEL_INTEGRITY_PERCENT: f64 = 10.0;
+
 pub enum ScutNetworkInput {
     /// Several networks cover the sector — pick which one to inspect.
     Picking {
