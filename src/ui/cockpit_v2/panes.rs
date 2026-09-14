@@ -265,9 +265,92 @@ fn render_comms_feed(
     render_body(frame, area, &format!(" COMMS › {label} "), active, p, lines, sel_line);
 }
 
+/// Contents of a drilled-into sector storage object (#387).
+///
+/// `loading` and *empty* are drawn differently on purpose: "nothing here" is a
+/// real answer about a container and must not be confused with "still on the
+/// wire", which is the same distinction the logbook draws between `None` and an
+/// empty page list (#254).
+fn render_sector_storage(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette, index: usize) {
+    let dim = Style::default().fg(p.dim);
+    let text = Style::default().fg(p.text);
+    let name = state
+        .scanner_objects()
+        .get(index)
+        .map(|e| {
+            if e.name.trim().is_empty() {
+                e.id.clone()
+            } else {
+                e.name.clone()
+            }
+        })
+        .unwrap_or_else(|| "container".into());
+
+    let mut lines: Vec<Line> = Vec::new();
+    if let Some(err) = &state.sector_storage_error {
+        lines.push(Line::styled(format!("✗ {err}"), Style::default().fg(p.crit)));
+    }
+    match state.sector_storage.as_ref() {
+        None => lines.push(Line::styled("no contents read", dim)),
+        Some(v) => {
+            if !v.resources.is_empty() {
+                lines.push(Line::styled("RESOURCES", Style::default().fg(p.accent)));
+                for r in &v.resources {
+                    let mut spans = vec![
+                        Span::styled(format!("  {:<18}", r.resource_type), text),
+                        Span::styled(format!("{:>8.4}", r.amount), text),
+                        Span::styled(" ECE", dim),
+                    ];
+                    // Reserved is stated only when it exists: a nought on every
+                    // row would make the one row that matters harder to see.
+                    if r.reserved_amount > 0.0 {
+                        spans.push(Span::styled(
+                            format!("  ({:.4} reserved)", r.reserved_amount),
+                            Style::default().fg(p.warn),
+                        ));
+                    }
+                    lines.push(Line::from(spans));
+                }
+            }
+            if !v.items.is_empty() {
+                if !v.resources.is_empty() {
+                    lines.push(Line::default());
+                }
+                lines.push(Line::from(vec![
+                    Span::styled("ITEMS", Style::default().fg(p.accent)),
+                    Span::styled(format!("  {} · {:.2} ECE", v.items.len(), v.items_space()), dim),
+                ]));
+                for it in &v.items {
+                    let mut spans = vec![Span::styled(format!("  {}", it.name), text)];
+                    // An unavailable item is claimed by a transfer already in
+                    // flight — the pilot needs that before planning a move.
+                    if !it.available {
+                        spans.push(Span::styled("  ⛔ claimed", Style::default().fg(p.warn)));
+                    }
+                    lines.push(Line::from(spans));
+                }
+            }
+            if v.is_empty() {
+                lines.push(Line::styled(if v.loading { "reading…" } else { "empty" }, dim));
+            } else if v.loading {
+                lines.push(Line::styled("reading more…", dim));
+            }
+        }
+    }
+
+    let title = format!(" SECTOR › {name} ");
+    render_body(frame, area, &title, active, p, lines, None);
+}
+
 pub fn render_sector(frame: &mut Frame, area: Rect, state: &AppState, active: bool, p: Palette) {
     let dim = Style::default().fg(p.dim);
     let text = Style::default().fg(p.text);
+    // Drilled into a storage object: its contents replace the object list
+    // (API v131, #387).
+    if let Some(&DrillLevel::SectorObject(i)) = state.pane_nav[Pane::Sector.index()].drill.last() {
+        render_sector_storage(frame, area, state, active, p, i);
+        return;
+    }
     let Some(s) = state.current_sector() else {
         render_body(
             frame,

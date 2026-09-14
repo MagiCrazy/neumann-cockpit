@@ -5,7 +5,7 @@ use neumann_cockpit::api::types::{
     MissileTargetKind, Mission, MissionStatus, MissionStepStatus, MotorFuelStatus, MovementPhase, ObservedClass, Probe,
     ProbeAlert, ProbeImprovement, ProbeInventory, ProbeMessage, ProbeMovement, ProbeStatus, ScutNetwork,
     ScutRelayStatus, SectorObject, SectorObjectStatus, SectorObjectType, SectorObservation, SectorProbePresence,
-    SensorMode, StorageContainer,
+    SectorStorageInventory, SensorMode, StorageContainer,
 };
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -1255,4 +1255,32 @@ fn the_sector_storage_task_is_named() {
     // moving contents in or out of sector storage read as "?".
     let t: MannyTask = deser("\"transferring_sector_storage\"");
     assert_eq!(t, MannyTask::TransferringSectorStorage);
+}
+
+#[test]
+fn a_sector_storage_page_deserializes() {
+    // Issue #387. `nextCursor` is nullable and its absence ends the loop;
+    // `reservedAmount` / `available` are what tell a pilot what can actually
+    // be taken versus what a transfer already holds.
+    let page: SectorStorageInventory = deser(
+        r#"{
+          "objectId": "obj_1", "nextCursor": "eyJ2IjoyfQ",
+          "resources": [{"type": "metals", "amount": 2.5,
+                         "reservedAmount": 0.5, "availableAmount": 2.0}],
+          "items": [{"id": "i1", "type": "steel_plate", "name": "Steel plate",
+                     "containerSpace": 0.1, "available": false, "metadata": {"wear": 3}}]
+        }"#,
+    );
+    assert_eq!(page.object_id.as_deref(), Some("obj_1"));
+    assert_eq!(page.next_cursor.as_deref(), Some("eyJ2IjoyfQ"));
+    assert_eq!(page.resources[0].available_amount, 2.0);
+    assert!(!page.items[0].available, "claimed by a transfer in flight");
+    assert!(page.depot_id.is_none());
+
+    // A germination depot answers on the same shape — not reachable from the
+    // cockpit, since a sector scan has no depot object type.
+    let depot: SectorStorageInventory =
+        deser(r#"{"depotId": "dep_9", "resources": [], "items": [], "nextCursor": null}"#);
+    assert_eq!(depot.depot_id.as_deref(), Some("dep_9"));
+    assert!(depot.next_cursor.is_none(), "the last page");
 }
