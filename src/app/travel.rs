@@ -56,7 +56,7 @@ impl AppState {
         let error = if (x + y + z) % 2 != 0 {
             Some("x+y+z must be even".to_string())
         } else {
-            None
+            self.travel_block_reason()
         };
         let (sector_distance, fuel_cost, eta_minutes) = self.travel_preview(x, y, z);
         self.active_wizard = ActiveWizard::Travel(TravelInput::Confirming {
@@ -72,6 +72,9 @@ impl AppState {
 
     pub fn travel_go_sector(&mut self, x: i32, y: i32, z: i32) {
         let (sector_distance, fuel_cost, eta_minutes) = self.travel_preview(x, y, z);
+        // Every entry point into the confirm screen gets the same refusal: the
+        // map, the waypoints picker and a safe corridor all land here too.
+        let error = self.travel_block_reason();
         self.active_wizard = ActiveWizard::Travel(TravelInput::Confirming {
             x,
             y,
@@ -79,8 +82,26 @@ impl AppState {
             sector_distance,
             fuel_cost,
             eta_minutes,
-            error: None,
+            error,
         });
+    }
+
+    /// Hull integrity, when the probe has reported it.
+    pub fn probe_integrity(&self) -> Option<f64> {
+        self.probe.as_ref()?.systems.as_ref()?.integrity_percent
+    }
+
+    /// Why this probe cannot start a movement, if it cannot (API v121, #364).
+    ///
+    /// The server refuses below 10 % with `probe_integrity_too_low`, and it
+    /// stays the authority — this is the same belt-and-braces the storage-move
+    /// maximum applies (#236): the pilot should not pick coordinates, read a
+    /// fuel bill and confirm only to be told no by a round-trip they paid for.
+    /// Silence is not a claim: with no integrity reported, nothing is refused.
+    pub fn travel_block_reason(&self) -> Option<String> {
+        let integrity = self.probe_integrity()?;
+        (integrity < MIN_TRAVEL_INTEGRITY_PERCENT)
+            .then(|| format!("hull at {integrity:.0}% — movement needs at least {MIN_TRAVEL_INTEGRITY_PERCENT:.0}%"))
     }
 
     fn travel_preview(&self, x: i32, y: i32, z: i32) -> (Option<i64>, Option<f64>, Option<i64>) {
