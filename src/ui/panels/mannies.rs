@@ -9,7 +9,7 @@ use ratatui::{
 };
 
 use crate::ui::theme::{format_duration, pane_block, scroll_markers, Palette};
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 // ── Mannies panel ─────────────────────────────────────────────────────────────
 
 pub(crate) fn render_mannies_panel(frame: &mut Frame, area: Rect, state: &AppState, focused: bool) {
@@ -156,6 +156,59 @@ pub(crate) fn manny_artificial_detection(m: &Manny) -> Option<crate::api::types:
     serde_json::from_value(v.clone()).ok()
 }
 
+/// Seven continuous days without capacity and the Manny abandons its cargo,
+/// retries docking, and — if its own 0.05 ECE slot is still unavailable — is
+/// detached from the probe and becomes an `abandoned` sector object to be
+/// recovered (API v123, issue #364).
+pub(crate) const STORAGE_WAIT_ABANDON_SECS: i64 = 7 * 24 * 3600;
+
+/// How loudly the remaining wait is stated: the last day before the deadline
+/// is the one where the pilot can still act on it.
+pub(crate) const STORAGE_WAIT_CRITICAL_SECS: i64 = 24 * 3600;
+
+/// A Manny's storage-docking wait, when it is in one.
+pub(crate) struct StorageWait {
+    pub elapsed_secs: i64,
+    pub remaining_secs: i64,
+}
+
+impl StorageWait {
+    /// True in the last day, when the loss is close enough to act on.
+    pub fn critical(&self) -> bool {
+        self.remaining_secs <= STORAGE_WAIT_CRITICAL_SECS
+    }
+
+    /// `waiting 3d 4h · abandons cargo in 3d 20h`, the whole story on one row.
+    pub fn summary(&self) -> String {
+        format!(
+            "waiting {} · abandons cargo in {}",
+            format_duration(self.elapsed_secs),
+            format_duration(self.remaining_secs)
+        )
+    }
+}
+
+/// The Manny's storage-docking wait, read from the task payload the way the
+/// hidden-container detection is (`artificialObjectDetected`): `task` is kept
+/// as a raw value, so no typing change is needed to consume one more field.
+///
+/// A label alone ("waiting for space") says nothing about a seven-day clock
+/// that ends in losing both the cargo and the Manny.
+pub(crate) fn manny_storage_wait(m: &Manny) -> Option<StorageWait> {
+    if m.current_task != Some(MannyTask::WaitingForSpace) {
+        return None;
+    }
+    let since = m.task.as_ref()?.get("waitingForSpaceSince")?.as_str()?;
+    let since: DateTime<Utc> = since.parse().ok()?;
+    // A clock that moved yields a negative span; clamp rather than render a
+    // countdown that has run backwards.
+    let elapsed_secs = (Utc::now() - since).num_seconds().max(0);
+    Some(StorageWait {
+        elapsed_secs,
+        remaining_secs: (STORAGE_WAIT_ABANDON_SECS - elapsed_secs).max(0),
+    })
+}
+
 /// Time remaining on the current task, as a compact duration (if known).
 pub(crate) fn manny_task_eta(m: &Manny) -> Option<String> {
     m.task_estimated_end_time
@@ -248,12 +301,17 @@ pub(crate) fn manny_list_item(m: &Manny, selected: bool, p: Palette, width: u16)
     // It truncates to the width left after the fixed columns and the ETA, so a
     // long name never pushes the ETA off-row.
     let label = manny_task_label(task);
-    let detail_text = manny_crafting_detail(m).or_else(|| {
-        manny_mining_detail(m).map(|d| {
-            let what = d.resources.unwrap_or(d.target);
-            format!("{what} → {}", d.destination)
-        })
-    });
+    // A storage wait outranks the other details: it is the only task on the
+    // roster with a deadline that destroys something (API v123, #364).
+    let detail_text = manny_storage_wait(m)
+        .map(|w| w.summary())
+        .or_else(|| manny_crafting_detail(m))
+        .or_else(|| {
+            manny_mining_detail(m).map(|d| {
+                let what = d.resources.unwrap_or(d.target);
+                format!("{what} → {}", d.destination)
+            })
+        });
     let detail = detail_text
         .map(|t| {
             // Reserved: highlight symbol (2) · "{loc} " (2) · name (12) ·
@@ -266,11 +324,19 @@ pub(crate) fn manny_list_item(m: &Manny, selected: bool, p: Palette, width: u16)
         .map(|t| format!(" {t}"))
         .unwrap_or_default();
 
+    // The wait is the one detail that is not quiet: it is a countdown to
+    // losing the cargo and then the Manny, and it gets louder in the last day.
+    let detail_style = match manny_storage_wait(m) {
+        Some(w) if w.critical() => Style::default().fg(p.crit).add_modifier(Modifier::BOLD),
+        Some(_) => Style::default().fg(p.warn),
+        None => secondary,
+    };
+
     ListItem::new(Line::from(vec![
         Span::styled(format!("{loc} "), secondary),
         Span::styled(format!("{:<12}", m.name), primary),
         Span::styled(label, task_style),
-        Span::styled(detail, secondary),
+        Span::styled(detail, detail_style),
         Span::styled(eta, secondary),
         Span::styled(via_scut, secondary),
     ]))
@@ -278,7 +344,7 @@ pub(crate) fn manny_list_item(m: &Manny, selected: bool, p: Palette, width: u16)
 
 #[cfg(test)]
 mod tests {
-    use super::{manny_artificial_detection, manny_crafting_detail};
+    use super::{manny_artificial_detection, manny_crafting_detail, manny_storage_wait, STORAGE_WAIT_ABANDON_SECS};
     use crate::api::types::Manny;
 
     fn mining_manny(task: &str) -> Manny {
@@ -303,6 +369,77 @@ mod tests {
         }}"#
         ))
         .unwrap()
+    }
+
+    fn waiting_manny(task: &str) -> Manny {
+        serde_json::from_str(&format!(
+            r#"{{
+            "id":"m1","name":"Manny-1","location":{{"type":"probe","sector":null}},
+            "currentTask":"waiting_for_space","taskProgressPercent":0.0,
+            "cargo":{{"capacity":0.3,"deuterium":0.0,"metals":0.1,"ice":0.0,"organicCompounds":0.0}},
+            "canReceiveOrders":false,"taskEstimatedEndTime":null,"task":{task}
+        }}"#
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_storage_wait_carries_its_seven_day_deadline() {
+        // The label alone said nothing about a clock that ends in losing both
+        // the cargo and the Manny (API v123, issue #364).
+        let since = chrono::Utc::now() - chrono::Duration::days(3);
+        let m = waiting_manny(&format!(
+            r#"{{"waitingFor":"storage_space","waitingForSpaceSince":"{}"}}"#,
+            since.to_rfc3339()
+        ));
+        let w = manny_storage_wait(&m).expect("a wait is reported");
+        assert!((w.elapsed_secs - 3 * 24 * 3600).abs() < 5, "three days in");
+        assert!(
+            (w.remaining_secs - 4 * 24 * 3600).abs() < 5,
+            "four days left of the seven"
+        );
+        assert!(!w.critical(), "not yet the last day");
+        assert!(w.summary().contains("abandons cargo in"), "{}", w.summary());
+    }
+
+    #[test]
+    fn the_last_day_of_a_storage_wait_is_critical() {
+        let since = chrono::Utc::now() - chrono::Duration::seconds(STORAGE_WAIT_ABANDON_SECS - 3600);
+        let m = waiting_manny(&format!(
+            r#"{{"waitingFor":"storage_space","waitingForSpaceSince":"{}"}}"#,
+            since.to_rfc3339()
+        ));
+        let w = manny_storage_wait(&m).unwrap();
+        assert!(w.critical(), "an hour from losing the cargo");
+        assert!(w.remaining_secs > 0);
+    }
+
+    #[test]
+    fn a_storage_wait_claims_nothing_without_a_start() {
+        // Pre-v123 servers omit the field, and a Manny on another task is not
+        // waiting at all — neither invents a countdown.
+        assert!(manny_storage_wait(&waiting_manny(r#"{"waitingFor":"storage_space"}"#)).is_none());
+        assert!(manny_storage_wait(&waiting_manny("null")).is_none());
+        assert!(
+            manny_storage_wait(&crafting_manny(
+                "crafting",
+                r#"{"waitingForSpaceSince":"2020-01-01T00:00:00Z"}"#
+            ))
+            .is_none(),
+            "the field only means something on a waiting Manny"
+        );
+    }
+
+    #[test]
+    fn a_storage_wait_past_its_deadline_does_not_count_backwards() {
+        let since = chrono::Utc::now() - chrono::Duration::seconds(STORAGE_WAIT_ABANDON_SECS + 9_000);
+        let m = waiting_manny(&format!(
+            r#"{{"waitingFor":"storage_space","waitingForSpaceSince":"{}"}}"#,
+            since.to_rfc3339()
+        ));
+        let w = manny_storage_wait(&m).unwrap();
+        assert_eq!(w.remaining_secs, 0, "clamped, not negative");
+        assert!(w.critical());
     }
 
     #[test]
