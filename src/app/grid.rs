@@ -22,8 +22,8 @@ pub enum Pane {
     Probe, // f — centre of the square
     Missions, // g
     Hold,    // c — cargo, stocks, containers, items
-    Log,     // v — the ship's log
-    Mannies, // b
+    Mannies, // v
+    Log,     // b — the ship's log
 }
 
 impl Pane {
@@ -36,8 +36,8 @@ impl Pane {
         Pane::Probe,
         Pane::Missions,
         Pane::Hold,
-        Pane::Log,
         Pane::Mannies,
+        Pane::Log,
     ];
 
     /// Map a bare (lowercase, unmodified) navigation key to its pane.
@@ -50,8 +50,8 @@ impl Pane {
             'f' => Pane::Probe,
             'g' => Pane::Missions,
             'c' => Pane::Hold,
-            'v' => Pane::Log,
-            'b' => Pane::Mannies,
+            'v' => Pane::Mannies,
+            'b' => Pane::Log,
             _ => return None,
         })
     }
@@ -66,8 +66,8 @@ impl Pane {
             Pane::Probe => 'f',
             Pane::Missions => 'g',
             Pane::Hold => 'c',
-            Pane::Log => 'v',
-            Pane::Mannies => 'b',
+            Pane::Mannies => 'v',
+            Pane::Log => 'b',
         }
     }
 
@@ -100,8 +100,8 @@ impl Pane {
             Pane::Probe => (1, 1),
             Pane::Missions => (1, 2),
             Pane::Hold => (2, 0),
-            Pane::Log => (2, 1),
-            Pane::Mannies => (2, 2),
+            Pane::Mannies => (2, 1),
+            Pane::Log => (2, 2),
         }
     }
 
@@ -624,11 +624,11 @@ mod tests {
     #[test]
     fn cycle_pane_wraps_both_ways() {
         let mut s = crate::app::AppState::default();
-        s.active_pane = Pane::Mannies; // last in ALL
+        s.active_pane = Pane::Log; // last in ALL
         s.cycle_pane(true);
         assert_eq!(s.active_pane, Pane::Scanner); // wrapped to first
         s.cycle_pane(false);
-        assert_eq!(s.active_pane, Pane::Mannies); // wrapped back
+        assert_eq!(s.active_pane, Pane::Log); // wrapped back
     }
 
     #[test]

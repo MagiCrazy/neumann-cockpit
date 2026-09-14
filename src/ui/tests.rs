@@ -1712,3 +1712,28 @@ fn the_ship_log_is_its_own_pane_and_missions_is_a_plain_list() {
         "the ship's log left the Missions pane: {missions}"
     );
 }
+
+#[test]
+fn the_crew_sits_in_the_centre_column_and_the_log_in_the_corner() {
+    // Mannies is a pane you work in constantly; the ship's log is a record you
+    // consult. The active one takes the centre column under PROBE, the passive
+    // one the corner — at the cost of the `b` muscle memory Mannies had.
+    use crate::app::Pane;
+    assert_eq!(Pane::from_key('v'), Some(Pane::Mannies));
+    assert_eq!(Pane::from_key('b'), Some(Pane::Log));
+    assert_eq!(Pane::Mannies.key(), 'v');
+    assert_eq!(Pane::Log.key(), 'b');
+
+    // And the grid draws them in that order, bottom row.
+    let mut state = AppState::default();
+    state.active_pane = Pane::Mannies;
+    let text = buffer_text(&render_cockpit(&state, 90, 24));
+    let row = text
+        .lines()
+        .find(|l| l.contains("MANNIES") && l.contains("SHIP'S LOG"))
+        .expect("both panes share the bottom row");
+    assert!(
+        row.find("MANNIES") < row.find("SHIP'S LOG"),
+        "the crew is left of the log: {row}"
+    );
+}

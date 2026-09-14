@@ -179,9 +179,9 @@ One unified phosphor theme (there is no classic/retro split any more). `theme.rs
 │ objects here  ││ status · fuel ││ active list   │
 │ (drill → obj) ││ integrity · ETA││ (drill → steps)│
 └═══════════════┘└═══════════════┘└═══════════════┘
-┌═ HOLD ════════┐┌═ SHIP'S LOG ══┐┌═ MANNIES ═════┐
-│ cargo · stocks││ narrated      ││ ● manny list  │
-│ containers    ││ actions +     ││ task + %      │
+┌═ HOLD ════════┐┌═ MANNIES ═════┐┌═ SHIP'S LOG ══┐
+│ cargo · stocks││ ● manny list  ││ narrated      │
+│ containers    ││ task + %      ││ actions       │
 └═══════════════┘└═══════════════┘└═══════════════┘
  NAV  COCKPIT › MANNIES        ⟳ · ≣ SCUT · ! 2 · API vN · 14:09
  ↑↓ move · hl drill · z zoom · Enter act · ertdfgcvb pane · F1 hints
@@ -193,7 +193,7 @@ One unified phosphor theme (there is no classic/retro split any more). `theme.rs
 
 **HOLD and SHIP'S LOG** (#345) — the Inventory and Storage panes were one question asked from two angles, and the Inventory pane already drew the container list inert. They are now one pane, `HOLD` on `c`: the CARGO gauge, the loose stocks, the **containers as selectable rows** (they could not be selected before), the items and the tanks. `l` on a container drills into its contents (`DrillLevel::Container`, fetched on drill-in, as the Storage pane did); `s` still toggles the container ordering. Zoomed, the pane splits in two and the selected container's **routing rules and free capacity sit permanently in the right column** — the one thing genuinely unique to the old Storage pane, previously buried behind a zoom *and* a scroll. `build_context_menu` dispatches on the row's kind rather than on the pane, so no action from either menu is lost: a container offers rename / routing rules / move craft reservations out, everything else offers fabricate / move stock / jettison / deploy waypoint.
 
-The freed slot (`v`) takes the **ship's log**, which CLAUDE.md always described as *parked* in the Missions pane. It is a read-only pane with its own cursor over `ship_log_entries()`. Missions **keeps** its category root, now two rows instead of three: the **logbook** (#254) stays there, since it is the pilot's diary and has no more natural home than beside the missions. Only the ship's log moved — it was the one parked for want of a pane.
+The freed slot takes the **ship's log**, which CLAUDE.md always described as *parked* in the Missions pane. It sits on `b` and the **Mannies moved to `v`**, into the centre column under PROBE: the crew is a pane you work in constantly, the log a record you consult, so the active one takes the centre and the passive one the corner. That costs the `b` muscle memory the Mannies had, which is the deliberate price of the arrangement being right rather than cheap. The log is read-only, with its own cursor over `ship_log_entries()`. Missions **keeps** its category root, now two rows instead of three: the **logbook** (#254) stays there, since it is the pilot's diary and has no more natural home than beside the missions. Only the ship's log moved — it was the one parked for want of a pane.
 
 **Logbook** (API v90, #254) — the pilot's own pages, stored server-side per probe, as the **second category of the Missions pane**, beside the missions themselves. The two journals are deliberately not merged: the ship's log is what the *ship* recorded — narrated actions, local, automatic, append-only — and the logbook is what the *pilot* wrote. One is a flight recorder, the other a diary. With #345 the flight recorder took the freed pane and the diary stayed here.
 
