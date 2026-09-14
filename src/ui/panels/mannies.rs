@@ -80,6 +80,7 @@ pub(crate) fn manny_task_label(task: Option<&MannyTask>) -> &'static str {
         Some(MannyTask::Returning) => "returning",
         Some(MannyTask::WaitingForSpace) => "waiting for space",
         Some(MannyTask::MovingStockage) => "moving cargo",
+        Some(MannyTask::TransferringSectorStorage) => "sector storage",
         Some(MannyTask::DroppingStorageContainer) => "dropping container",
         Some(MannyTask::RefillingDeuteriumTank) => "refueling",
         Some(MannyTask::TurningOnScutRelay) => "activating relay",
