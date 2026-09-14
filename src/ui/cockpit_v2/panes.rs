@@ -244,10 +244,22 @@ fn render_comms_feed(
             ("○ ", dim)
         };
         let body_style = if unread { text } else { dim };
-        lines.push(Line::from(vec![
-            Span::styled(mark, mark_style),
-            Span::styled(a.message.clone(), row_style(active, i == cur).patch(body_style)),
-        ]));
+        let mut spans = vec![Span::styled(mark, mark_style)];
+        // Being the declared target of a missile is not one entry among others
+        // in a feed (API v119/v120). It is marked here too, and stays marked
+        // once read — acknowledging a missile does not stop it. The countdown
+        // to `impactAt` is #362.
+        if a.phase == crate::api::types::AlertPhase::WeaponTargeted {
+            spans.push(Span::styled(
+                "⊗ TARGETED ",
+                Style::default().fg(p.crit).add_modifier(Modifier::BOLD),
+            ));
+        }
+        spans.push(Span::styled(
+            a.message.clone(),
+            row_style(active, i == cur).patch(body_style),
+        ));
+        lines.push(Line::from(spans));
     }
     render_body(frame, area, &format!(" COMMS › {label} "), active, p, lines, sel_line);
 }

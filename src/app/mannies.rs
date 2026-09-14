@@ -145,16 +145,25 @@ impl AppState {
         };
         let mut out: Vec<(String, String)> = Vec::new();
         for o in objects {
-            // Asteroids nested under a parent object (e.g. a solar system).
+            // Targets nested under a parent object (e.g. a solar system). The
+            // server decides what is mineable by putting it in this list — its
+            // type enum already carries `planet` and `dormant_construct`
+            // besides `asteroid`, and v130 documents Others mothership wrecks
+            // as mineable too. Filtering by type here was a hand-copied mirror
+            // of a server rule, and it silently dropped everything that was not
+            // an asteroid; #359 is the lesson about keeping those (issue #360).
             for t in o.minable_targets.iter().flatten() {
-                if matches!(t.object_type, SectorObjectType::Asteroid) && !out.iter().any(|(id, _)| id == &t.id) {
+                if !out.iter().any(|(id, _)| id == &t.id) {
                     out.push((t.id.clone(), t.name.clone().unwrap_or_else(|| "unnamed".into())));
                 }
             }
-            // Standalone top-level asteroids (e.g. a wandering asteroid) carry no
-            // parent minableTargets, so they must be collected directly or they
-            // never reach the mine picker.
-            if matches!(o.object_type, SectorObjectType::Asteroid) {
+            // Standalone top-level objects (a wandering asteroid, an Others
+            // wreck) carry no parent minableTargets, so they must be collected
+            // directly or they never reach the mine picker. `mannyMineable` is
+            // the server saying so; an asteroid without the field is the
+            // pre-v130 shape and stays in on its type.
+            let mineable = o.manny_mineable == Some(true) || matches!(o.object_type, SectorObjectType::Asteroid);
+            if mineable {
                 if let Some(id) = &o.id {
                     if !out.iter().any(|(i, _)| i == id) {
                         out.push((id.clone(), o.name.clone().unwrap_or_else(|| "unnamed".into())));

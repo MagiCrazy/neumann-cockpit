@@ -415,6 +415,8 @@ pub(crate) fn object_color(t: &SectorObjectType, p: Palette) -> Color {
         SectorObjectType::Manny | SectorObjectType::DeuteriumRefuelStation => p.good,
         SectorObjectType::DetachedContainer | SectorObjectType::ScutRelay => p.accent,
         SectorObjectType::DormantConstruct => p.warn,
+        // A missile is the one object in a scan that is a threat by itself.
+        SectorObjectType::Missile => p.crit,
         SectorObjectType::Unknown => p.dim,
     }
 }
@@ -435,6 +437,7 @@ pub(crate) fn object_type_label(t: &SectorObjectType) -> &'static str {
         SectorObjectType::DeuteriumRefuelStation => "fuel station",
         SectorObjectType::ScutRelay => "SCUT relay",
         SectorObjectType::DormantConstruct => "dormant construct",
+        SectorObjectType::Missile => "missile",
         SectorObjectType::Unknown => "object",
     }
 }
@@ -453,6 +456,7 @@ pub(crate) fn object_icon(t: &SectorObjectType) -> (&'static str, Color) {
         SectorObjectType::DeuteriumRefuelStation => ("⛽", Color::Green),
         SectorObjectType::ScutRelay => ("≣", Color::LightBlue),
         SectorObjectType::DormantConstruct => ("⍟", Color::Yellow),
+        SectorObjectType::Missile => ("➤", Color::Red),
         SectorObjectType::Unknown => ("?", Color::DarkGray),
     }
 }

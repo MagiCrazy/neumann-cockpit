@@ -1,4 +1,4 @@
-use crate::api::types::{AlertType, ProbeAlert};
+use crate::api::types::{AlertPhase, AlertType, ProbeAlert};
 use crate::app::{ActiveWizard, AlertsInput, AppState};
 use crate::ui::theme::Palette;
 use ratatui::{
@@ -22,6 +22,9 @@ fn alert_type_label(t: &AlertType) -> &'static str {
         AlertType::ProbeDestroyed => "probe lost",
         AlertType::AsteroidTrajectory => "asteroid trajectory",
         AlertType::BlueprintShared => "blueprint shared",
+        AlertType::OthersPresence => "OTHERS PRESENT",
+        AlertType::OthersWeapon => "OTHERS WEAPON",
+        AlertType::OthersHarvestTraces => "harvest traces",
         AlertType::Unknown => "alert",
     }
 }
@@ -38,8 +41,21 @@ fn type_color(t: &AlertType, p: Palette) -> Color {
         AlertType::ProbeDestroyed => p.crit,
         AlertType::AsteroidTrajectory => p.warn,
         AlertType::BlueprintShared => p.good,
+        // A neighbour sighted is a warning; a neighbour armed is not.
+        AlertType::OthersPresence => p.warn,
+        AlertType::OthersWeapon => p.crit,
+        AlertType::OthersHarvestTraces => p.warn,
         AlertType::Unknown => p.text,
     }
+}
+
+/// `weapon_targeted` is the one phase that is a countdown rather than a report:
+/// this probe, or a Manny it owns reachable through the same SCUT network, is
+/// the *declared* target of a missile (API v119/v120). Phase 1 names it so it
+/// stops reading like any other detection; the full treatment — a chip, a
+/// countdown to `impactAt` — is #362.
+fn targeted(alert: &ProbeAlert) -> bool {
+    alert.phase == AlertPhase::WeaponTargeted
 }
 
 fn alert_row(alert: &ProbeAlert, p: Palette) -> ListItem<'static> {
@@ -59,14 +75,24 @@ fn alert_row(alert: &ProbeAlert, p: Palette) -> ListItem<'static> {
     } else {
         p.dim
     };
-    ListItem::new(Line::from(vec![
+    let mut spans = vec![
         Span::styled(marker, Style::default().fg(marker_color)),
         Span::styled(
             format!("{:<18}", alert_type_label(&alert.alert_type)),
             Style::default().fg(label_color).add_modifier(Modifier::BOLD),
         ),
-        Span::styled(alert.message.clone(), text_style),
-    ]))
+    ];
+    // Being aimed at outranks the alert's own type in the row: it is the part
+    // the pilot must not scroll past. It stays crit once read, because
+    // acknowledging a missile does not stop it.
+    if targeted(alert) {
+        spans.push(Span::styled(
+            "⊗ TARGETED  ",
+            Style::default().fg(p.crit).add_modifier(Modifier::BOLD),
+        ));
+    }
+    spans.push(Span::styled(alert.message.clone(), text_style));
+    ListItem::new(Line::from(spans))
 }
 
 pub(crate) fn render_alerts_overlay(frame: &mut Frame, area: Rect, state: &AppState) {
