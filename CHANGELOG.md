@@ -1,5 +1,17 @@
 # Changelog
 
+## [116.1.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v116.0.1...neumann-cockpit-v116.1.0) (2026-09-14)
+
+
+### Features
+
+* **api:** name what v130 added ([#360](https://github.com/MagiCrazy/neumann-cockpit/issues/360)) ([#385](https://github.com/MagiCrazy/neumann-cockpit/issues/385)) ([acf970d](https://github.com/MagiCrazy/neumann-cockpit/commit/acf970df8fc1bd376bec3a51963677ad1c938af8))
+
+
+### Bug Fixes
+
+* **api:** three v117-v123 rule changes the cockpit assumed away ([#364](https://github.com/MagiCrazy/neumann-cockpit/issues/364)) ([#383](https://github.com/MagiCrazy/neumann-cockpit/issues/383)) ([8b02dea](https://github.com/MagiCrazy/neumann-cockpit/commit/8b02deaeb18971b20685ef3204f112473fb2be9f))
+
 ## [116.0.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v116.0.0...neumann-cockpit-v116.0.1) (2026-09-14)
 
 
