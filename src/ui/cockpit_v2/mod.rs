@@ -39,7 +39,11 @@ pub(crate) fn active_pane_inner_size(state: &AppState) -> (u16, u16) {
     } else {
         1
     };
-    let body = Rect::new(0, 0, w, h.saturating_sub(status_h));
+    // The threat banner eats a row from the grid while it is up (#362); a
+    // viewport that forgot it would compute scroll bounds against a body one
+    // row taller than the one drawn.
+    let banner_h = u16::from(state.incoming_missile().is_some());
+    let body = Rect::new(0, 0, w, h.saturating_sub(status_h + banner_h));
     let rect = if state.zoomed {
         body
     } else {
@@ -70,10 +74,22 @@ pub fn render(frame: &mut Frame, state: &AppState) {
     }
 
     let status_h = if state.hints_visible { 2 } else { 1 };
+    // The threat banner takes a row of its own, above the status bar (#362).
+    // It is the only thing in the cockpit that does, which is the point: a
+    // warning that cannot fire spuriously is one nobody learns to ignore.
+    let incoming = state.incoming_missile();
+    let banner_h = u16::from(incoming.is_some());
     let rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(status_h)])
+        .constraints([
+            Constraint::Min(1),
+            Constraint::Length(banner_h),
+            Constraint::Length(status_h),
+        ])
         .split(area);
+    if let Some(m) = &incoming {
+        render_threat_banner(frame, rows[1], state, m, p);
+    }
 
     let visible: Vec<Pane> = if state.zoomed {
         render_pane(frame, rows[0], state.active_pane, state, true, p);
@@ -88,13 +104,55 @@ pub fn render(frame: &mut Frame, state: &AppState) {
         }
         panes.iter().map(|(pane, _)| *pane).collect()
     };
-    render_status(frame, rows[1], state, p, &visible);
+    render_status(frame, rows[2], state, p, &visible);
 
     // Contextual menu popup, then any active wizard overlay on top.
     if let crate::app::InputMode::Menu(m) = &state.mode {
         menu::render(frame, area, m, p);
     }
     crate::ui::overlays::render_active_overlays(frame, area, state);
+}
+
+/// The one loud thing in the cockpit (issue #362).
+///
+/// A full-width row, unconditional: it does not depend on which panes the
+/// responsive grid happens to be showing, it cannot be scrolled past, and it
+/// is not a toast that expires in five seconds while the missile is still in
+/// the air. It is not modal either — the pilot needs the keyboard precisely
+/// now, and a dialog that had to be dismissed before they could travel away
+/// would be the cockpit getting in the way of the only available response.
+///
+/// It disappears the moment the scan stops reporting a missile aimed at us.
+fn render_threat_banner(
+    frame: &mut Frame,
+    area: Rect,
+    state: &AppState,
+    missile: &crate::app::IncomingMissile,
+    p: Palette,
+) {
+    if area.height == 0 {
+        return;
+    }
+    let crit = Style::default().fg(p.crit).add_modifier(Modifier::BOLD);
+    let mut spans = vec![Span::styled("⊗ INCOMING MISSILE", crit)];
+    // An untimed missile is still a threat; it just cannot be counted down.
+    // Saying "impact unknown" is honest, inventing a countdown would not be.
+    match missile.seconds_to_impact() {
+        Some(secs) => spans.push(Span::styled(
+            format!(" — impact in {}", crate::ui::theme::format_duration(secs)),
+            crit,
+        )),
+        None => spans.push(Span::styled(" — impact time unknown", crit)),
+    }
+    if let Some(who) = missile.launcher_label() {
+        spans.push(Span::styled(format!(" — from {who}"), Style::default().fg(p.crit)));
+    }
+    // The number a pilot wants next to a countdown is how much hull is left to
+    // spend on it.
+    if let Some(hull) = state.hull_percent() {
+        spans.push(Span::styled(format!(" — hull {hull}%"), Style::default().fg(p.crit)));
+    }
+    frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
 /// The idle starfield (issue #206). Drifting stars, the probe's name held

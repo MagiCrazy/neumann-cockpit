@@ -1402,3 +1402,81 @@ fn the_missions_root_offers_the_logbook_and_admits_it_has_not_looked() {
     let row = fetched.lines().find(|l| l.contains("Logbook")).unwrap();
     assert!(row.contains('0'), "once fetched and empty, it says zero: {row}");
 }
+
+// ── incoming missile (issue #362) ─────────────────────────────────────────
+
+/// A state whose current-sector scan holds one missile.
+fn state_with_missile(targets_us: bool, impact_in_secs: i64) -> AppState {
+    let at = chrono::Utc::now() + chrono::Duration::seconds(impact_in_secs);
+    let mut state = AppState::default();
+    state.probe = Some(
+        serde_json::from_str(
+            r#"{"id": 1, "name": "t", "status": "idle",
+                "fuel": {"deuterium": 50.0, "maxDeuterium": 100.0}, "sensorMode": "normal",
+                "sector": {"relative": {"x": 0.0, "y": 0.0, "z": 0.0}}, "movement": null,
+                "systems": {"integrityPercent": 84.0, "damagePercent": 16.0,
+                            "energyStored": null, "internalClockRate": null, "currentTask": null},
+                "inventory": {"capacity": 1.0, "usedCapacity": 0.0, "freeCapacity": 1.0,
+                              "items": [], "resourceStocks": [], "externalTanks": [],
+                              "containers": []}}"#,
+        )
+        .unwrap(),
+    );
+    state.scan_history = vec![serde_json::from_str(&format!(
+        r#"{{"relativeCoordinates": {{"x": 0.0, "y": 0.0, "z": 0.0}}, "distance": 0,
+             "knowledgeLevel": "detailed", "confidence": 1.0,
+             "objects": [{{"id": "msl", "type": "missile", "name": "missile", "summary": "s",
+                           "launcherKind": "others_ship", "targetKind": "manny",
+                           "targetsCurrentProbe": {targets_us},
+                           "impactAt": "{}"}}],
+             "scan": {{"currentSectorResidenceSeconds": 60,
+                       "requiredResidenceSeconds": 60, "scanQuality": 1.0}}}}"#,
+        at.to_rfc3339()
+    ))
+    .unwrap()];
+    state
+}
+
+#[test]
+fn an_incoming_missile_takes_a_row_of_its_own() {
+    let state = state_with_missile(true, 192);
+    let text = buffer_text(&render_cockpit(&state, 80, 24));
+    assert!(text.contains("INCOMING MISSILE"), "unmistakable:\n{text}");
+    assert!(text.contains("impact in"), "with time to impact");
+    assert!(text.contains("hull 84%"), "and the hull left to spend on it");
+    assert!(text.contains("from Others ship"), "and who fired");
+}
+
+#[test]
+fn the_banner_is_there_whatever_the_grid_shows() {
+    // The point of a full-width row rather than a pane state: the responsive
+    // grid may not be showing the Probe pane at all.
+    let state = state_with_missile(true, 60);
+    for (w, h) in [(80, 24), (40, 12), (60, 8)] {
+        let text = buffer_text(&render_cockpit(&state, w, h));
+        assert!(text.contains("INCOMING"), "missing at {w}x{h}:\n{text}");
+    }
+}
+
+#[test]
+fn a_missile_aimed_elsewhere_stays_quiet() {
+    // Visible without being alarming: it is an object in the Sector pane, and
+    // the banner does not exist.
+    let mut state = state_with_missile(false, 60);
+    state.active_pane = crate::app::Pane::Sector;
+    state.zoomed = true;
+    let text = buffer_text(&render_cockpit(&state, 80, 24));
+    assert!(!text.contains("INCOMING MISSILE"), "no banner:\n{text}");
+    assert!(text.contains("missile"), "but the object is on screen");
+    assert!(text.contains("a Manny"), "with who it is after");
+}
+
+#[test]
+fn the_banner_leaves_when_the_missile_does() {
+    // It costs a grid row while it is up and must give it back: a banner that
+    // outlived the threat would be the thing pilots learn to ignore.
+    let threatened = buffer_text(&render_cockpit(&state_with_missile(true, 60), 80, 24));
+    let calm = buffer_text(&render_cockpit(&AppState::default(), 80, 24));
+    assert!(threatened.contains("INCOMING"));
+    assert!(!calm.contains("INCOMING"));
+}

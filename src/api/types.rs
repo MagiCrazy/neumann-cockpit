@@ -1261,6 +1261,18 @@ pub enum ScutRelayStatus {
     Unknown,
 }
 
+impl ProbeAlert {
+    /// Whether this alert belongs to the weapon family (API v119-v124): being
+    /// declared a target, an impact resolving, or damage taken — missiles and
+    /// motorized asteroids alike.
+    pub fn is_weapon_event(&self) -> bool {
+        matches!(
+            self.phase,
+            AlertPhase::Weapon | AlertPhase::WeaponTargeted | AlertPhase::WeaponResult | AlertPhase::WeaponDamage
+        )
+    }
+}
+
 impl SectorObject {
     /// Whether this object is an **active** SCUT relay.
     ///

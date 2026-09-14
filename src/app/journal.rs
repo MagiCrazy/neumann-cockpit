@@ -320,4 +320,11 @@ pub mod kind {
     pub const RULES: &str = "rules";
     /// Reconstructed server-side event (alert / damage warning).
     pub const ALERT: &str = "alert";
+    /// A reconstructed server event in one of the **weapon** phases (API
+    /// v119-v124, issue #362): being targeted, an impact resolving, damage
+    /// taken. Split out of [`ALERT`] so the ship's log reads it in crit — the
+    /// pilot scrolling back through a day wants the hits to stand out from the
+    /// container breaks, and the five-second toast that announced it is long
+    /// gone.
+    pub const WEAPON: &str = "weapon";
 }

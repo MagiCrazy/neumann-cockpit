@@ -427,6 +427,21 @@ pub(crate) fn trajectory_label(t: &AsteroidTrajectory) -> String {
     out
 }
 
+/// What a missile is aimed at, in words. `None` when the scan does not say —
+/// an unstated target is not reported as an unknown one.
+fn missile_target_label(obj: &SectorObject) -> Option<&'static str> {
+    use crate::api::types::MissileTargetKind as K;
+    match obj.target_kind? {
+        K::Probe => Some("a probe"),
+        K::OthersShip => Some("an Others ship"),
+        K::OthersAuxiliary => Some("an Others auxiliary"),
+        K::Manny => Some("a Manny"),
+        K::Missile => Some("another missile"),
+        K::MotorizedAsteroid => Some("a motorized asteroid"),
+        K::Unknown => None,
+    }
+}
+
 pub(crate) fn sector_object_lines<'a>(obj: &'a SectorObject, compact: bool, p: Palette) -> Vec<Line<'a>> {
     let dim = Style::default().fg(p.dim);
     let text = Style::default().fg(p.text);
@@ -463,6 +478,23 @@ pub(crate) fn sector_object_lines<'a>(obj: &'a SectorObject, compact: bool, p: P
     // Active relay carrying a transit beacon (API v96): marks a safe-corridor node.
     if obj.object_type == SectorObjectType::ScutRelay && obj.is_transit_beacon == Some(true) {
         main_spans.push(Span::styled("  ⚡ transit beacon", Style::default().fg(p.good)));
+    }
+    // A missile in flight (API v122, issue #362). One aimed at *us* gets the
+    // banner; this is the other case — a missile crossing the sector after
+    // someone else. It is visible, in crit, with who it is after and when it
+    // lands, and it raises nothing: the distinction the server draws between
+    // its `weapon` and `weapon_targeted` alert phases, honoured here.
+    if obj.object_type == SectorObjectType::Missile {
+        let crit = Style::default().fg(p.crit);
+        if obj.targets_current_probe == Some(true) {
+            main_spans.push(Span::styled("  ⊗ TARGETING US", crit.add_modifier(Modifier::BOLD)));
+        } else if let Some(kind) = missile_target_label(obj) {
+            main_spans.push(Span::styled(format!("  ➤ {kind}"), crit));
+        }
+        if let Some(at) = obj.impact_at {
+            let secs = (at - chrono::Utc::now()).num_seconds().max(0);
+            main_spans.push(Span::styled(format!("  impact {}", format_duration(secs)), dim));
+        }
     }
     // Motorized asteroid (API v116). A rock under thrust must not read as an
     // ordinary one — least of all one aimed at the system you are sitting in.
