@@ -76,6 +76,9 @@ pub enum ObjectAction {
     RefuelAsteroid,
     AimAsteroid,
     TrackTrajectory,
+    /// Fire a missile from an embarked Manny at this object (API v125, #361).
+    /// The first irreversible act the cockpit offers against someone else.
+    FireMissile,
 }
 
 impl ObjectAction {
@@ -102,6 +105,7 @@ impl ObjectAction {
             ObjectAction::RefuelAsteroid => "refuel engine",
             ObjectAction::AimAsteroid => "aim and launch",
             ObjectAction::TrackTrajectory => "track trajectory",
+            ObjectAction::FireMissile => "fire missile",
         }
     }
 }
@@ -415,6 +419,16 @@ impl AppState {
     /// deploy ← any top-level object, when a bookmark is in inventory).
     pub fn actions_for_object(&self, entry: &ScannerObjectEntry) -> Vec<ObjectAction> {
         let mut actions: Vec<ObjectAction> = Vec::new();
+        // Firing cuts across the type table: what the server considers
+        // targetable is its own rule, and `missile_target_kind` is the one
+        // place that reads it (issue #361). Offered first — a pilot opening
+        // this menu on a hostile contact is not looking for "inspect".
+        if entry.provenance == ObjectProvenance::TopLevel
+            && self.missile_target_kind(&entry.id).is_some()
+            && self.missile_in_inventory()
+        {
+            actions.push(ObjectAction::FireMissile);
+        }
         match (entry.provenance, &entry.object_type) {
             (ObjectProvenance::MinableTarget, SectorObjectType::Asteroid) => {
                 actions.push(ObjectAction::Mine);

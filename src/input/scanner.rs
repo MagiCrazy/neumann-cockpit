@@ -4,14 +4,61 @@ use tokio::sync::mpsc;
 use super::geometry::{is_list_nav_key, list_nav};
 use crate::api::client::ApiClient;
 use crate::api::tasks::{
-    fetch_inspect, fetch_install_beacon, fetch_motorize_asteroid, fetch_recover, fetch_refuel_asteroid,
-    fetch_scut_network, fetch_trajectory, fetch_turn_on_relay,
+    fetch_ignite_missile, fetch_inspect, fetch_install_beacon, fetch_motorize_asteroid, fetch_recover,
+    fetch_refuel_asteroid, fetch_scut_network, fetch_trajectory, fetch_turn_on_relay,
 };
 use crate::app::{
-    ActiveWizard, AimAsteroidInput, ApiMessage, AppState, DeployInput, LogEvent, MineInput, ObjectAction,
-    ObjectActionInput, SalvageInput, ScutCorridorInput, ScutNetworkInput, ScutRelayInput, WaypointsInput, LIST_PAGE,
+    ActiveWizard, AimAsteroidInput, ApiMessage, AppState, DeployInput, FireMissileInput, LogEvent, MineInput,
+    ObjectAction, ObjectActionInput, SalvageInput, ScutCorridorInput, ScutNetworkInput, ScutRelayInput, WaypointsInput,
+    LIST_PAGE,
 };
 /// Send the chosen object action, reusing the existing wizards/endpoints.
+/// The fire confirmation (issue #361). One key, and it is `Enter` — the
+/// reinforced wording carries the weight for a player target, not a different
+/// gesture, because a pilot who reached this screen chose the target and the
+/// Manny deliberately two steps ago.
+pub(super) fn handle_fire_missile_event(
+    code: KeyCode,
+    state: &mut AppState,
+    client: &ApiClient,
+    tx: &mpsc::Sender<ApiMessage>,
+) {
+    let ActiveWizard::FireMissile(FireMissileInput::Confirm { .. }) = &state.active_wizard else {
+        return;
+    };
+    match code {
+        KeyCode::Esc => state.close_wizard(),
+        KeyCode::Enter => {
+            let ActiveWizard::FireMissile(FireMissileInput::Confirm {
+                manny_id,
+                object_id,
+                object_name,
+                target,
+                ..
+            }) = &state.active_wizard
+            else {
+                return;
+            };
+            let (manny_id, object_id, object_name, target) =
+                (manny_id.clone(), object_id.clone(), object_name.clone(), *target);
+            // Mirror-only endpoint, like the single-Manny GET and the task
+            // batch: without a probe sync there is no path to send to.
+            let Some(probe_id) = state.probe_id() else {
+                state.set_wizard_error("no probe sync yet".into());
+                return;
+            };
+            state.close_wizard();
+            fetch_ignite_missile(probe_id, manny_id, object_id, client.clone(), tx.clone());
+            state.log_event(LogEvent::fire_missile(
+                &object_name,
+                target.label(),
+                state.active_probe_id,
+            ));
+        }
+        _ => {}
+    }
+}
+
 pub(super) fn dispatch_object_action(
     state: &mut AppState,
     client: &ApiClient,
@@ -43,6 +90,22 @@ pub(super) fn dispatch_object_action(
         ObjectAction::Inspect => {
             fetch_inspect(manny_id, object_id, client.clone(), tx.clone());
             state.log_event(LogEvent::inspect(&object_name, state.active_probe_id));
+        }
+        // The target was chosen in the Sector pane and the Manny resolved by
+        // the ordinary object-action flow; what is left is the decision (#361).
+        ObjectAction::FireMissile => {
+            let Some(target) = state.missile_target_kind(&object_id) else {
+                state.error = Some("that object is not a valid missile target".into());
+                return;
+            };
+            state.active_wizard = ActiveWizard::FireMissile(FireMissileInput::Confirm {
+                manny_id,
+                manny_name,
+                object_id,
+                object_name,
+                target,
+                error: None,
+            });
         }
         ObjectAction::Salvage => {
             state.active_wizard = ActiveWizard::Salvage(SalvageInput::Confirm {

@@ -1296,6 +1296,34 @@ impl ApiClient {
     /// Needs the Distributed Thrust Anchoring blueprint and an idle onboard
     /// Manny. **On completion the asteroid receives a new opaque id**, so
     /// anything holding the old one has to re-resolve.
+    /// Start the one-minute missile preparation (API v125, issue #361).
+    ///
+    /// `missileItemId` is deliberately omitted: the server takes the first
+    /// available missile and exposes exactly one missile item type, so asking
+    /// the pilot which would be a step with one answer. The deprecated
+    /// `POST /api/probe/{probeId}/missiles` predecessor is not implemented.
+    ///
+    /// The 202 documents no schema, so the body is decoded leniently — a
+    /// payload shape we did not predict must not be recorded as an outage by
+    /// the metrics ring (#247), and the caller refetches the roster anyway
+    /// rather than inferring the Manny's new state.
+    pub async fn ignite_missile(&self, probe_id: u64, manny_id: &str, target_id: &str) -> Result<Option<Manny>> {
+        #[derive(Deserialize, Default)]
+        struct Resp {
+            #[serde(default)]
+            manny: Option<Manny>,
+        }
+        let path = format!("/api/probe/{probe_id}/mannies/{manny_id}/ignite_missile");
+        Ok(self
+            .send_with_body::<Resp, _>(
+                reqwest::Method::POST,
+                &path,
+                &serde_json::json!({ "targetId": target_id }),
+            )
+            .await?
+            .manny)
+    }
+
     pub async fn motorize_asteroid(&self, probe_id: u64, manny_id: &str, object_id: &str) -> Result<Manny> {
         #[derive(Deserialize)]
         struct Resp {

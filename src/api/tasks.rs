@@ -222,6 +222,22 @@ pub fn fetch_ack_alert(id: i64, client: ApiClient, tx: mpsc::Sender<ApiMessage>)
 /// Install an engine on a local asteroid. The accepted task comes back with
 /// the Manny already busy, so it is merged into the roster in place — the
 /// `observed_busy` guard the sequencers rely on then sees it a tick earlier.
+/// Start the one-minute missile preparation (API v125, issue #361).
+pub fn fetch_ignite_missile(
+    probe_id: u64,
+    manny_id: String,
+    target_id: String,
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+) {
+    spawn_action(
+        tx,
+        async move { client.ignite_missile(probe_id, &manny_id, &target_id).await },
+        ApiMessage::MissileIgniting,
+        ApiMessage::ActionError,
+    );
+}
+
 pub fn fetch_motorize_asteroid(
     probe_id: u64,
     manny_id: String,

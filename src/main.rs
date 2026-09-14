@@ -463,6 +463,17 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                         state.merge_mannies(vec![m]);
                         state.set_toast("refuelling run under way");
                     }
+                    // The 202 documents no schema, so a Manny may or may not
+                    // come back; either way the roster is refetched rather than
+                    // inferred, since the preparation is what makes the Manny
+                    // busy and the sequencers read busy from the roster.
+                    ApiMessage::MissileIgniting(m) => {
+                        if let Some(m) = m {
+                            state.merge_mannies(vec![m]);
+                        }
+                        state.set_toast("missile preparation under way — one minute");
+                        fetch_mannies(client.clone(), tx.clone());
+                    }
                     // The launch consumed the tank and started a trajectory,
                     // both of which live on the asteroid in the sector scan.
                     ApiMessage::TrajectoryLaunched(t) => {

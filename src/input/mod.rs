@@ -98,6 +98,10 @@ const WIZARD_INPUTS: &[(WizardGuard, WizardHandler)] = &[
     (|s| matches!(s.active_wizard, ActiveWizard::Fabrication(_)), handle_fabrication_event),
     (|s| matches!(s.active_wizard, ActiveWizard::Improve(_)), handle_improve_event),
     (|s| matches!(s.active_wizard, ActiveWizard::Salvage(_)), handle_salvage_event),
+    (
+        |s| matches!(s.active_wizard, ActiveWizard::FireMissile(_)),
+        crate::input::scanner::handle_fire_missile_event,
+    ),
     (|s| matches!(s.active_wizard, ActiveWizard::Recall(_)), handle_recall_event),
     (|s| matches!(s.active_wizard, ActiveWizard::Refuel(_)), handle_refuel_event),
     (|s| matches!(s.active_wizard, ActiveWizard::TransferDeuterium(_)), handle_transfer_deuterium_event),
