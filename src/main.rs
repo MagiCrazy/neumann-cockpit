@@ -718,7 +718,7 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                     }
                     ApiMessage::ScutNetworkError(e) => {
                         if matches!(state.active_wizard, ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { .. })) {
-                            state.active_wizard = ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { error: Some(e) });
+                            state.active_wizard = ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { error: Some(e), offset: 0 });
                         }
                     }
                     ApiMessage::DeployStarted => {

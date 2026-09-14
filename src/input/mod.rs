@@ -549,6 +549,59 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn the_scut_network_view_scrolls_to_its_last_relay() {
+        // A mature network lists more relays than the popup can hold, and the
+        // body used to be drawn with no offset and no keys — the overflow was
+        // dropped with nothing on screen saying so (issue #379).
+        use crate::app::{ActiveWizard, ScutNetworkInput};
+        let mut state = AppState::default();
+        let relay = |i: i64| {
+            serde_json::from_str::<crate::api::types::ScutRelay>(&format!(
+                r#"{{"id": {i}, "name": "R{i}", "status": "on", "coverageRadiusSectors": 2,
+                     "createdByProbeName": "Sanctioned Parts List",
+                     "sector": {{"relative": {{"x": {i}, "y": 0.0, "z": 0.0}}}}}}"#
+            ))
+            .unwrap()
+        };
+        state.scut_network_view = Some(crate::api::types::ScutNetwork {
+            id: 1,
+            name: "Meridian".into(),
+            relay_count: 40,
+            covered_sector_count: 120,
+            relays: (0..40).map(relay).collect(),
+            probes: Vec::new(),
+        });
+        state.active_wizard = ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { error: None, offset: 0 });
+
+        let offset = |state: &AppState| match &state.active_wizard {
+            ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { offset, .. }) => *offset,
+            _ => panic!("still viewing"),
+        };
+
+        press(&mut state, KeyCode::Char('j'));
+        assert_eq!(offset(&state), 1, "the viewport moves");
+        press(&mut state, KeyCode::Char('k'));
+        assert_eq!(offset(&state), 0);
+        press(&mut state, KeyCode::Char('k'));
+        assert_eq!(offset(&state), 0, "a viewport does not wrap to the end");
+
+        // `End` reaches the tail, which is the whole point: the last relay was
+        // unreachable before.
+        press(&mut state, KeyCode::End);
+        let end = offset(&state);
+        assert!(end > 0, "the body overflows a default-sized popup");
+        press(&mut state, KeyCode::Char('j'));
+        assert_eq!(offset(&state), end, "and does not overscroll past it");
+
+        press(&mut state, KeyCode::Home);
+        assert_eq!(offset(&state), 0);
+
+        // Esc still closes, and closing is not scrolling.
+        press(&mut state, KeyCode::Esc);
+        assert!(matches!(state.active_wizard, ActiveWizard::None));
+    }
+
+    #[tokio::test]
     async fn a_runtime_toggle_asks_to_be_remembered() {
         // A toggle that is forgotten on the next launch reads as a setting
         // that does not exist (issue #331). The write itself is the event

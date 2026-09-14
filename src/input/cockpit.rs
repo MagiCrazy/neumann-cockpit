@@ -618,7 +618,8 @@ fn fire_menu_action(action: MenuAction, state: &mut AppState, client: &ApiClient
             match nets.len() {
                 0 => state.error = Some("no SCUT network covers this sector".into()),
                 1 => {
-                    state.active_wizard = ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { error: None });
+                    state.active_wizard =
+                        ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { error: None, offset: 0 });
                     state.scut_network_view = None;
                     fetch_scut_network(nets[0].0, client.clone(), tx.clone());
                 }

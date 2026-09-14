@@ -502,8 +502,10 @@ pub enum ScutNetworkInput {
         selection: usize,
     },
     /// Inspecting a network; details live in `AppState::scut_network_view`
-    /// (None while the fetch is in flight).
-    Viewing { error: Option<String> },
+    /// (None while the fetch is in flight). `offset` is the body's scroll
+    /// viewport: a mature network lists more relays and probes than the popup
+    /// can hold, and it used to drop the overflow silently (issue #379).
+    Viewing { error: Option<String>, offset: usize },
 }
 
 /// Safe SCUT corridors from the current sector (API v96). A jump between two

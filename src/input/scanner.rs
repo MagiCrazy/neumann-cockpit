@@ -9,7 +9,7 @@ use crate::api::tasks::{
 };
 use crate::app::{
     ActiveWizard, AimAsteroidInput, ApiMessage, AppState, DeployInput, LogEvent, MineInput, ObjectAction,
-    ObjectActionInput, SalvageInput, ScutCorridorInput, ScutNetworkInput, ScutRelayInput, WaypointsInput,
+    ObjectActionInput, SalvageInput, ScutCorridorInput, ScutNetworkInput, ScutRelayInput, WaypointsInput, LIST_PAGE,
 };
 /// Send the chosen object action, reusing the existing wizards/endpoints.
 pub(super) fn dispatch_object_action(
@@ -203,7 +203,8 @@ pub(super) fn handle_scut_network_event(
                         };
                         networks[selection].0
                     };
-                    state.active_wizard = ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { error: None });
+                    state.active_wizard =
+                        ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { error: None, offset: 0 });
                     state.scut_network_view = None;
                     fetch_scut_network(id, client.clone(), tx.clone());
                 }
@@ -213,6 +214,27 @@ pub(super) fn handle_scut_network_event(
         ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { .. }) if code == KeyCode::Esc => {
             state.close_wizard();
             state.scut_network_view = None;
+        }
+        // The body is a viewport, not a cursor, so it answers the shared
+        // navigation keys (#325) without wrapping: a list that snapped back to
+        // the top after its last relay would read as a glitch (issue #379).
+        ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { error, offset }) => {
+            let (width, height) = crate::ui::overlays::scut_network::viewing_viewport();
+            let total = crate::ui::overlays::scut_network::viewing_height(state, error.as_ref(), width);
+            let max = total.saturating_sub(height as usize);
+            let cur = *offset;
+            let next = match code {
+                KeyCode::Down | KeyCode::Char('j') => (cur + 1).min(max),
+                KeyCode::Up | KeyCode::Char('k') => cur.saturating_sub(1),
+                KeyCode::PageDown => (cur + LIST_PAGE).min(max),
+                KeyCode::PageUp => cur.saturating_sub(LIST_PAGE),
+                KeyCode::Home => 0,
+                KeyCode::End => max,
+                _ => return,
+            };
+            if let ActiveWizard::ScutNetwork(ScutNetworkInput::Viewing { offset, .. }) = &mut state.active_wizard {
+                *offset = next;
+            }
         }
         _ => {}
     }
