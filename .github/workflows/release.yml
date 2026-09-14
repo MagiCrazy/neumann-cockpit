@@ -52,7 +52,13 @@ jobs:
         shell: bash
         run: |
           BIN=neumann-cockpit
-          ARCHIVE="${BIN}-${{ matrix.platform }}.tar.gz"
+          # The version belongs in the filename: three of these in a Downloads
+          # folder are otherwise indistinguishable. The tag carries the
+          # component prefix (neumann-cockpit-v117.0.0), which would repeat the
+          # binary name, so only the vN.N.N part is kept.
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#neumann-cockpit-}"
+          ARCHIVE="${BIN}-${VERSION}-${{ matrix.platform }}.tar.gz"
           # Bundle the example config next to the binary to ease first-run setup.
           tar czf "$ARCHIVE" \
             -C "target/${{ matrix.target }}/release" "$BIN" \
@@ -69,7 +75,9 @@ jobs:
         shell: pwsh
         run: |
           $BIN = "neumann-cockpit"
-          $ARCHIVE = "${BIN}-${{ matrix.platform }}.zip"
+          $TAG = "${{ github.event.release.tag_name }}"
+          $VERSION = $TAG -replace '^neumann-cockpit-', ''
+          $ARCHIVE = "${BIN}-${VERSION}-${{ matrix.platform }}.zip"
           Compress-Archive -Path "target\${{ matrix.target }}\release\${BIN}.exe", "config.example.toml" -DestinationPath $ARCHIVE
           $hash = (Get-FileHash -Algorithm SHA256 $ARCHIVE).Hash.ToLower()
           "$hash  $ARCHIVE" | Out-File -FilePath "${ARCHIVE}.sha256" -Encoding ascii

@@ -19,5 +19,30 @@ jobs:
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
         with:
           token: ${{ steps.app-token.outputs.token }}
+
+      # release-please names a release after its component — "neumann-cockpit:
+      # v117.0.0" — which is noise in a single-package repo where every release
+      # is the cockpit. The alternative was include-component-in-tag: false,
+      # which would also rename the *tags*; that is not worth it. The tag
+      # prefix bothers nobody, 60 releases already carry it, and a tag history
+      # in two shapes is a debt taken on for a display problem.
+      #
+      # So the titles are fixed after the fact. This sweeps the recent
+      # releases rather than reading the action's tag output, which makes it
+      # idempotent, independent of release-please's output naming (it moves
+      # between majors), and self-healing if one ever slips through.
+      - name: Drop the component prefix from release titles
+        if: steps.release.outputs.releases_created == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          gh release list --limit 10 --json tagName,name \
+            --jq '.[] | select(.name | startswith("neumann-cockpit: ")) | [.tagName, .name] | @tsv' \
+          | while IFS=$'\t' read -r tag name; do
+              echo "retitling $tag: $name -> ${name#neumann-cockpit: }"
+              gh release edit "$tag" --title "${name#neumann-cockpit: }"
+            done
