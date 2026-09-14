@@ -67,18 +67,15 @@ pub fn handle_cockpit_event(code: KeyCode, state: &mut AppState, client: &ApiCli
         KeyCode::End => state.pane_cursor_bottom(),
         // On the Scanner these move between the two columns rather than
         // drilling: the detail is the left column, the history the right one,
-        // so the keys point where the eye does (issue #347).
+        // so the keys point where the eye does (issue #347). `Tab` is
+        // deliberately not a third spelling of the same gesture: it is the one
+        // key that cycles panes everywhere, and claiming it here made the
+        // Scanner the single pane Tab could not leave (issue #378).
         KeyCode::Right | KeyCode::Char('l') if state.active_pane == Pane::Scanner => {
             state.scanner_focus = ScannerFocus::History;
         }
         KeyCode::Left | KeyCode::Char('h') if state.active_pane == Pane::Scanner => {
             state.scanner_focus = ScannerFocus::Detail;
-        }
-        KeyCode::Tab if state.active_pane == Pane::Scanner => {
-            state.scanner_focus = match state.scanner_focus {
-                ScannerFocus::History => ScannerFocus::Detail,
-                ScannerFocus::Detail => ScannerFocus::History,
-            };
         }
         KeyCode::Right | KeyCode::Char('l') => drill_in(state, client, tx),
         KeyCode::Left | KeyCode::Char('h') => {

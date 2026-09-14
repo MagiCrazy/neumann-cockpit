@@ -516,13 +516,36 @@ mod tests {
         assert_eq!(state.scanner_focus, ScannerFocus::Detail);
         press(&mut state, KeyCode::Char('l'));
         assert_eq!(state.scanner_focus, ScannerFocus::History);
-        press(&mut state, KeyCode::Tab);
-        assert_eq!(state.scanner_focus, ScannerFocus::Detail, "Tab toggles too");
 
         // Detail focused: the selection freezes and the viewport moves.
+        press(&mut state, KeyCode::Char('h'));
+        assert_eq!(state.scanner_focus, ScannerFocus::Detail);
         let held = state.scan_history_idx;
         press(&mut state, KeyCode::Char('j'));
         assert_eq!(state.scan_history_idx, held, "the history cursor stays put");
+    }
+
+    #[tokio::test]
+    async fn tab_leaves_the_scanner_like_every_other_pane() {
+        // `Tab` cycles panes everywhere, so it must cycle here too: the column
+        // toggle already answers to `h`/`l`, and claiming `Tab` for a third
+        // spelling of it made the Scanner the one pane Tab could not leave
+        // (issue #378). `Shift+Tab` always could, which made it worse.
+        use crate::app::{Pane, ScannerFocus};
+        let mut state = AppState::default();
+        state.active_pane = Pane::Scanner;
+        state.scanner_focus = ScannerFocus::Detail;
+
+        press(&mut state, KeyCode::Tab);
+        assert_ne!(state.active_pane, Pane::Scanner, "Tab cycles out of the Scanner");
+        assert_eq!(
+            state.scanner_focus,
+            ScannerFocus::Detail,
+            "and leaves the column focus where the pilot left it"
+        );
+
+        press(&mut state, KeyCode::BackTab);
+        assert_eq!(state.active_pane, Pane::Scanner, "Shift+Tab comes back");
     }
 
     #[tokio::test]
