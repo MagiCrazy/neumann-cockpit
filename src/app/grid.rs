@@ -21,8 +21,8 @@ pub enum Pane {
     #[default]
     Probe, // f — centre of the square
     Missions, // g
-    Inventory, // c
-    Storage, // v
+    Hold,    // c — cargo, stocks, containers, items
+    Log,     // v — the ship's log
     Mannies, // b
 }
 
@@ -35,8 +35,8 @@ impl Pane {
         Pane::Sector,
         Pane::Probe,
         Pane::Missions,
-        Pane::Inventory,
-        Pane::Storage,
+        Pane::Hold,
+        Pane::Log,
         Pane::Mannies,
     ];
 
@@ -49,8 +49,8 @@ impl Pane {
             'd' => Pane::Sector,
             'f' => Pane::Probe,
             'g' => Pane::Missions,
-            'c' => Pane::Inventory,
-            'v' => Pane::Storage,
+            'c' => Pane::Hold,
+            'v' => Pane::Log,
             'b' => Pane::Mannies,
             _ => return None,
         })
@@ -65,8 +65,8 @@ impl Pane {
             Pane::Sector => 'd',
             Pane::Probe => 'f',
             Pane::Missions => 'g',
-            Pane::Inventory => 'c',
-            Pane::Storage => 'v',
+            Pane::Hold => 'c',
+            Pane::Log => 'v',
             Pane::Mannies => 'b',
         }
     }
@@ -84,8 +84,8 @@ impl Pane {
             Pane::Sector => "SECTOR",
             Pane::Probe => "PROBE",
             Pane::Missions => "MISSIONS",
-            Pane::Inventory => "INVENTORY",
-            Pane::Storage => "STORAGE",
+            Pane::Hold => "HOLD",
+            Pane::Log => "SHIP'S LOG",
             Pane::Mannies => "MANNIES",
         }
     }
@@ -99,8 +99,8 @@ impl Pane {
             Pane::Sector => (1, 0),
             Pane::Probe => (1, 1),
             Pane::Missions => (1, 2),
-            Pane::Inventory => (2, 0),
-            Pane::Storage => (2, 1),
+            Pane::Hold => (2, 0),
+            Pane::Log => (2, 1),
             Pane::Mannies => (2, 2),
         }
     }
@@ -151,19 +151,16 @@ impl CommsCategory {
     pub const ALL: [CommsCategory; 3] = [CommsCategory::Messages, CommsCategory::Alerts, CommsCategory::Warnings];
 }
 
-/// The three sub-views of the Missions pane, selectable at its root: the
-/// active missions list, the ship's log, and the pilot's own logbook.
+/// The two sub-views of the Missions pane, selectable at its root: the active
+/// missions list and the pilot's own logbook.
 ///
-/// The two journals sit side by side and are deliberately **not** merged
-/// (issue #254): the ship's log is what the *ship* recorded — narrated
-/// actions, local, automatic, append-only — and the logbook is what the
-/// *pilot* wrote, stored server-side per probe. One is a flight recorder, the
-/// other a diary. Grouping them here keeps journaling in one place; if the
-/// pane merge (#345) ever lands, all three move together.
+/// The ship's log left for its own pane with #345 — the two journals were
+/// grouped here only because there was nowhere else to put one. The logbook
+/// stays: it is the pilot's diary, stored server-side per probe (#254), and it
+/// has no more natural home than beside the missions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MissionsCategory {
     Missions,
-    ShipsLog,
     Logbook,
 }
 
@@ -171,17 +168,12 @@ impl MissionsCategory {
     pub fn label(self) -> &'static str {
         match self {
             MissionsCategory::Missions => "Missions",
-            MissionsCategory::ShipsLog => "Ship's log",
             MissionsCategory::Logbook => "Logbook",
         }
     }
 
     /// Root-row order in the Missions pane.
-    pub const ALL: [MissionsCategory; 3] = [
-        MissionsCategory::Missions,
-        MissionsCategory::ShipsLog,
-        MissionsCategory::Logbook,
-    ];
+    pub const ALL: [MissionsCategory; 2] = [MissionsCategory::Missions, MissionsCategory::Logbook];
 }
 
 /// Per-pane navigation state: the cursor at the current level plus the
@@ -221,11 +213,10 @@ impl super::AppState {
                 _ => 0,
             },
             Pane::Sector => self.scanner_objects().len(),
-            // Root: two categories. Ship's log: the journal. Drilled into a
-            // mission: its steps. Otherwise (Missions category): the list.
+            // A plain list again: the ship's log has its own pane now, so the
+            // category root that held the two together is gone (issue #345).
             Pane::Missions => match drill {
                 None => MissionsCategory::ALL.len(),
-                Some(DrillLevel::MissionsCat(MissionsCategory::ShipsLog)) => self.ship_log_entries().len(),
                 // Its pages — or zero while they are still on the wire (#254).
                 Some(DrillLevel::MissionsCat(MissionsCategory::Logbook)) => {
                     self.logbook_pages.as_ref().map_or(0, |p| p.len())
@@ -235,10 +226,11 @@ impl super::AppState {
                 }
                 _ => self.missions.len(),
             },
-
+            // The ship's log is a flat list of entries.
+            Pane::Log => self.ship_log_entries().len(),
             // Drilled into a container, the cursor is frozen (contents are
             // rendered inline, read-only).
-            Pane::Storage => match drill {
+            Pane::Hold => match drill {
                 Some(DrillLevel::Container(_)) => 0,
                 _ => self.storage_containers_ordered().len(),
             },
@@ -251,7 +243,7 @@ impl super::AppState {
     /// Wraps at the end, like every other list in the cockpit (issue #325).
     pub fn pane_cursor_down(&mut self) {
         match self.active_pane {
-            Pane::Inventory => self.inventory_next(),
+            Pane::Hold => self.inventory_next(),
             Pane::Scanner => self.scan_hist_next(),
             // Frozen while viewing a single manny's detail (drilled in).
             Pane::Mannies if self.pane_nav[Pane::Mannies.index()].drill.is_empty() => self.manny_next(),
@@ -270,7 +262,7 @@ impl super::AppState {
     /// Move the cursor up within the active pane. Wraps at the top.
     pub fn pane_cursor_up(&mut self) {
         match self.active_pane {
-            Pane::Inventory => self.inventory_prev(),
+            Pane::Hold => self.inventory_prev(),
             Pane::Scanner => self.scan_hist_prev(),
             Pane::Mannies if self.pane_nav[Pane::Mannies.index()].drill.is_empty() => self.manny_prev(),
             Pane::Mannies => {}
@@ -291,7 +283,7 @@ impl super::AppState {
     /// where the cursor is deliberately frozen.
     fn pane_cursor_len(&self) -> usize {
         match self.active_pane {
-            Pane::Inventory => self.inventory_rows().len(),
+            Pane::Hold => self.inventory_rows().len(),
             Pane::Scanner => self.filtered_history_indices().len(),
             Pane::Mannies if !self.pane_nav[Pane::Mannies.index()].drill.is_empty() => 0,
             Pane::Mannies => self.mannies.as_ref().map_or(0, |m| m.len()),
@@ -305,7 +297,7 @@ impl super::AppState {
     /// `scan_history_idx` differ whenever a `ScanFilter` is active).
     fn pane_cursor_pos(&self) -> usize {
         match self.active_pane {
-            Pane::Inventory => self.inventory_selection,
+            Pane::Hold => self.inventory_selection,
             Pane::Scanner => self
                 .filtered_history_indices()
                 .iter()
@@ -324,7 +316,7 @@ impl super::AppState {
         }
         let pos = pos.min(len - 1);
         match self.active_pane {
-            Pane::Inventory => self.inventory_selection = pos,
+            Pane::Hold => self.inventory_selection = pos,
             Pane::Scanner => {
                 if let Some(&idx) = self.filtered_history_indices().get(pos) {
                     self.scan_history_idx = idx;
@@ -395,10 +387,6 @@ impl super::AppState {
         let level = match self.active_pane {
             // Missions and Comms drive their own drill (categories) via
             // `missions_activate` / `comms_activate`.
-            Pane::Storage => self
-                .storage_containers_ordered()
-                .get(cursor)
-                .map(|c| DrillLevel::Container(c.id.clone())),
             // A sector object is drillable only when its contents can be read
             // (API v131, #387); everything else in the pane acts through the
             // `Enter` picker instead.
@@ -407,6 +395,12 @@ impl super::AppState {
                 .get(cursor)
                 .filter(|e| self.sector_storage_readable(e))
                 .map(|_| DrillLevel::SectorObject(cursor)),
+            // A container row drills into its contents (issue #345); every
+            // other Hold row is a leaf.
+            Pane::Hold => match self.selected_inventory_row() {
+                Some(crate::app::InventoryRow::Container { id }) => Some(DrillLevel::Container(id)),
+                _ => None,
+            },
             // Mannies uses its own selection cursor, not `pane_nav.cursor`.
             Pane::Mannies => self
                 .mannies
@@ -451,7 +445,7 @@ impl super::AppState {
             })
     }
 
-    /// Enter a Missions category from the root (missions list / ship's log).
+    /// Enter a Missions category from the root (missions list / logbook).
     pub fn missions_enter_category(&mut self, cat: MissionsCategory) {
         let nav = &mut self.pane_nav[Pane::Missions.index()];
         nav.drill.clear();
@@ -510,7 +504,7 @@ impl super::AppState {
         } else if !matches!(pane, Pane::Probe | Pane::Map) {
             parts.push("jk move");
         }
-        if !drilled && matches!(pane, Pane::Missions | Pane::Comms | Pane::Storage | Pane::Mannies) {
+        if !drilled && matches!(pane, Pane::Missions | Pane::Comms | Pane::Hold | Pane::Mannies) {
             parts.push("l open");
         }
         // Panes that expose actions on Enter (menu or reused overlay). Probe
@@ -520,10 +514,10 @@ impl super::AppState {
             || matches!(
                 pane,
                 Pane::Mannies
-                    | Pane::Inventory
+                    | Pane::Hold
                     | Pane::Missions
                     | Pane::Comms
-                    | Pane::Storage
+                    | Pane::Log
                     | Pane::Sector
                     | Pane::Scanner
                     | Pane::Map
@@ -541,7 +535,7 @@ impl super::AppState {
         {
             parts.push("x discard · X acked");
         }
-        if pane == Pane::Storage && !drilled {
+        if pane == Pane::Hold && !drilled {
             parts.push("s sort");
         }
         parts.push(if self.zoomed { "z/Esc unzoom" } else { "z zoom" });
@@ -669,37 +663,36 @@ mod tests {
         }];
         s.active_pane = Pane::Missions;
 
-        // Root → enter the Missions category → drill into the mission's steps.
-        s.missions_enter_category(crate::app::MissionsCategory::Missions);
-        assert_eq!(s.breadcrumb(), vec!["COCKPIT", "MISSIONS", "Missions"]);
+        // One level now that the ship's log has its own pane (issue #345):
+        // the list drills straight into a mission's steps.
         s.missions_drill_into("m1".into());
-        assert_eq!(
-            s.breadcrumb(),
-            vec!["COCKPIT", "MISSIONS", "Missions", "Survey the rim"]
-        );
-        // The category holds while drilled into a mission's steps.
-        assert_eq!(s.missions_category(), Some(crate::app::MissionsCategory::Missions));
-
-        // Drill out step by step: mission → category → root.
-        assert!(s.pane_drill_out());
-        assert_eq!(s.breadcrumb(), vec!["COCKPIT", "MISSIONS", "Missions"]);
+        assert_eq!(s.breadcrumb(), vec!["COCKPIT", "MISSIONS", "Survey the rim"]);
         assert!(s.pane_drill_out());
         assert_eq!(s.breadcrumb(), vec!["COCKPIT", "MISSIONS"]);
     }
 
     #[test]
-    fn missions_root_categories_and_ship_log_counts_journal() {
-        use crate::app::{LogEvent, MissionsCategory};
+    fn the_log_pane_counts_the_journal_and_missions_counts_missions() {
+        // The two used to share the Missions pane through a category root
+        // (issue #345); each owns its own cursor now.
+        use crate::app::LogEvent;
         let mut s = crate::app::AppState::default();
-        s.active_pane = Pane::Missions;
-        // Root exposes the two categories.
-        assert_eq!(s.pane_item_count(Pane::Missions), MissionsCategory::ALL.len());
-        // The Ship's log category lists the journal entries.
         s.journal = vec![LogEvent::action("test", "a", None), LogEvent::action("test", "b", None)];
-        s.missions_enter_category(MissionsCategory::ShipsLog);
-        assert_eq!(s.missions_category(), Some(MissionsCategory::ShipsLog));
-        assert_eq!(s.pane_item_count(Pane::Missions), 2);
-        assert_eq!(s.breadcrumb(), vec!["COCKPIT", "MISSIONS", "Ship's log"]);
+
+        s.active_pane = Pane::Log;
+        assert_eq!(s.pane_item_count(Pane::Log), 2);
+        assert_eq!(s.breadcrumb(), vec!["COCKPIT", "SHIP'S LOG"]);
+
+        // Missions keeps a category root — the logbook still lives there —
+        // but the ship's log has left it for its own pane (#345).
+        s.active_pane = Pane::Missions;
+        assert_eq!(
+            s.pane_item_count(Pane::Missions),
+            MissionsCategory::ALL.len(),
+            "its remaining categories"
+        );
+        assert!(!MissionsCategory::ALL.iter().any(|c| c.label() == "Ship's log"));
+        assert_eq!(s.breadcrumb(), vec!["COCKPIT", "MISSIONS"]);
     }
 
     #[test]

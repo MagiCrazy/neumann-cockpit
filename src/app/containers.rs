@@ -171,14 +171,14 @@ impl AppState {
         self.storage_sort_alpha = !self.storage_sort_alpha;
         if let Some(id) = held {
             if let Some(pos) = self.storage_containers_ordered().iter().position(|c| c.id == id) {
-                self.pane_nav[crate::app::Pane::Storage.index()].cursor = pos;
+                self.pane_nav[crate::app::Pane::Log.index()].cursor = pos;
             }
         }
     }
 
     /// Id of the container the Storage pane cursor is on.
     pub fn storage_selected_container_id(&self) -> Option<String> {
-        let cur = self.pane_nav[crate::app::Pane::Storage.index()].cursor;
+        let cur = self.pane_nav[crate::app::Pane::Log.index()].cursor;
         self.storage_containers_ordered().get(cur).map(|c| c.id.clone())
     }
 

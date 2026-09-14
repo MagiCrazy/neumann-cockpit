@@ -110,7 +110,7 @@ pub fn handle_cockpit_event(code: KeyCode, state: &mut AppState, client: &ApiCli
             comms_discard_key(code, state);
         }
         // Storage: toggle server order ↔ alphabetical (issue #333).
-        KeyCode::Char('s') if state.active_pane == Pane::Storage => {
+        KeyCode::Char('s') if state.active_pane == Pane::Hold => {
             state.storage_toggle_sort();
             let how = if state.storage_sort_alpha { "a-z" } else { "probe order" };
             state.set_toast(format!("containers sorted: {how}"));
@@ -200,18 +200,15 @@ fn scroll_scan_detail(code: KeyCode, state: &mut AppState) -> bool {
 /// the contextual menu; panes backed by a rich wizard reuse its overlay.
 fn open_actions(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessage>) {
     match state.active_pane {
-        Pane::Mannies | Pane::Inventory | Pane::Probe | Pane::Storage | Pane::Scanner | Pane::Map => {
-            match state.build_context_menu() {
-                Some(menu) if !menu.items.is_empty() => state.mode = InputMode::Menu(menu),
-                _ => state.set_toast("no actions here"),
-            }
-        }
+        Pane::Mannies | Pane::Hold | Pane::Probe | Pane::Scanner | Pane::Map => match state.build_context_menu() {
+            Some(menu) if !menu.items.is_empty() => state.mode = InputMode::Menu(menu),
+            _ => state.set_toast("no actions here"),
+        },
         Pane::Missions => match state.missions_category() {
             // Root: Enter enters the selected category, like `l`.
             None => missions_activate(state, client, tx),
             // Both journals are records, not consoles. The logbook is written
             // with its own keys (c/e/x), not through Enter (issue #254).
-            Some(MissionsCategory::ShipsLog) => state.set_toast("ship's log — read only"),
             Some(MissionsCategory::Logbook) => missions_activate(state, client, tx),
             Some(MissionsCategory::Missions) => {
                 let in_detail = matches!(
@@ -228,9 +225,9 @@ fn open_actions(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiM
                 }
             }
         },
+        // The ship's log is a record, not a console (issue #345).
+        Pane::Log => state.set_toast("ship's log — read only"),
         Pane::Comms => comms_activate(state, client, tx),
-        // Enter is drill-in here: the halves and the pages are what there is
-        // to act on, and writing has its own keys (c/e/x).
         Pane::Sector => open_sector_object_actions(state),
     }
 }
@@ -395,8 +392,6 @@ fn missions_activate(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender
                 }
             }
         }
-        // A flat read: nothing to drill into.
-        Some(MissionsCategory::ShipsLog) => {}
         Some(MissionsCategory::Logbook) => {
             if state.logbook_open_page().is_some() {
                 return;
@@ -443,8 +438,8 @@ fn drill_in(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessa
             }
         }
     }
-    if state.active_pane == Pane::Storage {
-        if let Some(DrillLevel::Container(id)) = state.pane_nav[Pane::Storage.index()].drill.last().cloned() {
+    if state.active_pane == Pane::Hold {
+        if let Some(DrillLevel::Container(id)) = state.pane_nav[Pane::Hold.index()].drill.last().cloned() {
             state.storage_container_detail = None;
             state.storage_container_detail_error = None;
             fetch_storage_container_detail(id, client.clone(), tx.clone());
@@ -457,7 +452,7 @@ fn drill_out(state: &mut AppState) {
     if state.active_pane == Pane::Sector {
         state.clear_sector_storage();
     }
-    if state.active_pane == Pane::Storage {
+    if state.active_pane == Pane::Hold {
         state.storage_container_detail = None;
         state.storage_container_detail_error = None;
     }
@@ -550,7 +545,7 @@ fn fire_menu_action(action: MenuAction, state: &mut AppState, client: &ApiClient
         }
         // The Inventory pane opens the catalog with no builder pre-chosen; the
         // Mannies-pane variant (with a builder) is handled further down.
-        MenuAction::Fabricate if state.active_pane == Pane::Inventory => {
+        MenuAction::Fabricate if state.active_pane == Pane::Hold => {
             if state.fabrication_recipes().is_empty() {
                 state.error = Some("recipes not loaded yet — F5 to refresh".into());
             } else {
