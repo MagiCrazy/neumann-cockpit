@@ -13,7 +13,7 @@ use tokio::sync::mpsc;
 use neumann_cockpit::api::tasks::{
     fetch_all, fetch_api_version, fetch_atomic_printer_craft, fetch_craft, fetch_crafting_recipes, fetch_detach,
     fetch_logbook_pages, fetch_mannies, fetch_manny, fetch_manny_tasks, fetch_messages, fetch_mine, fetch_missions,
-    fetch_move, fetch_recover, fetch_repair, fetch_salvage, fetch_sector, fetch_sent_messages,
+    fetch_move, fetch_recover, fetch_repair, fetch_salvage, fetch_sector, fetch_sector_storage, fetch_sent_messages,
     fetch_unread_message_count,
 };
 use neumann_cockpit::app::{
@@ -455,6 +455,26 @@ async fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, ready: prefl
                     // motorization ends by replacing the asteroid's id and
                     // refuelling ends by changing its fuel status, and the
                     // scan is where both are read from.
+                    // Sector storage contents (API v131, #387): pages chain
+                    // on the cursor, a 409 restarts from the first page.
+                    ApiMessage::SectorStoragePage(page) => {
+                        if let Some(next) = state.merge_sector_storage(page) {
+                            if let (Some(pid), Some(id)) = (
+                                state.probe_id(),
+                                state.sector_storage.as_ref().map(|v| v.object_id.clone()),
+                            ) {
+                                fetch_sector_storage(pid, id, Some(next), client.clone(), tx.clone());
+                            }
+                        }
+                    }
+                    ApiMessage::SectorStorageStale => {
+                        if let Some(id) = state.restart_sector_storage() {
+                            if let Some(pid) = state.probe_id() {
+                                fetch_sector_storage(pid, id, None, client.clone(), tx.clone());
+                            }
+                        }
+                    }
+                    ApiMessage::SectorStorageFailed(e) => state.fail_sector_storage(e),
                     ApiMessage::AsteroidMotorizing(m) => {
                         state.merge_mannies(vec![m]);
                         state.set_toast("engine installation under way");

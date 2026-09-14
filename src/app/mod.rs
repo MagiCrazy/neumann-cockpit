@@ -18,6 +18,7 @@ mod mode;
 mod queue;
 mod scan;
 mod script;
+mod sector_storage;
 mod telemetry;
 #[cfg(test)]
 mod tests;
@@ -44,6 +45,7 @@ pub use mode::*;
 pub use queue::*;
 pub use scan::*;
 pub use script::*;
+pub use sector_storage::*;
 pub use telemetry::*;
 pub use threat::*;
 pub use tree::*;
@@ -258,6 +260,10 @@ pub struct AppState {
     /// Error from the last container-detail fetch, shown in the drill-in instead
     /// of a "fetching…" line that would otherwise hang forever.
     pub storage_container_detail_error: Option<String>,
+    /// Contents of the sector storage object drilled into (API v131, #387),
+    /// accumulated across cursor pages. `None` when nothing is drilled.
+    pub sector_storage: Option<SectorStorageView>,
+    pub sector_storage_error: Option<String>,
     pub help_open: bool,
     /// Vertical scroll offset of the help overlay (rows). Reset when it closes.
     pub help_scroll: u16,

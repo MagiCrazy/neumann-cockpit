@@ -222,6 +222,31 @@ pub fn fetch_ack_alert(id: i64, client: ApiClient, tx: mpsc::Sender<ApiMessage>)
 /// Install an engine on a local asteroid. The accepted task comes back with
 /// the Manny already busy, so it is merged into the roster in place — the
 /// `observed_busy` guard the sequencers rely on then sees it a tick earlier.
+/// Fetch one page of a sector storage object's contents (API v131, #387).
+///
+/// The 409 is classified here rather than left to collapse into a message
+/// string: it means the cursor went stale against changed contents, which the
+/// loop answers by restarting — not something to show the pilot.
+pub fn fetch_sector_storage(
+    probe_id: u64,
+    object_id: String,
+    cursor: Option<String>,
+    client: ApiClient,
+    tx: mpsc::Sender<ApiMessage>,
+) {
+    tokio::spawn(async move {
+        let result = client
+            .get_sector_object_inventory(probe_id, &object_id, cursor.as_deref())
+            .await;
+        let msg = match result {
+            Ok(page) => ApiMessage::SectorStoragePage(page),
+            Err(e) if crate::api::client::has_status(&e, 409) => ApiMessage::SectorStorageStale,
+            Err(e) => ApiMessage::SectorStorageFailed(e.to_string()),
+        };
+        let _ = tx.send(msg).await;
+    });
+}
+
 /// Start the one-minute missile preparation (API v125, issue #361).
 pub fn fetch_ignite_missile(
     probe_id: u64,

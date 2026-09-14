@@ -399,6 +399,14 @@ impl super::AppState {
                 .storage_containers_ordered()
                 .get(cursor)
                 .map(|c| DrillLevel::Container(c.id.clone())),
+            // A sector object is drillable only when its contents can be read
+            // (API v131, #387); everything else in the pane acts through the
+            // `Enter` picker instead.
+            Pane::Sector => self
+                .scanner_objects()
+                .get(cursor)
+                .filter(|e| self.sector_storage_readable(e))
+                .map(|_| DrillLevel::SectorObject(cursor)),
             // Mannies uses its own selection cursor, not `pane_nav.cursor`.
             Pane::Mannies => self
                 .mannies

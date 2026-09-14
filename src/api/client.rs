@@ -4,12 +4,32 @@ use super::types::{
     AsteroidTrajectory, BlueprintShareResult, ContainerInventory, CraftingRecipe, DamageWarningRule, EndpointId,
     LogbookPage, LogbookPageSummary, Manny, MannyDetail, MannyRoster, MannyTaskRequest, Mission, Pagination, Probe,
     ProbeAlert, ProbeImprovement, ProbeInventory, ProbeListResponse, ProbeMessage, ProbeModel, ProbeMovement,
-    ProbeSentMessage, ScutNetwork, SectorObservation, StorageContainer, VisitedSector,
+    ProbeSentMessage, ScutNetwork, SectorObservation, SectorStorageInventory, StorageContainer, VisitedSector,
 };
 use anyhow::{Context, Result};
 use reqwest::{Client, StatusCode, Url};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
+
+/// Query string for a sector-storage page, with the cursor percent-encoded.
+///
+/// The cursor is an **opaque** server string — the spec constrains it to
+/// `minLength: 1` and nothing else — so interpolating it raw would break on the
+/// first `&`, `=` or space it happens to contain. `reqwest` already carries a
+/// correct encoder, which beats both a new dependency and a hand-rolled one;
+/// the base it is parsed against is a placeholder and never leaves this
+/// function.
+fn inventory_query(cursor: Option<&str>) -> String {
+    let mut url = Url::parse("http://x/").expect("static base parses");
+    {
+        let mut pairs = url.query_pairs_mut();
+        pairs.append_pair("limit", "100");
+        if let Some(c) = cursor {
+            pairs.append_pair("cursor", c);
+        }
+    }
+    url.query().unwrap_or_default().to_string()
+}
 
 /// An HTTP error that kept its status code.
 ///
@@ -33,9 +53,14 @@ impl std::fmt::Display for HttpStatusError {
 
 impl std::error::Error for HttpStatusError {}
 
+/// Whether an error carries a given HTTP status.
+pub fn has_status(e: &anyhow::Error, status: u16) -> bool {
+    e.downcast_ref::<HttpStatusError>().is_some_and(|h| h.status == status)
+}
+
 /// Whether an error is that 409.
 fn occluded(e: &anyhow::Error) -> bool {
-    e.downcast_ref::<HttpStatusError>().is_some_and(|h| h.status == 409)
+    has_status(e, 409)
 }
 
 #[derive(Clone)]
@@ -1296,6 +1321,26 @@ impl ApiClient {
     /// Needs the Distributed Thrust Anchoring blueprint and an idle onboard
     /// Manny. **On completion the asteroid receives a new opaque id**, so
     /// anything holding the old one has to re-resolve.
+    /// One page of a sector-storage object's contents (API v131, issue #387).
+    ///
+    /// Mirror-only, like the single-Manny GET and the task batch. Paginated by
+    /// an opaque cursor; `limit` is capped at 500 server-side and defaults to
+    /// 100. A **409** means the inventory changed under the cursor and the
+    /// caller must restart from the first page — the cursor is versioned
+    /// against the contents, not merely positional.
+    pub async fn get_sector_object_inventory(
+        &self,
+        probe_id: u64,
+        object_id: &str,
+        cursor: Option<&str>,
+    ) -> Result<SectorStorageInventory> {
+        let path = format!(
+            "/api/probe/{probe_id}/sector-objects/{object_id}/inventory?{}",
+            inventory_query(cursor)
+        );
+        self.get::<SectorStorageInventory>(&path).await
+    }
+
     /// Start the one-minute missile preparation (API v125, issue #361).
     ///
     /// `missileItemId` is deliberately omitted: the server takes the first

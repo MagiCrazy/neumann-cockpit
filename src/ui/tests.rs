@@ -1533,3 +1533,88 @@ fn only_a_player_target_gets_the_reinforced_wording() {
     assert!(player.contains("ANOTHER PLAYER'S ASSET"));
     assert!(player.contains("marks it dead"), "and says what a hit can do");
 }
+
+// ── sector storage contents (issue #387) ──────────────────────────────────
+
+/// A cockpit drilled into a detached container in the current sector.
+fn state_in_container(loading: bool, resources: &str, items: &str) -> AppState {
+    let mut state = AppState::default();
+    state.probe = Some(
+        serde_json::from_str(
+            r#"{"id": 1, "name": "t", "status": "idle",
+                "fuel": {"deuterium": 50.0}, "sensorMode": "normal",
+                "sector": {"relative": {"x": 0.0, "y": 0.0, "z": 0.0}}, "movement": null,
+                "systems": {"integrityPercent": 100.0},
+                "inventory": {"capacity": 1.0, "usedCapacity": 0.0, "freeCapacity": 1.0,
+                              "items": [], "resourceStocks": [], "externalTanks": [],
+                              "containers": []}}"#,
+        )
+        .unwrap(),
+    );
+    state.scan_history = vec![serde_json::from_str(
+        r#"{"relativeCoordinates": {"x": 0.0, "y": 0.0, "z": 0.0}, "distance": 0,
+            "knowledgeLevel": "detailed", "confidence": 1.0,
+            "objects": [{"id": "c1", "type": "detached_container", "name": "Democrat",
+                         "summary": "s", "mode": "drifting"}],
+            "scan": {"currentSectorResidenceSeconds": 60,
+                     "requiredResidenceSeconds": 60, "scanQuality": 1.0}}"#,
+    )
+    .unwrap()];
+    state.active_pane = crate::app::Pane::Sector;
+    // Zoomed: compact, a pane of the 3x3 grid is ~26 columns and a resource
+    // row is truncated, the same way the ship's log reads out only zoomed.
+    state.zoomed = true;
+    state.pane_nav[crate::app::Pane::Sector.index()]
+        .drill
+        .push(crate::app::DrillLevel::SectorObject(0));
+    state.start_sector_storage("c1".into());
+    if !loading {
+        state.merge_sector_storage(
+            serde_json::from_str(&format!(
+                r#"{{"objectId": "c1", "resources": [{resources}], "items": [{items}],
+                     "nextCursor": null}}"#
+            ))
+            .unwrap(),
+        );
+    }
+    state
+}
+
+#[test]
+fn the_drilled_container_lists_what_is_inside() {
+    let state = state_in_container(
+        false,
+        r#"{"type": "metals", "amount": 2.0, "reservedAmount": 0.5, "availableAmount": 1.5}"#,
+        r#"{"id": "i1", "type": "steel_plate", "name": "Steel plate", "containerSpace": 0.1,
+            "available": false, "metadata": {}}"#,
+    );
+    let text = buffer_text(&render_cockpit(&state, 80, 24));
+    assert!(text.contains("Democrat"), "the pane names the container:\n{text}");
+    assert!(text.contains("metals"), "resources are listed");
+    assert!(text.contains("reserved"), "and what is spoken for");
+    assert!(text.contains("Steel plate"), "items are listed");
+    assert!(text.contains("claimed"), "an item another transfer holds says so");
+}
+
+#[test]
+fn reserved_is_stated_only_when_it_exists() {
+    // A nought on every row would make the one row that matters harder to see.
+    let state = state_in_container(
+        false,
+        r#"{"type": "ice", "amount": 1.0, "reservedAmount": 0.0, "availableAmount": 1.0}"#,
+        "",
+    );
+    let text = buffer_text(&render_cockpit(&state, 80, 24));
+    assert!(text.contains("ice"));
+    assert!(!text.contains("reserved"), "nothing is reserved:\n{text}");
+}
+
+#[test]
+fn an_empty_container_does_not_read_as_a_loading_one() {
+    let empty = buffer_text(&render_cockpit(&state_in_container(false, "", ""), 80, 24));
+    assert!(empty.contains("empty"), "nothing here is a real answer:\n{empty}");
+
+    let loading = buffer_text(&render_cockpit(&state_in_container(true, "", ""), 80, 24));
+    assert!(loading.contains("reading"), "still on the wire:\n{loading}");
+    assert!(!loading.contains("empty"));
+}

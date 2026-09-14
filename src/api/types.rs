@@ -509,6 +509,55 @@ pub struct ProbeAlert {
     pub resolved_at: Option<DateTime<Utc>>,
 }
 
+/// One page of a sector-storage object's contents (API v131, issue #387).
+///
+/// The server serves this for "drifting containers, personally known
+/// containers hidden on asteroids, and other storage objects whose access this
+/// probe has discovered" — and revalidates that access on **every page**, which
+/// is why the cursor loop cannot assume the first page's permission holds.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SectorStorageInventory {
+    pub object_id: Option<String>,
+    /// Set when the storage is a shared germination depot rather than a
+    /// container. Not reachable from the cockpit today: a sector scan has no
+    /// depot object type, so there is nothing to drill into.
+    pub depot_id: Option<String>,
+    #[serde(default)]
+    pub resources: Vec<SectorStorageResource>,
+    #[serde(default)]
+    pub items: Vec<SectorStorageItem>,
+    /// `None` on the last page.
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SectorStorageResource {
+    #[serde(rename = "type")]
+    pub resource_type: String,
+    /// Total held, in ECE.
+    pub amount: f64,
+    /// Spoken for by an in-flight transfer.
+    pub reserved_amount: f64,
+    /// What could actually be taken right now.
+    pub available_amount: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SectorStorageItem {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub item_type: String,
+    pub name: String,
+    pub container_space: f64,
+    /// False while another transfer has claimed it.
+    pub available: bool,
+    #[serde(default)]
+    pub metadata: serde_json::Value,
+}
+
 impl ProbeAlert {
     /// An alert still needs the operator's attention while unread and unresolved.
     pub fn is_unread(&self) -> bool {

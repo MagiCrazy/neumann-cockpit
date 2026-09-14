@@ -13,6 +13,11 @@ pub enum ApiMessage {
     /// A motorization or refuelling task was accepted (issue #308); the
     /// Manny comes back already busy.
     AsteroidMotorizing(crate::api::types::Manny),
+    /// One page of a sector storage object's contents (API v131, #387).
+    SectorStoragePage(crate::api::types::SectorStorageInventory),
+    /// 409: the contents changed under the cursor, so the read restarts.
+    SectorStorageStale,
+    SectorStorageFailed(String),
     /// The one-minute missile preparation was accepted (API v125, #361). The
     /// Manny comes back only if the 202 carried one — the schema is
     /// undocumented — so the loop refetches rather than infers.

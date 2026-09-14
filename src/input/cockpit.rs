@@ -14,7 +14,8 @@ use crate::api::client::ApiClient;
 use crate::api::tasks::{
     fetch_ack_alert, fetch_ack_damage_warning, fetch_alerts, fetch_all, fetch_cancel_move, fetch_damage_warnings,
     fetch_inspect, fetch_logbook_page, fetch_logbook_pages, fetch_messages, fetch_reassign_reservations, fetch_recover,
-    fetch_scut_network, fetch_sector, fetch_sent_messages, fetch_set_default_probe, fetch_storage_container_detail,
+    fetch_scut_network, fetch_sector, fetch_sector_storage, fetch_sent_messages, fetch_set_default_probe,
+    fetch_storage_container_detail,
 };
 use crate::api::types::{MannyTask, MannyTaskVisibility};
 use crate::app::{
@@ -426,6 +427,22 @@ fn drill_in(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessa
         return;
     }
     state.pane_drill_in();
+    // Contents are read lazily, on the drill: one request per container, and a
+    // pilot who never looks never pays it (#387).
+    if state.active_pane == Pane::Sector {
+        if let Some(&DrillLevel::SectorObject(i)) = state.pane_nav[Pane::Sector.index()].drill.last() {
+            if let Some(entry) = state.scanner_objects().get(i) {
+                let id = entry.id.clone();
+                state.start_sector_storage(id.clone());
+                match state.probe_id() {
+                    Some(pid) => fetch_sector_storage(pid, id, None, client.clone(), tx.clone()),
+                    // Mirror-only endpoint: without a probe sync there is no
+                    // path to send to.
+                    None => state.fail_sector_storage("no probe sync yet".into()),
+                }
+            }
+        }
+    }
     if state.active_pane == Pane::Storage {
         if let Some(DrillLevel::Container(id)) = state.pane_nav[Pane::Storage.index()].drill.last().cloned() {
             state.storage_container_detail = None;
@@ -437,6 +454,9 @@ fn drill_in(state: &mut AppState, client: &ApiClient, tx: &mpsc::Sender<ApiMessa
 
 /// Drill out one level, clearing any transient detail loaded for the level.
 fn drill_out(state: &mut AppState) {
+    if state.active_pane == Pane::Sector {
+        state.clear_sector_storage();
+    }
     if state.active_pane == Pane::Storage {
         state.storage_container_detail = None;
         state.storage_container_detail_error = None;
