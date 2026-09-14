@@ -1901,10 +1901,13 @@ fn relay_status_read_from_sector_object() {
     let mut state = AppState::default();
     state.probe = Some(probe_at(0., 0., 0.));
     state.scan_history = vec![relay_sector("off")];
-    assert_eq!(
-        state.sector_object_relay_status("42"),
-        Some(crate::api::types::ScutRelayStatus::Off)
-    );
+    assert!(!state.sector_object_relay_is_on("42"));
+    state.scan_history = vec![relay_sector("on")];
+    assert!(state.sector_object_relay_is_on("42"));
+    // Since v130 `status` also carries missile and Others-ship states, so the
+    // question is "is it on", never "is it not off" (issue #360).
+    state.scan_history = vec![relay_sector("moving")];
+    assert!(!state.sector_object_relay_is_on("42"), "a relay does not move");
 }
 
 #[test]

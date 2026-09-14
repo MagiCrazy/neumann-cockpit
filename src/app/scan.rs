@@ -1,5 +1,5 @@
 use super::*;
-use crate::api::types::{DangerLevel, ScutRelayStatus, SectorObjectType, SectorObservation};
+use crate::api::types::{DangerLevel, SectorObjectType, SectorObservation};
 use chrono::Utc;
 
 /// Reserves (presence flags + amounts, indexed as [`RESOURCE_TYPES`]) paired
@@ -434,9 +434,7 @@ impl AppState {
                 actions.push(ObjectAction::Inspect);
             }
             // An inactive relay (status != On) can be turned on or salvaged.
-            (ObjectProvenance::TopLevel, SectorObjectType::ScutRelay)
-                if self.sector_object_relay_status(&entry.id) != Some(ScutRelayStatus::On) =>
-            {
+            (ObjectProvenance::TopLevel, SectorObjectType::ScutRelay) if !self.sector_object_relay_is_on(&entry.id) => {
                 actions.push(ObjectAction::TurnOnRelay);
                 actions.push(ObjectAction::Salvage);
             }
@@ -506,10 +504,7 @@ impl AppState {
         };
         let mut out: Vec<(i64, String)> = Vec::new();
         for o in objects {
-            if o.object_type != crate::api::types::SectorObjectType::ScutRelay
-                || o.status != Some(crate::api::types::ScutRelayStatus::On)
-                || o.is_transit_beacon != Some(true)
-            {
+            if !o.relay_is_on() || o.is_transit_beacon != Some(true) {
                 continue;
             }
             if let Some(net) = &o.network {
@@ -569,16 +564,12 @@ impl AppState {
             .unwrap_or(false)
     }
 
-    /// Status of a SCUT relay object in the probe's current sector, by object id.
-    pub fn sector_object_relay_status(&self, id: &str) -> Option<ScutRelayStatus> {
+    /// Whether the SCUT relay object with this id, in the probe's current
+    /// sector, is active.
+    pub fn sector_object_relay_is_on(&self, id: &str) -> bool {
         self.probe_current_sector_scan()
             .and_then(|s| s.objects.as_ref())
-            .and_then(|objects| {
-                objects
-                    .iter()
-                    .find(|o| o.id.as_deref() == Some(id))
-                    .and_then(|o| o.status.clone())
-            })
+            .is_some_and(|objects| objects.iter().any(|o| o.id.as_deref() == Some(id) && o.relay_is_on()))
     }
 
     pub fn scanner_obj_next(&mut self) {

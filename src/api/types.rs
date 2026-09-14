@@ -14,7 +14,7 @@ pub struct Vector {
 
 // ── Enums ─────────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum ProbeStatus {
     Idle,
@@ -230,6 +230,25 @@ pub struct Manny {
     pub observed_at: Option<DateTime<Utc>>,
 }
 
+/// The `waiting_for_space` task payload (API v123).
+///
+/// Typed here for completeness; the wait is read straight off the raw `task`
+/// value by `manny_storage_wait` (#364), the way the hidden-container
+/// detection reads `artificialObjectDetected` — the payload is an `anyOf` that
+/// can also be an empty object, so the raw read stays the robust one.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MannyWaitingForSpaceTask {
+    /// Always `storage_space` today; the field exists to widen later.
+    pub waiting_for: String,
+    /// Canonical start of the **continuous** seven-day storage wait. At the end
+    /// the Manny abandons its cargo and retries docking; if its own 0.05 ECE
+    /// slot is still unavailable it is detached and becomes an `abandoned`
+    /// sector object.
+    pub waiting_for_space_since: DateTime<Utc>,
+    pub reason: Option<String>,
+}
+
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum MannyTaskVisibility {
@@ -360,6 +379,15 @@ pub enum AlertType {
     AsteroidTrajectory,
     /// Another probe shared an improvement blueprint (API v116).
     BlueprintShared,
+    /// ── The Others become visible (API v126-v130) ──
+    /// An Others ship or auxiliary was detected.
+    OthersPresence,
+    /// An Others weapon was observed — fired, or aimed.
+    OthersWeapon,
+    /// A planet shows signs of having been harvested by the Others. Crossed
+    /// with the 5 ECE floor below which a planet stops being harvestable, this
+    /// says they passed through and roughly how thoroughly.
+    OthersHarvestTraces,
     #[serde(other)]
     Unknown,
 }
@@ -387,6 +415,18 @@ pub enum AlertPhase {
     Ignition,
     /// A blueprint reached this probe (API v116).
     BlueprintShare,
+    /// ── Weapons (API v119-v130) ──
+    /// A weapon was detected, without this probe being the declared target.
+    Weapon,
+    /// **This probe is the declared target** of a missile, or owns a Manny
+    /// remotely targeted through the same SCUT network. The one phase that is
+    /// a countdown rather than a report; #362 is what the cockpit does with it.
+    WeaponTargeted,
+    /// A missile or motorized-asteroid impact resolved, seen from a launcher
+    /// still present in the impact sector.
+    WeaponResult,
+    /// The same impact, seen from the victim.
+    WeaponDamage,
     #[serde(other)]
     Unknown,
 }
@@ -871,6 +911,10 @@ pub enum SectorObjectType {
     DeuteriumRefuelStation,
     ScutRelay,
     DormantConstruct,
+    /// A missile in flight, observable in a sector scan (API v122). Before it
+    /// was named, the one object that is a countdown to being hit rendered as
+    /// `unknown`.
+    Missile,
     #[serde(other)]
     Unknown,
 }
@@ -931,6 +975,12 @@ pub struct SectorProbePresence {
     pub id: i64,
     pub name: String,
     pub moving: bool,
+    /// Observable state of the detected probe (API v130). A subset of
+    /// [`ProbeStatus`], which is reused rather than mirrored.
+    pub status: Option<ProbeStatus>,
+    /// True when the detected probe belongs to the authenticated player
+    /// (API v130) — which is what tells a fleet drone apart from a stranger.
+    pub owned: Option<bool>,
 }
 
 /// The four mineable-resource values shared by `resourceComposition`
@@ -946,6 +996,79 @@ pub struct ResourceShares {
     pub ice: f64,
     #[serde(default)]
     pub carbon_compounds: f64,
+}
+
+/// `SectorObject.status` (API v130): relay activation, in-flight missile state,
+/// or the observed state of a detected Others ship. Kept separate from
+/// [`ScutRelayStatus`] because `ScutRelay.status` is still only `off`/`on` —
+/// two schemas, two enums, even where the values overlap.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SectorObjectStatus {
+    /// Relay: inactive.
+    Off,
+    /// Relay: active.
+    On,
+    Moving,
+    Idle,
+    Preparing,
+    Accelerating,
+    Decelerating,
+    /// An Others ship coordinating an active planetary harvest.
+    LowOrbit,
+    #[serde(other)]
+    Unknown,
+}
+
+/// What a dynamically observed object was classified as (API v130). Present on
+/// detected missiles and Others ships; `suspected_missile` is the scan saying
+/// it is not sure, which is worth keeping distinct from a confirmed one.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ObservedClass {
+    SuspectedMissile,
+    LargeShip,
+    Ship,
+    #[serde(other)]
+    Unknown,
+}
+
+/// Who fired a missile (API v130). Present only on moving missile objects.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MissileLauncherKind {
+    Probe,
+    OthersShip,
+    #[serde(other)]
+    Unknown,
+}
+
+/// What a missile is aimed at (API v130). Present only on moving missile
+/// objects. A superset of [`MissileLauncherKind`]: anything that can shoot can
+/// also be shot at, and several things that cannot shoot can be.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MissileTargetKind {
+    Probe,
+    OthersShip,
+    OthersAuxiliary,
+    Manny,
+    /// Another missile — an interception attempt.
+    Missile,
+    MotorizedAsteroid,
+    #[serde(other)]
+    Unknown,
+}
+
+/// Observational movement telemetry for a detected Others ship (API v130).
+///
+/// A **direction, never a destination**: the probe APIs expose the normalized
+/// heading and deliberately withhold distance and timing. The cockpit must not
+/// present it as a course to a sector — the same discipline the motorized
+/// asteroid's launch heading demanded (#308).
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ObservedMovement {
+    pub direction: Vector,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -998,12 +1121,33 @@ pub struct SectorObject {
     /// Home planet of a deuterium refuel station (API v71).
     pub planet_id: Option<String>,
     pub planet_name: Option<String>,
+    /// ── Observed ships and missiles (API v130) ──
+    /// Classification of a dynamically observed object.
+    pub observed_class: Option<ObservedClass>,
+    /// Normalized heading of a detected Others ship — a direction, not a
+    /// destination.
+    pub movement: Option<ObservedMovement>,
+    /// Who fired this missile.
+    pub launcher_kind: Option<MissileLauncherKind>,
+    pub launched_at: Option<DateTime<Utc>>,
+    /// Estimated resolution: when the missile reaches its target.
+    pub impact_at: Option<DateTime<Utc>>,
+    pub target_id: Option<String>,
+    pub target_kind: Option<MissileTargetKind>,
+    /// True only when the observing probe is the declared target. This is not
+    /// another object in a list — it is a countdown to being hit, and what the
+    /// cockpit does with it is #362.
+    pub targets_current_probe: Option<bool>,
     /// Dormant-construct descriptors, revealed by inspection (API v64/v70).
     pub apparent_origin: Option<String>,
     pub activity_status: Option<String>,
     pub known_function: Option<String>,
-    // SCUT relay objects (present only when object_type == ScutRelay).
-    pub status: Option<ScutRelayStatus>,
+    /// Relay activation, in-flight missile state, or the observed state of a
+    /// detected Others ship (API v130) — one field doing triple duty, hence its
+    /// own enum rather than [`ScutRelayStatus`], whose schema still carries
+    /// only `off`/`on`. Ask [`SectorObject::relay_is_on`] for the relay
+    /// question rather than comparing against a variant.
+    pub status: Option<SectorObjectStatus>,
     /// Whether an active relay carries a scut_transit_beacon (API v96), which
     /// enables destruction-risk-free SCUT corridors between beacon-equipped
     /// relays in the same network.
@@ -1115,6 +1259,18 @@ pub enum ScutRelayStatus {
     On,
     #[serde(other)]
     Unknown,
+}
+
+impl SectorObject {
+    /// Whether this object is an **active** SCUT relay.
+    ///
+    /// Asked as a question rather than compared against a variant: since v130
+    /// `status` also carries missile and Others-ship states, so "not `Off`" no
+    /// longer means "on", and a relay that reports `moving` would be a server
+    /// contract change rather than an active relay.
+    pub fn relay_is_on(&self) -> bool {
+        self.object_type == SectorObjectType::ScutRelay && self.status == Some(SectorObjectStatus::On)
+    }
 }
 
 impl SectorObservation {

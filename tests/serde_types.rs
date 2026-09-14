@@ -1,10 +1,11 @@
 use neumann_cockpit::api::types::{
     AlertPhase, AlertStatus, AlertType, AsteroidTrajectoryMode, AsteroidTrajectoryStatus, BlueprintShareResult,
     ContainerInventory, CraftingRecipe, DamageWarningRule, DataFreshness, EndpointId, KnowledgeLevel, Manny,
-    MannyLocationType, MannyTask, MannyTaskVisibility, MessageStatus, Mission, MissionStatus, MissionStepStatus,
-    MotorFuelStatus, MovementPhase, Probe, ProbeAlert, ProbeImprovement, ProbeInventory, ProbeMessage, ProbeMovement,
-    ProbeStatus, ScutNetwork, ScutRelayStatus, SectorObject, SectorObjectType, SectorObservation, SensorMode,
-    StorageContainer,
+    MannyLocationType, MannyTask, MannyTaskVisibility, MannyWaitingForSpaceTask, MessageStatus, MissileLauncherKind,
+    MissileTargetKind, Mission, MissionStatus, MissionStepStatus, MotorFuelStatus, MovementPhase, ObservedClass, Probe,
+    ProbeAlert, ProbeImprovement, ProbeInventory, ProbeMessage, ProbeMovement, ProbeStatus, ScutNetwork,
+    ScutRelayStatus, SectorObject, SectorObjectStatus, SectorObjectType, SectorObservation, SectorProbePresence,
+    SensorMode, StorageContainer,
 };
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -736,7 +737,8 @@ fn scut_relay_sector_object_deserializes() {
     }"#;
     let obj: SectorObject = deser(json);
     assert_eq!(obj.object_type, SectorObjectType::ScutRelay);
-    assert_eq!(obj.status, Some(ScutRelayStatus::On));
+    assert_eq!(obj.status, Some(SectorObjectStatus::On));
+    assert!(obj.relay_is_on());
     assert_eq!(obj.coverage_radius_sectors, Some(10));
     let net = obj.network.expect("network present");
     assert_eq!(net.id, 7);
@@ -1138,4 +1140,109 @@ fn a_blueprint_share_reports_whether_the_recipient_already_knew_it() {
     assert_eq!(r.recipient_probe.name, "Someone else");
     assert!(r.already_known);
     assert!(r.recipient_notified);
+}
+
+// ── API v130 additive typing (issue #360) ─────────────────────────────────
+
+#[test]
+fn a_missile_in_the_sector_is_a_missile() {
+    // Before v130 named it, the one object that is a countdown to being hit
+    // deserialized as `unknown` — the least useful possible word for it.
+    let json = r#"{
+      "id": "msl_7f", "type": "missile", "name": "incoming", "summary": "missile",
+      "observedClass": "suspected_missile", "status": "moving",
+      "launcherKind": "others_ship", "launchedAt": "2026-09-14T12:00:00+00:00",
+      "impactAt": "2026-09-14T12:04:00+00:00",
+      "targetId": "42", "targetKind": "probe", "targetsCurrentProbe": true
+    }"#;
+    let obj: SectorObject = deser(json);
+    assert_eq!(obj.object_type, SectorObjectType::Missile);
+    assert_eq!(obj.observed_class, Some(ObservedClass::SuspectedMissile));
+    assert_eq!(obj.status, Some(SectorObjectStatus::Moving));
+    assert_eq!(obj.launcher_kind, Some(MissileLauncherKind::OthersShip));
+    assert_eq!(obj.target_kind, Some(MissileTargetKind::Probe));
+    assert_eq!(obj.targets_current_probe, Some(true));
+    assert!(obj.launched_at.is_some() && obj.impact_at.is_some());
+    assert!(!obj.relay_is_on(), "a missile is not an active relay");
+}
+
+#[test]
+fn an_interception_targets_another_missile() {
+    let json = r#"{"type": "missile", "name": "x", "summary": "s",
+                   "targetKind": "missile", "targetsCurrentProbe": false}"#;
+    let obj: SectorObject = deser(json);
+    assert_eq!(obj.target_kind, Some(MissileTargetKind::Missile));
+}
+
+#[test]
+fn an_observed_others_ship_reports_a_direction_not_a_destination() {
+    // The probe APIs expose a normalized heading and withhold distance and
+    // timing; the type must not let a caller pretend otherwise.
+    let json = r#"{
+      "id": "shp_1", "type": "manny", "name": "contact", "summary": "ship",
+      "observedClass": "large_ship", "status": "low_orbit",
+      "movement": {"direction": {"x": 0.0, "y": -1.0, "z": 1.0}}
+    }"#;
+    let obj: SectorObject = deser(json);
+    assert_eq!(obj.observed_class, Some(ObservedClass::LargeShip));
+    assert_eq!(obj.status, Some(SectorObjectStatus::LowOrbit));
+    let m = obj.movement.expect("movement present");
+    assert_eq!((m.direction.x, m.direction.y, m.direction.z), (0.0, -1.0, 1.0));
+}
+
+#[test]
+fn the_new_alert_types_and_phases_are_named() {
+    for (raw, expected) in [
+        ("others_presence", AlertType::OthersPresence),
+        ("others_weapon", AlertType::OthersWeapon),
+        ("others_harvest_traces", AlertType::OthersHarvestTraces),
+    ] {
+        let a: AlertType = deser(&format!("\"{raw}\""));
+        assert_eq!(a, expected, "{raw}");
+    }
+    for (raw, expected) in [
+        ("weapon", AlertPhase::Weapon),
+        ("weapon_targeted", AlertPhase::WeaponTargeted),
+        ("weapon_result", AlertPhase::WeaponResult),
+        ("weapon_damage", AlertPhase::WeaponDamage),
+    ] {
+        let p: AlertPhase = deser(&format!("\"{raw}\""));
+        assert_eq!(p, expected, "{raw}");
+    }
+}
+
+#[test]
+fn a_detected_probe_reports_what_it_is_doing() {
+    let json = r#"{"id": 9, "name": "Stranger", "moving": true,
+                   "status": "cruising", "owned": false}"#;
+    let p: SectorProbePresence = deser(json);
+    assert_eq!(p.status, Some(ProbeStatus::Cruising));
+    assert_eq!(p.owned, Some(false));
+
+    // A pre-v130 payload carries neither, and claims neither.
+    let old: SectorProbePresence = deser(r#"{"id": 9, "name": "S", "moving": false}"#);
+    assert!(old.status.is_none() && old.owned.is_none());
+}
+
+#[test]
+fn a_storage_wait_payload_types() {
+    let w: MannyWaitingForSpaceTask = deser(
+        r#"{"waitingFor": "storage_space",
+            "waitingForSpaceSince": "2026-09-07T09:00:00+00:00"}"#,
+    );
+    assert_eq!(w.waiting_for, "storage_space");
+    assert!(w.reason.is_none());
+}
+
+#[test]
+fn an_unknown_value_still_absorbs_rather_than_failing() {
+    // The 22 `#[serde(other)]` fallbacks are why the v116→v130 gap broke
+    // nothing; widening the enums must not cost that.
+    let obj: SectorObject = deser(
+        r#"{"type": "wormhole", "name": "?", "summary": "s",
+                                      "status": "singing", "observedClass": "dreadnought"}"#,
+    );
+    assert_eq!(obj.object_type, SectorObjectType::Unknown);
+    assert_eq!(obj.status, Some(SectorObjectStatus::Unknown));
+    assert_eq!(obj.observed_class, Some(ObservedClass::Unknown));
 }
