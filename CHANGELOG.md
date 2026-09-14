@@ -1,5 +1,20 @@
 # Changelog
 
+## [131.0.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v116.1.0...neumann-cockpit-v131.0.0) (2026-09-14)
+
+
+### Features
+
+* **fleet:** pilot the nth probe with a digit in the picker ([#334](https://github.com/MagiCrazy/neumann-cockpit/issues/334)) ([#394](https://github.com/MagiCrazy/neumann-cockpit/issues/394)) ([2449a51](https://github.com/MagiCrazy/neumann-cockpit/commit/2449a517e1b1952f6e5829479f040b7a1d388874))
+* **sector:** read what is inside a detached container ([#387](https://github.com/MagiCrazy/neumann-cockpit/issues/387)) ([#393](https://github.com/MagiCrazy/neumann-cockpit/issues/393)) ([cd83fe4](https://github.com/MagiCrazy/neumann-cockpit/commit/cd83fe4d0fdea574e0ab51e0f88c2e01243597ff))
+* **threat:** make an incoming missile unmistakable ([#362](https://github.com/MagiCrazy/neumann-cockpit/issues/362)) ([#386](https://github.com/MagiCrazy/neumann-cockpit/issues/386)) ([f911918](https://github.com/MagiCrazy/neumann-cockpit/commit/f911918e8eaf3f33091843ef2fb7b974a4a392f4))
+* **weapons:** fire a missile from an embarked Manny ([#361](https://github.com/MagiCrazy/neumann-cockpit/issues/361)) ([#390](https://github.com/MagiCrazy/neumann-cockpit/issues/390)) ([ea106be](https://github.com/MagiCrazy/neumann-cockpit/commit/ea106be4f033a8d0a57d1b0b4e8d9904d9b3c6f5))
+
+
+### Documentation
+
+* cut 131.0.0 and refresh the stale version examples ([#392](https://github.com/MagiCrazy/neumann-cockpit/issues/392)) ([55eeaa8](https://github.com/MagiCrazy/neumann-cockpit/commit/55eeaa8def4b46ddb7c8845ed77a289aeb5673f3))
+
 ## [116.1.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v116.0.1...neumann-cockpit-v116.1.0) (2026-09-14)
 
 
