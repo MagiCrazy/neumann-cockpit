@@ -1,5 +1,13 @@
 # Changelog
 
+## [116.0.1](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v116.0.0...neumann-cockpit-v116.0.1) (2026-09-14)
+
+
+### Bug Fixes
+
+* **scanner:** let Tab leave the Scanner pane ([#378](https://github.com/MagiCrazy/neumann-cockpit/issues/378)) ([#380](https://github.com/MagiCrazy/neumann-cockpit/issues/380)) ([a8d5adf](https://github.com/MagiCrazy/neumann-cockpit/commit/a8d5adfafeebcc66e1227f0ab27a74cd20cb86be))
+* **scut:** scroll the network view ([#379](https://github.com/MagiCrazy/neumann-cockpit/issues/379)) ([#381](https://github.com/MagiCrazy/neumann-cockpit/issues/381)) ([034795e](https://github.com/MagiCrazy/neumann-cockpit/commit/034795eb7683940e107a3608cd1fb3222e7a1873))
+
 ## [116.0.0](https://github.com/MagiCrazy/neumann-cockpit/compare/neumann-cockpit-v112.0.0...neumann-cockpit-v116.0.0) (2026-09-11)
 
 
