@@ -1480,3 +1480,56 @@ fn the_banner_leaves_when_the_missile_does() {
     assert!(threatened.contains("INCOMING"));
     assert!(!calm.contains("INCOMING"));
 }
+
+// ── firing a missile (issue #361) ─────────────────────────────────────────
+
+fn fire_confirm(target: crate::app::MissileTarget) -> AppState {
+    let mut state = AppState::default();
+    state.active_wizard = crate::app::ActiveWizard::FireMissile(crate::app::FireMissileInput::Confirm {
+        manny_id: "m1".into(),
+        manny_name: "Manny-3".into(),
+        object_id: "obj".into(),
+        object_name: "Sanctioned Parts List".into(),
+        target,
+        error: None,
+    });
+    state
+}
+
+#[test]
+fn the_fire_confirm_states_the_whole_bill() {
+    let text = buffer_text(&render_cockpit(
+        &fire_confirm(crate::app::MissileTarget::OthersShip),
+        80,
+        24,
+    ));
+    assert!(text.contains("FIRE MISSILE"));
+    assert!(text.contains("Sanctioned Parts List"), "the target is named");
+    assert!(text.contains("Others ship"), "and what it is");
+    assert!(text.contains("Manny-3"), "who fires");
+    assert!(text.contains("1 missile"), "and what it costs");
+}
+
+#[test]
+fn only_a_player_target_gets_the_reinforced_wording() {
+    // Aiming at the NPC faction is ordinary play; aiming at another player's
+    // asset is not, and the cockpit already treats abandon differently from
+    // recall for the same reason.
+    let npc = buffer_text(&render_cockpit(
+        &fire_confirm(crate::app::MissileTarget::OthersShip),
+        80,
+        24,
+    ));
+    assert!(
+        !npc.contains("ANOTHER PLAYER"),
+        "no scare wording for the Others:\n{npc}"
+    );
+
+    let player = buffer_text(&render_cockpit(
+        &fire_confirm(crate::app::MissileTarget::ForeignManny),
+        80,
+        24,
+    ));
+    assert!(player.contains("ANOTHER PLAYER'S ASSET"));
+    assert!(player.contains("marks it dead"), "and says what a hit can do");
+}

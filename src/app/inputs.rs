@@ -380,6 +380,20 @@ pub enum RemoteMineInput {
     },
 }
 
+/// Firing a missile (API v125, issue #361): a single confirm, because the
+/// target was already chosen in the Sector pane and the Manny resolved by the
+/// ordinary object-action flow. What is left is the decision itself.
+pub enum FireMissileInput {
+    Confirm {
+        manny_id: String,
+        manny_name: String,
+        object_id: String,
+        object_name: String,
+        target: crate::app::MissileTarget,
+        error: Option<String>,
+    },
+}
+
 pub enum SalvageInput {
     PickTarget {
         manny_id: String,
@@ -718,6 +732,7 @@ pub enum ActiveWizard {
     Fabrication(FabricationInput),
     Improve(ImproveInput),
     Salvage(SalvageInput),
+    FireMissile(FireMissileInput),
     Recall(RecallInput),
     Refuel(RefuelInput),
     TransferDeuterium(TransferDeuteriumInput),

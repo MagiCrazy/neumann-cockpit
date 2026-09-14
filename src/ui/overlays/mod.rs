@@ -6,6 +6,7 @@ pub(crate) mod containers;
 pub(crate) mod craft;
 mod discard;
 pub(crate) mod drop_container;
+mod fire;
 pub(crate) mod fleet;
 pub(crate) mod help;
 pub(crate) mod improve;
@@ -97,6 +98,10 @@ const WIZARD_OVERLAYS: &[(OverlayGuard, OverlayRender)] = &[
     (|s| matches!(s.active_wizard, ActiveWizard::Fabrication(_)), render_fabrication_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::Improve(_)), render_improve_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::Salvage(_)), render_salvage_overlay),
+    (
+        |s| matches!(s.active_wizard, ActiveWizard::FireMissile(_)),
+        fire::render_fire_missile_overlay,
+    ),
     (|s| matches!(s.active_wizard, ActiveWizard::Recall(_)), render_recall_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::Refuel(_)), render_refuel_overlay),
     (|s| matches!(s.active_wizard, ActiveWizard::TransferDeuterium(_)), render_transfer_deuterium_overlay),

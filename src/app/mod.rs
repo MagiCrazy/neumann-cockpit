@@ -25,6 +25,7 @@ mod threat;
 mod travel;
 mod tree;
 mod waypoints;
+mod weapons;
 
 pub use ambiance::*;
 pub use assembly::*;
@@ -47,6 +48,7 @@ pub use telemetry::*;
 pub use threat::*;
 pub use tree::*;
 pub use waypoints::*;
+pub use weapons::*;
 
 use crate::api::types::{
     ContainerInventory, CraftingRecipe, DamageWarningRule, Manny, MannyDetail, MannyRoster, Mission, Probe, ProbeAlert,

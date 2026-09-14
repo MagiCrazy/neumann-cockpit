@@ -13,6 +13,10 @@ pub enum ApiMessage {
     /// A motorization or refuelling task was accepted (issue #308); the
     /// Manny comes back already busy.
     AsteroidMotorizing(crate::api::types::Manny),
+    /// The one-minute missile preparation was accepted (API v125, #361). The
+    /// Manny comes back only if the 202 carried one — the schema is
+    /// undocumented — so the loop refetches rather than infers.
+    MissileIgniting(Option<crate::api::types::Manny>),
     AsteroidRefuelling(crate::api::types::Manny),
     /// A motorized asteroid was launched (issue #308).
     TrajectoryLaunched(crate::api::types::AsteroidTrajectory),

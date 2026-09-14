@@ -138,6 +138,17 @@ impl LogEvent {
         Self::action(kind::CRAFT, format!("Queued «{recipe}» {bay}."), probe_id)
     }
 
+    /// A missile launch (issue #361). It is recorded under [`kind::WEAPON`],
+    /// not under a generic action kind: the ship's log renders that rank in
+    /// crit, and firing is the one thing in here that hits someone else.
+    pub fn fire_missile(target: &str, kind_label: &str, probe_id: Option<u64>) -> Self {
+        Self::action(
+            kind::WEAPON,
+            format!("Fired a missile at «{target}» ({kind_label})."),
+            probe_id,
+        )
+    }
+
     pub fn salvage(target: &str, probe_id: Option<u64>) -> Self {
         Self::action(kind::SALVAGE, format!("Sent a manny to salvage «{target}»."), probe_id)
     }
