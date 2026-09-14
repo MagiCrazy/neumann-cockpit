@@ -791,9 +791,19 @@ fn render_ship_log(frame: &mut Frame, area: Rect, state: &AppState, active: bool
                 sel_line = Some((lines.len(), lines.len()));
             }
             let ts = e.occurred_at.with_timezone(&Local).format("%H:%M").to_string();
-            let server = e.kind == crate::app::kind::ALERT;
-            let base = Style::default().fg(if server { p.warn } else { p.text });
-            let accent = Style::default().fg(if server { p.warn } else { p.accent });
+            // Three ranks, not two: the pilot's own actions, what the server
+            // reported, and what hit us (issue #362).
+            let weapon = e.kind == crate::app::kind::WEAPON;
+            let server = weapon || e.kind == crate::app::kind::ALERT;
+            let color = if weapon {
+                p.crit
+            } else if server {
+                p.warn
+            } else {
+                p.text
+            };
+            let base = Style::default().fg(color);
+            let accent = Style::default().fg(if server { color } else { p.accent });
             let mut spans = vec![Span::styled(format!("{ts} — "), dim)];
             spans.extend(narrative_spans(&e.summary, base, accent));
             if !state.zoomed {

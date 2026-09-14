@@ -21,6 +21,7 @@ mod script;
 mod telemetry;
 #[cfg(test)]
 mod tests;
+mod threat;
 mod travel;
 mod tree;
 mod waypoints;
@@ -43,6 +44,7 @@ pub use queue::*;
 pub use scan::*;
 pub use script::*;
 pub use telemetry::*;
+pub use threat::*;
 pub use tree::*;
 pub use waypoints::*;
 
@@ -772,9 +774,17 @@ impl AppState {
     /// persisted locally (no dedup needed — this recomputes per render).
     pub fn ship_log_entries(&self) -> Vec<LogEvent> {
         fn project(a: &ProbeAlert) -> LogEvent {
+            // Weapon phases get their own kind so the log renders them in crit
+            // (issue #362): a missile that hit is not a container break, and
+            // the toast that said so expired five seconds after it landed.
+            let kind = if a.is_weapon_event() {
+                crate::app::kind::WEAPON
+            } else {
+                crate::app::kind::ALERT
+            };
             LogEvent {
                 occurred_at: a.scheduled_at.or(a.created_at).unwrap_or_else(Utc::now),
-                kind: crate::app::kind::ALERT.to_string(),
+                kind: kind.to_string(),
                 probe_id: None,
                 summary: a.message.clone(),
                 data: serde_json::Value::Null,
@@ -1005,6 +1015,10 @@ impl AppState {
     /// while the cockpit is doing something the pilot would want to watch.
     pub fn attract_allowed(&self) -> bool {
         self.probe_terminal_alert().is_none()
+            // #206's guard asked only about *unread* alerts, so a pilot who
+            // read the alert and walked away got a starfield over an incoming
+            // missile. The scan is the authority, not the inbox (issue #362).
+            && self.incoming_missile().is_none()
             && self.unread_alert_count() == 0
             && !self.booting
             && self.error.is_none()
