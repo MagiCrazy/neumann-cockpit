@@ -19,12 +19,17 @@ The official game instance runs at **[https://neumann-probe.net](https://neumann
 Every archive ships a matching `.sha256` — download, verify, then extract:
 
 ```bash
-# Linux x86_64 example
-base=https://github.com/MagiCrazy/neumann-cockpit/releases/latest/download
-curl -sLO "$base/neumann-cockpit-linux-x86_64.tar.gz"
-curl -sLO "$base/neumann-cockpit-linux-x86_64.tar.gz.sha256"
-sha256sum -c neumann-cockpit-linux-x86_64.tar.gz.sha256
-tar xzf neumann-cockpit-linux-x86_64.tar.gz
+# Linux x86_64 example. Archive names carry the version, so resolve the
+# latest tag first — the redirect on /releases/latest names it.
+repo=https://github.com/MagiCrazy/neumann-cockpit
+tag=$(curl -sI "$repo/releases/latest" | sed -n 's#.*/tag/##p' | tr -d '\r')
+version=${tag#neumann-cockpit-}
+archive="neumann-cockpit-${version}-linux-x86_64.tar.gz"
+
+curl -sLO "$repo/releases/download/$tag/$archive"
+curl -sLO "$repo/releases/download/$tag/$archive.sha256"
+sha256sum -c "$archive.sha256"
+tar xzf "$archive"
 ./neumann-cockpit
 ```
 
